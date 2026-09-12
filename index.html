@@ -449,7 +449,7 @@ body{
 <div id="app">
   <div id="sidebar">
     <div id="brand">
-      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v165</div>
+      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v166</div>
       <h1>Padrões &amp; Lesões</h1>
       <div class="sub">organizado por sítio e características de imagem</div>
     </div>
@@ -544,6 +544,20 @@ async function pushToFirebaseNow(){
 }
 
 /* busca o estado da nuvem e reconcilia com o local; some lesões canônicas novas (de atualizações do app) que a nuvem ainda não tem */
+function mergeImagesPreservingLocal(localEntry, remoteEntry){
+  const merged = {...remoteEntry};
+  const byData = new Map();
+  const add = (arr)=>{ if(Array.isArray(arr)) arr.forEach(img=>{ if(img&&img.data) byData.set(img.data, {...img}); }); };
+  add(remoteEntry && remoteEntry.images);
+  add(localEntry && localEntry.images);
+  merged.images = [...byData.values()];
+  // Nunca deixe um estado remoto antigo apagar a indicação de imagens locais legadas.
+  merged.localImg = !!((remoteEntry&&remoteEntry.localImg) || (localEntry&&localEntry.localImg));
+  // URL direta antiga também é preservada se o remoto vier vazio.
+  if(!merged.img && localEntry && localEntry.img) merged.img = localEntry.img;
+  return merged;
+}
+
 async function syncFromFirebase(){
   if(!fbDb) return;
   fbSyncing = true;
@@ -552,23 +566,27 @@ async function syncFromFirebase(){
     if(snap.exists){
       const remote = snap.data() || {};
       const remoteData = Array.isArray(remote.data) ? remote.data : [];
+      const localById = new Map((Array.isArray(DATA)?DATA:[]).map(e=>[e.id,e]));
       const remoteIds = new Set(remoteData.map(e=>e.id));
+      const reconciledRemote = remoteData.map(e=>mergeImagesPreservingLocal(localById.get(e.id), e));
       const newCanonical = DATA.filter(e => isSeedLikeId(e.id) && !remoteIds.has(e.id));
-      DATA = [...remoteData, ...newCanonical];
-      REVIEW = remote.review || {};
-      SRS = remote.srs || {};
-      SESSIONLOG = remote.sessionLog || {};
+      const customLocal = DATA.filter(e => !isSeedLikeId(e.id) && !remoteIds.has(e.id));
+      DATA = [...reconciledRemote, ...newCanonical, ...customLocal];
+      REVIEW = remote.review || REVIEW || {};
+      SRS = remote.srs || SRS || {};
+      SESSIONLOG = remote.sessionLog || SESSIONLOG || {};
       if(Array.isArray(remote.sectionOrder) && remote.sectionOrder.length) sectionOrder = remote.sectionOrder;
-      await saveData();
+      await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
       await saveOrder();
       try{ await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false); }catch(e){}
       await saveSRS();
       await saveSessionLog();
       fbSyncing = false;
-      if(newCanonical.length) pushToFirebase();
+      // Empurra a reconciliação para a nuvem; imagens existentes nunca são removidas por um remoto vazio/stale.
+      await pushToFirebaseNow();
     } else {
       fbSyncing = false;
-      pushToFirebase(); // primeira vez: sobe o estado local atual pra nuvem
+      await pushToFirebaseNow();
     }
   }catch(e){
     fbSyncing = false;
@@ -618,13 +636,18 @@ const storage = hasNativeStorage() ? window.storage : {
    Usa upload unsigned direto do navegador. O Atlas guarda apenas URLs/metadados leves.
    ============================================================ */
 const CLOUDINARY_CONFIG_LOCAL = LOCAL_PREFIX+'cloudinary_config';
+const CLOUDINARY_DEFAULT = {cloudName:'soegtip6', uploadPreset:'atlas_radiologico', folder:'atlas-radiologico'};
 function getCloudinaryConfig(){
   try{
     const raw=localStorage.getItem(CLOUDINARY_CONFIG_LOCAL);
-    if(!raw) return {cloudName:'', uploadPreset:'', folder:''};
+    if(!raw) return {...CLOUDINARY_DEFAULT};
     const c=JSON.parse(raw);
-    return {cloudName:(c.cloudName||'').trim(), uploadPreset:(c.uploadPreset||'').trim(), folder:(c.folder||'').trim()};
-  }catch(e){ return {cloudName:'', uploadPreset:'', folder:''}; }
+    return {
+      cloudName:(c.cloudName||CLOUDINARY_DEFAULT.cloudName).trim(),
+      uploadPreset:(c.uploadPreset||CLOUDINARY_DEFAULT.uploadPreset).trim(),
+      folder:(c.folder||CLOUDINARY_DEFAULT.folder).trim()
+    };
+  }catch(e){ return {...CLOUDINARY_DEFAULT}; }
 }
 function setCloudinaryConfig(c){
   try{
@@ -687,7 +710,7 @@ function openCloudinarySettings(){
 /* ============================================================
    DADOS
    ============================================================ */
-const APP_VERSION = 165;
+const APP_VERSION = 166;
 const STORAGE_KEY = 'atlas:pathologies';
 const ORDER_KEY = 'atlas:sectionOrder';
 const DEFAULT_SECTION_ORDER = ["Neurorradiologia","Cabeça e Pescoço","Coluna Vertebral","Tórax","Mamas","Abdômen Superior","Pelve Feminina","Obstetrícia","Pelve Masculina","Musculoesquelético","Vascular"];
@@ -2327,6 +2350,52 @@ async function getLocalImg(id){
 async function deleteLocalImg(id){
   try{ await storage.delete(imgKey(id), false); }catch(e){}
 }
+
+/* v166: recupera qualquer imagem antiga que ainda esteja em storage local (mesmo órfã)
+   e a envia ao Cloudinary. Só apaga a cópia local depois que TODAS as imagens daquele
+   registro foram confirmadas na nuvem. */
+async function migrateLegacyLocalImagesToCloudinary(){
+  if(!hasCloudinaryConfig()) return {migrated:0, failed:0};
+  let keys=[];
+  try{
+    const listed=await storage.list('atlas:img:', false);
+    keys=Array.isArray(listed&&listed.keys)?listed.keys:[];
+  }catch(e){ return {migrated:0, failed:0}; }
+  let migrated=0, failed=0, changed=false;
+  for(const key of keys){
+    if(!String(key).startsWith('atlas:img:')) continue;
+    const id=String(key).slice('atlas:img:'.length);
+    const entry=DATA.find(e=>String(e.id)===id);
+    if(!entry) continue;
+    const localImgs=await getLocalImgs(id);
+    if(!localImgs.length) continue;
+    const uploaded=[];
+    let ok=true;
+    for(const li of localImgs){
+      try{
+        if(li && li.data && /^data:image\//i.test(li.data)){
+          const blob=await (await fetch(li.data)).blob();
+          const ext=(blob.type.split('/')[1]||'jpg').replace('jpeg','jpg');
+          const file=new File([blob], `recuperada-${id}-${Date.now()}.${ext}`, {type:blob.type||'image/jpeg'});
+          const remote=await uploadToCloudinary(file);
+          remote.label=li.label||'';
+          uploaded.push(remote);
+        }
+      }catch(err){ console.error('Migração de imagem local falhou',id,err); ok=false; failed++; break; }
+    }
+    if(ok && uploaded.length===localImgs.length){
+      const existing=Array.isArray(entry.images)?entry.images:[];
+      const byData=new Map(existing.filter(x=>x&&x.data).map(x=>[x.data,x]));
+      uploaded.forEach(x=>byData.set(x.data,x));
+      entry.images=[...byData.values()];
+      entry.localImg=false;
+      await deleteLocalImg(id);
+      migrated+=uploaded.length; changed=true;
+    }
+  }
+  if(changed) await saveData();
+  return {migrated, failed};
+}
 /* imagens externas ficam no próprio registro e entram no backup; locais antigos continuam compatíveis */
 async function getEntryImgs(e){
   const remote = Array.isArray(e.images) ? e.images.filter(x=>x && x.data).map(x=>({...x, source:x.source||'url'})) : [];
@@ -2447,6 +2516,8 @@ async function loadData(){
   await loadSRS();
   await loadSessionLog();
   await syncFromFirebase();
+  const recoveredImgs = await migrateLegacyLocalImagesToCloudinary();
+  if(recoveredImgs.migrated) console.info(`[Atlas] v166 recuperou ${recoveredImgs.migrated} imagem(ns) locais e enviou ao Cloudinary.`);
   renderAll();
 }
 async function saveData(){
@@ -3151,7 +3222,7 @@ function openForm(id){
       cloudStatus.textContent='☁ Cloudinary ativo — imagens novas serão hospedadas externamente; o Atlas guarda apenas o link.';
       cloudStatus.className='img-cloud-status ok';
     }else{
-      cloudStatus.innerHTML='💾 Cloudinary não configurado — imagens novas ficarão locais. <span id="cloudinary-inline" style="text-decoration:underline;cursor:pointer;">configurar agora</span>';
+      cloudStatus.innerHTML='⚠ Cloudinary indisponível. Por segurança, o Atlas não salvará imagens apenas neste computador. <span id="cloudinary-inline" style="text-decoration:underline;cursor:pointer;">configurar</span>';
       cloudStatus.className='img-cloud-status warn';
       setTimeout(()=>{ const el=document.getElementById('cloudinary-inline'); if(el) el.onclick=openCloudinarySettings; },0);
     }
@@ -3216,10 +3287,8 @@ function openForm(id){
         toast('Falha no upload Cloudinary. Verifique cloud name, preset unsigned e conexão.');
       }
     }else{
-      try{
-        const dataUrl=await resizeImageToDataUrl(file,900,0.78);
-        pendingImgs.push({label:'',data:dataUrl,source:'local'}); imgsChanged=true; renderImgGallery();
-      }catch(e){ toast('Não consegui processar essa imagem.'); }
+      toast('Cloudinary precisa estar ativo para salvar imagens sincronizadas.');
+      renderCloudStatus('Cloudinary indisponível — imagem não foi salva localmente.','warn');
     }
   }
   imgFileInput.addEventListener('change', async (e)=>{
@@ -3255,10 +3324,20 @@ function openForm(id){
     let localImgFlag = existing ? !!existing.localImg : false;
     let remoteImgs = existing && Array.isArray(existing.images) ? existing.images : [];
     if(imgsChanged){
-      const localImgs = pendingImgs.filter(x=>x.source==='local').map(x=>({label:x.label||'',data:x.data}));
-      remoteImgs = pendingImgs.filter(x=>x.source!=='local').map(x=>({...x}));
-      if(localImgs.length>0){ await setLocalImgs(entryId, localImgs); localImgFlag=true; }
-      else { await deleteLocalImg(entryId); localImgFlag=false; }
+      // v166: nenhuma imagem nova fica presa ao computador. Legadas locais são convertidas para Cloudinary antes de salvar.
+      const normalized=[];
+      for(const x of pendingImgs){
+        if(x.source==='local' && x.data && /^data:image\//i.test(x.data)){
+          if(!hasCloudinaryConfig()){ toast('Cloudinary indisponível: não foi possível sincronizar uma imagem local antiga.'); return; }
+          try{
+            const blob=await (await fetch(x.data)).blob();
+            const file=new File([blob], 'atlas-recuperada-'+Date.now()+'.png', {type:blob.type||'image/png'});
+            const remote=await uploadToCloudinary(file); remote.label=x.label||''; normalized.push(remote);
+          }catch(err){ toast('Falha ao migrar imagem antiga para o Cloudinary. Nada foi apagado.'); return; }
+        }else normalized.push({...x});
+      }
+      remoteImgs = normalized.map(x=>({...x, source:x.source||'cloudinary'}));
+      await deleteLocalImg(entryId); localImgFlag=false;
     }
     if(existing){
       existing.name=name; existing.s=sec; existing.site=site; existing.tags=tags; existing.img=img; existing.notes=notes; existing.links=links; existing.enTerm=enTerm; existing.inc=inc; existing.localImg=localImgFlag; existing.images=remoteImgs; existing.classification=classification;
@@ -3285,7 +3364,7 @@ document.getElementById('btn-export').onclick = ()=>{
   const blob = new Blob([JSON.stringify(DATA,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'atlas-radiologico-backup-v165.json';
+  a.href = url; a.download = 'atlas-radiologico-backup-v166.json';
   a.click();
   URL.revokeObjectURL(url);
   toast('Backup exportado.');
