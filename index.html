@@ -463,7 +463,7 @@ body{
 <div id="app">
   <div id="sidebar">
     <div id="brand">
-      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v188</div>
+      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v189</div>
       <h1>Padrões &amp; Lesões</h1>
       <div class="sub">organizado por sítio e características de imagem</div>
     </div>
@@ -575,16 +575,21 @@ function mergeReviewPreservingProgress(localReview, remoteReview){
 }
 
 function mergeImagesPreservingLocal(localEntry, remoteEntry){
-  const merged = {...remoteEntry};
+  const merged = {...(remoteEntry||{})};
   const byData = new Map();
   const add = (arr)=>{ if(Array.isArray(arr)) arr.forEach(img=>{ if(img&&img.data) byData.set(img.data, {...img}); }); };
   add(remoteEntry && remoteEntry.images);
   add(localEntry && localEntry.images);
   merged.images = [...byData.values()];
-  // Nunca deixe um estado remoto antigo apagar a indicação de imagens locais legadas.
+
+  // Nunca deixe um lado vazio apagar conteúdo existente do outro.
   merged.localImg = !!((remoteEntry&&remoteEntry.localImg) || (localEntry&&localEntry.localImg));
-  // URL direta antiga também é preservada se o remoto vier vazio.
   if(!merged.img && localEntry && localEntry.img) merged.img = localEntry.img;
+  if((!merged.links || !merged.links.length) && localEntry && Array.isArray(localEntry.links)) merged.links = localEntry.links;
+  if((!merged.tags || !merged.tags.length) && localEntry && Array.isArray(localEntry.tags)) merged.tags = localEntry.tags;
+  if(!merged.notes && localEntry && localEntry.notes) merged.notes = localEntry.notes;
+  if(!merged.enTerm && localEntry && localEntry.enTerm) merged.enTerm = localEntry.enTerm;
+  if(!merged.classification && localEntry && localEntry.classification) merged.classification = localEntry.classification;
   return merged;
 }
 
@@ -2475,7 +2480,7 @@ function isAutoRadiopaediaLink(l){
    a base canônica e preserva somente registros personalizados (não seed_*).
    ============================================================ */
 const RECOVERY_KEY = 'atlas:recoveryVersion';
-const RECOVERY_VERSION = 'v187-canonical-active';
+const RECOVERY_VERSION = 'v189-preserve-user-state';
 const SUPPRESSED_DUPLICATE_IDS_V172 = new Set(['seed_876','seed_877','seed_564','seed_580','seed_603','seed_611','seed_619','seed_640','seed_671','seed_698','seed_720','seed_745','seed_761','seed_776','seed_791','seed_835','seed_836','seed_840','seed_1040','seed_1089','seed_605','seed_1028','seed_535','seed_716','seed_634','seed_594','seed_747','seed_614']);
 function activeCanonicalSeedV172(){ return SEED.filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id)); }
 
@@ -2493,24 +2498,45 @@ function hasBrokenMigrationArtifacts(data){
   return false;
 }
 async function recoverCanonicalBaseV154(){
-  let alreadyRecovered=false;
-  try{
-    const r=await storage.get(RECOVERY_KEY,false);
-    alreadyRecovered = r.value===RECOVERY_VERSION;
-  }catch(_e){}
-  if(alreadyRecovered && !hasBrokenMigrationArtifacts(DATA)) return false;
+  // v189 — reconciliação NÃO destrutiva.
+  // Nunca recria toda a base a partir do SEED quando já há dados do usuário,
+  // pois isso apaga imagens/metadados mantidos dentro de cada lesão.
+  if(!Array.isArray(DATA)) DATA=[];
 
-  if(hasBrokenMigrationArtifacts(DATA)){
-    const custom = Array.isArray(DATA) ? DATA.filter(e=>e && !isSeedLikeId(e.id)) : [];
-    DATA = JSON.parse(JSON.stringify(activeCanonicalSeedV172()));
-    const canonicalKeys = new Set(DATA.map(e=>[e.s||'',e.site||'',e.name||''].join('||').toLocaleLowerCase('pt-BR')));
-    custom.forEach(e=>{
-      const k=[e.s||'',e.site||'',e.name||''].join('||').toLocaleLowerCase('pt-BR');
-      if(!canonicalKeys.has(k)) DATA.push(e);
-    });
-    await saveData();
-    console.info(`[Atlas] recuperação v172: base ativa restaurada (${activeCanonicalSeedV172().length}) + ${DATA.length-activeCanonicalSeedV172().length} registro(s) personalizado(s).`);
+  const currentById = new Map(DATA.filter(Boolean).map(e=>[e.id,e]));
+  const out = [];
+
+  // Mantém a versão existente de cada registro canônico e apenas completa
+  // campos estruturais que eventualmente estejam ausentes.
+  for(const canonical of activeCanonicalSeedV172()){
+    const existing = currentById.get(canonical.id);
+    if(existing){
+      const merged = {...canonical, ...existing};
+
+      // Campos do usuário / conteúdo enriquecido têm prioridade absoluta.
+      if(Array.isArray(existing.images)) merged.images = existing.images;
+      if(existing.img) merged.img = existing.img;
+      if(existing.localImg) merged.localImg = true;
+      if(Array.isArray(existing.links) && existing.links.length) merged.links = existing.links;
+      if(Array.isArray(existing.tags) && existing.tags.length) merged.tags = existing.tags;
+      if(existing.notes) merged.notes = existing.notes;
+      if(existing.enTerm) merged.enTerm = existing.enTerm;
+      if(existing.classification) merged.classification = existing.classification;
+      out.push(merged);
+    }else{
+      // Só adiciona o registro padrão quando ele realmente não existe.
+      out.push(JSON.parse(JSON.stringify(canonical)));
+    }
   }
+
+  // Preserva integralmente lesões personalizadas.
+  for(const e of DATA){
+    if(!e || isSeedLikeId(e.id)) continue;
+    out.push(e);
+  }
+
+  DATA = out;
+  try{ await storage.set(STORAGE_KEY,JSON.stringify(DATA),false); }catch(_e){}
   try{ await storage.set(RECOVERY_KEY,RECOVERY_VERSION,false); }catch(_e){}
   return true;
 }
@@ -2817,7 +2843,10 @@ async function deduplicateV171(){
     const keep=byId.get(keepId), drop=byId.get(dropId);
     if(!keep||!drop) continue;
     mergeDuplicateEntryV171(keep,drop);
-    if(REVIEW && REVIEW[dropId] && !REVIEW[keepId]) REVIEW[keepId]=REVIEW[dropId];
+    if(REVIEW){
+      const keepReview=Number(REVIEW[keepId])||0, dropReview=Number(REVIEW[dropId])||0;
+      if(dropReview>keepReview) REVIEW[keepId]=dropReview;
+    }
     if(SRS && SRS[dropId] && !SRS[keepId]) SRS[keepId]=SRS[dropId];
     remove.add(dropId); merged++;
   }
@@ -2828,7 +2857,7 @@ async function deduplicateV171(){
   try{ await storage.set(REVIEW_KEY,JSON.stringify(REVIEW),false); }catch(_e){}
   await saveSRS();
   await pushToFirebaseNow();
-  console.info(`[Atlas] v186: ${merged} duplicata(s) semântica(s) consolidada(s), preservando imagens e metadados.`);
+  console.info(`[Atlas] v189: ${merged} duplicata(s) semântica(s) consolidada(s), preservando imagens, metadados e progresso.`);
   return merged;
 }
 
@@ -2867,7 +2896,22 @@ async function loadData(){
   }catch(e){ REVIEW = {}; }
   await loadSRS();
   await loadSessionLog();
-  // Só a partir daqui REVIEW/SRS/SESSIONLOG já foram carregados; antes disso nenhum push ao Firebase é permitido.
+
+  // v189: snapshot de segurança da sessão LOCAL antes de tocar no Firebase.
+  // Serve para evitar que uma sincronização defeituosa destrua o último estado válido.
+  try{
+    const emergencySnapshot = {
+      savedAt:new Date().toISOString(),
+      data:DATA,
+      review:REVIEW,
+      srs:SRS,
+      sessionLog:SESSIONLOG,
+      sectionOrder:sectionOrder
+    };
+    localStorage.setItem(LOCAL_PREFIX+'emergency_snapshot_v189', JSON.stringify(emergencySnapshot));
+  }catch(_e){}
+
+  // Só a partir daqui REVIEW/SRS/SESSIONLOG já foram carregados.
   appStateReady = true;
   await syncFromFirebase();
   await upgradeDescriptionsV169();
