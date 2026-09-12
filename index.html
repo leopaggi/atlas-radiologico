@@ -511,6 +511,23 @@ function pushToFirebase(){
     }catch(e){ console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e); }
   }, 400);
 }
+/* versão sem atraso, usada logo após editar/adicionar uma lesão — garante que a
+   nuvem já tenha a mudança antes da tela fechar, evitando que uma sincronização
+   futura sobrescreva a edição com uma versão antiga do Firestore. */
+async function pushToFirebaseNow(){
+  if(!fbDb || fbSyncing) return;
+  clearTimeout(fbPushTimer);
+  try{
+    await FB_DOC_REF().set({
+      data: DATA,
+      review: REVIEW,
+      srs: SRS,
+      sessionLog: SESSIONLOG,
+      sectionOrder: sectionOrder,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }catch(e){ console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e); }
+}
 
 /* busca o estado da nuvem e reconcilia com o local; some lesões canônicas novas (de atualizações do app) que a nuvem ainda não tem */
 async function syncFromFirebase(){
@@ -1221,7 +1238,7 @@ const EN_TERMS = {
   "Dissecção de artéria carótida (traumática)":"carotid artery dissection trauma",
   "Cisto ovariano roto":"ruptured ovarian cyst",
   "Doença inflamatória pélvica aguda":"pelvic inflammatory disease",
-  "Plasmocitoma solitário craniano":"solitary bone plasmacytoma",
+  "Plasmocitoma solitário ósseo (vertebral)":"solitary bone plasmacytoma",
   "Linfoma orbitário":"orbital lymphoma",
   "Cisto neuroepitelial (cisto ependimário)":"neuroepithelial cyst brain",
   "Angiolipoma epidural":"spinal epidural angiolipoma",
@@ -2422,7 +2439,7 @@ async function saveData(){
   try{
     await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
   }catch(e){ console.error('storage error', e); }
-  pushToFirebase();
+  await pushToFirebaseNow();
 }
 async function saveOrder(){
   try{
@@ -2538,14 +2555,19 @@ function scopedEntries(){
     return true;
   });
 }
+const IMG_TAG = '📷 imagens';
 function filteredEntries(){
   let list = scopedEntries();
   if(searchTerm.trim()){
     const q = searchTerm.trim().toLowerCase();
     list = list.filter(e=> e.name.toLowerCase().includes(q) || (e.notes||'').toLowerCase().includes(q) || e.tags.some(t=>t.toLowerCase().includes(q)));
   }
-  if(activeTags.size>0){
-    list = list.filter(e=> [...activeTags].every(t=> e.tags.includes(t)));
+  if(activeTags.has(IMG_TAG)){
+    list = list.filter(e=> hasEntryImgs(e));
+  }
+  const realTags = [...activeTags].filter(t=> t!==IMG_TAG);
+  if(realTags.length>0){
+    list = list.filter(e=> realTags.every(t=> e.tags.includes(t)));
   }
   if(reviewFilter !== null){
     list = list.filter(e=> getReview(e.id) === reviewFilter);
@@ -2574,6 +2596,16 @@ function renderTagbar(){
   const counts = {};
   base.forEach(e=> e.tags.forEach(t=> counts[t]=(counts[t]||0)+1 ));
   const tags = Object.keys(counts).sort((a,b)=> counts[b]-counts[a] || a.localeCompare(b));
+
+  const imgCount = base.filter(e=> hasEntryImgs(e)).length;
+  const imgChip = document.createElement('div');
+  imgChip.className = 'tag-chip' + (activeTags.has(IMG_TAG)?' active':'');
+  imgChip.innerHTML = `${IMG_TAG}<span class="n">${imgCount}</span>`;
+  imgChip.onclick = ()=>{
+    if(activeTags.has(IMG_TAG)) activeTags.delete(IMG_TAG); else activeTags.add(IMG_TAG);
+    renderResults(); renderTagbar();
+  };
+  bar.appendChild(imgChip);
 
   if(tags.length===0){
     const none = document.createElement('span');
