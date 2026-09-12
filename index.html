@@ -463,7 +463,7 @@ body{
 <div id="app">
   <div id="sidebar">
     <div id="brand">
-      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v190</div>
+      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v192</div>
       <h1>Padrões &amp; Lesões</h1>
       <div class="sub">organizado por sítio e características de imagem</div>
     </div>
@@ -475,6 +475,7 @@ body{
         <button class="backup-btn" id="btn-export" title="Salvar lesões, progresso, quiz e ordem das seções">💾 Salvar<br>backup</button>
         <button class="backup-btn" id="btn-import" title="Restaurar um backup .json do Atlas">📂 Importar<br>backup</button>
       </div>
+      <button class="foot-btn" id="btn-recover-data" title="Procurar imagens e progresso em dados locais, snapshots e Firebase">🛟 procurar dados antigos / recuperar</button>
       <button class="foot-btn" id="btn-restore-snapshot" title="Voltar ao último snapshot local criado automaticamente">↶ restaurar último snapshot de segurança</button>
       <button class="foot-btn" id="btn-reset" style="color:var(--red);">⟲ restaurar padrão de fábrica</button>
     </div>
@@ -780,15 +781,36 @@ function setCloudinaryConfig(c){
 }
 function hasCloudinaryConfig(){ const c=getCloudinaryConfig(); return !!(c.cloudName && c.uploadPreset); }
 function escAttr(v){ return String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-async function uploadToCloudinary(file){
+function safeCloudTagPart(v){
+  return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80);
+}
+function cloudinaryLesionContext(meta){
+  const id=String(meta&&meta.id||'').trim();
+  const name=String(meta&&meta.name||'').trim();
+  return {id,name};
+}
+async function uploadToCloudinary(file, lesionMeta={}){
   const cfg=getCloudinaryConfig();
   if(!cfg.cloudName || !cfg.uploadPreset) throw new Error('Configure o Cloudinary primeiro.');
   if(!file || !file.type || !file.type.startsWith('image/')) throw new Error('Arquivo de imagem inválido.');
+
+  const lesion=cloudinaryLesionContext(lesionMeta);
   const fd=new FormData();
   fd.append('file',file,file.name||('atlas-'+Date.now()+'.png'));
   fd.append('upload_preset',cfg.uploadPreset);
   if(cfg.folder) fd.append('folder',cfg.folder);
-  fd.append('tags','atlas-radiologico');
+
+  const tags=['atlas-radiologico'];
+  if(lesion.id) tags.push('lesion-'+safeCloudTagPart(lesion.id));
+  fd.append('tags',tags.join(','));
+
+  const ctx=[];
+  if(lesion.id) ctx.push('lesion_id='+lesion.id.replace(/[|=]/g,'_'));
+  if(lesion.name) ctx.push('lesion_name='+lesion.name.replace(/[|=]/g,'_'));
+  ctx.push('atlas_version=v192');
+  if(ctx.length) fd.append('context',ctx.join('|'));
+
   const endpoint='https://api.cloudinary.com/v1_1/'+encodeURIComponent(cfg.cloudName)+'/image/upload';
   const res=await fetch(endpoint,{method:'POST',body:fd});
   let out=null; try{ out=await res.json(); }catch(e){}
@@ -799,7 +821,9 @@ async function uploadToCloudinary(file){
   return {
     label:'', data:out.secure_url, source:'cloudinary',
     thumb:out.secure_url, publicId:out.public_id||'', assetId:out.asset_id||'',
-    width:out.width||'', height:out.height||'', format:out.format||'', bytes:out.bytes||''
+    width:out.width||'', height:out.height||'', format:out.format||'', bytes:out.bytes||'',
+    lesionId:lesion.id, lesionName:lesion.name,
+    cloudinaryContext:out.context||null
   };
 }
 function openCloudinarySettings(){
@@ -812,7 +836,7 @@ function openCloudinarySettings(){
     <div class="field"><label>Cloud name</label><input id="cloudinary-cloud" autocomplete="off" value="${escAttr(cfg.cloudName)}" placeholder="ex: dxxxxxxx"></div>
     <div class="field"><label>Unsigned upload preset</label><input id="cloudinary-preset" autocomplete="off" value="${escAttr(cfg.uploadPreset)}" placeholder="ex: atlas_radiologico"></div>
     <div class="field"><label>Pasta no Cloudinary (opcional)</label><input id="cloudinary-folder" autocomplete="off" value="${escAttr(cfg.folder)}" placeholder="ex: atlas-radiologico"></div>
-    <div class="detail-notes">O Atlas usa upload <b>unsigned</b>: não precisa de API Secret e nenhuma senha fica no HTML. Estes dados ficam somente no localStorage deste navegador e não entram no backup JSON. No Cloudinary, crie um Upload Preset marcado como <b>Unsigned</b>. Para reduzir abuso, restrinja formatos/tamanho no próprio preset. Não envie imagens com nome, prontuário ou qualquer outro dado identificável do paciente.</div>
+    <div class="detail-notes">O Atlas usa upload <b>unsigned</b>: não precisa de API Secret e nenhuma senha fica no HTML. A partir da v192, cada novo upload recebe no Cloudinary o <b>ID e o nome da lesão</b>, além da tag geral do Atlas. Isso permite reconstruir a associação imagem → lesão mesmo se Firebase/localStorage forem perdidos. Estes dados de configuração ficam somente no localStorage deste navegador e não entram no backup JSON. No Cloudinary, mantenha o Upload Preset como <b>Unsigned</b>. Não envie imagens com nome, prontuário ou qualquer outro dado identificável do paciente.</div>
     <div class="modal-actions"><button class="btn btn-ghost" id="cloudinary-cancel">cancelar</button><div style="display:flex;gap:8px"><button class="btn btn-danger" id="cloudinary-clear">remover configuração</button><button class="btn btn-primary" id="cloudinary-save">salvar</button></div></div>
   </div>`;
   document.body.appendChild(ov);
@@ -2499,7 +2523,7 @@ async function migrateLegacyLocalImagesToCloudinary(){
           const blob=await (await fetch(li.data)).blob();
           const ext=(blob.type.split('/')[1]||'jpg').replace('jpeg','jpg');
           const file=new File([blob], `recuperada-${id}-${Date.now()}.${ext}`, {type:blob.type||'image/jpeg'});
-          const remote=await uploadToCloudinary(file);
+          const remote=await uploadToCloudinary(file,{id:entry.id,name:entry.name});
           remote.label=li.label||'';
           uploaded.push(remote);
         }
@@ -2567,7 +2591,7 @@ function isAutoRadiopaediaLink(l){
    a base canônica e preserva somente registros personalizados (não seed_*).
    ============================================================ */
 const RECOVERY_KEY = 'atlas:recoveryVersion';
-const RECOVERY_VERSION = 'v190-stable-user-state';
+const RECOVERY_VERSION = 'v192-cloudinary-lesion-metadata';
 const SUPPRESSED_DUPLICATE_IDS_V172 = new Set(['seed_876','seed_877','seed_564','seed_580','seed_603','seed_611','seed_619','seed_640','seed_671','seed_698','seed_720','seed_745','seed_761','seed_776','seed_791','seed_835','seed_836','seed_840','seed_1040','seed_1089','seed_605','seed_1028','seed_535','seed_716','seed_634','seed_594','seed_747','seed_614']);
 function activeCanonicalSeedV172(){ return SEED.filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id)); }
 
@@ -3548,6 +3572,11 @@ function openDetail(id){
 function openForm(id){
   editingId = id || null;
   const existing = id ? DATA.find(x=>x.id===id) : null;
+  const formEntryId = existing ? existing.id : ('u_'+Date.now()+'_'+Math.random().toString(36).slice(2,8));
+  const getCurrentLesionMeta = ()=>({
+    id: formEntryId,
+    name: ((document.getElementById('f-name')||{}).value||existing?.name||'').trim()
+  });
   const sections = [...new Set(DATA.map(e=>e.s))].sort();
 
   const ov = document.createElement('div');
@@ -3839,7 +3868,7 @@ function openForm(id){
     cov.querySelector('#collage-insert').onclick=async()=>{
       if(!finalBlob)return; const label=items.map(x=>x.seq).filter(Boolean).join(' · ')||'Quadro multimodal';
       if(hasCloudinaryConfig()){
-        try{const file=new File([finalBlob],'quadro-imagens-'+Date.now()+'.jpg',{type:'image/jpeg'});const remote=await uploadToCloudinary(file);remote.label=label;pendingImgs.push(remote);imgsChanged=true;renderImgGallery();cleanup();toast('Quadro gerado e enviado ao Cloudinary.');}
+        try{const file=new File([finalBlob],'quadro-imagens-'+Date.now()+'.jpg',{type:'image/jpeg'});const remote=await uploadToCloudinary(file,getCurrentLesionMeta());remote.label=label;pendingImgs.push(remote);imgsChanged=true;renderImgGallery();cleanup();toast('Quadro gerado e enviado ao Cloudinary.');}
         catch(e){toast('Falha ao enviar o quadro ao Cloudinary: '+e.message);}
       }else{
         const data=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(finalBlob);});pendingImgs.push({label,data,source:'local'});imgsChanged=true;renderImgGallery();cleanup();toast('Quadro inserido localmente.');
@@ -3932,7 +3961,7 @@ function openForm(id){
           const blob=await fr.blob(); if(!blob.type.startsWith('image/')) throw new Error('arquivo não é imagem');
           const ext=(blob.type.split('/')[1]||'jpg').replace('jpeg','jpg').replace('svg+xml','svg');
           const f=new File([blob],`commons-${Date.now()}-${n}.${ext}`,{type:blob.type});
-          const remote=await uploadToCloudinary(f);
+          const remote=await uploadToCloudinary(f,getCurrentLesionMeta());
           remote.label=''; remote.sourcePage=r.page; remote.sourceSite='Wikimedia Commons'; remote.license=r.license||''; remote.artist=r.artist||''; remote.attribution=r.attribution||''; remote.originalUrl=r.url;
           pendingImgs.push(remote); ok++;
         }catch(err){ console.error('Commons import',r,err); fail++; }
@@ -3947,7 +3976,7 @@ function openForm(id){
   function renderCloudStatus(msg, kind){
     if(msg){ cloudStatus.textContent=msg; cloudStatus.className='img-cloud-status '+(kind||''); return; }
     if(hasCloudinaryConfig()){
-      cloudStatus.textContent='☁ Cloudinary ativo — imagens novas serão hospedadas externamente; o Atlas guarda apenas o link.';
+      cloudStatus.textContent='☁ Cloudinary ativo — novos uploads também recebem ID + nome da lesão para recuperação futura.';
       cloudStatus.className='img-cloud-status ok';
     }else{
       cloudStatus.innerHTML='⚠ Cloudinary indisponível. Por segurança, o Atlas não salvará imagens apenas neste computador. <span id="cloudinary-inline" style="text-decoration:underline;cursor:pointer;">configurar</span>';
@@ -4008,7 +4037,7 @@ function openForm(id){
     if(hasCloudinaryConfig()){
       try{
         renderCloudStatus('☁ Enviando '+(file.name||'imagem')+' para o Cloudinary…','ok');
-        const remote=await uploadToCloudinary(file);
+        const remote=await uploadToCloudinary(file,getCurrentLesionMeta());
         pendingImgs.push(remote); imgsChanged=true; renderImgGallery(); renderCloudStatus();
       }catch(err){
         console.error('Cloudinary upload',err);
@@ -4049,7 +4078,7 @@ function openForm(id){
     const classification = document.getElementById('f-classification').value || null;
     const notes = document.getElementById('f-notes').value.trim();
     if(!name || !sec || !site){ toast('Preencha nome, seção e sítio.'); return; }
-    const entryId = existing ? existing.id : ('u_'+Date.now());
+    const entryId = formEntryId;
     let localImgFlag = existing ? !!existing.localImg : false;
     let remoteImgs = existing && Array.isArray(existing.images) ? existing.images : [];
     if(imgsChanged){
@@ -4061,11 +4090,16 @@ function openForm(id){
           try{
             const blob=await (await fetch(x.data)).blob();
             const file=new File([blob], 'atlas-recuperada-'+Date.now()+'.png', {type:blob.type||'image/png'});
-            const remote=await uploadToCloudinary(file); remote.label=x.label||''; normalized.push(remote);
+            const remote=await uploadToCloudinary(file,{id:entryId,name}); remote.label=x.label||''; normalized.push(remote);
           }catch(err){ toast('Falha ao migrar imagem antiga para o Cloudinary. Nada foi apagado.'); return; }
         }else normalized.push({...x});
       }
-      remoteImgs = normalized.map(x=>({...x, source:x.source||'cloudinary'}));
+      remoteImgs = normalized.map(x=>({
+        ...x,
+        source:x.source||'cloudinary',
+        lesionId:x.lesionId||entryId,
+        lesionName:x.lesionName||name
+      }));
       await deleteLocalImg(entryId); localImgFlag=false;
     }
     if(existing){
@@ -4083,10 +4117,216 @@ function openForm(id){
   };
 }
 
+
+/* ============================================================
+   RECUPERAÇÃO DE DADOS ANTIGOS — v191
+   Somente leitura até o usuário confirmar a restauração.
+   ============================================================ */
+function entryHasRecoverableImages(e){
+  return !!(e && ((Array.isArray(e.images)&&e.images.length) || e.img || e.localImg));
+}
+function summarizeRecoverableEntry(e, source){
+  return {
+    id:e.id||'',
+    name:e.name||e.id||'(sem nome)',
+    source,
+    images:Array.isArray(e.images)?e.images:[],
+    img:e.img||'',
+    localImg:!!e.localImg,
+    entry:e
+  };
+}
+function mergeRecoverableIntoMap(map, e, source){
+  if(!e || !e.id || !entryHasRecoverableImages(e)) return;
+  const prev=map.get(e.id);
+  if(!prev){
+    map.set(e.id, summarizeRecoverableEntry(e,source));
+    return;
+  }
+  const merged=mergeEntryNonDestructive(prev.entry,e);
+  map.set(e.id, summarizeRecoverableEntry(merged, prev.source+' + '+source));
+}
+async function collectRecoverySources(){
+  const found = new Map();
+  const progress = {};
+  const notes = [];
+
+  // 1) Estado atual já carregado.
+  for(const e of (Array.isArray(DATA)?DATA:[])) mergeRecoverableIntoMap(found,e,'estado atual');
+  for(const [id,st] of Object.entries(REVIEW||{})){
+    if((Number(st)||0)>0) progress[id]=Math.max(progress[id]||0,Number(st)||0);
+  }
+
+  // 2) Snapshots v190/v191.
+  const snapKeys=[LOCAL_PREFIX+'safety_snapshots_v190', LOCAL_PREFIX+'safety_snapshots_v191'];
+  for(const key of snapKeys){
+    try{
+      const arr=JSON.parse(localStorage.getItem(key)||'[]');
+      if(Array.isArray(arr)){
+        arr.forEach((snap,idx)=>{
+          for(const [id,im] of Object.entries(snap.images||{})){
+            const base=(DATA||[]).find(e=>e&&e.id===id) || (snap.modifiedEntries&&snap.modifiedEntries[id]) || {id,name:id};
+            const synthetic={...base,images:Array.isArray(im.images)?im.images:[],img:im.img||'',localImg:!!im.localImg};
+            mergeRecoverableIntoMap(found,synthetic,`snapshot local ${idx+1}`);
+          }
+          for(const e of (snap.customEntries||[])) mergeRecoverableIntoMap(found,e,`snapshot local ${idx+1}`);
+          for(const [id,st] of Object.entries(snap.review||{})){
+            if((Number(st)||0)>0) progress[id]=Math.max(progress[id]||0,Number(st)||0);
+          }
+        });
+      }
+    }catch(_e){}
+  }
+
+  // 3) Snapshot emergencial v189, se ainda existir.
+  try{
+    const raw=localStorage.getItem(LOCAL_PREFIX+'emergency_snapshot_v189');
+    if(raw){
+      const snap=JSON.parse(raw);
+      for(const e of (Array.isArray(snap.data)?snap.data:[])) mergeRecoverableIntoMap(found,e,'snapshot emergencial v189');
+      for(const [id,st] of Object.entries(snap.review||{})){
+        if((Number(st)||0)>0) progress[id]=Math.max(progress[id]||0,Number(st)||0);
+      }
+    }
+  }catch(_e){}
+
+  // 4) Qualquer chave antiga do Atlas no localStorage contendo array/objeto de lesões.
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const key=localStorage.key(i)||'';
+      if(!/atlas/i.test(key)) continue;
+      if(key===SAFETY_SNAPSHOTS_KEY || key===CLOUDINARY_CONFIG_LOCAL) continue;
+      const raw=localStorage.getItem(key);
+      if(!raw || raw.length<2) continue;
+      try{
+        const obj=JSON.parse(raw);
+        const arrays=[];
+        if(Array.isArray(obj)) arrays.push(obj);
+        if(obj&&Array.isArray(obj.data)) arrays.push(obj.data);
+        arrays.forEach(arr=>arr.forEach(e=>mergeRecoverableIntoMap(found,e,`localStorage: ${key}`)));
+        const rev=(obj&&obj.review&&typeof obj.review==='object')?obj.review:null;
+        if(rev) for(const [id,st] of Object.entries(rev)){
+          if((Number(st)||0)>0) progress[id]=Math.max(progress[id]||0,Number(st)||0);
+        }
+      }catch(_e){}
+    }
+  }catch(_e){}
+
+  // 5) Firebase atual — leitura sem gravar.
+  if(fbDb){
+    try{
+      const snap=await FB_DOC_REF().get();
+      if(snap.exists){
+        const remote=snap.data()||{};
+        for(const e of (Array.isArray(remote.data)?remote.data:[])) mergeRecoverableIntoMap(found,e,'Firebase');
+        for(const [id,st] of Object.entries(remote.review||{})){
+          if((Number(st)||0)>0) progress[id]=Math.max(progress[id]||0,Number(st)||0);
+        }
+      }
+    }catch(e){ notes.push('Firebase não pôde ser lido: '+String(e&&e.message||e)); }
+  }
+
+  // 6) Tenta a lista pública por tag do Cloudinary.
+  // Nem toda conta permite esse endpoint; falha aqui não altera nada.
+  let cloudAssets=[];
+  try{
+    const cfg=getCloudinaryConfig();
+    const u=`https://res.cloudinary.com/${encodeURIComponent(cfg.cloudName)}/image/list/atlas-radiologico.json`;
+    const r=await fetch(u,{cache:'no-store'});
+    if(r.ok){
+      const j=await r.json();
+      if(j&&Array.isArray(j.resources)) cloudAssets=j.resources;
+    } else {
+      notes.push('Lista pública do Cloudinary não está habilitada nesta conta.');
+    }
+  }catch(_e){ notes.push('Lista pública do Cloudinary indisponível.'); }
+
+  return {entries:[...found.values()], progress, cloudAssets, notes};
+}
+
+function recoveryStatusLabel(st){
+  return st===2?'Dominado':st===1?'Revisando':'Não revisado';
+}
+
+async function openRecoveryInspector(){
+  toast('Procurando dados antigos…');
+  const result=await collectRecoverySources();
+  const ov=document.createElement('div'); ov.className='overlay';
+  ov.onclick=(ev)=>{ if(ev.target===ov) closeOverlay(); };
+
+  const entries=result.entries.sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR'));
+  const withProgress=Object.entries(result.progress).filter(([,st])=>(Number(st)||0)>0);
+
+  const rows=entries.map((x,idx)=>{
+    const n=(Array.isArray(x.images)?x.images.length:0)+(x.img?1:0);
+    const st=result.progress[x.id]||0;
+    return `<div style="border:1px solid var(--line);border-radius:8px;padding:9px 10px;margin:6px 0;">
+      <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;">
+        <input type="checkbox" class="recover-check" data-idx="${idx}" checked style="margin-top:3px">
+        <div style="min-width:0;flex:1">
+          <div style="font-weight:600;color:var(--text)">${escAttr(x.name)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">${n} imagem(ns) · ${escAttr(x.source)}${st?` · <b>${recoveryStatusLabel(st)}</b>`:''}</div>
+        </div>
+      </label>
+    </div>`;
+  }).join('');
+
+  const cloudNote=result.cloudAssets.length
+    ? `<div class="detail-notes" style="margin-top:12px"><b>Cloudinary:</b> encontrei ${result.cloudAssets.length} asset(s) com a tag atlas-radiologico. Como versões antigas não gravavam o ID da lesão no Cloudinary, assets órfãos sem referência no Atlas não podem ser associados automaticamente com segurança.</div>`
+    : `<div class="detail-notes" style="margin-top:12px"><b>Cloudinary:</b> não foi possível obter uma lista pública de assets. Isso não significa que as imagens foram apagadas.</div>`;
+
+  ov.innerHTML=`<div class="modal" style="max-width:760px;">
+    <h2>🛟 Recuperação de dados antigos</h2>
+    <div class="modal-sub">Varredura somente leitura: estado atual, localStorage antigo, snapshots e Firebase.</div>
+
+    <div class="detail-notes" style="margin:12px 0">
+      Encontrados <b>${entries.length}</b> registro(s) com imagens recuperáveis e <b>${withProgress.length}</b> status de revisão acima de zero.
+      Marque os registros que deseja fundir ao Atlas atual. A restauração <b>não apaga</b> imagens nem rebaixa progresso.
+    </div>
+
+    <div style="max-height:46vh;overflow:auto">${rows || '<div class="detail-notes">Nenhuma referência antiga de imagem foi encontrada neste navegador/Firebase.</div>'}</div>
+    ${cloudNote}
+    ${(result.notes||[]).map(n=>`<div style="font-size:11px;color:var(--muted-2);margin-top:5px">${escAttr(n)}</div>`).join('')}
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="recover-cancel">fechar</button>
+      <button class="btn btn-primary" id="recover-apply" ${entries.length?'':'disabled'}>fundir dados encontrados</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  document.getElementById('recover-cancel').onclick=closeOverlay;
+  document.getElementById('recover-apply').onclick=async()=>{
+    const selected=[...ov.querySelectorAll('.recover-check:checked')].map(el=>entries[Number(el.dataset.idx)]).filter(Boolean);
+    if(!selected.length){ toast('Nenhum registro selecionado.'); return; }
+    if(!confirm(`Fundir dados recuperados de ${selected.length} registro(s) ao Atlas atual? Nada será apagado.`)) return;
+
+    createSafetySnapshot('antes da recuperação de dados antigos');
+    const byId=new Map((DATA||[]).filter(Boolean).map(e=>[e.id,e]));
+    for(const x of selected){
+      const cur=byId.get(x.id);
+      byId.set(x.id, cur ? mergeEntryNonDestructive(cur,x.entry) : x.entry);
+    }
+    DATA=[...byId.values()].filter(e=>e&&!SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+    REVIEW=mergeReviewPreservingProgress(REVIEW,result.progress);
+
+    fbSyncing=true;
+    await storage.set(STORAGE_KEY,JSON.stringify(DATA),false);
+    await storage.set(REVIEW_KEY,JSON.stringify(REVIEW),false);
+    fbSyncing=false;
+
+    createSafetySnapshot('após recuperação de dados antigos');
+    renderAll();
+    await pushToFirebaseNow();
+    closeOverlay();
+    toast('Dados encontrados foram fundidos sem apagar o estado atual.');
+  };
+}
+
 /* ============================================================
    AÇÕES GLOBAIS
    ============================================================ */
 document.getElementById('add-btn').onclick = ()=> openForm(null);
+document.getElementById('btn-recover-data').onclick = openRecoveryInspector;
 document.getElementById('search').addEventListener('input', (e)=>{ searchTerm = e.target.value; renderResults(); });
 
 document.getElementById('btn-export').onclick = ()=>{
@@ -4096,7 +4336,7 @@ document.getElementById('btn-export').onclick = ()=>{
   const backup = {
     format: 'atlas-radiologico-backup',
     backupVersion: 1,
-    appVersion: 'v190',
+    appVersion: 'v192',
     exportedAt: now.toISOString(),
     data: DATA,
     review: REVIEW,
@@ -4108,7 +4348,7 @@ document.getElementById('btn-export').onclick = ()=>{
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `atlas-radiologico-backup-v190_${stamp}.json`;
+  a.download = `atlas-radiologico-backup-v192_${stamp}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
