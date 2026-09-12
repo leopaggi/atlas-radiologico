@@ -363,6 +363,20 @@ body{
   padding:3px 8px;border-radius:10px;cursor:pointer;
 }
 .suggest-chip:hover{color:var(--teal);border-color:var(--teal-dim);}
+
+/* ---------- Construtor de quadro de imagens ---------- */
+.collage-modal{max-width:980px;}
+.collage-drop{border:1.5px dashed var(--teal-dim);background:var(--panel-2);padding:14px;border-radius:var(--radius);text-align:center;outline:none;}
+.collage-drop:focus,.collage-drop.drag{border-color:var(--teal);}
+.collage-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:8px;margin:12px 0;}
+.collage-item{background:var(--panel-2);border:1px solid var(--line);padding:6px;border-radius:var(--radius);}
+.collage-item img{width:100%;height:105px;object-fit:contain;background:#000;display:block;border-radius:3px;margin-bottom:6px;}
+.collage-item select{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);padding:6px;border-radius:3px;font-size:11px;}
+.collage-item-actions{display:flex;justify-content:space-between;gap:4px;margin-top:5px;}
+.collage-mini{background:none;border:1px solid var(--line);color:var(--muted);cursor:pointer;border-radius:3px;padding:2px 6px;}
+.collage-preview{width:100%;max-height:520px;object-fit:contain;background:#000;border:1px solid var(--line);display:none;margin-top:10px;}
+.collage-options{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-top:12px;}
+.collage-options .field{margin-bottom:0;min-width:150px;flex:1;}
 .modal-actions{display:flex;justify-content:space-between;margin-top:20px;gap:10px;}
 .btn{
   border:none;border-radius:var(--radius);padding:9px 16px;font-family:inherit;font-size:13px;
@@ -435,7 +449,7 @@ body{
 <div id="app">
   <div id="sidebar">
     <div id="brand">
-      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v156</div>
+      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v163</div>
       <h1>Padrões &amp; Lesões</h1>
       <div class="sub">organizado por sítio e características de imagem</div>
     </div>
@@ -673,7 +687,7 @@ function openCloudinarySettings(){
 /* ============================================================
    DADOS
    ============================================================ */
-const APP_VERSION = 156;
+const APP_VERSION = 163;
 const STORAGE_KEY = 'atlas:pathologies';
 const ORDER_KEY = 'atlas:sectionOrder';
 const DEFAULT_SECTION_ORDER = ["Neurorradiologia","Cabeça e Pescoço","Coluna Vertebral","Tórax","Mamas","Abdômen Superior","Pelve Feminina","Obstetrícia","Pelve Masculina","Musculoesquelético","Vascular"];
@@ -2901,6 +2915,7 @@ function openForm(id){
         <div class="img-gallery" id="img-gallery"></div>
         <div class="img-upload-box" id="img-upload-box">
           <button type="button" class="btn btn-ghost" id="img-pick-btn">📎 adicionar imagem</button>
+          <button type="button" class="btn btn-ghost" id="img-collage-btn" style="margin-left:6px;color:var(--teal);border-color:var(--teal-dim);">▦ criar quadro de imagens</button>
           <span style="color:var(--muted-2);font-size:12px;margin-left:8px;">ou cole (Ctrl+V) aqui — pode adicionar quantas quiser</span>
           <input type="file" id="img-file-input" accept="image/*" multiple style="display:none;">
           <div id="img-cloud-status" class="img-cloud-status"></div>
@@ -3046,6 +3061,85 @@ function openForm(id){
     { title: 'RX / MMG / US', items: ["RX","MMG","US","Doppler"] },
   ];
 
+  function openCollageBuilder(){
+    const cov=document.createElement('div'); cov.className='overlay';
+    cov.innerHTML=`<div class="modal collage-modal">
+      <h2>▦ Criar quadro de imagens</h2>
+      <div class="modal-sub">cole ou selecione de 2 a 8 imagens · organize · identifique as sequências · gere uma única imagem</div>
+      <div class="collage-drop" id="collage-drop" tabindex="0">
+        <button type="button" class="btn btn-ghost" id="collage-pick">📎 selecionar imagens</button>
+        <span style="color:var(--muted-2);font-size:12px;margin-left:8px;">ou Ctrl+V / arraste aqui</span>
+        <input type="file" id="collage-files" accept="image/*" multiple style="display:none">
+      </div>
+      <div class="collage-list" id="collage-list"></div>
+      <div class="collage-options">
+        <div class="field"><label>Layout</label><select id="collage-layout"><option value="auto">Automático</option><option value="2">2 colunas</option><option value="3">3 colunas</option><option value="4">4 colunas</option></select></div>
+        <div class="field"><label>Rótulos</label><select id="collage-label-pos"><option value="top">faixa superior</option><option value="inside">dentro da imagem</option></select></div>
+        <div class="field"><label>Resolução</label><select id="collage-size"><option value="1600">1600 px</option><option value="1920" selected>1920 px</option><option value="2400">2400 px</option></select></div>
+        <button type="button" class="btn btn-primary" id="collage-generate">gerar quadro</button>
+      </div>
+      <canvas id="collage-canvas" style="display:none"></canvas><img id="collage-preview" class="collage-preview">
+      <div class="modal-actions"><button class="btn btn-ghost" id="collage-cancel">cancelar</button><button class="btn btn-primary" id="collage-insert" disabled>inserir quadro no caso</button></div>
+    </div>`;
+    document.body.appendChild(cov);
+    let items=[]; let finalBlob=null; let finalUrl='';
+    const seqs=['RX','MMG','U.S','TC C-','TC C+','RM T1','RM T2','RM T1 +','RM FLAIR','RM DIFUSAO','RM ADC','ANGIORM'];
+    const list=cov.querySelector('#collage-list'), drop=cov.querySelector('#collage-drop'), input=cov.querySelector('#collage-files');
+    const cleanup=()=>{ if(finalUrl) URL.revokeObjectURL(finalUrl); cov.remove(); };
+    cov.onclick=e=>{ if(e.target===cov) cleanup(); };
+    cov.querySelector('#collage-cancel').onclick=cleanup;
+    cov.querySelector('#collage-pick').onclick=()=>input.click();
+    function addFiles(files){
+      [...files].filter(f=>f&&f.type&&f.type.startsWith('image/')).slice(0,8-items.length).forEach(f=>{
+        items.push({file:f,url:URL.createObjectURL(f),seq:''});
+      }); render();
+    }
+    input.onchange=e=>{addFiles(e.target.files); input.value='';};
+    drop.onpaste=e=>{const fs=[...(e.clipboardData?.items||[])].filter(x=>x.type?.startsWith('image/')).map(x=>x.getAsFile()); if(fs.length){e.preventDefault();addFiles(fs);}};
+    drop.ondragover=e=>{e.preventDefault();drop.classList.add('drag');}; drop.ondragleave=()=>drop.classList.remove('drag');
+    drop.ondrop=e=>{e.preventDefault();drop.classList.remove('drag');addFiles(e.dataTransfer.files);};
+    function render(){
+      list.innerHTML=''; items.forEach((it,i)=>{
+        const d=document.createElement('div');d.className='collage-item';
+        d.innerHTML=`<img src="${it.url}"><select><option value="">identificar sequência…</option>${seqs.map(q=>`<option value="${q}" ${it.seq===q?'selected':''}>${q}</option>`).join('')}</select><div class="collage-item-actions"><button class="collage-mini" data-a="left">←</button><button class="collage-mini" data-a="right">→</button><button class="collage-mini" data-a="del">✕</button></div>`;
+        d.querySelector('select').onchange=e=>items[i].seq=e.target.value;
+        d.querySelector('[data-a="left"]').onclick=()=>{if(i){[items[i-1],items[i]]=[items[i],items[i-1]];render();}};
+        d.querySelector('[data-a="right"]').onclick=()=>{if(i<items.length-1){[items[i+1],items[i]]=[items[i],items[i+1]];render();}};
+        d.querySelector('[data-a="del"]').onclick=()=>{URL.revokeObjectURL(items[i].url);items.splice(i,1);render();}; list.appendChild(d);
+      });
+    }
+    async function loadImg(url){return await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=url;});}
+    cov.querySelector('#collage-generate').onclick=async()=>{
+      if(items.length<2){toast('Adicione pelo menos 2 imagens.');return;} if(items.length>8){toast('Máximo de 8 imagens.');return;}
+      const width=+cov.querySelector('#collage-size').value; const lv=cov.querySelector('#collage-layout').value;
+      const cols=lv==='auto'?(items.length<=4?2:(items.length<=6?3:4)):+lv; const rows=Math.ceil(items.length/cols);
+      const gap=4, labelH=54, cellW=Math.floor((width-gap*(cols-1))/cols), cellH=Math.round(cellW*.78);
+      const canvas=cov.querySelector('#collage-canvas'); canvas.width=width; canvas.height=rows*(cellH+labelH)+gap*(rows-1);
+      const ctx=canvas.getContext('2d'); ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height); ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='600 28px Arial';
+      const pos=cov.querySelector('#collage-label-pos').value;
+      for(let i=0;i<items.length;i++){
+        const im=await loadImg(items[i].url), c=i%cols,r=Math.floor(i/cols),x=c*(cellW+gap),y=r*(cellH+labelH+gap);
+        const iy=pos==='top'?y+labelH:y, ih=pos==='top'?cellH:cellH+labelH;
+        const scale=Math.min(cellW/im.width,ih/im.height),dw=im.width*scale,dh=im.height*scale;
+        ctx.drawImage(im,x+(cellW-dw)/2,iy+(ih-dh)/2,dw,dh);
+        const lab=items[i].seq||('Imagem '+(i+1));
+        if(pos==='top'){ctx.fillStyle='#050505';ctx.fillRect(x,y,cellW,labelH);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,y+labelH/2);}
+        else{const bh=46;ctx.fillStyle='rgba(0,0,0,.72)';ctx.fillRect(x,iy+ih-bh,cellW,bh);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,iy+ih-bh/2);}
+      }
+      finalBlob=await new Promise(res=>canvas.toBlob(res,'image/jpeg',.92)); if(finalUrl)URL.revokeObjectURL(finalUrl);finalUrl=URL.createObjectURL(finalBlob);
+      const prev=cov.querySelector('#collage-preview');prev.src=finalUrl;prev.style.display='block';cov.querySelector('#collage-insert').disabled=false;
+    };
+    cov.querySelector('#collage-insert').onclick=async()=>{
+      if(!finalBlob)return; const label=items.map(x=>x.seq).filter(Boolean).join(' · ')||'Quadro multimodal';
+      if(hasCloudinaryConfig()){
+        try{const file=new File([finalBlob],'quadro-rm-'+Date.now()+'.jpg',{type:'image/jpeg'});const remote=await uploadToCloudinary(file);remote.label=label;pendingImgs.push(remote);imgsChanged=true;renderImgGallery();cleanup();toast('Quadro gerado e enviado ao Cloudinary.');}
+        catch(e){toast('Falha ao enviar o quadro ao Cloudinary: '+e.message);}
+      }else{
+        const data=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(finalBlob);});pendingImgs.push({label,data,source:'local'});imgsChanged=true;renderImgGallery();cleanup();toast('Quadro inserido localmente.');
+      }
+    };
+  }
+
   function renderCloudStatus(msg, kind){
     if(msg){ cloudStatus.textContent=msg; cloudStatus.className='img-cloud-status '+(kind||''); return; }
     if(hasCloudinaryConfig()){
@@ -3102,6 +3196,7 @@ function openForm(id){
   }
   renderCloudStatus();
   document.getElementById('img-pick-btn').onclick = ()=> imgFileInput.click();
+  document.getElementById('img-collage-btn').onclick = openCollageBuilder;
 
   async function handleImgFile(file){
     if(!file || !file.type.startsWith('image/')) return;
@@ -3185,7 +3280,7 @@ document.getElementById('btn-export').onclick = ()=>{
   const blob = new Blob([JSON.stringify(DATA,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'atlas-radiologico-backup-v156.json';
+  a.href = url; a.download = 'atlas-radiologico-backup-v163.json';
   a.click();
   URL.revokeObjectURL(url);
   toast('Backup exportado.');
