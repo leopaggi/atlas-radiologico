@@ -453,7 +453,7 @@ body{
 <div id="app">
   <div id="sidebar">
     <div id="brand">
-      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v182</div>
+      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v184</div>
       <h1>Padrões &amp; Lesões</h1>
       <div class="sub">organizado por sítio e características de imagem</div>
     </div>
@@ -511,10 +511,11 @@ try{
 const FB_DOC_REF = () => fbDb.collection('atlas_state').doc('main');
 let fbSyncing = false;   // evita brigar com o próprio load inicial
 let fbPushTimer = null;
+let appStateReady = false; // impede que migrações iniciais enviem REVIEW/SRS vazios ao Firebase
 
 /* envia o estado atual pra nuvem (com pequeno atraso pra juntar mudanças rápidas em uma escrita só) */
 function pushToFirebase(){
-  if(!fbDb || fbSyncing) return;
+  if(!fbDb || fbSyncing || !appStateReady) return;
   clearTimeout(fbPushTimer);
   fbPushTimer = setTimeout(async ()=>{
     try{
@@ -533,7 +534,7 @@ function pushToFirebase(){
    nuvem já tenha a mudança antes da tela fechar, evitando que uma sincronização
    futura sobrescreva a edição com uma versão antiga do Firestore. */
 async function pushToFirebaseNow(){
-  if(!fbDb || fbSyncing) return;
+  if(!fbDb || fbSyncing || !appStateReady) return;
   clearTimeout(fbPushTimer);
   try{
     await FB_DOC_REF().set({
@@ -548,6 +549,18 @@ async function pushToFirebaseNow(){
 }
 
 /* busca o estado da nuvem e reconcilia com o local; some lesões canônicas novas (de atualizações do app) que a nuvem ainda não tem */
+function mergeReviewPreservingProgress(localReview, remoteReview){
+  const out = {...(remoteReview && typeof remoteReview==='object' ? remoteReview : {})};
+  const local = localReview && typeof localReview==='object' ? localReview : {};
+  for(const [id, st] of Object.entries(local)){
+    const lv = Number(st)||0;
+    const rv = Number(out[id])||0;
+    // Nunca regrida automaticamente o progresso: Dominado (2) > Revisando (1) > Não revisado (0).
+    if(lv > rv) out[id] = lv;
+  }
+  return out;
+}
+
 function mergeImagesPreservingLocal(localEntry, remoteEntry){
   const merged = {...remoteEntry};
   const byData = new Map();
@@ -576,7 +589,7 @@ async function syncFromFirebase(){
       const newCanonical = DATA.filter(e => isSeedLikeId(e.id) && !remoteIds.has(e.id));
       const customLocal = DATA.filter(e => !isSeedLikeId(e.id) && !remoteIds.has(e.id));
       DATA = [...reconciledRemote, ...newCanonical, ...customLocal];
-      REVIEW = remote.review || REVIEW || {};
+      REVIEW = mergeReviewPreservingProgress(REVIEW, remote.review);
       SRS = remote.srs || SRS || {};
       SESSIONLOG = remote.sessionLog || SESSIONLOG || {};
       if(Array.isArray(remote.sectionOrder) && remote.sectionOrder.length) sectionOrder = remote.sectionOrder;
@@ -2766,7 +2779,7 @@ async function upgradeDescriptionsV182(){
    O registro canônico mantém o ID antigo; imagens/tags/links e
    metadados úteis do duplicado são incorporados antes da remoção.
    ============================================================ */
-const DUPLICATE_PAIRS_V171 = [("seed_477", "seed_876"), ("seed_625", "seed_877"), ("seed_232", "seed_564"), ("seed_316", "seed_580"), ("seed_157", "seed_603"), ("seed_213", "seed_611"), ("seed_331", "seed_619"), ("seed_91", "seed_640"), ("seed_498", "seed_671"), ("seed_152", "seed_698"), ("seed_42", "seed_720"), ("seed_608", "seed_745"), ("seed_215", "seed_761"), ("seed_239", "seed_776"), ("seed_97", "seed_791"), ("seed_163", "seed_835"), ("seed_606", "seed_836"), ("seed_283", "seed_840"), ("seed_533", "seed_1040"), ("seed_777", "seed_1089"), ("seed_162", "seed_605"), ("seed_604", "seed_1028"), ("seed_136", "seed_535"), ("seed_31", "seed_716"), ("seed_54", "seed_634"), ("seed_46", "seed_594"), ("seed_574", "seed_747")];
+const DUPLICATE_PAIRS_V171 = [("seed_477", "seed_876"), ("seed_625", "seed_877"), ("seed_232", "seed_564"), ("seed_316", "seed_580"), ("seed_157", "seed_603"), ("seed_213", "seed_611"), ("seed_331", "seed_619"), ("seed_91", "seed_640"), ("seed_498", "seed_671"), ("seed_152", "seed_698"), ("seed_42", "seed_720"), ("seed_608", "seed_745"), ("seed_215", "seed_761"), ("seed_239", "seed_776"), ("seed_97", "seed_791"), ("seed_163", "seed_835"), ("seed_606", "seed_836"), ("seed_283", "seed_840"), ("seed_533", "seed_1040"), ("seed_777", "seed_1089"), ("seed_162", "seed_605"), ("seed_604", "seed_1028"), ("seed_136", "seed_535"), ("seed_31", "seed_716"), ("seed_54", "seed_634"), ("seed_46", "seed_594"), ("seed_574", "seed_747"), ("seed_243", "seed_614")];
 function mergeDuplicateEntryV171(target, source){
   if(!target || !source) return target;
   target.tags=[...new Set([...(Array.isArray(target.tags)?target.tags:[]),...(Array.isArray(source.tags)?source.tags:[])])];
@@ -2802,7 +2815,7 @@ async function deduplicateV171(){
   try{ await storage.set(REVIEW_KEY,JSON.stringify(REVIEW),false); }catch(_e){}
   await saveSRS();
   await pushToFirebaseNow();
-  console.info(`[Atlas] v172: ${merged} duplicata(s) semântica(s) consolidada(s), preservando imagens e metadados.`);
+  console.info(`[Atlas] v184: ${merged} duplicata(s) semântica(s) consolidada(s), preservando imagens e metadados.`);
   return merged;
 }
 
@@ -2841,6 +2854,8 @@ async function loadData(){
   }catch(e){ REVIEW = {}; }
   await loadSRS();
   await loadSessionLog();
+  // Só a partir daqui REVIEW/SRS/SESSIONLOG já foram carregados; antes disso nenhum push ao Firebase é permitido.
+  appStateReady = true;
   await syncFromFirebase();
   await upgradeDescriptionsV169();
   await upgradeDescriptionsV170();
@@ -3805,7 +3820,7 @@ document.getElementById('btn-export').onclick = ()=>{
   const blob = new Blob([JSON.stringify(DATA,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'atlas-radiologico-backup-v182.json';
+  a.href = url; a.download = 'atlas-radiologico-backup-v184.json';
   a.click();
   URL.revokeObjectURL(url);
   toast('Backup exportado.');
