@@ -463,7 +463,7 @@ body{
 <div id="app">
   <div id="sidebar">
     <div id="brand">
-      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v189</div>
+      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v190</div>
       <h1>Padrões &amp; Lesões</h1>
       <div class="sub">organizado por sítio e características de imagem</div>
     </div>
@@ -475,6 +475,7 @@ body{
         <button class="backup-btn" id="btn-export" title="Salvar lesões, progresso, quiz e ordem das seções">💾 Salvar<br>backup</button>
         <button class="backup-btn" id="btn-import" title="Restaurar um backup .json do Atlas">📂 Importar<br>backup</button>
       </div>
+      <button class="foot-btn" id="btn-restore-snapshot" title="Voltar ao último snapshot local criado automaticamente">↶ restaurar último snapshot de segurança</button>
       <button class="foot-btn" id="btn-reset" style="color:var(--red);">⟲ restaurar padrão de fábrica</button>
     </div>
   </div>
@@ -503,9 +504,9 @@ body{
 <script>
 /* ============================================================
    FIREBASE — sincronização entre dispositivos (Firestore)
-   Tudo (lesões, revisão, quiz, ordem de seções) espelha um único
-   documento no Firestore. O armazenamento local continua funcionando
-   como cache/offline; o Firestore é a fonte de verdade quando disponível.
+   Tudo (lesões, revisão, quiz, ordem de seções) pode ser sincronizado
+   com o Firestore. A partir da v190, a nuvem NÃO substitui cegamente o
+   estado local: a reconciliação é não destrutiva e preserva dados mais ricos.
    ============================================================ */
 const firebaseConfig = {
   apiKey: "AIzaSyCGGpDCeOmTLTN6nt4qvyo41vnRgea2hvE",
@@ -538,6 +539,7 @@ function pushToFirebase(){
         srs: SRS,
         sessionLog: SESSIONLOG,
         sectionOrder: sectionOrder,
+        stateSchemaVersion: 2,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
     }catch(e){ console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e); }
@@ -556,68 +558,152 @@ async function pushToFirebaseNow(){
       srs: SRS,
       sessionLog: SESSIONLOG,
       sectionOrder: sectionOrder,
+      stateSchemaVersion: 2,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
   }catch(e){ console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e); }
 }
 
-/* busca o estado da nuvem e reconcilia com o local; some lesões canônicas novas (de atualizações do app) que a nuvem ainda não tem */
+/* reconciliação não destrutiva entre estado local e nuvem */
 function mergeReviewPreservingProgress(localReview, remoteReview){
   const out = {...(remoteReview && typeof remoteReview==='object' ? remoteReview : {})};
   const local = localReview && typeof localReview==='object' ? localReview : {};
   for(const [id, st] of Object.entries(local)){
     const lv = Number(st)||0;
     const rv = Number(out[id])||0;
-    // Nunca regrida automaticamente o progresso: Dominado (2) > Revisando (1) > Não revisado (0).
+    // Progresso nunca regride automaticamente.
     if(lv > rv) out[id] = lv;
   }
   return out;
 }
 
-function mergeImagesPreservingLocal(localEntry, remoteEntry){
-  const merged = {...(remoteEntry||{})};
-  const byData = new Map();
-  const add = (arr)=>{ if(Array.isArray(arr)) arr.forEach(img=>{ if(img&&img.data) byData.set(img.data, {...img}); }); };
-  add(remoteEntry && remoteEntry.images);
-  add(localEntry && localEntry.images);
-  merged.images = [...byData.values()];
+function mergeSRSPreservingNewest(localSRS, remoteSRS){
+  const local = localSRS && typeof localSRS==='object' ? localSRS : {};
+  const remote = remoteSRS && typeof remoteSRS==='object' ? remoteSRS : {};
+  const out = {...remote};
+  for(const [id, ls] of Object.entries(local)){
+    const rs = out[id];
+    if(!rs){ out[id] = ls; continue; }
+    const lt = Number(ls && ls.updatedAt)||0;
+    const rt = Number(rs && rs.updatedAt)||0;
+    // Para registros antigos sem timestamp, o local vence: é a opção mais segura
+    // contra apagar estudo/progresso existente neste dispositivo.
+    if(lt===0 && rt===0) out[id] = ls;
+    else if(lt >= rt) out[id] = ls;
+  }
+  return out;
+}
 
-  // Nunca deixe um lado vazio apagar conteúdo existente do outro.
-  merged.localImg = !!((remoteEntry&&remoteEntry.localImg) || (localEntry&&localEntry.localImg));
-  if(!merged.img && localEntry && localEntry.img) merged.img = localEntry.img;
-  if((!merged.links || !merged.links.length) && localEntry && Array.isArray(localEntry.links)) merged.links = localEntry.links;
-  if((!merged.tags || !merged.tags.length) && localEntry && Array.isArray(localEntry.tags)) merged.tags = localEntry.tags;
-  if(!merged.notes && localEntry && localEntry.notes) merged.notes = localEntry.notes;
-  if(!merged.enTerm && localEntry && localEntry.enTerm) merged.enTerm = localEntry.enTerm;
-  if(!merged.classification && localEntry && localEntry.classification) merged.classification = localEntry.classification;
+function mergeSessionLogPreservingProgress(localLog, remoteLog){
+  const local = localLog && typeof localLog==='object' ? localLog : {};
+  const remote = remoteLog && typeof remoteLog==='object' ? remoteLog : {};
+  const out = {...remote};
+  for(const [day, lv] of Object.entries(local)){
+    const rv = out[day] || {};
+    out[day] = {
+      reviewed: Math.max(Number(lv&&lv.reviewed)||0, Number(rv&&rv.reviewed)||0),
+      right: Math.max(Number(lv&&lv.right)||0, Number(rv&&rv.right)||0),
+      wrong: Math.max(Number(lv&&lv.wrong)||0, Number(rv&&rv.wrong)||0)
+    };
+  }
+  return out;
+}
+
+function mergeEntryNonDestructive(localEntry, remoteEntry){
+  const local = localEntry || {};
+  const remote = remoteEntry || {};
+  const lt = Number(local._userUpdatedAt)||0;
+  const rt = Number(remote._userUpdatedAt)||0;
+
+  // Quando há timestamp de edição, a edição mais nova domina os campos mutáveis.
+  // Sem timestamp, prioriza o conteúdo local para não apagar trabalho existente.
+  let merged;
+  if(rt > lt) merged = {...local, ...remote};
+  else merged = {...remote, ...local};
+
+  // Imagens são SEMPRE união: um lado vazio jamais apaga o outro.
+  const byKey = new Map();
+  const addImages = arr=>{
+    if(!Array.isArray(arr)) return;
+    arr.forEach(img=>{
+      if(!img) return;
+      const key = img.data || img.thumb || img.originalUrl || img.publicId || JSON.stringify(img);
+      if(key) byKey.set(key, {...(byKey.get(key)||{}), ...img});
+    });
+  };
+  addImages(remote.images);
+  addImages(local.images);
+  merged.images = [...byKey.values()];
+  merged.localImg = !!(local.localImg || remote.localImg);
+  if(!merged.img) merged.img = local.img || remote.img || '';
+
+  // Para registros legados sem timestamp, campos não vazios locais têm prioridade.
+  if(lt===0 && rt===0){
+    if(local.notes) merged.notes = local.notes;
+    if(local.enTerm) merged.enTerm = local.enTerm;
+    if(Array.isArray(local.tags) && local.tags.length) merged.tags = local.tags;
+    if(Array.isArray(local.links) && local.links.length) merged.links = local.links;
+    if(local.classification) merged.classification = local.classification;
+  }
   return merged;
 }
 
 async function syncFromFirebase(){
   if(!fbDb) return;
+
+  // Snapshot obrigatório ANTES de qualquer reconciliação com a nuvem.
+  try{ createSafetySnapshot('antes da sincronização Firebase'); }catch(_e){}
+
   fbSyncing = true;
   try{
     const snap = await FB_DOC_REF().get();
     if(snap.exists){
       const remote = snap.data() || {};
-      const remoteData = (Array.isArray(remote.data) ? remote.data : []).filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
-      const localById = new Map((Array.isArray(DATA)?DATA:[]).map(e=>[e.id,e]));
-      const remoteIds = new Set(remoteData.map(e=>e.id));
-      const reconciledRemote = remoteData.map(e=>mergeImagesPreservingLocal(localById.get(e.id), e));
-      const newCanonical = DATA.filter(e => isSeedLikeId(e.id) && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id) && !remoteIds.has(e.id));
-      const customLocal = DATA.filter(e => !isSeedLikeId(e.id) && !remoteIds.has(e.id));
-      DATA = [...reconciledRemote, ...newCanonical, ...customLocal];
+      const remoteData = (Array.isArray(remote.data) ? remote.data : [])
+        .filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+
+      const localData = (Array.isArray(DATA)?DATA:[])
+        .filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+
+      const localById = new Map(localData.map(e=>[e.id,e]));
+      const remoteById = new Map(remoteData.map(e=>[e.id,e]));
+      const allIds = new Set([...localById.keys(), ...remoteById.keys()]);
+      const reconciled = [];
+
+      for(const id of allIds){
+        const l = localById.get(id);
+        const r = remoteById.get(id);
+        if(l && r) reconciled.push(mergeEntryNonDestructive(l,r));
+        else reconciled.push(l || r);
+      }
+
+      // Garante lesões canônicas novas sem recriar nem empobrecer registros existentes.
+      const present = new Set(reconciled.map(e=>e&&e.id));
+      for(const canonical of activeCanonicalSeedV172()){
+        if(!present.has(canonical.id)) reconciled.push(JSON.parse(JSON.stringify(canonical)));
+      }
+
+      DATA = reconciled.filter(Boolean);
       REVIEW = mergeReviewPreservingProgress(REVIEW, remote.review);
-      SRS = remote.srs || SRS || {};
-      SESSIONLOG = remote.sessionLog || SESSIONLOG || {};
-      if(Array.isArray(remote.sectionOrder) && remote.sectionOrder.length) sectionOrder = remote.sectionOrder;
+      SRS = mergeSRSPreservingNewest(SRS, remote.srs);
+      SESSIONLOG = mergeSessionLogPreservingProgress(SESSIONLOG, remote.sessionLog);
+
+      // Ordem local é preservada quando válida; remoto só preenche ausência.
+      if((!Array.isArray(sectionOrder) || !sectionOrder.length) &&
+         Array.isArray(remote.sectionOrder) && remote.sectionOrder.length){
+        sectionOrder = remote.sectionOrder;
+      }
+
       await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
-      await saveOrder();
-      try{ await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false); }catch(e){}
-      await saveSRS();
-      await saveSessionLog();
+      await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
+      await storage.set(SRS_KEY, JSON.stringify(SRS), false);
+      await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
+      await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
+
       fbSyncing = false;
-      // Empurra a reconciliação para a nuvem; imagens existentes nunca são removidas por um remoto vazio/stale.
+
+      // Snapshot após reconciliação bem-sucedida.
+      try{ createSafetySnapshot('após sincronização Firebase'); }catch(_e){}
       await pushToFirebaseNow();
     } else {
       fbSyncing = false;
@@ -981,6 +1067,7 @@ function srsGrade(id, correct){
     setReview(id, 1);
   }
   s.due = Date.now() + s.interval*24*60*60*1000;
+  s.updatedAt = Date.now();
   SRS[id] = s;
   saveSRS();
 }
@@ -2473,16 +2560,151 @@ function isAutoRadiopaediaLink(l){
 }
 
 /* ============================================================
-   RECUPERAÇÃO DETERMINÍSTICA — v154
+   RECUPERAÇÃO NÃO DESTRUTIVA — v190
    Base original: backup v148 do usuário, 1112 IDs seed.
    A base ativa v172 suprime 27 aliases/duplicatas consolidados, mantendo IDs estáveis.
    Se detectar artefatos das migrações v151–v153, restaura exatamente
    a base canônica e preserva somente registros personalizados (não seed_*).
    ============================================================ */
 const RECOVERY_KEY = 'atlas:recoveryVersion';
-const RECOVERY_VERSION = 'v189-preserve-user-state';
+const RECOVERY_VERSION = 'v190-stable-user-state';
 const SUPPRESSED_DUPLICATE_IDS_V172 = new Set(['seed_876','seed_877','seed_564','seed_580','seed_603','seed_611','seed_619','seed_640','seed_671','seed_698','seed_720','seed_745','seed_761','seed_776','seed_791','seed_835','seed_836','seed_840','seed_1040','seed_1089','seed_605','seed_1028','seed_535','seed_716','seed_634','seed_594','seed_747','seed_614']);
 function activeCanonicalSeedV172(){ return SEED.filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id)); }
+
+const SAFETY_SNAPSHOTS_KEY = LOCAL_PREFIX+'safety_snapshots_v190';
+const SAFETY_SNAPSHOT_LIMIT = 6;
+
+function buildSafetySnapshot(reason){
+  const imageState = {};
+  const modifiedEntries = {};
+  const customEntries = [];
+
+  for(const e of (Array.isArray(DATA)?DATA:[])){
+    if(!e || !e.id) continue;
+    const hasImgs = (Array.isArray(e.images) && e.images.length) || e.img || e.localImg;
+    if(hasImgs){
+      imageState[e.id] = {
+        images:Array.isArray(e.images) ? e.images : [],
+        img:e.img||'',
+        localImg:!!e.localImg
+      };
+    }
+
+    if(!isSeedLikeId(e.id)){
+      customEntries.push(e);
+    }else if(Number(e._userUpdatedAt)||0){
+      // Guarda a versão completa apenas de registros seed realmente editados pelo usuário.
+      modifiedEntries[e.id] = e;
+    }
+  }
+
+  return {
+    snapshotVersion:1,
+    createdAt:new Date().toISOString(),
+    reason:reason||'automático',
+    images:imageState,
+    modifiedEntries,
+    customEntries,
+    review:{...(REVIEW||{})},
+    srs:{...(SRS||{})},
+    sessionLog:{...(SESSIONLOG||{})},
+    sectionOrder:Array.isArray(sectionOrder)?[...sectionOrder]:[]
+  };
+}
+
+function loadSafetySnapshots(){
+  try{
+    const raw = localStorage.getItem(SAFETY_SNAPSHOTS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  }catch(_e){ return []; }
+}
+
+function createSafetySnapshot(reason){
+  try{
+    const snap = buildSafetySnapshot(reason);
+    const arr = loadSafetySnapshots();
+
+    // Evita criar vários snapshots idênticos em sequência imediata.
+    const signature = JSON.stringify({
+      images:snap.images,
+      modifiedEntries:snap.modifiedEntries,
+      customEntries:snap.customEntries,
+      review:snap.review,
+      srs:snap.srs
+    });
+    const last = arr[0];
+    if(last){
+      const lastSig = JSON.stringify({
+        images:last.images||{},
+        modifiedEntries:last.modifiedEntries||{},
+        customEntries:last.customEntries||[],
+        review:last.review||{},
+        srs:last.srs||{}
+      });
+      if(signature === lastSig) return last;
+    }
+
+    arr.unshift(snap);
+    while(arr.length > SAFETY_SNAPSHOT_LIMIT) arr.pop();
+    localStorage.setItem(SAFETY_SNAPSHOTS_KEY, JSON.stringify(arr));
+    return snap;
+  }catch(e){
+    console.warn('Não foi possível criar snapshot de segurança.', e);
+    return null;
+  }
+}
+
+async function restoreSafetySnapshot(snapshot){
+  if(!snapshot) throw new Error('snapshot ausente');
+
+  const byId = new Map((Array.isArray(DATA)?DATA:[]).filter(Boolean).map(e=>[e.id,e]));
+
+  // Restaura registros seed editados.
+  for(const [id, saved] of Object.entries(snapshot.modifiedEntries||{})){
+    const cur = byId.get(id);
+    byId.set(id, cur ? mergeEntryNonDestructive(cur, saved) : saved);
+  }
+
+  // Restaura/une imagens mesmo de registros sem outras edições.
+  for(const [id, im] of Object.entries(snapshot.images||{})){
+    const cur = byId.get(id);
+    if(!cur) continue;
+    byId.set(id, mergeEntryNonDestructive(cur, {
+      id,
+      images:Array.isArray(im.images)?im.images:[],
+      img:im.img||'',
+      localImg:!!im.localImg
+    }));
+  }
+
+  // Restaura lesões personalizadas.
+  for(const e of (snapshot.customEntries||[])){
+    if(!e || !e.id) continue;
+    const cur = byId.get(e.id);
+    byId.set(e.id, cur ? mergeEntryNonDestructive(cur,e) : e);
+  }
+
+  DATA = [...byId.values()].filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+  REVIEW = mergeReviewPreservingProgress(REVIEW, snapshot.review);
+  SRS = mergeSRSPreservingNewest(SRS, snapshot.srs);
+  SESSIONLOG = mergeSessionLogPreservingProgress(SESSIONLOG, snapshot.sessionLog);
+  if(Array.isArray(snapshot.sectionOrder) && snapshot.sectionOrder.length) sectionOrder = snapshot.sectionOrder;
+
+  // Grava tudo localmente como uma transação lógica antes de tocar na nuvem.
+  const wasSyncing = fbSyncing;
+  fbSyncing = true;
+  await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
+  await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
+  await storage.set(SRS_KEY, JSON.stringify(SRS), false);
+  await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
+  await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
+  fbSyncing = wasSyncing;
+
+  createSafetySnapshot('após restauração de segurança');
+  renderAll();
+  await pushToFirebaseNow();
+}
 
 function isSeedLikeId(id){
   return /^seed_/.test(String(id||''));
@@ -2897,19 +3119,8 @@ async function loadData(){
   await loadSRS();
   await loadSessionLog();
 
-  // v189: snapshot de segurança da sessão LOCAL antes de tocar no Firebase.
-  // Serve para evitar que uma sincronização defeituosa destrua o último estado válido.
-  try{
-    const emergencySnapshot = {
-      savedAt:new Date().toISOString(),
-      data:DATA,
-      review:REVIEW,
-      srs:SRS,
-      sessionLog:SESSIONLOG,
-      sectionOrder:sectionOrder
-    };
-    localStorage.setItem(LOCAL_PREFIX+'emergency_snapshot_v189', JSON.stringify(emergencySnapshot));
-  }catch(_e){}
+  // v190: snapshot compacto e versionado ANTES de qualquer sincronização.
+  try{ createSafetySnapshot('abertura do Atlas antes do Firebase'); }catch(_e){}
 
   // Só a partir daqui REVIEW/SRS/SESSIONLOG já foram carregados.
   appStateReady = true;
@@ -2934,6 +3145,7 @@ async function loadData(){
   renderAll();
 }
 async function saveData(){
+  try{ createSafetySnapshot('antes de salvar alterações'); }catch(_e){}
   try{
     await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
   }catch(e){ console.error('storage error', e); }
@@ -3857,9 +4069,9 @@ function openForm(id){
       await deleteLocalImg(entryId); localImgFlag=false;
     }
     if(existing){
-      existing.name=name; existing.s=sec; existing.site=site; existing.tags=tags; existing.img=img; existing.notes=notes; existing.links=links; existing.enTerm=enTerm; existing.inc=inc; existing.localImg=localImgFlag; existing.images=remoteImgs; existing.classification=classification;
+      existing.name=name; existing.s=sec; existing.site=site; existing.tags=tags; existing.img=img; existing.notes=notes; existing.links=links; existing.enTerm=enTerm; existing.inc=inc; existing.localImg=localImgFlag; existing.images=remoteImgs; existing.classification=classification; existing._userUpdatedAt=Date.now();
     } else {
-      DATA.push({id:entryId, name, s:sec, site, tags, img, notes, links, enTerm, inc, localImg:localImgFlag, images:remoteImgs, classification});
+      DATA.push({id:entryId, name, s:sec, site, tags, img, notes, links, enTerm, inc, localImg:localImgFlag, images:remoteImgs, classification, _userUpdatedAt:Date.now()});
     }
     await saveData();
     document.removeEventListener('keydown', closeFormOnEsc);
@@ -3884,7 +4096,7 @@ document.getElementById('btn-export').onclick = ()=>{
   const backup = {
     format: 'atlas-radiologico-backup',
     backupVersion: 1,
-    appVersion: 'v188',
+    appVersion: 'v190',
     exportedAt: now.toISOString(),
     data: DATA,
     review: REVIEW,
@@ -3896,7 +4108,7 @@ document.getElementById('btn-export').onclick = ()=>{
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `atlas-radiologico-backup-v188_${stamp}.json`;
+  a.download = `atlas-radiologico-backup-v190_${stamp}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -3909,6 +4121,7 @@ document.getElementById('btn-cloudinary').onclick = openCloudinarySettings;
 
 document.getElementById('import-file').addEventListener('change', async (ev)=>{
   const file = ev.target.files[0];
+  try{ createSafetySnapshot('antes de importar backup'); }catch(_e){};
   if(!file) return;
   try{
     const raw = await file.text();
@@ -3972,8 +4185,28 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
   }
   ev.target.value='';
 });
+document.getElementById('btn-restore-snapshot').onclick = async ()=>{
+  const snaps = loadSafetySnapshots();
+  if(!snaps.length){
+    toast('Nenhum snapshot de segurança disponível neste navegador.');
+    return;
+  }
+  const snap = snaps[0];
+  const when = snap.createdAt ? new Date(snap.createdAt).toLocaleString('pt-BR') : 'data desconhecida';
+  const reason = snap.reason || 'automático';
+  if(!confirm(`Restaurar o último snapshot de segurança?\n\nCriado em: ${when}\nMotivo: ${reason}\n\nA restauração faz merge e não apaga imagens/progresso mais avançados atuais.`)) return;
+  try{
+    await restoreSafetySnapshot(snap);
+    toast('Snapshot de segurança restaurado.');
+  }catch(e){
+    console.error(e);
+    toast('Não foi possível restaurar o snapshot.');
+  }
+};
+
 document.getElementById('btn-reset').onclick = async ()=>{
-  if(confirm('Isso substitui TODO o seu banco atual pelo conjunto padrão de exemplo. Exporte antes se quiser manter suas edições. Continuar?')){
+  if(confirm('Isso substitui TODO o seu banco atual pelo conjunto padrão de exemplo. Um snapshot de segurança será criado antes. Continuar?')){
+    try{ createSafetySnapshot('antes de restaurar padrão de fábrica'); }catch(_e){}
     DATA = JSON.parse(JSON.stringify(activeCanonicalSeedV172()));
     await saveData();
     try{ await storage.set(RECOVERY_KEY,RECOVERY_VERSION,false); }catch(_e){}
