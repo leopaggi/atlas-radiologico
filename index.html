@@ -453,7 +453,7 @@ body{
 <div id="app">
   <div id="sidebar">
     <div id="brand">
-      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v167</div>
+      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v168</div>
       <h1>Padrões &amp; Lesões</h1>
       <div class="sub">organizado por sítio e características de imagem</div>
     </div>
@@ -714,7 +714,7 @@ function openCloudinarySettings(){
 /* ============================================================
    DADOS
    ============================================================ */
-const APP_VERSION = 167;
+const APP_VERSION = 168;
 const STORAGE_KEY = 'atlas:pathologies';
 const ORDER_KEY = 'atlas:sectionOrder';
 const DEFAULT_SECTION_ORDER = ["Neurorradiologia","Cabeça e Pescoço","Coluna Vertebral","Tórax","Mamas","Abdômen Superior","Pelve Feminina","Obstetrícia","Pelve Masculina","Musculoesquelético","Vascular"];
@@ -2991,6 +2991,7 @@ function openForm(id){
         <div class="img-upload-box" id="img-upload-box">
           <button type="button" class="btn btn-ghost" id="img-pick-btn">📎 adicionar imagem</button>
           <button type="button" class="btn btn-ghost" id="img-collage-btn" style="margin-left:6px;color:var(--teal);border-color:var(--teal-dim);">▦ criar quadro de imagens</button>
+          <button type="button" class="btn btn-ghost" id="img-web-btn" style="margin-left:6px;color:var(--teal);border-color:var(--teal-dim);">🔎 buscar imagens livres</button>
           <span style="color:var(--muted-2);font-size:12px;margin-left:8px;">ou cole (Ctrl+V) aqui — pode adicionar quantas quiser</span>
           <input type="file" id="img-file-input" accept="image/*" multiple style="display:none;">
           <div id="img-cloud-status" class="img-cloud-status"></div>
@@ -3225,6 +3226,103 @@ function openForm(id){
     };
   }
 
+  function stripHtmlText(v){
+    const d=document.createElement('div'); d.innerHTML=String(v||''); return (d.textContent||'').replace(/\s+/g,' ').trim();
+  }
+
+  function openCommonsImageSearch(){
+    const cov=document.createElement('div'); cov.className='overlay';
+    cov.style.zIndex='10030';
+    const initialTerm=(document.getElementById('f-en-term').value.trim() || document.getElementById('f-name').value.trim());
+    cov.innerHTML=`<div class="modal" style="max-width:1040px;max-height:90vh;overflow:auto;">
+      <h2>🔎 Buscar imagens livres</h2>
+      <div class="modal-sub">teste com Wikimedia Commons · revise a imagem e a licença antes de inserir</div>
+      <div class="field-row" style="align-items:flex-end;gap:8px;">
+        <div class="field" style="flex:1;margin-bottom:0;"><label>Termo de busca</label><input id="commons-q" value="${escAttr(initialTerm)}" placeholder="ex: Wilms tumor CT"></div>
+        <button type="button" class="btn btn-primary" id="commons-search" style="height:38px;">buscar</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted-2);margin:8px 0 12px;">Fonte: Wikimedia Commons. O Atlas salvará também página de origem, autor e licença quando disponíveis.</div>
+      <div id="commons-status" style="font-size:12px;color:var(--muted-2);margin-bottom:10px;"></div>
+      <div id="commons-results" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;"></div>
+      <div class="modal-actions" style="position:sticky;bottom:-1px;background:var(--panel);padding-top:12px;">
+        <button type="button" class="btn btn-ghost" id="commons-cancel">fechar</button>
+        <button type="button" class="btn btn-primary" id="commons-add" disabled>adicionar selecionadas ao caso</button>
+      </div>
+    </div>`;
+    document.body.appendChild(cov);
+    let results=[];
+    let selected=new Set();
+    let busy=false;
+    const close=()=>{ if(cov.isConnected) cov.remove(); };
+    cov.addEventListener('click',e=>{ if(e.target===cov) close(); });
+    cov.querySelector('#commons-cancel').onclick=close;
+    const esc=e=>{ if(e.key==='Escape'&&cov.isConnected){e.stopPropagation();close();document.removeEventListener('keydown',esc,true);} };
+    document.addEventListener('keydown',esc,true);
+    function updateAdd(){ cov.querySelector('#commons-add').disabled=!selected.size||busy; }
+    function renderResults(){
+      const box=cov.querySelector('#commons-results'); box.innerHTML='';
+      results.forEach((r,i)=>{
+        const card=document.createElement('div');
+        card.style.cssText='border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg);cursor:pointer;position:relative;';
+        const lic=[r.license,r.artist].filter(Boolean).join(' · ');
+        card.innerHTML=`<div style="height:145px;background:#000;display:flex;align-items:center;justify-content:center;"><img src="${escAttr(r.thumb)}" loading="lazy" style="max-width:100%;max-height:145px;object-fit:contain;"></div>
+          <div style="padding:7px 8px 8px;font-size:11px;line-height:1.3;"><div style="font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escAttr(r.title)}">${r.title.replace(/^File:/,'')}</div><div style="color:var(--muted-2);margin-top:3px;min-height:28px;">${lic||'licença/autor não informados pela API'}</div></div>
+          <div data-check="1" style="position:absolute;top:7px;right:7px;width:24px;height:24px;border-radius:50%;border:2px solid #fff;background:${selected.has(i)?'var(--teal)':'rgba(0,0,0,.55)'};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;">${selected.has(i)?'✓':''}</div>`;
+        card.onclick=()=>{ selected.has(i)?selected.delete(i):selected.add(i); renderResults(); updateAdd(); };
+        box.appendChild(card);
+      });
+      updateAdd();
+    }
+    async function doSearch(){
+      const q=cov.querySelector('#commons-q').value.trim(); if(!q)return;
+      const st=cov.querySelector('#commons-status'); const box=cov.querySelector('#commons-results');
+      st.textContent='Buscando no Wikimedia Commons…'; box.innerHTML=''; selected.clear(); updateAdd();
+      try{
+        const params=new URLSearchParams({action:'query',format:'json',origin:'*',generator:'search',gsrsearch:q,gsrnamespace:'6',gsrlimit:'16',prop:'imageinfo',iiprop:'url|mime|extmetadata',iiurlwidth:'700'});
+        const res=await fetch('https://commons.wikimedia.org/w/api.php?'+params.toString());
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        const data=await res.json();
+        const pages=Object.values((data.query&&data.query.pages)||{}).sort((a,b)=>(a.index||999)-(b.index||999));
+        results=pages.map(p=>{
+          const ii=(p.imageinfo&&p.imageinfo[0])||{}; const em=ii.extmetadata||{};
+          const mime=ii.mime||'';
+          if(mime && !mime.startsWith('image/')) return null;
+          return {title:p.title||'', thumb:ii.thumburl||ii.url||'', url:ii.url||ii.thumburl||'',
+            page:'https://commons.wikimedia.org/wiki/'+encodeURIComponent((p.title||'').replace(/ /g,'_')),
+            license:stripHtmlText((em.LicenseShortName&&em.LicenseShortName.value)||(em.UsageTerms&&em.UsageTerms.value)||''),
+            artist:stripHtmlText((em.Artist&&em.Artist.value)||(em.Credit&&em.Credit.value)||''),
+            attribution:stripHtmlText((em.Attribution&&em.Attribution.value)||'')};
+        }).filter(x=>x&&x.thumb&&x.url);
+        st.textContent=results.length?`${results.length} resultado(s). Clique nas imagens que deseja adicionar.`:'Nenhuma imagem encontrada. Tente o termo em inglês ou acrescente CT, MRI, ultrasound, x-ray etc.';
+        renderResults();
+      }catch(err){ console.error('Commons search',err); st.textContent='Falha na busca: '+err.message; results=[]; renderResults(); }
+    }
+    cov.querySelector('#commons-search').onclick=doSearch;
+    cov.querySelector('#commons-q').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();doSearch();} });
+    cov.querySelector('#commons-add').onclick=async()=>{
+      if(!selected.size||busy)return;
+      if(!hasCloudinaryConfig()){ toast('Cloudinary precisa estar ativo para adicionar imagens da busca.'); return; }
+      busy=true; updateAdd(); const st=cov.querySelector('#commons-status');
+      const chosen=[...selected].sort((a,b)=>a-b).map(i=>results[i]).filter(Boolean); let ok=0,fail=0;
+      for(let n=0;n<chosen.length;n++){
+        const r=chosen[n]; st.textContent=`Enviando ${n+1}/${chosen.length} ao Cloudinary…`;
+        try{
+          const fr=await fetch(r.url,{mode:'cors'}); if(!fr.ok) throw new Error('imagem HTTP '+fr.status);
+          const blob=await fr.blob(); if(!blob.type.startsWith('image/')) throw new Error('arquivo não é imagem');
+          const ext=(blob.type.split('/')[1]||'jpg').replace('jpeg','jpg').replace('svg+xml','svg');
+          const f=new File([blob],`commons-${Date.now()}-${n}.${ext}`,{type:blob.type});
+          const remote=await uploadToCloudinary(f);
+          remote.label=''; remote.sourcePage=r.page; remote.sourceSite='Wikimedia Commons'; remote.license=r.license||''; remote.artist=r.artist||''; remote.attribution=r.attribution||''; remote.originalUrl=r.url;
+          pendingImgs.push(remote); ok++;
+        }catch(err){ console.error('Commons import',r,err); fail++; }
+      }
+      if(ok){imgsChanged=true;renderImgGallery();}
+      busy=false; updateAdd(); st.textContent=`Concluído: ${ok} adicionada(s)${fail?` · ${fail} falhou/falharam`:''}.`;
+      if(ok&&!fail){ setTimeout(close,500); toast(ok+' imagem(ns) adicionada(s) ao caso.'); }
+    };
+    doSearch();
+  }
+
   function renderCloudStatus(msg, kind){
     if(msg){ cloudStatus.textContent=msg; cloudStatus.className='img-cloud-status '+(kind||''); return; }
     if(hasCloudinaryConfig()){
@@ -3282,6 +3380,7 @@ function openForm(id){
   renderCloudStatus();
   document.getElementById('img-pick-btn').onclick = ()=> imgFileInput.click();
   document.getElementById('img-collage-btn').onclick = openCollageBuilder;
+  document.getElementById('img-web-btn').onclick = openCommonsImageSearch;
 
   async function handleImgFile(file){
     if(!file || !file.type.startsWith('image/')) return;
@@ -3373,7 +3472,7 @@ document.getElementById('btn-export').onclick = ()=>{
   const blob = new Blob([JSON.stringify(DATA,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'atlas-radiologico-backup-v167.json';
+  a.href = url; a.download = 'atlas-radiologico-backup-v168.json';
   a.click();
   URL.revokeObjectURL(url);
   toast('Backup exportado.');
