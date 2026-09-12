@@ -187,7 +187,7 @@ body{
 .quiz-img{width:100%;max-height:320px;object-fit:contain;border-radius:var(--radius);background:var(--panel-2);}
 .quiz-img-gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;width:100%;}
 .quiz-img-item{background:var(--panel-2);border-radius:var(--radius);overflow:hidden;}
-.quiz-img-item img{width:100%;max-height:220px;object-fit:contain;display:block;background:var(--panel-2);}
+.quiz-img-item img{width:100%;max-height:220px;object-fit:contain;display:block;background:var(--panel-2);cursor:zoom-in;}
 .quiz-img-label{font-size:11px;color:var(--muted);text-align:center;padding:4px 2px;font-family:'IBM Plex Mono',monospace;}
 .quiz-grade-row{display:flex;gap:10px;margin-top:16px;}
 .quiz-grade-row .btn{flex:1;padding:12px;font-weight:700;}
@@ -380,7 +380,16 @@ body{
 .detail-img{width:100%;max-height:260px;object-fit:cover;border-radius:var(--radius);margin-bottom:14px;background:var(--panel-2);}
 .detail-img-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:14px;}
 .detail-img-item{background:var(--panel-2);border-radius:var(--radius);overflow:hidden;}
-.detail-img-item img{width:100%;height:110px;object-fit:cover;display:block;}
+.detail-img-item img{width:100%;height:110px;object-fit:cover;display:block;cursor:zoom-in;}
+.lightbox-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;
+  z-index:9999;padding:24px;cursor:zoom-out;
+}
+.lightbox-img{max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;}
+.lightbox-close{
+  position:absolute;top:16px;right:20px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);
+  color:#fff;width:36px;height:36px;border-radius:50%;font-size:16px;cursor:pointer;
+}
 .detail-img-label{font-size:10.5px;color:var(--muted);text-align:center;padding:4px 2px;font-family:'IBM Plex Mono',monospace;}
 .detail-notes{color:var(--muted);font-size:13.5px;white-space:pre-wrap;line-height:1.6;}
 .detail-meta{color:var(--muted-2);font-size:12px;font-family:'IBM Plex Mono',monospace;margin-bottom:14px;}
@@ -2759,7 +2768,10 @@ function openDetail(id){
     getEntryImgs(e).then(imgs=>{
       const gal=document.getElementById('detail-img-gallery'); if(!gal) return;
       const all=imgs.length?imgs:(e.img?[{data:e.img,label:''}]:[]);
-      gal.innerHTML=all.map(img=>`<div class="detail-img-item"><img src="${img.data}">${img.label?`<div class="detail-img-label">${img.label.replace(/</g,'&lt;')}</div>`:''}</div>`).join('');
+      gal.innerHTML=all.map((img,i)=>`<div class="detail-img-item"><img src="${img.data}" data-idx="${i}">${img.label?`<div class="detail-img-label">${img.label.replace(/</g,'&lt;')}</div>`:''}</div>`).join('');
+      gal.querySelectorAll('img').forEach(imgEl=>{
+        imgEl.addEventListener('click', ()=> openImageLightbox(all[+imgEl.dataset.idx].data));
+      });
     });
   }
   function renderReviewButtons(){
@@ -3203,6 +3215,15 @@ function showHoverPreview(src, x, y){
   positionHoverPreview(x, y);
 }
 function hideHoverPreview(){ if(hoverPreviewEl) hoverPreviewEl.style.display = 'none'; }
+
+/* lightbox — expande qualquer imagem de galeria em tela cheia ao clicar */
+function openImageLightbox(src){
+  const ov = document.createElement('div');
+  ov.className = 'overlay lightbox-overlay';
+  ov.onclick = ()=> ov.remove();
+  ov.innerHTML = `<img src="${src}" class="lightbox-img"><button type="button" class="lightbox-close">✕</button>`;
+  document.body.appendChild(ov);
+}
 function attachThumbHoverPreview(thumbEl, e){
   let srcPromise = null;
   if(hasEntryImgs(e)) srcPromise = getEntryFirstImg(e);
@@ -3310,7 +3331,10 @@ function renderQuizCard(){
     getEntryImgs(e).then(imgs=>{
       const gal=document.getElementById('quiz-img-gallery'); if(!gal) return;
       const all=imgs.length?imgs:(e.img?[{data:e.img,label:''}]:[]);
-      gal.innerHTML=all.map(img=>`<div class="quiz-img-item"><img src="${img.data}">${img.label?`<div class="quiz-img-label">${img.label.replace(/</g,'&lt;')}</div>`:''}</div>`).join('');
+      gal.innerHTML=all.map((img,i)=>`<div class="quiz-img-item"><img src="${img.data}" data-idx="${i}">${img.label?`<div class="quiz-img-label">${img.label.replace(/</g,'&lt;')}</div>`:''}</div>`).join('');
+      gal.querySelectorAll('img').forEach(imgEl=>{
+        imgEl.addEventListener('click', ()=> openImageLightbox(all[+imgEl.dataset.idx].data));
+      });
     });
   } else {
     const links = ensureLinks(e);
