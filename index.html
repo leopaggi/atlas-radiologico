@@ -366,8 +366,8 @@ body{
 
 /* ---------- Construtor de quadro de imagens ---------- */
 .collage-modal{max-width:980px;}
-.collage-drop{border:1.5px dashed var(--teal-dim);background:var(--panel-2);padding:14px;border-radius:var(--radius);text-align:center;outline:none;}
-.collage-drop:focus,.collage-drop.drag{border-color:var(--teal);}
+.collage-drop{border:1.5px dashed var(--teal-dim);background:var(--panel-2);padding:24px 14px;border-radius:var(--radius);text-align:center;outline:none;cursor:pointer;transition:border-color .15s ease,background .15s ease;}
+.collage-drop:hover,.collage-drop:focus,.collage-drop.drag{border-color:var(--teal);background:#1d2d38;}
 .collage-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:8px;margin:12px 0;}
 .collage-item{background:var(--panel-2);border:1px solid var(--line);padding:6px;border-radius:var(--radius);}
 .collage-item img{width:100%;height:105px;object-fit:contain;background:#000;display:block;border-radius:3px;margin-bottom:6px;}
@@ -449,7 +449,7 @@ body{
 <div id="app">
   <div id="sidebar">
     <div id="brand">
-      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v163</div>
+      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v165</div>
       <h1>Padrões &amp; Lesões</h1>
       <div class="sub">organizado por sítio e características de imagem</div>
     </div>
@@ -687,7 +687,7 @@ function openCloudinarySettings(){
 /* ============================================================
    DADOS
    ============================================================ */
-const APP_VERSION = 163;
+const APP_VERSION = 165;
 const STORAGE_KEY = 'atlas:pathologies';
 const ORDER_KEY = 'atlas:sectionOrder';
 const DEFAULT_SECTION_ORDER = ["Neurorradiologia","Cabeça e Pescoço","Coluna Vertebral","Tórax","Mamas","Abdômen Superior","Pelve Feminina","Obstetrícia","Pelve Masculina","Musculoesquelético","Vascular"];
@@ -3083,33 +3083,37 @@ function openForm(id){
     </div>`;
     document.body.appendChild(cov);
     let items=[]; let finalBlob=null; let finalUrl='';
-    const seqs=['RX','MMG','U.S','TC C-','TC C+','RM T1','RM T2','RM T1 +','RM FLAIR','RM DIFUSAO','RM ADC','ANGIORM'];
+    const seqs=['RX','MMG','U.S','TC C-','TC C+','RM T1','RM T2','RM T1 +','RM FLAIR','RM DIFUSAO','RM ADC','RM SWI','ANGIORM'];
     const list=cov.querySelector('#collage-list'), drop=cov.querySelector('#collage-drop'), input=cov.querySelector('#collage-files');
     const cleanup=()=>{ if(finalUrl) URL.revokeObjectURL(finalUrl); cov.remove(); };
     cov.onclick=e=>{ if(e.target===cov) cleanup(); };
     cov.querySelector('#collage-cancel').onclick=cleanup;
-    cov.querySelector('#collage-pick').onclick=()=>input.click();
+    cov.querySelector('#collage-pick').onclick=(e)=>{e.stopPropagation();input.click();};
+    drop.onclick=(e)=>{ if(e.target!==input) input.click(); };
+    drop.onkeydown=(e)=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();input.click();} };
     function addFiles(files){
       [...files].filter(f=>f&&f.type&&f.type.startsWith('image/')).slice(0,8-items.length).forEach(f=>{
         items.push({file:f,url:URL.createObjectURL(f),seq:''});
       }); render();
     }
     input.onchange=e=>{addFiles(e.target.files); input.value='';};
-    drop.onpaste=e=>{const fs=[...(e.clipboardData?.items||[])].filter(x=>x.type?.startsWith('image/')).map(x=>x.getAsFile()); if(fs.length){e.preventDefault();addFiles(fs);}};
+    const handlePaste=e=>{const fs=[...(e.clipboardData?.items||[])].filter(x=>x.type?.startsWith('image/')).map(x=>x.getAsFile()); if(fs.length){e.preventDefault();addFiles(fs);}};
+    drop.onpaste=handlePaste;
+    cov.addEventListener('paste',handlePaste);
     drop.ondragover=e=>{e.preventDefault();drop.classList.add('drag');}; drop.ondragleave=()=>drop.classList.remove('drag');
     drop.ondrop=e=>{e.preventDefault();drop.classList.remove('drag');addFiles(e.dataTransfer.files);};
     function render(){
       list.innerHTML=''; items.forEach((it,i)=>{
         const d=document.createElement('div');d.className='collage-item';
         d.innerHTML=`<img src="${it.url}"><select><option value="">identificar sequência…</option>${seqs.map(q=>`<option value="${q}" ${it.seq===q?'selected':''}>${q}</option>`).join('')}</select><div class="collage-item-actions"><button class="collage-mini" data-a="left">←</button><button class="collage-mini" data-a="right">→</button><button class="collage-mini" data-a="del">✕</button></div>`;
-        d.querySelector('select').onchange=e=>items[i].seq=e.target.value;
-        d.querySelector('[data-a="left"]').onclick=()=>{if(i){[items[i-1],items[i]]=[items[i],items[i-1]];render();}};
-        d.querySelector('[data-a="right"]').onclick=()=>{if(i<items.length-1){[items[i+1],items[i]]=[items[i],items[i+1]];render();}};
-        d.querySelector('[data-a="del"]').onclick=()=>{URL.revokeObjectURL(items[i].url);items.splice(i,1);render();}; list.appendChild(d);
+        d.querySelector('select').onchange=e=>{items[i].seq=e.target.value;if(finalBlob)generateCollage();};
+        d.querySelector('[data-a="left"]').onclick=()=>{if(i){[items[i-1],items[i]]=[items[i],items[i-1]];render();if(finalBlob)generateCollage();}};
+        d.querySelector('[data-a="right"]').onclick=()=>{if(i<items.length-1){[items[i+1],items[i]]=[items[i],items[i+1]];render();if(finalBlob)generateCollage();}};
+        d.querySelector('[data-a="del"]').onclick=()=>{URL.revokeObjectURL(items[i].url);items.splice(i,1);render();if(finalBlob&&items.length>=2)generateCollage();}; list.appendChild(d);
       });
     }
     async function loadImg(url){return await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=url;});}
-    cov.querySelector('#collage-generate').onclick=async()=>{
+    async function generateCollage(){
       if(items.length<2){toast('Adicione pelo menos 2 imagens.');return;} if(items.length>8){toast('Máximo de 8 imagens.');return;}
       const width=+cov.querySelector('#collage-size').value; const lv=cov.querySelector('#collage-layout').value;
       const cols=lv==='auto'?(items.length<=4?2:(items.length<=6?3:4)):+lv; const rows=Math.ceil(items.length/cols);
@@ -3128,11 +3132,12 @@ function openForm(id){
       }
       finalBlob=await new Promise(res=>canvas.toBlob(res,'image/jpeg',.92)); if(finalUrl)URL.revokeObjectURL(finalUrl);finalUrl=URL.createObjectURL(finalBlob);
       const prev=cov.querySelector('#collage-preview');prev.src=finalUrl;prev.style.display='block';cov.querySelector('#collage-insert').disabled=false;
-    };
+    }
+    cov.querySelector('#collage-generate').onclick=generateCollage;
     cov.querySelector('#collage-insert').onclick=async()=>{
       if(!finalBlob)return; const label=items.map(x=>x.seq).filter(Boolean).join(' · ')||'Quadro multimodal';
       if(hasCloudinaryConfig()){
-        try{const file=new File([finalBlob],'quadro-rm-'+Date.now()+'.jpg',{type:'image/jpeg'});const remote=await uploadToCloudinary(file);remote.label=label;pendingImgs.push(remote);imgsChanged=true;renderImgGallery();cleanup();toast('Quadro gerado e enviado ao Cloudinary.');}
+        try{const file=new File([finalBlob],'quadro-imagens-'+Date.now()+'.jpg',{type:'image/jpeg'});const remote=await uploadToCloudinary(file);remote.label=label;pendingImgs.push(remote);imgsChanged=true;renderImgGallery();cleanup();toast('Quadro gerado e enviado ao Cloudinary.');}
         catch(e){toast('Falha ao enviar o quadro ao Cloudinary: '+e.message);}
       }else{
         const data=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(finalBlob);});pendingImgs.push({label,data,source:'local'});imgsChanged=true;renderImgGallery();cleanup();toast('Quadro inserido localmente.');
@@ -3280,7 +3285,7 @@ document.getElementById('btn-export').onclick = ()=>{
   const blob = new Blob([JSON.stringify(DATA,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'atlas-radiologico-backup-v163.json';
+  a.href = url; a.download = 'atlas-radiologico-backup-v165.json';
   a.click();
   URL.revokeObjectURL(url);
   toast('Backup exportado.');
