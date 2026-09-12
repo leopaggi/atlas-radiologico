@@ -2759,7 +2759,7 @@ function openDetail(id){
     getEntryImgs(e).then(imgs=>{
       const gal=document.getElementById('detail-img-gallery'); if(!gal) return;
       const all=imgs.length?imgs:(e.img?[{data:e.img,label:''}]:[]);
-      gal.innerHTML=all.map(img=>`<div class="detail-img-item"><img src="${img.data}">${(img.modality||img.label)?`<div class="detail-img-label">${[img.modality,img.label].filter(Boolean).map(x=>x.replace(/</g,'&lt;')).join(' · ')}</div>`:''}</div>`).join('');
+      gal.innerHTML=all.map(img=>`<div class="detail-img-item"><img src="${img.data}">${img.label?`<div class="detail-img-label">${img.label.replace(/</g,'&lt;')}</div>`:''}</div>`).join('');
     });
   }
   function renderReviewButtons(){
@@ -2996,8 +2996,11 @@ function openForm(id){
   const imgBox = document.getElementById('img-upload-box');
   const cloudStatus = document.getElementById('img-cloud-status');
 
-  const IMG_LABEL_PRESETS = ["T1","T2","T1 c/ contraste","T2 FLAIR","Difusão (DWI)","TC sem contraste","TC c/ contraste","US","Doppler"];
-  const IMG_MODALITY_PRESETS = ["RX","MMG","U.S","TC C-","TC C+","RM T1","RM T2","RM T1 +","RM FLAIR","RM DIFUSAO","RM ADC","ANGIORM"];
+  const IMG_PRESET_GROUPS = [
+    { title: 'RM', items: ["RM T1","RM T2","RM T1 c/ contraste","RM T2 FLAIR","RM Difusão (DWI)","RM ADC","AngioRM"] },
+    { title: 'TC', items: ["TC sem contraste","TC c/ contraste","AngioTC"] },
+    { title: 'RX / MMG / US', items: ["RX","MMG","US","Doppler"] },
+  ];
 
   function renderCloudStatus(msg, kind){
     if(msg){ cloudStatus.textContent=msg; cloudStatus.className='img-cloud-status '+(kind||''); return; }
@@ -3020,25 +3023,26 @@ function openForm(id){
         <span class="img-source-badge">${sourceLabel}</span>
         <img src="${img.data}">
         <input class="img-gallery-label" placeholder="descrição da imagem (ex: axial T2, CC, MLO, pós-contraste)" value="${(img.label||'').replace(/"/g,'&quot;')}">
-        <div class="img-gallery-modality"><div class="img-gallery-modality-title">Modalidade / origem</div><div class="img-gallery-presets img-gallery-modality-presets"></div></div>
-        <div class="img-gallery-presets img-gallery-label-presets"></div>
+        <div class="img-gallery-preset-groups"></div>
         <button type="button" class="img-gallery-remove" title="remover esta imagem do Atlas">✕</button>
       `;
       const labelInput = item.querySelector('.img-gallery-label');
       labelInput.addEventListener('input', (ev)=>{ pendingImgs[idx].label = ev.target.value; imgsChanged = true; });
-      const modalityRow = item.querySelector('.img-gallery-modality-presets');
-      IMG_MODALITY_PRESETS.forEach(preset=>{
-        const chip = document.createElement('button'); chip.type='button';
-        chip.className='img-gallery-preset-chip'+(img.modality===preset?' active':''); chip.textContent=preset;
-        chip.onclick=()=>{ pendingImgs[idx].modality=(pendingImgs[idx].modality===preset?'':preset); imgsChanged=true; renderImgGallery(); };
-        modalityRow.appendChild(chip);
-      });
-      const presetsRow = item.querySelector('.img-gallery-label-presets');
-      IMG_LABEL_PRESETS.forEach(preset=>{
-        const chip = document.createElement('button'); chip.type='button';
-        chip.className='img-gallery-preset-chip'+(img.label===preset?' active':''); chip.textContent=preset;
-        chip.onclick=()=>{ pendingImgs[idx].label=preset; imgsChanged=true; renderImgGallery(); };
-        presetsRow.appendChild(chip);
+      const groupsWrap = item.querySelector('.img-gallery-preset-groups');
+      IMG_PRESET_GROUPS.forEach(group=>{
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'img-gallery-modality';
+        groupDiv.innerHTML = `<div class="img-gallery-modality-title">${group.title}</div><div class="img-gallery-presets"></div>`;
+        const row = groupDiv.querySelector('.img-gallery-presets');
+        group.items.forEach(preset=>{
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'img-gallery-preset-chip' + (img.label===preset ? ' active' : '');
+          chip.textContent = preset;
+          chip.onclick = ()=>{ pendingImgs[idx].label = preset; imgsChanged = true; renderImgGallery(); };
+          row.appendChild(chip);
+        });
+        groupsWrap.appendChild(groupDiv);
       });
       item.querySelector('.img-gallery-remove').addEventListener('click', ()=>{
         pendingImgs.splice(idx,1); imgsChanged=true; renderImgGallery();
@@ -3048,7 +3052,7 @@ function openForm(id){
   }
   if(existing){
     getEntryImgs(existing).then(imgs=>{
-      pendingImgs = imgs.map(i=>({...i,label:i.label||'',modality:i.modality||'',source:i.source||'local'}));
+      pendingImgs = imgs.map(i=>({...i, label:[i.modality,i.label].filter(Boolean).join(' ').trim(), source:i.source||'local'}));
       renderImgGallery();
     });
   }
@@ -3070,7 +3074,7 @@ function openForm(id){
     }else{
       try{
         const dataUrl=await resizeImageToDataUrl(file,900,0.78);
-        pendingImgs.push({label:'',modality:'',data:dataUrl,source:'local'}); imgsChanged=true; renderImgGallery();
+        pendingImgs.push({label:'',data:dataUrl,source:'local'}); imgsChanged=true; renderImgGallery();
       }catch(e){ toast('Não consegui processar essa imagem.'); }
     }
   }
@@ -3089,7 +3093,7 @@ function openForm(id){
   document.getElementById('img-add-url').onclick=()=>{
     const el=document.getElementById('f-img'); const url=el.value.trim();
     if(!/^https?:\/\//i.test(url)){ toast('Cole uma URL http/https válida.'); return; }
-    pendingImgs.push({label:'',modality:'',data:url,source:'url'}); imgsChanged=true; el.value=''; renderImgGallery();
+    pendingImgs.push({label:'',data:url,source:'url'}); imgsChanged=true; el.value=''; renderImgGallery();
   };
 
   document.getElementById('f-cancel').onclick = ()=>{ document.removeEventListener('keydown', closeFormOnEsc); closeOverlay(); };
@@ -3107,7 +3111,7 @@ function openForm(id){
     let localImgFlag = existing ? !!existing.localImg : false;
     let remoteImgs = existing && Array.isArray(existing.images) ? existing.images : [];
     if(imgsChanged){
-      const localImgs = pendingImgs.filter(x=>x.source==='local').map(x=>({label:x.label||'',modality:x.modality||'',data:x.data}));
+      const localImgs = pendingImgs.filter(x=>x.source==='local').map(x=>({label:x.label||'',data:x.data}));
       remoteImgs = pendingImgs.filter(x=>x.source!=='local').map(x=>({...x}));
       if(localImgs.length>0){ await setLocalImgs(entryId, localImgs); localImgFlag=true; }
       else { await deleteLocalImg(entryId); localImgFlag=false; }
@@ -3306,7 +3310,7 @@ function renderQuizCard(){
     getEntryImgs(e).then(imgs=>{
       const gal=document.getElementById('quiz-img-gallery'); if(!gal) return;
       const all=imgs.length?imgs:(e.img?[{data:e.img,label:''}]:[]);
-      gal.innerHTML=all.map(img=>`<div class="quiz-img-item"><img src="${img.data}">${(img.modality||img.label)?`<div class="quiz-img-label">${[img.modality,img.label].filter(Boolean).map(x=>x.replace(/</g,'&lt;')).join(' · ')}</div>`:''}</div>`).join('');
+      gal.innerHTML=all.map(img=>`<div class="quiz-img-item"><img src="${img.data}">${img.label?`<div class="quiz-img-label">${img.label.replace(/</g,'&lt;')}</div>`:''}</div>`).join('');
     });
   } else {
     const links = ensureLinks(e);
