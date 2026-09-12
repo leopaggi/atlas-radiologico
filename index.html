@@ -369,7 +369,11 @@ body{
 .collage-drop{border:1.5px dashed var(--teal-dim);background:var(--panel-2);padding:24px 14px;border-radius:var(--radius);text-align:center;outline:none;cursor:pointer;transition:border-color .15s ease,background .15s ease;}
 .collage-drop:hover,.collage-drop:focus,.collage-drop.drag{border-color:var(--teal);background:#1d2d38;}
 .collage-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:8px;margin:12px 0;}
-.collage-item{background:var(--panel-2);border:1px solid var(--line);padding:6px;border-radius:var(--radius);}
+.collage-item{background:var(--panel-2);border:1px solid var(--line);padding:6px;border-radius:var(--radius);cursor:grab;user-select:none;transition:opacity .12s ease,border-color .12s ease,transform .12s ease;}
+.collage-item:active{cursor:grabbing;}
+.collage-item.dragging{opacity:.45;border-color:var(--teal);transform:scale(.98);}
+.collage-item.drag-over{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal) inset;}
+.collage-drag-hint{font-size:11px;color:var(--muted-2);margin:4px 0 10px;font-family:'IBM Plex Mono',monospace;}
 .collage-item img{width:100%;height:105px;object-fit:contain;background:#000;display:block;border-radius:3px;margin-bottom:6px;}
 .collage-item select{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);padding:6px;border-radius:3px;font-size:11px;}
 .collage-item-actions{display:flex;justify-content:space-between;gap:4px;margin-top:5px;}
@@ -449,7 +453,7 @@ body{
 <div id="app">
   <div id="sidebar">
     <div id="brand">
-      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v166</div>
+      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v167</div>
       <h1>Padrões &amp; Lesões</h1>
       <div class="sub">organizado por sítio e características de imagem</div>
     </div>
@@ -710,7 +714,7 @@ function openCloudinarySettings(){
 /* ============================================================
    DADOS
    ============================================================ */
-const APP_VERSION = 166;
+const APP_VERSION = 167;
 const STORAGE_KEY = 'atlas:pathologies';
 const ORDER_KEY = 'atlas:sectionOrder';
 const DEFAULT_SECTION_ORDER = ["Neurorradiologia","Cabeça e Pescoço","Coluna Vertebral","Tórax","Mamas","Abdômen Superior","Pelve Feminina","Obstetrícia","Pelve Masculina","Musculoesquelético","Vascular"];
@@ -3142,7 +3146,7 @@ function openForm(id){
         <span style="color:var(--muted-2);font-size:12px;margin-left:8px;">ou Ctrl+V / arraste aqui</span>
         <input type="file" id="collage-files" accept="image/*" multiple style="display:none">
       </div>
-      <div class="collage-list" id="collage-list"></div>
+      <div class="collage-drag-hint">↕ arraste as imagens para reorganizar a ordem</div><div class="collage-list" id="collage-list"></div>
       <div class="collage-options">
         <div class="field"><label>Layout</label><select id="collage-layout"><option value="auto">Automático</option><option value="2">2 colunas</option><option value="3">3 colunas</option><option value="4">4 colunas</option></select></div>
         <div class="field"><label>Rótulos</label><select id="collage-label-pos"><option value="top">faixa superior</option><option value="inside">dentro da imagem</option></select></div>
@@ -3175,8 +3179,13 @@ function openForm(id){
     drop.ondrop=e=>{e.preventDefault();drop.classList.remove('drag');addFiles(e.dataTransfer.files);};
     function render(){
       list.innerHTML=''; items.forEach((it,i)=>{
-        const d=document.createElement('div');d.className='collage-item';
-        d.innerHTML=`<img src="${it.url}"><select><option value="">identificar sequência…</option>${seqs.map(q=>`<option value="${q}" ${it.seq===q?'selected':''}>${q}</option>`).join('')}</select><div class="collage-item-actions"><button class="collage-mini" data-a="left">←</button><button class="collage-mini" data-a="right">→</button><button class="collage-mini" data-a="del">✕</button></div>`;
+        const d=document.createElement('div');d.className='collage-item'; d.draggable=true; d.dataset.index=i;
+        d.innerHTML=`<img src="${it.url}" draggable="false"><select><option value="">identificar sequência…</option>${seqs.map(q=>`<option value="${q}" ${it.seq===q?'selected':''}>${q}</option>`).join('')}</select><div class="collage-item-actions"><button class="collage-mini" data-a="left">←</button><button class="collage-mini" data-a="right">→</button><button class="collage-mini" data-a="del">✕</button></div>`;
+        d.ondragstart=e=>{ d.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',String(i)); };
+        d.ondragend=()=>{ d.classList.remove('dragging'); list.querySelectorAll('.drag-over').forEach(x=>x.classList.remove('drag-over')); };
+        d.ondragover=e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; d.classList.add('drag-over'); };
+        d.ondragleave=()=>d.classList.remove('drag-over');
+        d.ondrop=e=>{ e.preventDefault(); d.classList.remove('drag-over'); const from=Number(e.dataTransfer.getData('text/plain')); const to=i; if(Number.isInteger(from)&&from>=0&&from<items.length&&from!==to){ const moved=items.splice(from,1)[0]; items.splice(to,0,moved); render(); if(finalBlob)generateCollage(); } };
         d.querySelector('select').onchange=e=>{items[i].seq=e.target.value;if(finalBlob)generateCollage();};
         d.querySelector('[data-a="left"]').onclick=()=>{if(i){[items[i-1],items[i]]=[items[i],items[i-1]];render();if(finalBlob)generateCollage();}};
         d.querySelector('[data-a="right"]').onclick=()=>{if(i<items.length-1){[items[i+1],items[i]]=[items[i],items[i+1]];render();if(finalBlob)generateCollage();}};
@@ -3364,7 +3373,7 @@ document.getElementById('btn-export').onclick = ()=>{
   const blob = new Blob([JSON.stringify(DATA,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'atlas-radiologico-backup-v166.json';
+  a.href = url; a.download = 'atlas-radiologico-backup-v167.json';
   a.click();
   URL.revokeObjectURL(url);
   toast('Backup exportado.');
