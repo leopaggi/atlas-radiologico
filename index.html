@@ -3369,15 +3369,18 @@ async function loadData(){
     // que o usuário NUNCA editou manualmente (sem _userUpdatedAt) sempre absorve
     // classificação/tags/notas/termo em inglês/nome mais recentes do arquivo atual.
     // Sem isso, um navegador que carregou uma versão antiga guardaria erros já
-    // corrigidos (ex: classificação errada) para sempre, mesmo após atualizações.
-    // Imagens, links editados manualmente e progresso de revisão nunca são tocados aqui.
+    // corrigidos (ex: classificação errada, imagem atribuída à lesão errada) para
+    // sempre, mesmo após atualizações. Isso agora inclui imagens: se você editou
+    // uma lesão manualmente pelo formulário (o que sempre grava _userUpdatedAt),
+    // ela fica protegida e nunca é sobrescrita por esta rotina. Links editados
+    // manualmente e progresso de revisão também nunca são tocados aqui.
     const seedById = new Map(SEED.map(e=>[e.id, e]));
     let canonicalRefreshed = 0;
     DATA.forEach(e=>{
       if(Number(e._userUpdatedAt)||0) return; // usuário editou esta lesão — nunca sobrescrever
       const canon = seedById.get(e.id);
       if(!canon) return; // lesão personalizada do usuário, sem par no arquivo — preservar como está
-      const fieldsToSync = ['name','s','site','tags','notes','classification','enTerm','inc'];
+      const fieldsToSync = ['name','s','site','tags','notes','classification','enTerm','inc','images','localImg'];
       let changed = false;
       fieldsToSync.forEach(f=>{
         const a = JSON.stringify(e[f]);
