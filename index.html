@@ -539,7 +539,7 @@ body{
 <div id="app">
   <div id="sidebar">
     <div id="brand">
-      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v193</div>
+      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v208</div>
       <h1>Padrões &amp; Lesões</h1>
       <div class="sub">organizado por sítio e características de imagem</div>
     </div>
@@ -730,6 +730,67 @@ function mergeSessionLogPreservingProgress(localLog, remoteLog){
   return out;
 }
 
+/* v208 — integridade imagem ↔ lesão.
+   Uma imagem nunca deve migrar silenciosamente para outro ID. */
+function stableImageKeyV208(img){
+  if(!img || typeof img!=='object') return '';
+  if(img.assetId) return 'asset:'+String(img.assetId);
+  if(img.publicId) return 'public:'+String(img.publicId);
+  const clean=v=>String(v||'').trim().replace(/[?#].*$/,'').replace(/\/v\d+\//,'/');
+  if(img.originalUrl) return 'original:'+clean(img.originalUrl);
+  if(img.data) return 'data:'+clean(img.data);
+  if(img.thumb) return 'thumb:'+clean(img.thumb);
+  return '';
+}
+
+let canonicalImageOwnersV208 = null;
+function getCanonicalImageOwnersV208(){
+  if(canonicalImageOwnersV208) return canonicalImageOwnersV208;
+  const owners = new Map();
+  for(const e of (Array.isArray(SEED)?SEED:[])){
+    for(const img of (Array.isArray(e.images)?e.images:[])){
+      const k=stableImageKeyV208(img);
+      if(k && !owners.has(k)) owners.set(k,e.id);
+    }
+  }
+  canonicalImageOwnersV208 = owners;
+  return owners;
+}
+
+function imageBelongsToEntryV208(img, entry){
+  if(!img || !entry) return false;
+  // Uploads novos já carregam o ID de origem: nunca aceitar em outro registro.
+  if(img.lesionId && String(img.lesionId)!==String(entry.id)) return false;
+
+  // Imagens que já fazem parte do SEED têm proprietário canônico conhecido.
+  // Isso bloqueia contaminação por snapshots/Firebase de versões com IDs desalinhados.
+  const k=stableImageKeyV208(img);
+  const owner=k ? getCanonicalImageOwnersV208().get(k) : null;
+  if(owner && String(owner)!==String(entry.id)) return false;
+  return true;
+}
+
+function sanitizeEntryImagesV208(entry){
+  if(!entry || !Array.isArray(entry.images)) return 0;
+  const before=entry.images.length;
+  const byKey=new Map();
+  const loose=[];
+  for(const img of entry.images){
+    if(!imageBelongsToEntryV208(img,entry)) continue;
+    const k=stableImageKeyV208(img);
+    if(k) byKey.set(k,{...(byKey.get(k)||{}),...img});
+    else loose.push(img);
+  }
+  entry.images=[...byKey.values(),...loose];
+  return before-entry.images.length;
+}
+
+function sanitizeAllImageOwnershipV208(){
+  let removed=0;
+  for(const e of (Array.isArray(DATA)?DATA:[])) removed += sanitizeEntryImagesV208(e);
+  return removed;
+}
+
 function mergeEntryNonDestructive(localEntry, remoteEntry){
   const local = localEntry || {};
   const remote = remoteEntry || {};
@@ -742,19 +803,13 @@ function mergeEntryNonDestructive(localEntry, remoteEntry){
   if(rt > lt) merged = {...local, ...remote};
   else merged = {...remote, ...local};
 
-  // Imagens são SEMPRE união: um lado vazio jamais apaga o outro.
-  const byKey = new Map();
-  const addImages = arr=>{
-    if(!Array.isArray(arr)) return;
-    arr.forEach(img=>{
-      if(!img) return;
-      const key = img.data || img.thumb || img.originalUrl || img.publicId || JSON.stringify(img);
-      if(key) byKey.set(key, {...(byKey.get(key)||{}), ...img});
-    });
-  };
-  addImages(remote.images);
-  addImages(local.images);
-  merged.images = [...byKey.values()];
+  // União não destrutiva, mas SEM permitir que uma imagem atravesse para outro ID.
+  const imageCandidates = [
+    ...(Array.isArray(remote.images)?remote.images:[]),
+    ...(Array.isArray(local.images)?local.images:[])
+  ];
+  merged.images = imageCandidates;
+  sanitizeEntryImagesV208(merged);
   merged.localImg = !!(local.localImg || remote.localImg);
   if(!merged.img) merged.img = local.img || remote.img || '';
 
@@ -2606,10 +2661,17 @@ function runDuplicateCleanup(){
     const others = list.slice(1);
 
     const byKey = new Map();
-    const addImgs = arr => { if(Array.isArray(arr)) arr.forEach(img=>{ if(!img) return; const k = img.data||img.thumb||img.originalUrl||img.publicId||JSON.stringify(img); if(k) byKey.set(k, {...(byKey.get(k)||{}), ...img}); }); };
-    addImgs(keeper.images);
-    others.forEach(o=> addImgs(o.images));
-    const mergedImages = [...byKey.values()];
+    const addImgs = (arr, destination) => {
+      if(!Array.isArray(arr)) return;
+      arr.forEach(img=>{
+        if(!img || !imageBelongsToEntryV208(img,destination)) return;
+        const k=stableImageKeyV208(img);
+        if(k) byKey.set(k,{...(byKey.get(k)||{}),...img});
+      });
+    };
+    addImgs(keeper.images,keeper);
+    others.forEach(o=>addImgs(o.images,keeper));
+    const mergedImages=[...byKey.values()];
     if(JSON.stringify(mergedImages) !== JSON.stringify(keeper.images||[])){ keeper.images = mergedImages; changed = true; }
     const newLocalImg = !!(keeper.localImg || others.some(o=>o.localImg));
     if(newLocalImg !== !!keeper.localImg){ keeper.localImg = newLocalImg; changed = true; }
@@ -3255,7 +3317,11 @@ function mergeDuplicateEntryV171(target, source){
   if(!target || !source) return target;
   target.tags=[...new Set([...(Array.isArray(target.tags)?target.tags:[]),...(Array.isArray(source.tags)?source.tags:[])])];
   const imgs=new Map();
-  [...(Array.isArray(target.images)?target.images:[]),...(Array.isArray(source.images)?source.images:[])].forEach(x=>{ if(x&&x.data) imgs.set(x.data,{...x}); });
+  [...(Array.isArray(target.images)?target.images:[]),...(Array.isArray(source.images)?source.images:[])].forEach(x=>{
+    if(!x || !imageBelongsToEntryV208(x,target)) return;
+    const k=stableImageKeyV208(x);
+    if(k) imgs.set(k,{...(imgs.get(k)||{}),...x});
+  });
   target.images=[...imgs.values()];
   const links=new Map();
   [...(Array.isArray(target.links)?target.links:[]),...(Array.isArray(source.links)?source.links:[])].forEach(x=>{ if(x&&x.url) links.set(x.url,{...x}); });
@@ -3374,6 +3440,23 @@ async function loadData(){
   // Só a partir daqui REVIEW/SRS/SESSIONLOG já foram carregados.
   appStateReady = true;
   await syncFromFirebase();
+
+  // v208: o Firebase pode trazer registros duplicados ou imagens associadas a IDs errados.
+  // Corrige DEPOIS da reconciliação remota, antes de renderizar ou gravar novamente.
+  const wrongImagesRemovedV208 = sanitizeAllImageOwnershipV208();
+  const postSyncDupV208 = runDuplicateCleanup();
+  if(wrongImagesRemovedV208 || postSyncDupV208.changed){
+    try{ await storage.set(STORAGE_KEY,JSON.stringify(DATA),false); }catch(_e){}
+  }
+  if(postSyncDupV208.reviewOrSrsChanged){
+    try{ await storage.set(REVIEW_KEY,JSON.stringify(REVIEW),false); }catch(_e){}
+    await saveSRS();
+  }
+  if(wrongImagesRemovedV208 || postSyncDupV208.changed || postSyncDupV208.reviewOrSrsChanged){
+    await pushToFirebaseNow();
+    console.info(`[Atlas] v208 integridade: ${wrongImagesRemovedV208} imagem(ns) em ID incorreto removida(s); duplicatas exatas pós-sync corrigidas.`);
+  }
+
   await upgradeDescriptionsV169();
   await upgradeDescriptionsV170();
   await upgradeDescriptionsV173();
@@ -3395,6 +3478,7 @@ async function loadData(){
 }
 async function saveData(){
   try{ createSafetySnapshot('antes de salvar alterações'); }catch(_e){}
+  sanitizeAllImageOwnershipV208();
   try{
     await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
   }catch(e){ console.error('storage error', e); }
