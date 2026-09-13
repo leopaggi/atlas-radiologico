@@ -294,6 +294,13 @@ body{
 .link-row-label{color:var(--teal);flex-shrink:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .link-row-url{color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .link-row-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;flex-shrink:0;}
+.link-row-edit{background:none;border:none;color:var(--teal);cursor:pointer;font-size:13px;flex-shrink:0;}
+.link-row-save{background:none;border:none;color:var(--green,#4E9A6A);cursor:pointer;font-size:14px;flex-shrink:0;}
+.link-row-cancel{background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;flex-shrink:0;}
+.link-row-edit-label,.link-row-edit-url{
+  background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--text);
+  padding:5px 8px;font-size:12.5px;font-family:inherit;
+}
 .suggest-row{margin-top:10px;max-height:220px;overflow-y:auto;padding-right:4px;}
 .img-upload-box{
   border:1.5px dashed var(--line);border-radius:var(--radius);padding:14px;
@@ -894,6 +901,8 @@ function setCloudinaryConfig(c){
 }
 function hasCloudinaryConfig(){ const c=getCloudinaryConfig(); return !!(c.cloudName && c.uploadPreset); }
 function escAttr(v){ return String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+/* alias global — o painel de progresso/quiz reformado usa esc() para escapar texto exibido */
+function esc(v){ return escAttr(v); }
 function safeCloudTagPart(v){
   return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80);
@@ -3230,7 +3239,7 @@ async function loadData(){
     let migrated = false;
     DATA.forEach(e=>{
       if(!Array.isArray(e.links)){ ensureLinks(e); migrated = true; }
-      else if(e.links.length===1 && isAutoRadiopaediaLink(e.links[0])){
+      else if(e.links.length===1 && isAutoRadiopaediaLink(e.links[0]) && !e.links[0].userEdited){
         const term = EN_TERMS[e.name] || e.name;
         const correctUrl = radiopaediaSearchUrl(term);
         if(e.links[0].url !== correctUrl){ e.links[0].url = correctUrl; migrated = true; }
@@ -3868,6 +3877,7 @@ function openForm(id){
   let tags = existing ? [...existing.tags] : [];
   let links = existing ? [...ensureLinks(existing)] : [];
 
+  let editingLinkIdx = null;
   function renderLinks(){
     const box = document.getElementById('link-list');
     box.innerHTML = '';
@@ -3877,8 +3887,25 @@ function openForm(id){
     links.forEach((l,i)=>{
       const row = document.createElement('div');
       row.className = 'link-row';
-      row.innerHTML = `<span class="link-row-label">${l.label||'referência'}</span><span class="link-row-url">${l.url}</span><button type="button" class="link-row-del">✕</button>`;
-      row.querySelector('.link-row-del').onclick = ()=>{ links.splice(i,1); renderLinks(); };
+      if(editingLinkIdx === i){
+        row.innerHTML = `
+          <input class="link-row-edit-label" placeholder="rótulo" value="${(l.label||'').replace(/"/g,'&quot;')}" style="flex:0 0 140px;">
+          <input class="link-row-edit-url" placeholder="https://…" value="${(l.url||'').replace(/"/g,'&quot;')}" style="flex:1;">
+          <button type="button" class="link-row-save" title="salvar">✓</button>
+          <button type="button" class="link-row-cancel" title="cancelar">✕</button>`;
+        row.querySelector('.link-row-save').onclick = ()=>{
+          const newUrl = row.querySelector('.link-row-edit-url').value.trim();
+          if(!newUrl){ toast('A URL não pode ficar vazia.'); return; }
+          links[i] = { label: row.querySelector('.link-row-edit-label').value.trim() || 'Referência', url: newUrl, userEdited: true };
+          editingLinkIdx = null;
+          renderLinks();
+        };
+        row.querySelector('.link-row-cancel').onclick = ()=>{ editingLinkIdx = null; renderLinks(); };
+      } else {
+        row.innerHTML = `<span class="link-row-label">${l.label||'referência'}</span><span class="link-row-url">${l.url}</span><button type="button" class="link-row-edit" title="editar este link">✎</button><button type="button" class="link-row-del" title="remover este link">✕</button>`;
+        row.querySelector('.link-row-edit').onclick = ()=>{ editingLinkIdx = i; renderLinks(); };
+        row.querySelector('.link-row-del').onclick = ()=>{ links.splice(i,1); renderLinks(); };
+      }
       box.appendChild(row);
     });
   }
@@ -4689,6 +4716,7 @@ function attachThumbHoverPreview(thumbEl, e){
 let quizQueue = [];
 let quizIndex = 0;
 let quizStats = {right:0, wrong:0};
+let quizSessionWrongIds = []; // ids errados nesta sessão de quiz, usado no resumo pra "refazer erros"
 
 function openQuizSetup(){
   const inScope = scopedEntries();
@@ -4743,6 +4771,7 @@ function startQuizSession(queue){
   quizQueue = queue;
   quizIndex = 0;
   quizStats = {right:0, wrong:0};
+  quizSessionWrongIds = [];
   renderQuizCard();
 }
 
@@ -4923,7 +4952,7 @@ function openProgressDashboard(){
   if(!strongest.length) strongEl.innerHTML='<div class="progress-empty">Ainda não há áreas dominadas.</div>'; else strongest.forEach(a=>strongEl.appendChild(buildAreaRow(`${a.site} <span style="color:var(--muted-2)">· ${a.section}</span>`,a,null)));
   document.getElementById('progress-due').onclick=()=>{const items=DATA.filter(e=>isDue(e.id)); if(!items.length){toast('Nenhuma revisão pendente hoje.');return;} closeOverlay();startQuizSession(shuffleArr(items).slice(0,30));};
   document.getElementById('progress-weak').onclick=()=>{if(!weakest.length){toast('Sem área fraca identificada.');return;}const a=weakest[0];closeOverlay();startQuizSession(shuffleArr(DATA.filter(e=>e.s===a.section&&e.site===a.site)).slice(0,30));};
-  ov.querySelectorAll('.section-progress-row').forEach(row=>row.onclick=()=>{const sec=row.dataset.section;closeOverlay();currentSection=sec;currentSite=null;renderAll();});
+  ov.querySelectorAll('.section-progress-row').forEach(row=>row.onclick=()=>{const sec=row.dataset.section;closeOverlay();scope={section:sec,site:null};renderAll();});
   document.getElementById('progress-close').onclick=closeOverlay;
 }
 
