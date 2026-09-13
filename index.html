@@ -3242,7 +3242,31 @@ async function loadData(){
     const r = await storage.get(STORAGE_KEY, false);
     DATA = JSON.parse(r.value);
     await recoverCanonicalBaseV154();
-    let migrated = false;
+
+    // Correção de cache obsoleto entre dispositivos: uma lesão canônica (id seed_N)
+    // que o usuário NUNCA editou manualmente (sem _userUpdatedAt) sempre absorve
+    // classificação/tags/notas/termo em inglês/nome mais recentes do arquivo atual.
+    // Sem isso, um navegador que carregou uma versão antiga guardaria erros já
+    // corrigidos (ex: classificação errada) para sempre, mesmo após atualizações.
+    // Imagens, links editados manualmente e progresso de revisão nunca são tocados aqui.
+    const seedById = new Map(SEED.map(e=>[e.id, e]));
+    let canonicalRefreshed = 0;
+    DATA.forEach(e=>{
+      if(Number(e._userUpdatedAt)||0) return; // usuário editou esta lesão — nunca sobrescrever
+      const canon = seedById.get(e.id);
+      if(!canon) return; // lesão personalizada do usuário, sem par no arquivo — preservar como está
+      const fieldsToSync = ['name','s','site','tags','notes','classification','enTerm','inc'];
+      let changed = false;
+      fieldsToSync.forEach(f=>{
+        const a = JSON.stringify(e[f]);
+        const b = JSON.stringify(canon[f]);
+        if(a !== b){ e[f] = canon[f]; changed = true; }
+      });
+      if(changed) canonicalRefreshed++;
+    });
+    if(canonicalRefreshed) console.log(`[Atlas] ${canonicalRefreshed} lesão(ões) canônica(s) sincronizada(s) com a versão atual do arquivo (cache antigo corrigido).`);
+
+    let migrated = canonicalRefreshed > 0;
     DATA.forEach(e=>{
       if(!Array.isArray(e.links)){ ensureLinks(e); migrated = true; }
       else if(e.links.length===1 && isAutoRadiopaediaLink(e.links[0]) && !e.links[0].userEdited){
