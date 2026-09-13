@@ -199,8 +199,11 @@ body{
 .tag-chip .n{color:var(--muted-2);font-size:10px;margin-left:4px;}
 .tag-chip.active .n{color:var(--teal);opacity:.7;}
 #clear-tags{
-  color:var(--red);font-size:12px;cursor:pointer;margin-left:6px;background:none;border:none;font-family:inherit;
+  color:var(--red);font-size:12px;cursor:pointer;font-family:inherit;font-weight:600;
+  background:var(--red-dim,rgba(220,90,90,.14));border:1px solid var(--red);border-radius:999px;
+  padding:5px 12px;flex-shrink:0;white-space:nowrap;
 }
+#clear-tags:hover{background:var(--red);color:#fff;}
 
 #reviewbar{
   padding:10px 28px;border-bottom:1px solid var(--line);
@@ -3499,6 +3502,16 @@ function renderTagbar(){
   label.textContent = 'CARACTERÍSTICAS';
   bar.appendChild(label);
 
+  // botão de limpar vem logo aqui no início — sempre visível, mesmo com a lista de tags
+  // muito longa e uma tag ativa "escondida" lá no final/embaixo.
+  if(activeTags.size>0){
+    const clr = document.createElement('button');
+    clr.id='clear-tags';
+    clr.textContent = `limpar filtro${activeTags.size>1?'s':''} (${activeTags.size}) ✕`;
+    clr.onclick = ()=>{ activeTags.clear(); renderResults(); renderTagbar(); };
+    bar.appendChild(clr);
+  }
+
   // conta tags dentro do escopo atual (ignorando os próprios filtros de tag para permitir combinar)
   const base = (()=>{
     let list = scopedEntries();
@@ -3540,13 +3553,6 @@ function renderTagbar(){
     };
     bar.appendChild(chip);
   });
-
-  if(activeTags.size>0){
-    const clr = document.createElement('button');
-    clr.id='clear-tags'; clr.textContent='limpar filtros ✕';
-    clr.onclick = ()=>{ activeTags.clear(); renderResults(); renderTagbar(); };
-    bar.appendChild(clr);
-  }
 }
 
 function renderReviewBar(){
