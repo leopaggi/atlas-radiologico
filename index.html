@@ -2578,6 +2578,62 @@ function runTagCleanup(){
   });
   return changed;
 }
+/* Funde lesões duplicadas exatas (mesma seção+sítio+nome) que podem surgir quando uma
+   lesão é criada manualmente num dispositivo sem perceber que já existia no arquivo —
+   ao sincronizar, as duas passam a existir lado a lado. Mantém a versão canônica (id
+   seed_N) quando existe, une as imagens de ambas, e transfere revisão/SRS da lesão
+   removida para a que sobrevive (sem apagar progresso). Retorna true se algo mudou,
+   e um array com os REVIEW/SRS a persistir depois. */
+function runDuplicateCleanup(){
+  const groups = new Map();
+  DATA.forEach(e=>{
+    const key = `${e.s}|||${e.site}|||${e.name}`;
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  });
+  let changed = false;
+  let reviewOrSrsChanged = false;
+  const toRemoveIds = new Set();
+  groups.forEach(list=>{
+    if(list.length<2) return;
+    list.sort((a,b)=>{
+      const aCanon = a.id.startsWith('seed_') ? 0 : 1;
+      const bCanon = b.id.startsWith('seed_') ? 0 : 1;
+      if(aCanon !== bCanon) return aCanon - bCanon;
+      return String(a.id).localeCompare(String(b.id), undefined, {numeric:true});
+    });
+    const keeper = list[0];
+    const others = list.slice(1);
+
+    const byKey = new Map();
+    const addImgs = arr => { if(Array.isArray(arr)) arr.forEach(img=>{ if(!img) return; const k = img.data||img.thumb||img.originalUrl||img.publicId||JSON.stringify(img); if(k) byKey.set(k, {...(byKey.get(k)||{}), ...img}); }); };
+    addImgs(keeper.images);
+    others.forEach(o=> addImgs(o.images));
+    const mergedImages = [...byKey.values()];
+    if(JSON.stringify(mergedImages) !== JSON.stringify(keeper.images||[])){ keeper.images = mergedImages; changed = true; }
+    const newLocalImg = !!(keeper.localImg || others.some(o=>o.localImg));
+    if(newLocalImg !== !!keeper.localImg){ keeper.localImg = newLocalImg; changed = true; }
+
+    const tagSet = new Set(keeper.tags||[]);
+    others.forEach(o=> (o.tags||[]).forEach(t=>tagSet.add(t)));
+    const newTags = [...tagSet];
+    if(newTags.length !== (keeper.tags||[]).length){ keeper.tags = newTags; changed = true; }
+
+    others.forEach(o=>{
+      if((REVIEW[o.id]||0) > (REVIEW[keeper.id]||0)){ REVIEW[keeper.id] = REVIEW[o.id]; reviewOrSrsChanged = true; }
+      if(SRS[o.id] && !SRS[keeper.id]){ SRS[keeper.id] = SRS[o.id]; reviewOrSrsChanged = true; }
+      if(REVIEW[o.id]!==undefined){ delete REVIEW[o.id]; reviewOrSrsChanged = true; }
+      if(SRS[o.id]!==undefined){ delete SRS[o.id]; reviewOrSrsChanged = true; }
+      toRemoveIds.add(o.id);
+    });
+  });
+  if(toRemoveIds.size){
+    DATA = DATA.filter(e=>!toRemoveIds.has(e.id));
+    changed = true;
+    console.log(`[Atlas] ${toRemoveIds.size} lesão(ões) duplicada(s) fundida(s) automaticamente (imagens e progresso preservados).`);
+  }
+  return { changed, reviewOrSrsChanged };
+}
 let DATA = [];
 let sectionOrder = [...DEFAULT_SECTION_ORDER];
 let siteOrder = {}; // { [nomeDaSeção]: [siteA, siteB, ...] } — ordem manual dos sítios dentro de cada seção
@@ -3304,6 +3360,13 @@ async function loadData(){
   }catch(e){ REVIEW = {}; }
   await loadSRS();
   await loadSessionLog();
+
+  // Funde duplicatas exatas (mesma seção+sítio+nome) — pode acontecer quando uma
+  // lesão foi criada manualmente num dispositivo que ainda não tinha essa lesão
+  // canônica sincronizada. Roda aqui porque já precisa de REVIEW/SRS carregados.
+  const dupResult = runDuplicateCleanup();
+  if(dupResult.changed) await saveData();
+  if(dupResult.reviewOrSrsChanged){ await saveReview(); await saveSRS(); }
 
   // v190: snapshot compacto e versionado ANTES de qualquer sincronização.
   try{ createSafetySnapshot('abertura do Atlas antes do Firebase'); }catch(_e){}
