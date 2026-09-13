@@ -463,7 +463,7 @@ body{
 <div id="app">
   <div id="sidebar">
     <div id="brand">
-      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v192</div>
+      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v193</div>
       <h1>Padrões &amp; Lesões</h1>
       <div class="sub">organizado por sítio e características de imagem</div>
     </div>
@@ -476,6 +476,7 @@ body{
         <button class="backup-btn" id="btn-import" title="Restaurar um backup .json do Atlas">📂 Importar<br>backup</button>
       </div>
       <button class="foot-btn" id="btn-recover-data" title="Procurar imagens e progresso em dados locais, snapshots e Firebase">🛟 procurar dados antigos / recuperar</button>
+      <button class="foot-btn" id="btn-force-cloud" title="Enviar o estado completo deste dispositivo para o Firebase, preservando e migrando imagens locais">☁↑ forçar envio deste dispositivo</button>
       <button class="foot-btn" id="btn-restore-snapshot" title="Voltar ao último snapshot local criado automaticamente">↶ restaurar último snapshot de segurança</button>
       <button class="foot-btn" id="btn-reset" style="color:var(--red);">⟲ restaurar padrão de fábrica</button>
     </div>
@@ -563,6 +564,45 @@ async function pushToFirebaseNow(){
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
   }catch(e){ console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e); }
+}
+
+/* v193: ação manual para quando ESTE dispositivo contém o estado mais completo.
+   Primeiro migra eventuais imagens locais legadas para Cloudinary; depois grava
+   diretamente o estado atual no Firebase, sem fazer leitura/reconciliação remota antes. */
+async function forceThisDeviceToCloud(){
+  if(!fbDb){ toast('Firebase indisponível neste navegador.'); return; }
+  if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return; }
+  const ok=confirm('Forçar o envio do estado DESTE dispositivo para a nuvem agora?\n\nUse esta opção somente no dispositivo que contém as imagens/progresso mais completos. O Atlas fará um snapshot local antes do envio.');
+  if(!ok) return;
+  try{
+    createSafetySnapshot('antes de forçar envio deste dispositivo para Firebase');
+    toast('Preparando imagens locais para envio…');
+    const mig=await migrateLegacyLocalImagesToCloudinary();
+    // Persiste qualquer migração no estado local antes do envio explícito.
+    try{ await storage.set(STORAGE_KEY,JSON.stringify(DATA),false); }catch(_e){}
+    try{ await storage.set(REVIEW_KEY,JSON.stringify(REVIEW),false); }catch(_e){}
+    try{ await storage.set(SRS_KEY,JSON.stringify(SRS),false); }catch(_e){}
+    try{ await storage.set(SESSIONLOG_KEY,JSON.stringify(SESSIONLOG),false); }catch(_e){}
+    try{ await storage.set(ORDER_KEY,JSON.stringify(sectionOrder),false); }catch(_e){}
+
+    clearTimeout(fbPushTimer);
+    await FB_DOC_REF().set({
+      data: DATA,
+      review: REVIEW,
+      srs: SRS,
+      sessionLog: SESSIONLOG,
+      sectionOrder: sectionOrder,
+      stateSchemaVersion: 3,
+      forcedFromDeviceAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    createSafetySnapshot('após forçar envio deste dispositivo para Firebase');
+    const extra=mig&&mig.migrated ? ` ${mig.migrated} imagem(ns) local(is) também foram enviada(s) ao Cloudinary.` : '';
+    toast('Envio deste dispositivo concluído.'+extra);
+  }catch(e){
+    console.error('Falha ao forçar envio deste dispositivo.',e);
+    toast('Falha no envio. Os dados locais foram preservados.');
+  }
 }
 
 /* reconciliação não destrutiva entre estado local e nuvem */
@@ -808,7 +848,7 @@ async function uploadToCloudinary(file, lesionMeta={}){
   const ctx=[];
   if(lesion.id) ctx.push('lesion_id='+lesion.id.replace(/[|=]/g,'_'));
   if(lesion.name) ctx.push('lesion_name='+lesion.name.replace(/[|=]/g,'_'));
-  ctx.push('atlas_version=v192');
+  ctx.push('atlas_version=v193');
   if(ctx.length) fd.append('context',ctx.join('|'));
 
   const endpoint='https://api.cloudinary.com/v1_1/'+encodeURIComponent(cfg.cloudName)+'/image/upload';
@@ -2591,7 +2631,7 @@ function isAutoRadiopaediaLink(l){
    a base canônica e preserva somente registros personalizados (não seed_*).
    ============================================================ */
 const RECOVERY_KEY = 'atlas:recoveryVersion';
-const RECOVERY_VERSION = 'v192-cloudinary-lesion-metadata';
+const RECOVERY_VERSION = 'v193-force-device-cloud';
 const SUPPRESSED_DUPLICATE_IDS_V172 = new Set(['seed_876','seed_877','seed_564','seed_580','seed_603','seed_611','seed_619','seed_640','seed_671','seed_698','seed_720','seed_745','seed_761','seed_776','seed_791','seed_835','seed_836','seed_840','seed_1040','seed_1089','seed_605','seed_1028','seed_535','seed_716','seed_634','seed_594','seed_747','seed_614']);
 function activeCanonicalSeedV172(){ return SEED.filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id)); }
 
@@ -4327,6 +4367,7 @@ async function openRecoveryInspector(){
    ============================================================ */
 document.getElementById('add-btn').onclick = ()=> openForm(null);
 document.getElementById('btn-recover-data').onclick = openRecoveryInspector;
+document.getElementById('btn-force-cloud').onclick = forceThisDeviceToCloud;
 document.getElementById('search').addEventListener('input', (e)=>{ searchTerm = e.target.value; renderResults(); });
 
 document.getElementById('btn-export').onclick = ()=>{
@@ -4336,7 +4377,7 @@ document.getElementById('btn-export').onclick = ()=>{
   const backup = {
     format: 'atlas-radiologico-backup',
     backupVersion: 1,
-    appVersion: 'v192',
+    appVersion: 'v193',
     exportedAt: now.toISOString(),
     data: DATA,
     review: REVIEW,
@@ -4348,7 +4389,7 @@ document.getElementById('btn-export').onclick = ()=>{
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `atlas-radiologico-backup-v192_${stamp}.json`;
+  a.download = `atlas-radiologico-backup-v193_${stamp}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
