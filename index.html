@@ -49,6 +49,12 @@ body{
   padding:20px 18px 14px 18px;
   border-bottom:1px solid var(--line);
 }
+.sync-status{
+  margin-top:10px;padding:6px 10px;border-radius:8px;font-size:11px;font-family:'IBM Plex Mono',monospace;
+  cursor:default;
+}
+.sync-status-ok{background:rgba(78,154,106,.12);color:var(--green,#4E9A6A);border:1px solid rgba(78,154,106,.3);}
+.sync-status-error{background:rgba(220,90,90,.14);color:var(--red);border:1px solid var(--red);}
 #brand .mark{
   font-family:'IBM Plex Mono',monospace;
   font-size:11px;
@@ -337,6 +343,30 @@ body{
   width:18px;height:18px;border-radius:50%;font-size:11px;cursor:pointer;line-height:1;
 }
 .img-gallery-remove:hover{background:#c0392b;}
+.img-gallery-actions{display:flex;gap:6px;margin-top:6px;}
+.img-gallery-actions .img-gallery-remove{position:static;width:auto;height:auto;border-radius:6px;padding:5px 9px;font-size:11px;background:var(--panel-2);border:1px solid var(--line);}
+.img-gallery-actions .img-gallery-remove:hover{background:#c0392b;border-color:#c0392b;}
+.img-gallery-swap{
+  background:var(--panel-2);border:1px solid var(--line);color:var(--teal);cursor:pointer;
+  font-size:11px;border-radius:6px;padding:5px 9px;font-family:inherit;
+}
+.img-gallery-swap:hover{border-color:var(--teal);}
+.img-gallery-replace-box{
+  display:none;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap;
+  background:var(--panel);border:1px dashed var(--line);border-radius:8px;padding:8px;
+}
+.img-gallery-replace-file{
+  background:var(--panel-2);border:1px solid var(--line);color:var(--text);cursor:pointer;
+  font-size:11px;border-radius:6px;padding:5px 9px;font-family:inherit;flex-shrink:0;
+}
+.img-gallery-replace-url{
+  flex:1;min-width:140px;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;
+  color:var(--text);padding:5px 8px;font-size:11.5px;font-family:inherit;
+}
+.img-gallery-replace-url-btn{
+  background:var(--teal);border:none;color:#04211d;cursor:pointer;font-size:12px;
+  border-radius:6px;width:26px;height:26px;flex-shrink:0;font-weight:700;
+}
 .suggest-group-label{font-size:10px;color:var(--muted-2);letter-spacing:.05em;margin:10px 0 5px 0;font-family:'IBM Plex Mono',monospace;}
 .suggest-group-label:first-child{margin-top:0;}
 .suggest-row-inner{display:flex;flex-wrap:wrap;gap:5px;}
@@ -542,6 +572,7 @@ body{
       <div class="mark">ATLAS · SUMÁRIO PESSOAL · v208</div>
       <h1>Padrões &amp; Lesões</h1>
       <div class="sub">organizado por sítio e características de imagem</div>
+      <div id="sync-status" class="sync-status sync-status-ok" style="display:none;"></div>
     </div>
     <div id="tree"></div>
     <div id="sidebar-foot">
@@ -602,26 +633,74 @@ try{
 
 const FB_DOC_REF = () => fbDb.collection('atlas_state').doc('main');
 let fbSyncing = false;   // evita brigar com o próprio load inicial
+/* Envolve qualquer chamada ao Firebase com um tempo-limite. Sem isso, uma rede
+   instável pode deixar uma chamada pendurada para sempre (nunca resolve, nunca
+   rejeita) — e como fbSyncing só é liberado dentro do try/catch dessa chamada,
+   ela ficaria "sincronizando" pra sempre, bloqueando silenciosamente TODO envio
+   futuro enquanto a aba continuar aberta, sem nenhum erro visível.*/
+function withFirebaseTimeout(promise, ms=15000, label='operação Firebase'){
+  return Promise.race([
+    promise,
+    new Promise((_,reject)=> setTimeout(()=> reject(new Error(`tempo-limite (${ms/1000}s) excedido em: ${label}`)), ms))
+  ]);
+}
 let fbPushTimer = null;
 let appStateReady = false; // impede que migrações iniciais enviem REVIEW/SRS vazios ao Firebase
+
+/* mostra/some o aviso permanente de status de sincronização no topo da barra lateral —
+   diferente de um toast passageiro, fica visível até o problema ser resolvido. */
+function setSyncStatus(ok, detail){
+  const el = document.getElementById('sync-status');
+  if(!el) return;
+  if(ok){
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = 'block';
+  el.className = 'sync-status sync-status-error';
+  el.textContent = '⚠ ' + (detail || 'falha ao sincronizar com a nuvem');
+}
+function buildFirebasePayload(){
+  return {
+    data: DATA,
+    review: REVIEW,
+    srs: SRS,
+    sessionLog: SESSIONLOG,
+    sectionOrder: sectionOrder,
+    siteOrder: siteOrder,
+    stateSchemaVersion: 2,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+}
+/* Firestore recusa documentos acima de ~1MB. Imagens salvas localmente (não pelo
+   Cloudinary) viram texto base64 gigante dentro do próprio documento, e podem
+   estourar esse limite silenciosamente. Avisa ANTES de tentar enviar. */
+function checkPayloadSize(payload){
+  try{
+    const bytes = new Blob([JSON.stringify(payload)]).size;
+    const MB = 1024*1024;
+    if(bytes > 0.95*MB){
+      setSyncStatus(false, `dados grandes demais pra sincronizar (${(bytes/MB).toFixed(2)}MB de ~1MB). Alguma imagem local precisa ir pro Cloudinary.`);
+      return false;
+    }
+  }catch(_e){}
+  return true;
+}
 
 /* envia o estado atual pra nuvem (com pequeno atraso pra juntar mudanças rápidas em uma escrita só) */
 function pushToFirebase(){
   if(!fbDb || fbSyncing || !appStateReady) return;
   clearTimeout(fbPushTimer);
   fbPushTimer = setTimeout(async ()=>{
+    const payload = buildFirebasePayload();
+    if(!checkPayloadSize(payload)) return;
     try{
-      await FB_DOC_REF().set({
-        data: DATA,
-        review: REVIEW,
-        srs: SRS,
-        sessionLog: SESSIONLOG,
-        sectionOrder: sectionOrder,
-        siteOrder: siteOrder,
-        stateSchemaVersion: 2,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    }catch(e){ console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e); }
+      await withFirebaseTimeout(FB_DOC_REF().set(payload), 15000, 'pushToFirebase');
+      setSyncStatus(true);
+    }catch(e){
+      console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e);
+      setSyncStatus(false, 'falha ao sincronizar — ficou salvo só neste dispositivo: ' + (e.message||e));
+    }
   }, 400);
 }
 /* versão sem atraso, usada logo após editar/adicionar uma lesão — garante que a
@@ -630,18 +709,19 @@ function pushToFirebase(){
 async function pushToFirebaseNow(){
   if(!fbDb || fbSyncing || !appStateReady) return;
   clearTimeout(fbPushTimer);
+  const payload = buildFirebasePayload();
+  if(!checkPayloadSize(payload)){
+    toast('⚠ Não foi possível sincronizar: dados grandes demais (imagem local sem Cloudinary). Veja o aviso na barra lateral.');
+    return;
+  }
   try{
-    await FB_DOC_REF().set({
-      data: DATA,
-      review: REVIEW,
-      srs: SRS,
-      sessionLog: SESSIONLOG,
-      sectionOrder: sectionOrder,
-      siteOrder: siteOrder,
-      stateSchemaVersion: 2,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  }catch(e){ console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e); }
+    await withFirebaseTimeout(FB_DOC_REF().set(payload), 15000, 'pushToFirebaseNow');
+    setSyncStatus(true);
+  }catch(e){
+    console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e);
+    setSyncStatus(false, 'falha ao sincronizar — ficou salvo só neste dispositivo: ' + (e.message||e));
+    toast('⚠ Falha ao sincronizar com a nuvem — esta mudança ficou salva só neste dispositivo por enquanto.');
+  }
 }
 
 /* v193: ação manual para quando ESTE dispositivo contém o estado mais completo.
@@ -665,7 +745,7 @@ async function forceThisDeviceToCloud(){
     try{ await storage.set(SITEORDER_KEY,JSON.stringify(siteOrder),false); }catch(_e){}
 
     clearTimeout(fbPushTimer);
-    await FB_DOC_REF().set({
+    const forcePayload = {
       data: DATA,
       review: REVIEW,
       srs: SRS,
@@ -675,12 +755,19 @@ async function forceThisDeviceToCloud(){
       stateSchemaVersion: 3,
       forcedFromDeviceAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    };
+    if(!checkPayloadSize(forcePayload)){
+      toast('⚠ Não deu pra enviar: dados grandes demais pra nuvem (imagem local sem Cloudinary). Veja o aviso na barra lateral.');
+      return;
+    }
+    await withFirebaseTimeout(FB_DOC_REF().set(forcePayload), 20000, 'forceThisDeviceToCloud');
+    setSyncStatus(true);
     createSafetySnapshot('após forçar envio deste dispositivo para Firebase');
     const extra=mig&&mig.migrated ? ` ${mig.migrated} imagem(ns) local(is) também foram enviada(s) ao Cloudinary.` : '';
     toast('Envio deste dispositivo concluído.'+extra);
   }catch(e){
     console.error('Falha ao forçar envio deste dispositivo.',e);
+    setSyncStatus(false, 'falha ao forçar envio: ' + (e.message||e));
     toast('Falha no envio. Os dados locais foram preservados.');
   }
 }
@@ -832,7 +919,7 @@ async function syncFromFirebase(){
 
   fbSyncing = true;
   try{
-    const snap = await FB_DOC_REF().get();
+    const snap = await withFirebaseTimeout(FB_DOC_REF().get(), 15000, 'syncFromFirebase (leitura)');
     if(snap.exists){
       const remote = snap.data() || {};
       const remoteData = (Array.isArray(remote.data) ? remote.data : [])
@@ -894,6 +981,7 @@ async function syncFromFirebase(){
   }catch(e){
     fbSyncing = false;
     console.error('Firebase sync falhou — usando dados locais por enquanto.', e);
+    setSyncStatus(false, 'não foi possível confirmar sincronização com a nuvem ao abrir — ' + (e.message||e));
   }
 }
 
@@ -4175,6 +4263,7 @@ function openForm(id){
 
   /* --- imagens: Cloudinary por padrão quando configurado; local continua como fallback compatível --- */
   let pendingImgs = [];       // [{label,data,source,...}]
+  let replaceTargetIdx = null; // se definido, o próximo upload/URL SUBSTITUI esse índice em vez de adicionar
   let imgsChanged = false;
   const imgGallery = document.getElementById('img-gallery');
   const imgFileInput = document.getElementById('img-file-input');
@@ -4395,8 +4484,33 @@ function openForm(id){
         <img src="${img.data}">
         <input class="img-gallery-label" placeholder="descrição da imagem (ex: axial T2, CC, MLO, pós-contraste)" value="${(img.label||'').replace(/"/g,'&quot;')}">
         <div class="img-gallery-preset-groups"></div>
-        <button type="button" class="img-gallery-remove" title="remover esta imagem do Atlas">✕</button>
+        <div class="img-gallery-replace-box" style="display:none;">
+          <button type="button" class="img-gallery-replace-file">📁 escolher arquivo</button>
+          <input class="img-gallery-replace-url" placeholder="ou cole uma URL http(s)…">
+          <button type="button" class="img-gallery-replace-url-btn">✓</button>
+        </div>
+        <div class="img-gallery-actions">
+          <button type="button" class="img-gallery-swap" title="trocar a imagem deste quadro, mantendo rótulo e posição">🔄 trocar imagem</button>
+          <button type="button" class="img-gallery-remove" title="remover este quadro do Atlas">✕</button>
+        </div>
       `;
+      item.querySelector('.img-gallery-swap').addEventListener('click', ()=>{
+        const box = item.querySelector('.img-gallery-replace-box');
+        box.style.display = box.style.display==='none' ? 'flex' : 'none';
+      });
+      item.querySelector('.img-gallery-replace-file').addEventListener('click', ()=>{
+        replaceTargetIdx = idx;
+        imgFileInput.click();
+      });
+      item.querySelector('.img-gallery-replace-url-btn').addEventListener('click', ()=>{
+        const urlInput = item.querySelector('.img-gallery-replace-url');
+        const url = urlInput.value.trim();
+        if(!/^https?:\/\//i.test(url)){ toast('Cole uma URL http/https válida.'); return; }
+        const oldLabel = pendingImgs[idx].label;
+        pendingImgs[idx] = { label: oldLabel, data: url, source: 'url' };
+        imgsChanged = true;
+        renderImgGallery();
+      });
       const labelInput = item.querySelector('.img-gallery-label');
       labelInput.addEventListener('input', (ev)=>{ pendingImgs[idx].label = ev.target.value; imgsChanged = true; });
       const groupsWrap = item.querySelector('.img-gallery-preset-groups');
@@ -4434,11 +4548,19 @@ function openForm(id){
 
   async function handleImgFile(file){
     if(!file || !file.type.startsWith('image/')) return;
+    const targetIdx = replaceTargetIdx;
+    replaceTargetIdx = null;
     if(hasCloudinaryConfig()){
       try{
         renderCloudStatus('☁ Enviando '+(file.name||'imagem')+' para o Cloudinary…','ok');
         const remote=await uploadToCloudinary(file,getCurrentLesionMeta());
-        pendingImgs.push(remote); imgsChanged=true; renderImgGallery(); renderCloudStatus();
+        if(targetIdx!==null && pendingImgs[targetIdx]){
+          remote.label = pendingImgs[targetIdx].label; // mantém o rótulo já escolhido pro quadro
+          pendingImgs[targetIdx] = remote;
+        } else {
+          pendingImgs.push(remote);
+        }
+        imgsChanged=true; renderImgGallery(); renderCloudStatus();
       }catch(err){
         console.error('Cloudinary upload',err);
         renderCloudStatus('Falha no Cloudinary: '+err.message+' — nada foi salvo localmente automaticamente.','warn');
