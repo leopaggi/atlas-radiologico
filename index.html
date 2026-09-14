@@ -4388,27 +4388,45 @@ function openForm(id){
         d.querySelector('[data-a="del"]').onclick=()=>{URL.revokeObjectURL(items[i].url);items.splice(i,1);render();if(finalBlob&&items.length>=2)generateCollage();}; list.appendChild(d);
       });
     }
-    async function loadImg(url){return await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=url;});}
+    async function loadImg(url){return await new Promise((res,rej)=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>res(im);im.onerror=()=>rej(new Error('Não foi possível carregar uma das imagens do quadro (link quebrado ou bloqueio de origem).'));im.src=url;});}
     if(isEditMode && items.length){ render(); generateCollage(); }
     async function generateCollage(){
       if(items.length<2){toast('Adicione pelo menos 2 imagens.');return;} if(items.length>8){toast('Máximo de 8 imagens.');return;}
-      const width=+cov.querySelector('#collage-size').value; const lv=cov.querySelector('#collage-layout').value;
-      const cols=lv==='auto'?(items.length<=4?2:(items.length<=6?3:4)):+lv; const rows=Math.ceil(items.length/cols);
-      const gap=4, labelH=54, cellW=Math.floor((width-gap*(cols-1))/cols), cellH=Math.round(cellW*.78);
-      const canvas=cov.querySelector('#collage-canvas'); canvas.width=width; canvas.height=rows*(cellH+labelH)+gap*(rows-1);
-      const ctx=canvas.getContext('2d'); ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height); ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='600 28px Arial';
-      const pos=cov.querySelector('#collage-label-pos').value;
-      for(let i=0;i<items.length;i++){
-        const im=await loadImg(items[i].url), c=i%cols,r=Math.floor(i/cols),x=c*(cellW+gap),y=r*(cellH+labelH+gap);
-        const iy=pos==='top'?y+labelH:y, ih=pos==='top'?cellH:cellH+labelH;
-        const scale=Math.min(cellW/im.width,ih/im.height),dw=im.width*scale,dh=im.height*scale;
-        ctx.drawImage(im,x+(cellW-dw)/2,iy+(ih-dh)/2,dw,dh);
-        const lab=items[i].seq||('Imagem '+(i+1));
-        if(pos==='top'){ctx.fillStyle='#050505';ctx.fillRect(x,y,cellW,labelH);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,y+labelH/2);}
-        else{const bh=46;ctx.fillStyle='rgba(0,0,0,.72)';ctx.fillRect(x,iy+ih-bh,cellW,bh);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,iy+ih-bh/2);}
+      try{
+        const width=+cov.querySelector('#collage-size').value; const lv=cov.querySelector('#collage-layout').value;
+        const cols=lv==='auto'?(items.length<=4?2:(items.length<=6?3:4)):+lv; const rows=Math.ceil(items.length/cols);
+        const gap=4, labelH=54, cellW=Math.floor((width-gap*(cols-1))/cols), cellH=Math.round(cellW*.78);
+        const canvas=cov.querySelector('#collage-canvas'); canvas.width=width; canvas.height=rows*(cellH+labelH)+gap*(rows-1);
+        const ctx=canvas.getContext('2d'); ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height); ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='600 28px Arial';
+        const pos=cov.querySelector('#collage-label-pos').value;
+        for(let i=0;i<items.length;i++){
+          const im=await loadImg(items[i].url), c=i%cols,r=Math.floor(i/cols),x=c*(cellW+gap),y=r*(cellH+labelH+gap);
+          const iy=pos==='top'?y+labelH:y, ih=pos==='top'?cellH:cellH+labelH;
+          const scale=Math.min(cellW/im.width,ih/im.height),dw=im.width*scale,dh=im.height*scale;
+          ctx.drawImage(im,x+(cellW-dw)/2,iy+(ih-dh)/2,dw,dh);
+          const lab=items[i].seq||('Imagem '+(i+1));
+          if(pos==='top'){ctx.fillStyle='#050505';ctx.fillRect(x,y,cellW,labelH);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,y+labelH/2);}
+          else{const bh=46;ctx.fillStyle='rgba(0,0,0,.72)';ctx.fillRect(x,iy+ih-bh,cellW,bh);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,iy+ih-bh/2);}
+        }
+        finalBlob=await new Promise((res,rej)=>{
+          try{ canvas.toBlob(b=>res(b), 'image/jpeg', .92); }
+          catch(err){ rej(err); } // navegadores como Firefox lançam erro de segurança aqui num canvas "contaminado"
+        });
+        if(!finalBlob){
+          // Chrome não lança erro, só devolve null quando o canvas fica "contaminado" por imagem
+          // de origem cruzada sem CORS liberado — sem essa checagem, o botão de salvar fica
+          // desabilitado pra sempre, sem nenhuma explicação visível.
+          toast('⚠ Não foi possível gerar o quadro: uma das imagens veio de um site que bloqueia esse uso (CORS). Tente subir a imagem como arquivo em vez de link direto.');
+          return;
+        }
+        if(finalUrl) URL.revokeObjectURL(finalUrl);
+        finalUrl=URL.createObjectURL(finalBlob);
+        const prev=cov.querySelector('#collage-preview');prev.src=finalUrl;prev.style.display='block';cov.querySelector('#collage-insert').disabled=false;
+      }catch(err){
+        console.error('Falha ao gerar o quadro de imagens', err);
+        toast('⚠ Falha ao gerar o quadro: ' + (err.message||err));
+        finalBlob=null;
       }
-      finalBlob=await new Promise(res=>canvas.toBlob(res,'image/jpeg',.92)); if(finalUrl)URL.revokeObjectURL(finalUrl);finalUrl=URL.createObjectURL(finalBlob);
-      const prev=cov.querySelector('#collage-preview');prev.src=finalUrl;prev.style.display='block';cov.querySelector('#collage-insert').disabled=false;
     }
     cov.querySelector('#collage-generate').onclick=generateCollage;
     cov.querySelector('#collage-insert').onclick=async()=>{
