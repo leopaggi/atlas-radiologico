@@ -351,6 +351,11 @@ body{
   font-size:11px;border-radius:6px;padding:5px 9px;font-family:inherit;
 }
 .img-gallery-swap:hover{border-color:var(--teal);}
+.img-gallery-edit-collage{
+  background:var(--panel-2);border:1px solid var(--line);color:var(--amber,#d9a441);cursor:pointer;
+  font-size:11px;border-radius:6px;padding:5px 9px;font-family:inherit;
+}
+.img-gallery-edit-collage:hover{border-color:var(--amber,#d9a441);}
 .img-gallery-replace-box{
   display:none;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap;
   background:var(--panel);border:1px dashed var(--line);border-radius:8px;padding:8px;
@@ -4307,11 +4312,12 @@ function openForm(id){
     { title: 'RX / MMG / US', items: ["RX","MMG","US","Doppler"] },
   ];
 
-  function openCollageBuilder(){
+  function openCollageBuilder(existingPanels, editTargetIdx){
+    const isEditMode = Array.isArray(existingPanels);
     const cov=document.createElement('div'); cov.className='overlay';
     cov.innerHTML=`<div class="modal collage-modal">
-      <h2>▦ Criar quadro de imagens</h2>
-      <div class="modal-sub">cole ou selecione de 2 a 8 imagens · organize · identifique as sequências · gere uma única imagem</div>
+      <h2>▦ ${isEditMode?'Editar':'Criar'} quadro de imagens</h2>
+      <div class="modal-sub">${isEditMode?'ajuste, adicione ou remova painéis, corrija as legendas, e gere de novo':'cole ou selecione de 2 a 8 imagens · organize · identifique as sequências · gere uma única imagem'}</div>
       <div class="collage-drop" id="collage-drop" tabindex="0">
         <button type="button" class="btn btn-ghost" id="collage-pick">📎 selecionar imagens</button>
         <span style="color:var(--muted-2);font-size:12px;margin-left:8px;">ou Ctrl+V / arraste aqui</span>
@@ -4325,10 +4331,13 @@ function openForm(id){
         <button type="button" class="btn btn-primary" id="collage-generate">gerar quadro</button>
       </div>
       <canvas id="collage-canvas" style="display:none"></canvas><img id="collage-preview" class="collage-preview">
-      <div class="modal-actions"><button class="btn btn-ghost" id="collage-cancel">cancelar</button><button class="btn btn-primary" id="collage-insert" disabled>inserir quadro no caso</button></div>
+      <div class="modal-actions"><button class="btn btn-ghost" id="collage-cancel">cancelar</button><button class="btn btn-primary" id="collage-insert" disabled>${isEditMode?'salvar quadro atualizado':'inserir quadro no caso'}</button></div>
     </div>`;
     document.body.appendChild(cov);
-    let items=[]; let finalBlob=null; let finalUrl='';
+    let items = isEditMode
+      ? existingPanels.map(p=>({file:null, url:p.url, durableUrl:p.url, seq:p.seq||''}))
+      : [];
+    let finalBlob=null; let finalUrl='';
     const seqs=['RX','MMG','U.S','TC C-','TC C+','RM T1','RM T2','RM T1 +','RM FLAIR','RM DIFUSAO','RM ADC','RM SWI','ANGIORM'];
     const list=cov.querySelector('#collage-list'), drop=cov.querySelector('#collage-drop'), input=cov.querySelector('#collage-files');
     const cleanup=()=>{ if(finalUrl) URL.revokeObjectURL(finalUrl); cov.remove(); };
@@ -4338,9 +4347,25 @@ function openForm(id){
     drop.onclick=(e)=>{ if(e.target!==input) input.click(); };
     drop.onkeydown=(e)=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();input.click();} };
     function addFiles(files){
-      [...files].filter(f=>f&&f.type&&f.type.startsWith('image/')).slice(0,8-items.length).forEach(f=>{
-        items.push({file:f,url:URL.createObjectURL(f),seq:''});
-      }); render();
+      [...files].filter(f=>f&&f.type&&f.type.startsWith('image/')).slice(0,8-items.length).forEach(async f=>{
+        const item = {file:f, url:URL.createObjectURL(f), seq:'', durableUrl:null};
+        items.push(item);
+        render();
+        // Sobe também uma cópia individual e permanente deste painel (Cloudinary se
+        // configurado, senão um dataURL compacto), pra o quadro poder ser reaberto e
+        // editado depois — sem isso, só a imagem final achatada sobreviveria.
+        try{
+          if(hasCloudinaryConfig()){
+            const remote = await uploadToCloudinary(f, getCurrentLesionMeta());
+            item.durableUrl = remote.data;
+          } else {
+            item.durableUrl = await new Promise(res=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(f); });
+          }
+        }catch(e){
+          console.error('Falha ao persistir painel individual do quadro', e);
+          item.durableUrl = item.url; // fallback: pelo menos tenta, mesmo sabendo que é efêmero
+        }
+      });
     }
     input.onchange=e=>{addFiles(e.target.files); input.value='';};
     const handlePaste=e=>{const fs=[...(e.clipboardData?.items||[])].filter(x=>x.type?.startsWith('image/')).map(x=>x.getAsFile()); if(fs.length){e.preventDefault();addFiles(fs);}};
@@ -4364,6 +4389,7 @@ function openForm(id){
       });
     }
     async function loadImg(url){return await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=url;});}
+    if(isEditMode && items.length){ render(); generateCollage(); }
     async function generateCollage(){
       if(items.length<2){toast('Adicione pelo menos 2 imagens.');return;} if(items.length>8){toast('Máximo de 8 imagens.');return;}
       const width=+cov.querySelector('#collage-size').value; const lv=cov.querySelector('#collage-layout').value;
@@ -4386,12 +4412,30 @@ function openForm(id){
     }
     cov.querySelector('#collage-generate').onclick=generateCollage;
     cov.querySelector('#collage-insert').onclick=async()=>{
-      if(!finalBlob)return; const label=items.map(x=>x.seq).filter(Boolean).join(' · ')||'Quadro multimodal';
+      if(!finalBlob)return;
+      const label=items.map(x=>x.seq).filter(Boolean).join(' · ')||'Quadro multimodal';
+      const panels=items.map(x=>({url:x.durableUrl||x.url, seq:x.seq||''}));
+      const applyResult=(imgObj)=>{
+        imgObj.label=label;
+        imgObj.panels=panels;
+        if(isEditMode && editTargetIdx!=null && pendingImgs[editTargetIdx]){
+          pendingImgs[editTargetIdx]=imgObj;
+        }else{
+          pendingImgs.push(imgObj);
+        }
+        imgsChanged=true; renderImgGallery(); cleanup();
+      };
       if(hasCloudinaryConfig()){
-        try{const file=new File([finalBlob],'quadro-imagens-'+Date.now()+'.jpg',{type:'image/jpeg'});const remote=await uploadToCloudinary(file,getCurrentLesionMeta());remote.label=label;pendingImgs.push(remote);imgsChanged=true;renderImgGallery();cleanup();toast('Quadro gerado e enviado ao Cloudinary.');}
-        catch(e){toast('Falha ao enviar o quadro ao Cloudinary: '+e.message);}
+        try{
+          const file=new File([finalBlob],'quadro-imagens-'+Date.now()+'.jpg',{type:'image/jpeg'});
+          const remote=await uploadToCloudinary(file,getCurrentLesionMeta());
+          applyResult(remote);
+          toast(isEditMode?'Quadro atualizado com sucesso.':'Quadro gerado e enviado ao Cloudinary.');
+        }catch(e){toast('Falha ao enviar o quadro ao Cloudinary: '+e.message);}
       }else{
-        const data=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(finalBlob);});pendingImgs.push({label,data,source:'local'});imgsChanged=true;renderImgGallery();cleanup();toast('Quadro inserido localmente.');
+        const data=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(finalBlob);});
+        applyResult({data,source:'local'});
+        toast(isEditMode?'Quadro atualizado localmente.':'Quadro inserido localmente.');
       }
     };
   }
@@ -4521,10 +4565,16 @@ function openForm(id){
           <button type="button" class="img-gallery-replace-url-btn">✓</button>
         </div>
         <div class="img-gallery-actions">
+          ${Array.isArray(img.panels) && img.panels.length ? '<button type="button" class="img-gallery-edit-collage" title="reabrir o construtor de quadro com os mesmos painéis, pra adicionar, remover ou corrigir legendas">▦ editar quadro</button>' : ''}
           <button type="button" class="img-gallery-swap" title="trocar a imagem deste quadro, mantendo rótulo e posição">🔄 trocar imagem</button>
           <button type="button" class="img-gallery-remove" title="remover este quadro do Atlas">✕</button>
         </div>
       `;
+      if(Array.isArray(img.panels) && img.panels.length){
+        item.querySelector('.img-gallery-edit-collage').addEventListener('click', ()=>{
+          openCollageBuilder(img.panels, idx);
+        });
+      }
       item.querySelector('.img-gallery-swap').addEventListener('click', ()=>{
         const box = item.querySelector('.img-gallery-replace-box');
         box.style.display = box.style.display==='none' ? 'flex' : 'none';
@@ -4584,7 +4634,7 @@ function openForm(id){
   }
   renderCloudStatus();
   document.getElementById('img-pick-btn').onclick = ()=> imgFileInput.click();
-  document.getElementById('img-collage-btn').onclick = openCollageBuilder;
+  document.getElementById('img-collage-btn').onclick = ()=> openCollageBuilder();
   document.getElementById('img-web-btn').onclick = openCommonsImageSearch;
 
   async function handleImgFile(file){
