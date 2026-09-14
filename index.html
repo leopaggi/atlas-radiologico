@@ -4553,9 +4553,19 @@ function openForm(id){
         group.items.forEach(preset=>{
           const chip = document.createElement('button');
           chip.type = 'button';
-          chip.className = 'img-gallery-preset-chip' + (img.label===preset ? ' active' : '');
+          const currentParts = (img.label||'').split('·').map(s=>s.trim()).filter(Boolean);
+          const isActive = currentParts.includes(preset);
+          chip.className = 'img-gallery-preset-chip' + (isActive ? ' active' : '');
           chip.textContent = preset;
-          chip.onclick = ()=>{ pendingImgs[idx].label = preset; imgsChanged = true; renderImgGallery(); };
+          chip.title = 'clique pra adicionar/remover esta sequência da legenda (sem apagar as outras)';
+          chip.onclick = ()=>{
+            const parts = (pendingImgs[idx].label||'').split('·').map(s=>s.trim()).filter(Boolean);
+            const at = parts.indexOf(preset);
+            if(at>=0) parts.splice(at,1); else parts.push(preset);
+            pendingImgs[idx].label = parts.join(' · ');
+            imgsChanged = true;
+            renderImgGallery();
+          };
           row.appendChild(chip);
         });
         groupsWrap.appendChild(groupDiv);
