@@ -944,12 +944,25 @@ function mergeEntryNonDestructive(localEntry, remoteEntry){
   if(rt > lt) merged = {...local, ...remote};
   else merged = {...remote, ...local};
 
-  // União não destrutiva, mas SEM permitir que uma imagem atravesse para outro ID.
-  const imageCandidates = [
-    ...(Array.isArray(remote.images)?remote.images:[]),
-    ...(Array.isArray(local.images)?local.images:[])
-  ];
-  merged.images = imageCandidates;
+  // Imagens: quando um dos lados tem uma edição CLARAMENTE mais recente (timestamp
+  // maior), essa versão vale sozinha — inclusive remoções deliberadas de imagem
+  // erradas. Uma versão anterior deste código sempre SOMAVA as imagens dos dois
+  // lados (união), o que parecia seguro, mas na prática "ressuscitava" imagens que
+  // o usuário tinha acabado de apagar de propósito, sempre que a nuvem ainda tinha
+  // a cópia antiga no momento da sincronização. União só é usada como fallback
+  // seguro quando nenhum dos dois lados tem uma edição claramente mais nova
+  // (registros legados, mesmo cenário do bug de perda de imagem já corrigido).
+  if(lt > rt && Array.isArray(local.images)){
+    merged.images = local.images;
+  }else if(rt > lt && Array.isArray(remote.images)){
+    merged.images = remote.images;
+  }else{
+    const imageCandidates = [
+      ...(Array.isArray(remote.images)?remote.images:[]),
+      ...(Array.isArray(local.images)?local.images:[])
+    ];
+    merged.images = imageCandidates;
+  }
   sanitizeEntryImagesV208(merged);
   merged.localImg = !!(local.localImg || remote.localImg);
   if(!merged.img) merged.img = local.img || remote.img || '';
