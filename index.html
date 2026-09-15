@@ -341,7 +341,7 @@ body{
 .img-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-bottom:8px;}
 .img-gallery:empty{display:none;}
 .img-gallery-item{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius);padding:6px;position:relative;}
-.img-gallery-item img{width:100%;height:80px;object-fit:cover;border-radius:4px;display:block;margin-bottom:6px;}
+.img-gallery-item img{width:100%;height:80px;object-fit:cover;border-radius:4px;display:block;margin-bottom:6px;cursor:zoom-in;}
 .img-gallery-label{
   width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
   font-size:11px;padding:4px 6px;border-radius:4px;font-family:inherit;margin-bottom:6px;
@@ -4721,7 +4721,7 @@ function openForm(id){
       const sourceLabel=img.source==='cloudinary'?'☁ Cloudinary':(img.source==='imgbb'?'☁ ImgBB':(img.source==='url'?'🔗 URL':'💾 local'));
       item.innerHTML = `
         <span class="img-source-badge">${sourceLabel}</span>
-        <img src="${img.data}">
+        <img src="${img.data}" class="img-gallery-thumb" title="clique pra ampliar">
         <input class="img-gallery-label" placeholder="descrição da imagem (ex: axial T2, CC, MLO, pós-contraste)" value="${(img.label||'').replace(/"/g,'&quot;')}">
         <div class="img-gallery-preset-groups"></div>
         <div class="img-gallery-replace-box" style="display:none;">
@@ -4735,6 +4735,7 @@ function openForm(id){
           <button type="button" class="img-gallery-remove" title="remover este quadro do Atlas">✕</button>
         </div>
       `;
+      item.querySelector('.img-gallery-thumb').addEventListener('click', ()=> openImageLightbox(img.data));
       if(Array.isArray(img.panels) && img.panels.length){
         item.querySelector('.img-gallery-edit-collage').addEventListener('click', ()=>{
           openCollageBuilder(img.panels, idx);
