@@ -677,7 +677,20 @@ try{
   fbAuth = firebase.auth(fbApp);
 }catch(e){ console.error('Firebase init falhou — app continua funcionando localmente.', e); }
 
-const FB_DOC_REF = () => fbDb.collection('atlas_state').doc('main');
+/* ============================================================
+   ARQUITETURA EM PEDAÇOS (v231→v232) — o Firestore recusa documentos
+   acima de ~1MB, e o Atlas já cresceu a ponto do texto sozinho (sem
+   nenhuma imagem embutida) bater nesse teto com ~1200 lesões. A partir
+   daqui, DATA é dividido em vários documentos menores ("chunks"),
+   e um documento pequeno separado guarda revisão/SRS/histórico/ordens
+   — que dificilmente vão se aproximar do limite sozinhos.
+   ============================================================ */
+const FB_META_REF = () => fbDb.collection('atlas_state').doc('main');
+const FB_CHUNK_REF = (i) => fbDb.collection('atlas_state').doc('data_chunk_'+i);
+const DATA_CHUNK_SIZE = 150; // ~150 lesões por pedaço fica com boa margem abaixo de 1MB
+// Mantido por compatibilidade com qualquer chamada antiga que ainda o referencie.
+const FB_DOC_REF = FB_META_REF;
+
 let fbSyncing = false;   // evita brigar com o próprio load inicial
 /* Envolve qualquer chamada ao Firebase com um tempo-limite. Sem isso, uma rede
    instável pode deixar uma chamada pendurada para sempre (nunca resolve, nunca
@@ -714,31 +727,86 @@ function stripUndefinedDeep(value){
   try{ return JSON.parse(JSON.stringify(value)); }
   catch(_e){ return value; }
 }
-function buildFirebasePayload(){
-  return {
-    data: stripUndefinedDeep(DATA),
+function splitIntoChunks(arr, size){
+  const out = [];
+  for(let i=0;i<arr.length;i+=size) out.push(arr.slice(i,i+size));
+  return out;
+}
+function checkChunkSize(chunk, label){
+  try{
+    const bytes = new Blob([JSON.stringify(chunk)]).size;
+    const MB = 1024*1024;
+    if(bytes > 0.95*MB){
+      setSyncStatus(false, `${label} ficou grande demais (${(bytes/MB).toFixed(2)}MB de ~1MB) mesmo dividido em pedaços. Alguma imagem local precisa ir pro Cloudinary.`);
+      return false;
+    }
+  }catch(_e){}
+  return true;
+}
+/* Escreve DATA em vários documentos pequenos + um documento "main" com o
+   resto do estado. Apaga pedaços antigos que sobrarem se a lista encolheu
+   (ex: depois de uma limpeza de duplicatas). */
+async function writeShardedState(ms=15000){
+  const cleanData = stripUndefinedDeep(DATA);
+  const chunks = splitIntoChunks(cleanData, DATA_CHUNK_SIZE);
+  for(let i=0;i<chunks.length;i++){
+    if(!checkChunkSize(chunks[i], `pedaço ${i+1}/${chunks.length}`)) return false;
+  }
+
+  const metaPayload = {
     review: stripUndefinedDeep(REVIEW),
     srs: stripUndefinedDeep(SRS),
     sessionLog: stripUndefinedDeep(SESSIONLOG),
     sectionOrder: stripUndefinedDeep(sectionOrder),
     siteOrder: stripUndefinedDeep(siteOrder),
-    stateSchemaVersion: 2,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp() // sentinela especial do SDK — nunca passar por JSON
+    chunkCount: chunks.length,
+    stateSchemaVersion: 4, // v4 = estado dividido em pedaços (chunks)
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
-}
-/* Firestore recusa documentos acima de ~1MB. Imagens salvas localmente (não pelo
-   Cloudinary) viram texto base64 gigante dentro do próprio documento, e podem
-   estourar esse limite silenciosamente. Avisa ANTES de tentar enviar. */
-function checkPayloadSize(payload){
-  try{
-    const bytes = new Blob([JSON.stringify(payload)]).size;
-    const MB = 1024*1024;
-    if(bytes > 0.95*MB){
-      setSyncStatus(false, `dados grandes demais pra sincronizar (${(bytes/MB).toFixed(2)}MB de ~1MB). Alguma imagem local precisa ir pro Cloudinary.`);
-      return false;
+  if(!checkChunkSize(metaPayload, 'documento principal (revisão/SRS/histórico)')) return false;
+
+  await withFirebaseTimeout(FB_META_REF().set(metaPayload), ms, 'gravar documento principal');
+  for(let i=0;i<chunks.length;i++){
+    await withFirebaseTimeout(FB_CHUNK_REF(i).set({items: chunks[i]}), ms, `gravar pedaço ${i+1}/${chunks.length}`);
+  }
+
+  // Limpa pedaços antigos que sobraram de uma lista maior no passado.
+  const prevCount = Number(window.__lastKnownChunkCount || 0);
+  if(prevCount > chunks.length){
+    for(let i=chunks.length;i<prevCount;i++){
+      try{ await FB_CHUNK_REF(i).delete(); }catch(_e){}
     }
-  }catch(_e){}
+  }
+  window.__lastKnownChunkCount = chunks.length;
   return true;
+}
+/* Lê o documento principal + todos os pedaços, e junta tudo de volta num
+   único array, no mesmo formato que o resto do código já espera. */
+async function readShardedState(ms=15000){
+  const metaSnap = await withFirebaseTimeout(FB_META_REF().get(), ms, 'ler documento principal');
+  if(!metaSnap.exists) return null;
+  const meta = metaSnap.data() || {};
+  const chunkCount = Number(meta.chunkCount)||0;
+  window.__lastKnownChunkCount = chunkCount;
+
+  let combinedData = [];
+  if(chunkCount > 0){
+    const chunkSnaps = await Promise.all(
+      Array.from({length:chunkCount}, (_,i)=> withFirebaseTimeout(FB_CHUNK_REF(i).get(), ms, `ler pedaço ${i+1}/${chunkCount}`))
+    );
+    chunkSnaps.forEach(snap=>{
+      if(snap.exists){
+        const items = (snap.data()||{}).items;
+        if(Array.isArray(items)) combinedData.push(...items);
+      }
+    });
+  }else if(Array.isArray(meta.data)){
+    // Compatibilidade: documento antigo (pré-sharding) ainda não migrado.
+    combinedData = meta.data;
+  }
+
+  return { data: combinedData, review: meta.review, srs: meta.srs, sessionLog: meta.sessionLog,
+    sectionOrder: meta.sectionOrder, siteOrder: meta.siteOrder };
 }
 
 /* envia o estado atual pra nuvem (com pequeno atraso pra juntar mudanças rápidas em uma escrita só) */
@@ -746,11 +814,9 @@ function pushToFirebase(){
   if(!fbDb || fbSyncing || !appStateReady) return;
   clearTimeout(fbPushTimer);
   fbPushTimer = setTimeout(async ()=>{
-    const payload = buildFirebasePayload();
-    if(!checkPayloadSize(payload)) return;
     try{
-      await withFirebaseTimeout(FB_DOC_REF().set(payload), 15000, 'pushToFirebase');
-      setSyncStatus(true);
+      const ok = await writeShardedState(15000);
+      setSyncStatus(!!ok);
     }catch(e){
       console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e);
       setSyncStatus(false, 'falha ao sincronizar — ficou salvo só neste dispositivo: ' + (e.message||e));
@@ -763,14 +829,10 @@ function pushToFirebase(){
 async function pushToFirebaseNow(){
   if(!fbDb || fbSyncing || !appStateReady) return;
   clearTimeout(fbPushTimer);
-  const payload = buildFirebasePayload();
-  if(!checkPayloadSize(payload)){
-    toast('⚠ Não foi possível sincronizar: dados grandes demais (imagem local sem Cloudinary). Veja o aviso na barra lateral.');
-    return;
-  }
   try{
-    await withFirebaseTimeout(FB_DOC_REF().set(payload), 15000, 'pushToFirebaseNow');
-    setSyncStatus(true);
+    const ok = await writeShardedState(15000);
+    setSyncStatus(!!ok);
+    if(!ok) toast('⚠ Não foi possível sincronizar: algum pedaço dos dados ainda ficou grande demais. Veja o aviso na barra lateral.');
   }catch(e){
     console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e);
     setSyncStatus(false, 'falha ao sincronizar — ficou salvo só neste dispositivo: ' + (e.message||e));
@@ -799,22 +861,11 @@ async function forceThisDeviceToCloud(){
     try{ await storage.set(SITEORDER_KEY,JSON.stringify(siteOrder),false); }catch(_e){}
 
     clearTimeout(fbPushTimer);
-    const forcePayload = {
-      data: stripUndefinedDeep(DATA),
-      review: stripUndefinedDeep(REVIEW),
-      srs: stripUndefinedDeep(SRS),
-      sessionLog: stripUndefinedDeep(SESSIONLOG),
-      sectionOrder: stripUndefinedDeep(sectionOrder),
-      siteOrder: stripUndefinedDeep(siteOrder),
-      stateSchemaVersion: 3,
-      forcedFromDeviceAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
-    if(!checkPayloadSize(forcePayload)){
-      toast('⚠ Não deu pra enviar: dados grandes demais pra nuvem (imagem local sem Cloudinary). Veja o aviso na barra lateral.');
+    const ok = await writeShardedState(20000);
+    if(!ok){
+      toast('⚠ Não deu pra enviar: algum pedaço dos dados ficou grande demais pra nuvem (imagem local sem Cloudinary). Veja o aviso na barra lateral.');
       return;
     }
-    await withFirebaseTimeout(FB_DOC_REF().set(forcePayload), 20000, 'forceThisDeviceToCloud');
     setSyncStatus(true);
     createSafetySnapshot('após forçar envio deste dispositivo para Firebase');
     const extra=mig&&mig.migrated ? ` ${mig.migrated} imagem(ns) local(is) também foram enviada(s) ao Cloudinary.` : '';
@@ -986,9 +1037,8 @@ async function syncFromFirebase(){
 
   fbSyncing = true;
   try{
-    const snap = await withFirebaseTimeout(FB_DOC_REF().get(), 15000, 'syncFromFirebase (leitura)');
-    if(snap.exists){
-      const remote = snap.data() || {};
+    const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'syncFromFirebase (leitura)');
+    if(remote){
       const remoteData = (Array.isArray(remote.data) ? remote.data : [])
         .filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
 
@@ -4943,9 +4993,8 @@ async function collectRecoverySources(){
   // 5) Firebase atual — leitura sem gravar.
   if(fbDb){
     try{
-      const snap=await FB_DOC_REF().get();
-      if(snap.exists){
-        const remote=snap.data()||{};
+      const remote = await readShardedState(15000);
+      if(remote){
         for(const e of (Array.isArray(remote.data)?remote.data:[])) mergeRecoverableIntoMap(found,e,'Firebase');
         for(const [id,st] of Object.entries(remote.review||{})){
           if((Number(st)||0)>0) progress[id]=Math.max(progress[id]||0,Number(st)||0);
