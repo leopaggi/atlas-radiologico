@@ -3966,7 +3966,14 @@ function renderTagbar(){
     const clr = document.createElement('button');
     clr.id='clear-tags';
     clr.textContent = `limpar filtro${activeTags.size>1?'s':''} (${activeTags.size}) ✕`;
-    clr.onclick = ()=>{ activeTags.clear(); renderResults(); renderTagbar(); };
+    clr.onclick = ()=>{
+      activeTags.clear();
+      searchTerm = '';
+      const searchInput = document.getElementById('search');
+      if(searchInput) searchInput.value = '';
+      scope = {section:null, site:null};
+      renderAll();
+    };
     bar.appendChild(clr);
   }
 
