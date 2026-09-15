@@ -4885,13 +4885,38 @@ function openForm(id){
     } else {
       DATA.push({id:entryId, name, s:sec, site, tags, img, notes, links, enTerm, inc, localImg:localImgFlag, images:remoteImgs, classification, _userUpdatedAt:Date.now()});
     }
-    await saveData();
-    document.removeEventListener('keydown', closeFormOnEsc);
-    closeOverlay();
-    scope = {section:sec, site:site};
-    openSections = new Set([sec]);
-    renderAll();
-    toast(existing?'Alterações salvas.':'Lesão adicionada ao seu banco.');
+
+    // A partir daqui, a tela SEMPRE fecha ao final (sucesso ou falha na nuvem) —
+    // o try/finally garante isso. O botão mostra "salvando" pra não parecer
+    // travado enquanto espera a confirmação da nuvem (que agora usa tempo-limite
+    // mais curto aqui, já que o usuário está esperando na tela ativamente).
+    const saveBtn = document.getElementById('f-save');
+    const originalBtnText = saveBtn.textContent;
+    saveBtn.textContent = '⏳ Salvando...';
+    saveBtn.disabled = true;
+    let cloudOk = true;
+    try{
+      try{ createSafetySnapshot('antes de salvar alterações'); }catch(_e){}
+      sanitizeAllImageOwnershipV208();
+      try{ await storage.set(STORAGE_KEY, JSON.stringify(DATA), false); }catch(e){ console.error('storage error', e); }
+      cloudOk = await withFirebaseTimeout(writeShardedState(6000), 25000, 'salvar lesão').catch(e=>{
+        console.error('Firebase push falhou ao salvar lesão (ficou salvo só localmente por enquanto).', e);
+        setSyncStatus(false, 'falha ao sincronizar — ficou salvo só neste dispositivo: ' + (e.message||e));
+        return false;
+      });
+      if(cloudOk) setSyncStatus(true);
+    }finally{
+      saveBtn.textContent = originalBtnText;
+      saveBtn.disabled = false;
+      document.removeEventListener('keydown', closeFormOnEsc);
+      closeOverlay();
+      scope = {section:sec, site:site};
+      openSections = new Set([sec]);
+      renderAll();
+      toast(cloudOk
+        ? (existing?'Alterações salvas.':'Lesão adicionada ao seu banco.')
+        : '⚠ Salvo neste dispositivo, mas a sincronização com a nuvem falhou — veja o aviso na barra lateral.');
+    }
   };
 }
 
