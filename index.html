@@ -135,9 +135,18 @@ body{
 }
 .foot-btn{
   background:none;border:none;color:var(--muted);font-size:12px;text-align:left;
-  cursor:pointer;padding:4px 0;font-family:inherit;
+  cursor:pointer;padding:4px 0;font-family:inherit;width:100%;
 }
 .foot-btn:hover{color:var(--teal);}
+.foot-btn-sub{display:block;color:var(--muted-2);font-size:10.5px;font-weight:400;margin-top:2px;line-height:1.4;}
+.advanced-tools{margin-top:10px;border-top:1px solid var(--line);padding-top:8px;}
+.advanced-tools summary{
+  cursor:pointer;color:var(--muted);font-size:12px;list-style:none;padding:4px 0;user-select:none;
+}
+.advanced-tools summary::-webkit-details-marker{display:none;}
+.advanced-tools summary:hover{color:var(--teal);}
+.advanced-tools[open] summary{color:var(--text);margin-bottom:6px;}
+.advanced-tools-list{display:flex;flex-direction:column;gap:10px;padding-left:4px;}
 .backup-actions{
   display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:2px;
 }
@@ -637,12 +646,17 @@ body{
         <button class="backup-btn" id="btn-export" title="Salvar lesões, progresso, quiz e ordem das seções">💾 Salvar<br>backup</button>
         <button class="backup-btn" id="btn-import" title="Restaurar um backup .json do Atlas">📂 Importar<br>backup</button>
       </div>
-      <button class="foot-btn" id="btn-recover-data" title="Procurar imagens e progresso em dados locais, snapshots e Firebase">🛟 procurar dados antigos / recuperar</button>
-      <button class="foot-btn" id="btn-audit-images" title="Verifica se cada imagem está anexada à lesão certa, usando a etiqueta guardada na própria imagem">🔍 auditar vínculo de imagens</button>
-      <button class="foot-btn" id="btn-patch-19" style="color:var(--amber,#d9a441);" title="Remove só as 19 imagens confirmadas como erradas nesta conversa — não mexe em mais nada">🩹 aplicar correção pontual (19 imagens erradas)</button>
       <button class="foot-btn" id="btn-force-cloud" title="Enviar o estado completo deste dispositivo para o Firebase, preservando e migrando imagens locais">☁↑ forçar envio deste dispositivo</button>
-      <button class="foot-btn" id="btn-restore-snapshot" title="Voltar ao último snapshot local criado automaticamente">↶ restaurar último snapshot de segurança</button>
-      <button class="foot-btn" id="btn-reset" style="color:var(--red);">⟲ restaurar padrão de fábrica</button>
+      <details class="advanced-tools">
+        <summary>⚙️ ferramentas avançadas</summary>
+        <div class="advanced-tools-list">
+          <button class="foot-btn" id="btn-audit-images" title="Verifica se cada imagem está anexada à lesão certa, usando a etiqueta guardada na própria imagem">🔍 auditar vínculo de imagens<br><span class="foot-btn-sub">usa isso depois de qualquer atualização, pra conferir se as imagens ficaram no lugar certo</span></button>
+          <button class="foot-btn" id="btn-force-dedup" title="Funde agora mesmo qualquer lesão duplicada (mesmo nome/seção/sítio), preservando a melhor imagem e o melhor progresso de revisão entre as cópias">🔗 fundir duplicatas agora<br><span class="foot-btn-sub">usa se perceber a mesma lesão aparecendo duas vezes, ou progresso de revisão sumindo</span></button>
+          <button class="foot-btn" id="btn-recover-data" title="Procurar imagens e progresso em dados locais, snapshots e Firebase">🛟 procurar dados antigos / recuperar<br><span class="foot-btn-sub">último recurso: vasculha tudo que existe neste navegador atrás de algo perdido</span></button>
+          <button class="foot-btn" id="btn-restore-snapshot" title="Voltar ao último snapshot local criado automaticamente">↶ restaurar snapshot de segurança<br><span class="foot-btn-sub">volta pra um momento salvo automaticamente antes de uma ação arriscada</span></button>
+          <button class="foot-btn" id="btn-reset" style="color:var(--red);">⟲ restaurar padrão de fábrica<br><span class="foot-btn-sub">⚠ substitui TUDO pelo conteúdo do arquivo — só use como último recurso</span></button>
+        </div>
+      </details>
     </div>
   </div>
 
@@ -2875,7 +2889,13 @@ function runDuplicateCleanup(){
       // ativo do usuário) nunca deve virar o "descartado" da fusão.
       const at = Number(a._userUpdatedAt)||0, bt = Number(b._userUpdatedAt)||0;
       if(at !== bt) return bt - at;
-      // Prioridade 2 (empate): prefere o id canônico de fábrica.
+      // Prioridade 2: quem tem MAIS progresso de revisão/quiz (dominado > revisando
+      // > não revisado) nunca deve ser descartado — sem isso, o "dominado" podia
+      // acabar preso numa cópia que a fusão removia, fazendo o progresso "sumir"
+      // ou reaparecer trocado de lugar aleatoriamente entre as duas cópias.
+      const ar = Number(REVIEW[a.id])||0, br = Number(REVIEW[b.id])||0;
+      if(ar !== br) return br - ar;
+      // Prioridade 3 (empate): prefere o id canônico de fábrica.
       const aCanon = a.id.startsWith('seed_') ? 0 : 1;
       const bCanon = b.id.startsWith('seed_') ? 0 : 1;
       if(aCanon !== bCanon) return aCanon - bCanon;
@@ -5248,33 +5268,18 @@ function openImageAuditModal(){
   }
 }
 document.getElementById('btn-audit-images').onclick = openImageAuditModal;
-document.getElementById('btn-patch-19').onclick = async ()=>{
-  // Correção pontual e cirúrgica: mexe SÓ nestas 19 lesões, especificamente
-  // no campo de imagens delas — nunca substitui o banco inteiro como
-  // "restaurar padrão de fábrica" ou "importar backup" fazem. Progresso de
-  // revisão, tags, notas e qualquer outra lesão ficam 100% intocados.
-  const WRONG_IMAGE_NAMES = [
-    'Síndrome de hiperestimulação ovariana','Subependimoma','Trombose de veia mesentérica superior',
-    'Estenose traqueal idiopática','Isquemia do quiasma óptico','Nefroma mesoblástico congênito',
-    'Tumor lipomatoso atípico do cordão espermático','Colesteatoma',
-    'Acretismo placentário (placenta acreta/increta/percreta)','Fibromatose plantar (doença de Ledderhose)',
-    'Hepatoblastoma','Mola hidatiforme','Neuropatia óptica compressiva','Osteomalácia',
-    'Proteínose alveolar pulmonar','Bursite trocantérica','Estenose hipertrófica do piloro',
-    'Otite média com efusão','Seminoma testicular'
-  ];
-  if(!confirm(`Isso remove a imagem de ${WRONG_IMAGE_NAMES.length} lesões específicas confirmadas como erradas, sem mexer em mais nada do seu banco. Continuar?`)) return;
-  try{ createSafetySnapshot('antes da correção pontual de 19 imagens'); }catch(_e){}
-  let fixed = 0;
-  DATA.forEach(e=>{
-    if(WRONG_IMAGE_NAMES.includes(e.name) && (e.images||[]).length){
-      e.images = [];
-      e.localImg = false;
-      fixed++;
-    }
-  });
-  await saveData();
+document.getElementById('btn-force-dedup').onclick = async ()=>{
+  if(!confirm('Isso funde qualquer lesão duplicada (mesmo nome/seção/sítio) agora mesmo, mantendo a imagem e o progresso de revisão mais completos entre as cópias. Continuar?')) return;
+  try{ createSafetySnapshot('antes de forçar fusão de duplicatas'); }catch(_e){}
+  const result = runDuplicateCleanup();
+  if(result.changed) await saveData();
+  if(result.reviewOrSrsChanged){ await saveReview(); await saveSRS(); }
   renderAll();
-  toast(`Correção aplicada: ${fixed} lesão(ões) tiveram a imagem errada removida.`);
+  if(!result.changed && !result.reviewOrSrsChanged){
+    toast('Nenhuma lesão duplicada encontrada — seu banco já está limpo.');
+  }else{
+    toast('Duplicatas fundidas com sucesso.');
+  }
 };
 document.getElementById('btn-recover-data').onclick = openRecoveryInspector;
 document.getElementById('btn-force-cloud').onclick = forceThisDeviceToCloud;
