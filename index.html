@@ -410,6 +410,18 @@ body{
 .snapshot-row-latest{font-size:10px;font-weight:600;color:var(--teal);background:var(--tag-bg-active);padding:2px 6px;border-radius:8px;margin-left:6px;}
 .snapshot-row-detail{font-size:11.5px;color:var(--muted-2);margin-top:3px;}
 .snapshot-row-restore{flex-shrink:0;}
+.audit-modal{max-width:760px;}
+.audit-list{display:flex;flex-direction:column;gap:8px;margin-top:14px;max-height:420px;overflow-y:auto;}
+.audit-row{
+  display:flex;align-items:center;gap:12px;background:var(--panel-2);border:1px solid var(--red);
+  border-radius:var(--radius);padding:10px 12px;
+}
+.audit-thumb{width:56px;height:56px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:zoom-in;}
+.audit-row-info{flex:1;font-size:12px;}
+.audit-row-current{color:var(--text);}
+.audit-row-correct{color:var(--muted);margin-top:3px;}
+.audit-fix-btn{flex-shrink:0;white-space:nowrap;}
+.audit-orphan-tag{flex-shrink:0;font-size:11px;color:var(--red);background:rgba(220,90,90,.14);padding:4px 10px;border-radius:8px;}
 .collage-drop{border:1.5px dashed var(--teal-dim);background:var(--panel-2);padding:24px 14px;border-radius:var(--radius);text-align:center;outline:none;cursor:pointer;transition:border-color .15s ease,background .15s ease;}
 .collage-drop:hover,.collage-drop:focus,.collage-drop.drag{border-color:var(--teal);background:#1d2d38;}
 .collage-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:8px;margin:12px 0;}
@@ -626,6 +638,7 @@ body{
         <button class="backup-btn" id="btn-import" title="Restaurar um backup .json do Atlas">📂 Importar<br>backup</button>
       </div>
       <button class="foot-btn" id="btn-recover-data" title="Procurar imagens e progresso em dados locais, snapshots e Firebase">🛟 procurar dados antigos / recuperar</button>
+      <button class="foot-btn" id="btn-audit-images" title="Verifica se cada imagem está anexada à lesão certa, usando a etiqueta guardada na própria imagem">🔍 auditar vínculo de imagens</button>
       <button class="foot-btn" id="btn-force-cloud" title="Enviar o estado completo deste dispositivo para o Firebase, preservando e migrando imagens locais">☁↑ forçar envio deste dispositivo</button>
       <button class="foot-btn" id="btn-restore-snapshot" title="Voltar ao último snapshot local criado automaticamente">↶ restaurar último snapshot de segurança</button>
       <button class="foot-btn" id="btn-reset" style="color:var(--red);">⟲ restaurar padrão de fábrica</button>
@@ -5136,6 +5149,104 @@ async function openRecoveryInspector(){
    AÇÕES GLOBAIS
    ============================================================ */
 document.getElementById('add-btn').onclick = ()=> openForm(null);
+/* Auditoria de vínculo imagem↔lesão. Cada imagem carrega, desde que foi
+   enviada, uma etiqueta permanente (lesionId/lesionName) guardada dentro
+   dela mesma — é essa etiqueta que permitiu reconstruir imagens perdidas
+   direto do Cloudinary sem precisar de backup nenhuma vez. Esta função
+   verifica se a etiqueta de cada imagem ainda bate com o lugar onde ela
+   está aparecendo agora, e oferece corrigir automaticamente quando não bate.*/
+function auditImageOwnership(){
+  const byId = new Map(DATA.map(e=>[e.id,e]));
+  const byName = new Map(DATA.map(e=>[e.name,e]));
+  const mismatches = []; // {entry, img, correctEntry|null}
+  const untagged = [];   // imagens sem etiqueta nenhuma (legado, não dá pra verificar)
+
+  DATA.forEach(entry=>{
+    (entry.images||[]).forEach(img=>{
+      if(!img.lesionId && !img.lesionName){ untagged.push({entry, img}); return; }
+      const matchesHere = (img.lesionId && img.lesionId===entry.id) || (img.lesionName && img.lesionName===entry.name);
+      if(matchesHere) return;
+      const correctEntry = (img.lesionId && byId.get(img.lesionId)) || (img.lesionName && byName.get(img.lesionName)) || null;
+      mismatches.push({entry, img, correctEntry});
+    });
+  });
+
+  return {mismatches, untagged, totalChecked: DATA.reduce((n,e)=>n+((e.images||[]).length),0)};
+}
+
+function openImageAuditModal(){
+  const report = auditImageOwnership();
+  const cov = document.createElement('div');
+  cov.className = 'overlay';
+  const rows = report.mismatches.map((m,idx)=>{
+    const correctLabel = m.correctEntry
+      ? `<b>${m.correctEntry.s} › ${m.correctEntry.site} › ${m.correctEntry.name}</b>`
+      : `<span style="color:var(--red);">nenhuma lesão atual corresponde à etiqueta (${m.img.lesionName||m.img.lesionId||'sem nome'})</span>`;
+    return `<div class="audit-row" data-idx="${idx}">
+      <img src="${m.img.data}" class="audit-thumb">
+      <div class="audit-row-info">
+        <div class="audit-row-current">está em: <b>${m.entry.s} › ${m.entry.site} › ${m.entry.name}</b></div>
+        <div class="audit-row-correct">etiqueta diz: ${correctLabel}</div>
+      </div>
+      ${m.correctEntry ? '<button type="button" class="btn btn-primary audit-fix-btn" data-idx="'+idx+'">mover pra lesão certa</button>' : '<span class="audit-orphan-tag">órfã</span>'}
+    </div>`;
+  }).join('');
+
+  cov.innerHTML = `<div class="modal audit-modal">
+    <h2>🔍 Auditoria de vínculo de imagens</h2>
+    <div class="modal-sub">
+      ${report.totalChecked} imagem(ns) verificada(s) no total.
+      ${report.mismatches.length===0
+        ? '<br><span style="color:var(--green,#4E9A6A);font-weight:600;">✓ Tudo certo — nenhuma imagem fora do lugar.</span>'
+        : `<br><span style="color:var(--red);font-weight:600;">⚠ ${report.mismatches.length} imagem(ns) fora do lugar encontrada(s).</span>`}
+      ${report.untagged.length ? `<br><span style="color:var(--muted-2);">${report.untagged.length} imagem(ns) antiga(s) sem etiqueta — não é possível verificar essas automaticamente.</span>` : ''}
+    </div>
+    <div class="audit-list">${rows}</div>
+    <div class="modal-actions">
+      ${report.mismatches.some(m=>m.correctEntry) ? '<button class="btn btn-primary" id="audit-fix-all">corrigir todas automaticamente</button>' : ''}
+      <button class="btn btn-ghost" id="audit-close">fechar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(cov);
+  cov.onclick = e=>{ if(e.target===cov) cov.remove(); };
+  cov.querySelector('#audit-close').onclick = ()=> cov.remove();
+  cov.querySelectorAll('.audit-thumb').forEach((thumb,idx)=>{
+    thumb.onclick = (e)=>{ e.stopPropagation(); openImageLightbox(thumb.src); };
+  });
+
+  async function applyFix(idx){
+    const m = report.mismatches[idx];
+    if(!m || !m.correctEntry) return;
+    // move a imagem da lesão errada pra lesão certa (a que a etiqueta indica)
+    m.entry.images = (m.entry.images||[]).filter(x=>x!==m.img);
+    m.correctEntry.images = [...(m.correctEntry.images||[]), m.img];
+    m.entry._userUpdatedAt = Date.now();
+    m.correctEntry._userUpdatedAt = Date.now();
+  }
+
+  cov.querySelectorAll('.audit-fix-btn').forEach(btn=>{
+    btn.onclick = async ()=>{
+      await applyFix(Number(btn.dataset.idx));
+      await saveData();
+      toast('Imagem movida pra lesão certa.');
+      cov.remove();
+      openImageAuditModal(); // reabre já atualizado
+    };
+  });
+  const fixAllBtn = cov.querySelector('#audit-fix-all');
+  if(fixAllBtn){
+    fixAllBtn.onclick = async ()=>{
+      for(let i=0;i<report.mismatches.length;i++){
+        if(report.mismatches[i].correctEntry) await applyFix(i);
+      }
+      await saveData();
+      toast('Imagens corrigidas automaticamente.');
+      cov.remove();
+      openImageAuditModal();
+    };
+  }
+}
+document.getElementById('btn-audit-images').onclick = openImageAuditModal;
 document.getElementById('btn-recover-data').onclick = openRecoveryInspector;
 document.getElementById('btn-force-cloud').onclick = forceThisDeviceToCloud;
 document.getElementById('search').addEventListener('input', (e)=>{ searchTerm = e.target.value; renderResults(); });
