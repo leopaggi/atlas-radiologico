@@ -732,6 +732,20 @@ function withFirebaseTimeout(promise, ms=15000, label='operação Firebase'){
   ]);
 }
 let fbPushTimer = null;
+/* Trava de escrita única: se dois envios ao Firebase acontecerem em sequência
+   rápida (ex: o quiz salvando progresso automaticamente + você salvando uma
+   edição de imagem logo depois), sem essa trava os dois podiam rodar ao
+   mesmo tempo — e se o mais LENTO terminasse DEPOIS do mais rápido, ele
+   sobrescrevia com uma versão mais antiga dos dados, mesmo tendo sido
+   disparado primeiro. Agora, todo envio espera o anterior terminar antes de
+   começar, e sempre usa os dados mais atuais no momento em que realmente
+   executa — nunca dados "congelados" de quando foi originalmente chamado. */
+let writeChainV247 = Promise.resolve();
+function writeShardedStateSerialized(ms=15000){
+  const run = ()=> writeShardedState(ms);
+  writeChainV247 = writeChainV247.then(run, run);
+  return writeChainV247;
+}
 let appStateReady = false; // impede que migrações iniciais enviem REVIEW/SRS vazios ao Firebase
 
 /* mostra/some o aviso permanente de status de sincronização no topo da barra lateral —
@@ -843,7 +857,7 @@ function pushToFirebase(){
   clearTimeout(fbPushTimer);
   fbPushTimer = setTimeout(async ()=>{
     try{
-      const ok = await writeShardedState(15000);
+      const ok = await writeShardedStateSerialized(15000);
       setSyncStatus(!!ok);
     }catch(e){
       console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e);
@@ -858,7 +872,7 @@ async function pushToFirebaseNow(){
   if(!fbDb || fbSyncing || !appStateReady) return;
   clearTimeout(fbPushTimer);
   try{
-    const ok = await writeShardedState(15000);
+    const ok = await writeShardedStateSerialized(15000);
     setSyncStatus(!!ok);
     if(!ok) toast('⚠ Não foi possível sincronizar: algum pedaço dos dados ainda ficou grande demais. Veja o aviso na barra lateral.');
   }catch(e){
@@ -889,7 +903,7 @@ async function forceThisDeviceToCloud(){
     try{ await storage.set(SITEORDER_KEY,JSON.stringify(siteOrder),false); }catch(_e){}
 
     clearTimeout(fbPushTimer);
-    const ok = await writeShardedState(20000);
+    const ok = await writeShardedStateSerialized(20000);
     if(!ok){
       toast('⚠ Não deu pra enviar: algum pedaço dos dados ficou grande demais pra nuvem (imagem local sem Cloudinary). Veja o aviso na barra lateral.');
       return;
@@ -4967,7 +4981,7 @@ function openForm(id){
     try{
       try{ createSafetySnapshot('antes de salvar alterações'); }catch(_e){}
       try{ await storage.set(STORAGE_KEY, JSON.stringify(DATA), false); }catch(e){ console.error('storage error', e); }
-      cloudOk = await withFirebaseTimeout(writeShardedState(6000), 25000, 'salvar lesão').catch(e=>{
+      cloudOk = await withFirebaseTimeout(writeShardedStateSerialized(6000), 25000, 'salvar lesão').catch(e=>{
         console.error('Firebase push falhou ao salvar lesão (ficou salvo só localmente por enquanto).', e);
         setSyncStatus(false, 'falha ao sincronizar — ficou salvo só neste dispositivo: ' + (e.message||e));
         return false;
