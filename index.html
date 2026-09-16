@@ -825,7 +825,12 @@ async function writeShardedState(ms=15000){
 /* Lê o documento principal + todos os pedaços, e junta tudo de volta num
    único array, no mesmo formato que o resto do código já espera. */
 async function readShardedState(ms=15000){
-  const metaSnap = await withFirebaseTimeout(FB_META_REF().get(), ms, 'ler documento principal');
+  // { source: 'server' } força buscar do servidor de verdade, ignorando o
+  // cache local do Firestore no navegador — sem isso, logo após recarregar a
+  // página, o SDK às vezes devolve uma versão em cache mais antiga do
+  // documento (de antes da sua última edição), fazendo parecer que uma
+  // correção "voltou atrás" mesmo já tendo sido salva corretamente.
+  const metaSnap = await withFirebaseTimeout(FB_META_REF().get({source:'server'}), ms, 'ler documento principal');
   if(!metaSnap.exists) return null;
   const meta = metaSnap.data() || {};
   const chunkCount = Number(meta.chunkCount)||0;
@@ -834,7 +839,7 @@ async function readShardedState(ms=15000){
   let combinedData = [];
   if(chunkCount > 0){
     const chunkSnaps = await Promise.all(
-      Array.from({length:chunkCount}, (_,i)=> withFirebaseTimeout(FB_CHUNK_REF(i).get(), ms, `ler pedaço ${i+1}/${chunkCount}`))
+      Array.from({length:chunkCount}, (_,i)=> withFirebaseTimeout(FB_CHUNK_REF(i).get({source:'server'}), ms, `ler pedaço ${i+1}/${chunkCount}`))
     );
     chunkSnaps.forEach(snap=>{
       if(snap.exists){
