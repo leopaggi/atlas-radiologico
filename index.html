@@ -3669,12 +3669,15 @@ async function loadData(){
     // uma lesão manualmente pelo formulário (o que sempre grava _userUpdatedAt),
     // ela fica protegida e nunca é sobrescrita por esta rotina. Links editados
     // manualmente e progresso de revisão também nunca são tocados aqui.
-    const seedById = new Map(SEED.map(e=>[e.id, e]));
+        const seedById = new Map(SEED.map(e=>[e.id, e]));
     let canonicalRefreshed = 0;
+    // v250: canonicalRefreshed DESLIGADO da inicialização.
+    const CANONICAL_REFRESH_DISABLED_V250 = true;
     DATA.forEach(e=>{
-      if(Number(e._userUpdatedAt)||0) return; // usuário editou esta lesão — nunca sobrescrever
+      if(CANONICAL_REFRESH_DISABLED_V250) return;
+      if(Number(e._userUpdatedAt)||0) return;
       const canon = seedById.get(e.id);
-      if(!canon) return; // lesão personalizada do usuário, sem par no arquivo — preservar como está
+      if(!canon) return;
       const fieldsToSync = ['name','s','site','tags','notes','classification','enTerm','inc'];
       let changed = false;
       fieldsToSync.forEach(f=>{
