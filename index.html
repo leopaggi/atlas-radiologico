@@ -2916,6 +2916,10 @@ function runTagCleanup(){
    removida para a que sobrevive (sem apagar progresso). Retorna true se algo mudou,
    e um array com os REVIEW/SRS a persistir depois. */
 function runDuplicateCleanup(){
+  // v250: runDuplicateCleanup DESLIGADO da inicialização.
+  // Rodar em toda abertura fundia lesões que não eram duplicatas reais.
+  // Agora só roda quando você clica explicitamente num botão.
+  return { changed:false, reviewOrSrsChanged:false };
   const groups = new Map();
   DATA.forEach(e=>{
     const key = `${e.s}|||${e.site}|||${e.name}`;
