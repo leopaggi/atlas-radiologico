@@ -5633,15 +5633,31 @@ function showLoginGate(msg){
 if(fbAuth){
   document.getElementById('login-google-btn').onclick = async ()=>{
     document.getElementById('login-status').textContent = '';
+    const provider = new firebase.auth.GoogleAuthProvider();
     try{
-      const provider = new firebase.auth.GoogleAuthProvider();
       await fbAuth.signInWithPopup(provider);
       // o resultado é tratado pelo onAuthStateChanged abaixo
     }catch(e){
-      console.error('Falha no login Google', e);
-      document.getElementById('login-status').textContent = 'Falha ao entrar: ' + (e.message||e);
+      console.error('Falha no login Google via popup, tentando por redirecionamento…', e);
+      // Alguns navegadores/computadores restringem a comunicação entre a
+      // janela do site e a janela pop-up do Google (mesmo com cookies de
+      // terceiros liberados nas configurações gerais). O redirecionamento
+      // completo evita esse problema, pois não depende dessa comunicação.
+      try{
+        await fbAuth.signInWithRedirect(provider);
+        // a página vai navegar pro Google e voltar — o resultado é tratado
+        // por getRedirectResult()/onAuthStateChanged após o retorno.
+      }catch(e2){
+        console.error('Falha no login Google via redirecionamento também.', e2);
+        document.getElementById('login-status').textContent = 'Falha ao entrar: ' + (e2.message||e2);
+      }
     }
   };
+  // Processa o retorno de um login por redirecionamento, se for o caso.
+  fbAuth.getRedirectResult().catch(e=>{
+    console.error('Falha ao processar retorno do login por redirecionamento.', e);
+    document.getElementById('login-status').textContent = 'Falha ao entrar: ' + (e.message||e);
+  });
   fbAuth.onAuthStateChanged(async (user)=>{
     if(!user){
       showLoginGate();
