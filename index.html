@@ -3189,6 +3189,7 @@ function loadSafetySnapshots(){
 }
 
 function createSafetySnapshot(reason){
+    return null; // DESLIGADO v194 — snapshot causava QuotaExceededError
   try{
     const snap = buildSafetySnapshot(reason);
     const arr = loadSafetySnapshots();
