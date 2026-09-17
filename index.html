@@ -1199,7 +1199,24 @@ const storage = hasNativeStorage() ? window.storage : {
     return { key, value: raw, shared: !!shared };
   },
   async set(key, value, shared){
-    localStorage.setItem(LOCAL_PREFIX+key, value);
+    try{
+      localStorage.setItem(LOCAL_PREFIX+key, value);
+    }catch(e){
+      const isQuotaError = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
+      if(!isQuotaError) throw e;
+      // Espaço estourou. Libera o que dá pra liberar sem risco (os snapshots de
+      // segurança não são mais criados desde a v194 — ver createSafetySnapshot —
+      // então essa chave só ocupa espaço de forma legada) e tenta gravar de novo
+      // uma única vez antes de desistir e deixar o chamador tratar o erro.
+      console.warn('localStorage cheio ao gravar "'+key+'" ('+(value?value.length:0)+' chars). Tentando liberar espaço...');
+      try{ localStorage.removeItem(SAFETY_SNAPSHOTS_KEY); }catch(_e){}
+      try{
+        localStorage.setItem(LOCAL_PREFIX+key, value);
+        console.warn('Gravação de "'+key+'" bem-sucedida após liberar espaço.');
+      }catch(e2){
+        throw e2;
+      }
+    }
     return { key, value, shared: !!shared };
   },
   async delete(key, shared){
