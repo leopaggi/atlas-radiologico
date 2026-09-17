@@ -3136,8 +3136,13 @@ function isAutoRadiopaediaLink(l){
    ============================================================ */
 const RECOVERY_KEY = 'atlas:recoveryVersion';
 const RECOVERY_VERSION = 'v193-force-device-cloud';
-const SUPPRESSED_DUPLICATE_IDS_V172 = new Set(['seed_876','seed_877','seed_564','seed_580','seed_603','seed_611','seed_619','seed_640','seed_671','seed_698','seed_720','seed_745','seed_761','seed_776','seed_791','seed_835','seed_836','seed_840','seed_1040','seed_1089','seed_605','seed_1028','seed_535','seed_716','seed_634','seed_594','seed_747','seed_614']);
-function activeCanonicalSeedV172(){ return SEED.filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id)); }
+const SUPPRESSED_DUPLICATE_IDS_V172 = new Set([
+  // v172 (antigos)
+  'seed_876','seed_877','seed_564','seed_580','seed_603','seed_611','seed_619','seed_640','seed_671','seed_698','seed_720','seed_745','seed_761','seed_776','seed_791','seed_835','seed_836','seed_840','seed_1040','seed_1089','seed_605','seed_1028','seed_535','seed_716','seed_634','seed_594','seed_747','seed_614',
+  // v246 (novos — fantasmas dos 42 pares atuais)
+  'seed_7','seed_15','seed_20','seed_25','seed_39','seed_365','seed_366','seed_407','seed_408','seed_426','seed_427','seed_472','seed_473','seed_478','seed_480','seed_485','seed_486','seed_568','seed_599','seed_607','seed_623','seed_633','seed_689','seed_699','seed_785','seed_786','seed_799','seed_800','seed_816','seed_827','seed_844','seed_845','seed_891','seed_910','seed_1025','seed_1026','seed_1044','seed_1045','seed_1096','seed_1097','seed_1124','seed_1125'
+]);
+  function activeCanonicalSeedV172(){ return SEED.filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id)); }
 
 const SAFETY_SNAPSHOTS_KEY = LOCAL_PREFIX+'safety_snapshots_v190';
 const SAFETY_SNAPSHOT_LIMIT = 6;
