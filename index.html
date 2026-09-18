@@ -6239,27 +6239,16 @@ function buildAreaRow(label, stats, onStart){
 
 function startQuizInsideDashboard(queue){
   if(!queue||!queue.length){toast('Nenhum caso disponível.');return;}
-  quizQueue=queue; quizIndex=0; quizStats={right:0,wrong:0,easy:0,medium:0,hard:0,again:0}; quizSessionWrongIds=[];
+  quizQueue=queue;
+  quizIndex=0;
+  quizStats={right:0,wrong:0,easy:0,medium:0,hard:0,again:0};
+  quizSessionWrongIds=[];
   const current=document.querySelector('.overlay .study-dashboard');
-  if(!current){ startQuizSession(queue); return; }
-  // Keep the SAME Quiz & Progresso overlay. renderQuizCard normally creates a modal;
-  // capture that modal, then transplant its contents into the existing dashboard shell.
-  const originalAppend=document.body.appendChild.bind(document.body);
-  let captured=null;
-  document.body.appendChild=function(node){
-    if(node && node.classList && node.classList.contains('overlay')){captured=node;return node;}
-    return originalAppend(node);
-  };
-  try{ renderQuizCard(); }finally{ document.body.appendChild=originalAppend; }
-  if(captured){
-    const qm=captured.querySelector('.quiz-modal');
-    current.className='modal progress-modal study-dashboard quiz-modal';
-    current.innerHTML=qm?qm.innerHTML:captured.innerHTML;
-    // Event listeners were attached to captured DOM, so re-run render directly into same overlay via mode flag.
-    current.innerHTML='';
-    current.dataset.integratedQuiz='1';
-    renderQuizCardIntegrated(current);
-  }
+  if(!current){ toast('Abra Quiz & Progresso para iniciar a sessão.'); return; }
+  current.className='modal progress-modal study-dashboard quiz-modal';
+  current.dataset.integratedQuiz='1';
+  current.dataset.answered='0';
+  renderQuizCardIntegrated(current);
 }
 function renderQuizCardIntegrated(host){
   if(quizIndex>=quizQueue.length){ openProgressDashboardReplacing(host); return; }
