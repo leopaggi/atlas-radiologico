@@ -1047,6 +1047,44 @@ body{
   }
 }
 
+
+/* Resumo geral do ciclo — painel panorâmico independente do preview aprovado */
+.study-dashboard .study-cycle-overall{
+  margin-top:14px;border:1px solid #294157;border-radius:12px;
+  background:linear-gradient(145deg,#101d29,#0c1924);
+  padding:18px 20px 17px;
+}
+.study-dashboard .study-cycle-overall-head b{display:block;font-size:15px;color:#eef6ff}
+.study-dashboard .study-cycle-overall-head span{display:block;margin-top:3px;font-size:10.5px;color:#7f98ab}
+.study-dashboard .study-cycle-overall-track{
+  display:flex;width:100%;height:32px;margin-top:18px;
+  border-radius:10px;overflow:hidden;background:#183043;
+}
+.study-dashboard .study-cycle-overall-track>i{
+  min-width:0;height:100%;display:flex;align-items:center;justify-content:center;font-style:normal;
+}
+.study-dashboard .study-cycle-overall-track b{
+  color:#fff;font:800 13px 'IBM Plex Mono',monospace;text-shadow:0 1px 3px #0008;
+}
+.study-dashboard .study-cycle-overall-values{display:flex;width:100%;margin-top:10px}
+.study-dashboard .study-cycle-overall-values>div{
+  min-width:0;text-align:center;display:flex;flex-direction:column;align-items:center;
+}
+.study-dashboard .study-cycle-overall-values b{font:800 13px 'IBM Plex Mono',monospace;color:#eef6ff}
+.study-dashboard .study-cycle-overall-values span{font-size:9.5px;color:#a5bac9;margin-top:3px;white-space:nowrap}
+.study-dashboard .study-cycle-tip{
+  margin-top:16px;border:1px solid #1677b9;border-radius:9px;
+  background:rgba(9,83,130,.12);padding:11px 14px;
+  display:flex;align-items:center;gap:12px;color:#93aec1;
+}
+.study-dashboard .study-cycle-tip>span{font-size:20px}
+.study-dashboard .study-cycle-tip p{margin:0;font-size:10.5px;line-height:1.45}
+@media(max-width:800px){
+ .study-dashboard .study-cycle-overall{padding:14px}
+ .study-dashboard .study-cycle-overall-track{height:26px}
+ .study-dashboard .study-cycle-overall-values span{font-size:7.5px;white-space:normal}
+}
+
 </style>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
@@ -6598,6 +6636,10 @@ function refreshStudyDashboardLive(){
   if(cycleTotal) cycleTotal.textContent=`${cg.total-cg.never} / ${cg.total} vistas`;
   const cycleSummary=ov.querySelector('.study-cycle-summary');
   if(cycleSummary) cycleSummary.innerHTML=cgs.map(z=>`<div><i class="cycle-${z.k}"></i><b>${z.n}</b><span>${z.k==='recent'?'≤7d':z.k==='short'?'8–45d':z.k==='medium'?'46d–6m':z.k==='late'?'>6m':'nunca'} · ${Math.round(z.pct)}%</span></div>`).join('');
+  const overallTrack=ov.querySelector('.study-cycle-overall-track');
+  if(overallTrack) overallTrack.innerHTML=cgs.map(z=>`<i class="cycle-${z.k}" style="width:${z.pct}%"><b>${Math.round(z.pct)}%</b></i>`).join('');
+  const overallValues=ov.querySelector('.study-cycle-overall-values');
+  if(overallValues) overallValues.innerHTML=cgs.map(z=>`<div style="width:${z.pct}%"><b>${z.n}</b><span>${z.k==='recent'?'≤ 7 dias':z.k==='short'?'8–45 dias':z.k==='medium'?'46 dias–6 meses':z.k==='late'?'> 6 meses':'nunca revisadas'}</span></div>`).join('');
 
   const counts={easy:0,medium:0,hard:0,again:0,fresh:0};
   DATA.forEach(e=>{
@@ -6859,6 +6901,14 @@ function openProgressDashboard(){
           <div class="study-state-row"><span><i style="background:${CONF_COLORS.fresh}"></i>Nunca estudadas</span><b>${confidenceCounts.fresh} (${Math.round(cf)}%)</b></div>
         </div></div></div>
         <div class="study-chart study-domain-card"><h3>Domínio por área</h3><div class="study-domain-list">${sections.map((s,i)=>`<div class="study-domain-row" data-sec="${escAttr(s.name)}" style="--section-color:${studySectionColor(s.name)}" title="${s.studied} de ${s.total} casos estudados · cobertura ${s.coverage}%"><span class="study-domain-name">${esc(s.name)}</span><div class="study-domain-track"><div class="study-domain-fill" style="width:${s.studied?s.pct:0}%"></div></div><b class="study-domain-pct">${s.studied?s.pct+'%':'—'}</b></div>`).join('')}</div></div>
+    </div>
+    <div class="study-cycle-overall">
+      <div class="study-cycle-overall-head">
+        <div><b>◷ Resumo geral do ciclo de revisão</b><span>Distribuição de todas as ${cycleGlobal.total} lesões do acervo por tempo desde a última revisão</span></div>
+      </div>
+      <div class="study-cycle-overall-track">${cycleGlobalSeg.map(z=>`<i class="cycle-${z.k}" style="width:${z.pct}%"><b>${Math.round(z.pct)}%</b></i>`).join('')}</div>
+      <div class="study-cycle-overall-values">${cycleGlobalSeg.map(z=>`<div style="width:${z.pct}%"><b>${z.n}</b><span>${z.k==='recent'?'≤ 7 dias':z.k==='short'?'8–45 dias':z.k==='medium'?'46 dias–6 meses':z.k==='late'?'> 6 meses':'nunca revisadas'}</span></div>`).join('')}</div>
+      <div class="study-cycle-tip"><span>💡</span><p>Mesmo quando você revisar 100% do acervo, este gráfico continuará útil, mostrando o quanto seu estudo está recente e o que precisa de nova revisão.</p></div>
     </div>
     <div class="study-embedded-section" id="study-embedded-section">
       <div class="study-embedded-head">
