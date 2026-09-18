@@ -1133,6 +1133,162 @@ body{
   }
 }
 
+
+/* 2026-09-18 — composição panorâmica fiel ao preview aprovado */
+.study-dashboard{
+  width:calc(100vw - 28px)!important;
+  max-width:1780px!important;
+  max-height:calc(100vh - 24px)!important;
+  overflow:auto!important;
+  padding:18px 20px!important;
+}
+.study-dashboard .study-primary{
+  display:grid!important;
+  grid-template-columns:minmax(400px,.92fr) minmax(470px,1.08fr) minmax(330px,.82fr)!important;
+  gap:12px!important;
+  align-items:stretch!important;
+}
+/* Move Estado do acervo para a terceira coluna da primeira linha sem duplicar conteúdo. */
+.study-dashboard .study-lower{
+  display:contents!important;
+}
+.study-dashboard .study-lower>.study-chart:first-child{
+  grid-column:3!important;
+  grid-row:1!important;
+}
+/* Domínio passa a formar a coluna esquerda da linha inferior, como no preview. */
+.study-dashboard .study-lower>.study-chart:last-child{
+  grid-column:1!important;
+  grid-row:3!important;
+  margin-top:0!important;
+}
+/* Ciclo: faixa panorâmica principal, larga e legível. */
+.study-dashboard .study-cycle-feature{
+  grid-column:2 / 4!important;
+  grid-row:2!important;
+  margin:0!important;
+  padding:5px 10px 8px!important;
+}
+.study-dashboard .study-cycle-feature .study-cycle-mini{
+  padding:13px 10px 7px!important;
+}
+.study-dashboard .study-cycle-feature .study-cycle-rows{
+  gap:7px!important;
+}
+.study-dashboard .study-cycle-feature .study-cycle-row{
+  grid-template-columns:minmax(130px,165px) minmax(520px,1fr) 76px 40px!important;
+}
+.study-dashboard .study-cycle-feature .study-cycle-track{
+  height:17px!important;
+}
+.study-dashboard .study-cycle-feature .study-cycle-name{font-size:11px!important}
+.study-dashboard .study-cycle-feature .study-cycle-head>div>b{font-size:14px!important}
+
+/* Top-left card must not create a tall empty column. */
+.study-dashboard .study-start-card{min-height:0!important;height:auto!important}
+.study-dashboard .study-upcoming{margin-top:12px!important}
+.study-dashboard .study-upcoming-list{gap:5px!important}
+
+/* Performance is intentionally compact: it has little historical data initially. */
+.study-dashboard .study-primary>.study-chart{
+  min-height:0!important;
+  height:auto!important;
+}
+.study-dashboard .study-primary>.study-chart .study-line-svg{
+  min-height:145px!important;
+  height:145px!important;
+  flex:none!important;
+}
+.study-dashboard .study-primary>.study-chart .study-chart-empty{
+  margin-top:4px!important;
+  padding:4px 8px!important;
+  min-height:0!important;
+}
+
+/* Estado do acervo compact enough for the same top row. */
+.study-dashboard .study-lower>.study-chart:first-child{
+  min-height:0!important;
+  height:auto!important;
+}
+
+/* Resumo geral sits to the right of Domínio, exactly as a landscape pair. */
+.study-dashboard .study-cycle-overall{
+  grid-column:2 / 4!important;
+  grid-row:3!important;
+  margin:0!important;
+  align-self:stretch!important;
+}
+
+/* All dashboard pieces participate in the same explicit landscape grid. */
+.study-dashboard .study-primary{display:contents!important}
+.study-dashboard{
+  display:grid!important;
+  grid-template-columns:minmax(400px,.92fr) minmax(470px,1.08fr) minmax(330px,.82fr)!important;
+  gap:12px!important;
+}
+.study-dashboard>.study-title,
+.study-dashboard>.study-kpis,
+.study-dashboard>.study-embedded-section,
+.study-dashboard>.study-close-row{
+  grid-column:1 / -1!important;
+}
+.study-dashboard>.study-title{grid-row:auto}
+.study-dashboard>.study-kpis{grid-row:auto}
+.study-dashboard .study-start-card{grid-column:1!important}
+.study-dashboard .study-primary>.study-chart{grid-column:2!important}
+.study-dashboard .study-cycle-feature{grid-column:2 / 4!important}
+.study-dashboard .study-cycle-overall{grid-column:2 / 4!important}
+.study-dashboard>.study-embedded-section{margin-top:0!important}
+
+/* Because display:contents removes row wrapper boxes, explicitly keep visual order
+   via CSS order; this avoids the previous tall-column behavior. */
+.study-dashboard>.study-title{order:1}
+.study-dashboard>.study-kpis{order:2}
+.study-dashboard .study-start-card{order:3}
+.study-dashboard .study-primary>.study-chart{order:4}
+.study-dashboard .study-lower>.study-chart:first-child{order:5}
+.study-dashboard .study-cycle-feature{order:6}
+.study-dashboard .study-lower>.study-chart:last-child{order:7}
+.study-dashboard .study-cycle-overall{order:8}
+.study-dashboard>.study-embedded-section{order:9}
+.study-dashboard>.study-close-row{order:10}
+
+/* Explicit placement after the header/KPIs using named-like row bands. */
+.study-dashboard{
+  grid-template-rows:auto auto auto auto auto auto!important;
+}
+.study-dashboard>.study-title{grid-row:1!important}
+.study-dashboard>.study-kpis{grid-row:2!important}
+.study-dashboard .study-start-card{grid-row:3!important}
+.study-dashboard .study-primary>.study-chart{grid-row:3!important}
+.study-dashboard .study-lower>.study-chart:first-child{grid-row:3!important}
+.study-dashboard .study-cycle-feature{grid-row:4!important}
+.study-dashboard .study-lower>.study-chart:last-child{grid-row:5!important}
+.study-dashboard .study-cycle-overall{grid-row:5!important}
+.study-dashboard>.study-embedded-section{grid-row:6!important}
+.study-dashboard>.study-close-row{grid-row:7!important}
+
+/* On narrower screens revert to a normal single-column flow. */
+@media(max-width:1180px){
+  .study-dashboard{
+    display:block!important;
+    width:96vw!important;
+    max-height:none!important;
+  }
+  .study-dashboard .study-primary,
+  .study-dashboard .study-lower{display:grid!important;grid-template-columns:1fr!important}
+  .study-dashboard .study-start-card,
+  .study-dashboard .study-primary>.study-chart,
+  .study-dashboard .study-lower>.study-chart,
+  .study-dashboard .study-cycle-feature,
+  .study-dashboard .study-cycle-overall{
+    grid-column:1!important;grid-row:auto!important;margin-top:12px!important;
+  }
+  .study-dashboard .study-cycle-feature .study-cycle-row{
+    grid-template-columns:110px minmax(180px,1fr) 62px 34px!important;
+  }
+}
+
 </style>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
