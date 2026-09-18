@@ -172,3 +172,9 @@ que já foi resolvido, por falta de contexto.
 - A correção não altera `s` nem `site` (localização anatômica principal), nem imagens, tags, descrições, revisão/SRS ou IDs.
 - O `index.html` corrigido contém migração pontual pós-Firebase para remover apenas os `altPlacements` auditados como errados, evitando que o estado remoto os reintroduza.
 - Arquivo correspondente desta entrega: `index-atlas-altplacements-corrigido-20260918.html`.
+
+### Revisão 2 da correção de `altPlacements` — 2026-09-18
+
+A primeira implementação usava uma chave de migração “já executado”. Isso era insuficiente: se o Firebase ainda contivesse um `altPlacement` espúrio, uma sincronização posterior poderia reintroduzi-lo e a chave impediria nova limpeza. A correção agora é **idempotente e reaplicada após toda leitura inicial do Firebase**, exclusivamente para a lista auditada de IDs. Não há recovery genérico nem reescrita de outros campos. Se a gravação remota falhar, a interface da sessão continua saneada e a correção é reaplicada na próxima abertura.
+
+Regra de entrega permanece obrigatória: toda alteração do `index.html` deve acompanhar `AI.md` e `README.md` atualizados.

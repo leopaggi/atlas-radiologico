@@ -3779,32 +3779,30 @@ async function deduplicateV171(){
 }
 
 
-/* 2026-09-18 — correção auditada de altPlacements.
+/* 2026-09-18 — correção auditada de altPlacements (revisão 2: idempotente).
    Fonte: backup fresco do usuário. Remove SOMENTE associações secundárias
    comprovadamente espúrias; não altera seção principal, site, imagens,
    tags, revisão, SRS ou qualquer outro campo. */
 const ALTPLACEMENTS_AUDIT_REMOVE_20260918 = new Set(["seed_1056", "seed_1058", "seed_1059", "seed_1062", "seed_1071", "seed_1072", "seed_1073", "seed_1074", "seed_1075", "seed_1076", "seed_1077", "seed_1142", "seed_1143", "seed_1144", "seed_1145", "seed_1146", "seed_1147", "seed_370", "seed_371", "seed_372", "seed_373", "seed_374", "seed_375", "seed_376", "seed_380", "seed_381", "seed_383", "seed_612", "seed_617", "seed_618", "seed_650", "seed_651", "seed_843", "seed_848", "seed_851", "seed_855", "seed_856", "seed_860", "seed_861", "seed_863", "seed_864", "seed_865", "seed_869", "seed_871", "seed_874", "seed_875", "seed_882", "seed_883", "seed_884", "seed_885", "seed_887", "seed_888", "seed_889", "seed_914", "seed_915", "seed_919", "seed_920", "seed_922", "seed_924", "seed_941", "seed_942", "seed_943", "seed_944", "seed_946", "seed_947", "seed_948", "seed_996", "seed_997"]);
-const ALTPLACEMENTS_AUDIT_MIGRATION_KEY_20260918 = 'atlas:altPlacementsAudit:2026-09-18';
-
 async function applyAltPlacementsAudit20260918(){
-  try{
-    const done = await storage.get(ALTPLACEMENTS_AUDIT_MIGRATION_KEY_20260918);
-    if(done) return false;
-  }catch(_e){}
-
+  // Correção idempotente: roda após TODA leitura do Firebase.
+  // Não usa mais uma chave "já executado", pois o estado remoto pode
+  // reintroduzir um altPlacement espúrio em uma abertura posterior.
   let changed=false;
   for(const e of (Array.isArray(DATA)?DATA:[])){
-    if(e && ALTPLACEMENTS_AUDIT_REMOVE_20260918.has(e.id) && Array.isArray(e.altPlacements) && e.altPlacements.length){
+    if(e && ALTPLACEMENTS_AUDIT_REMOVE_20260918.has(e.id) &&
+       Array.isArray(e.altPlacements) && e.altPlacements.length){
       delete e.altPlacements;
       changed=true;
     }
   }
-
   if(changed){
     try{ await storage.set(STORAGE_KEY,JSON.stringify(DATA),false); }catch(_e){}
+    // Tenta consolidar a correção na nuvem. Mesmo se a rede falhar,
+    // a interface desta sessão já usa DATA saneado; na próxima abertura
+    // a mesma correção será reaplicada após o sync.
     try{ await pushToFirebaseNow(); }catch(_e){}
   }
-  try{ await storage.set(ALTPLACEMENTS_AUDIT_MIGRATION_KEY_20260918,'1',false); }catch(_e){}
   return changed;
 }
 

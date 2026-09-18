@@ -73,3 +73,7 @@ Foi realizada uma auditoria de `altPlacements`, campo usado para exibir uma les�
 A correção é restrita a `altPlacements`: não muda a seção/subseção principal (`s`/`site`), imagens, tags, descrições, IDs ou progresso de revisão/SRS.
 
 **Regra de manutenção do projeto:** qualquer nova alteração no `index.html` deve ser acompanhada, na mesma entrega, pelas versões atualizadas de `AI.md` e `README.md`.
+
+### Correção persistente de `altPlacements` — revisão 2
+
+A limpeza auditada de associações secundárias erradas agora é reaplicada após cada sincronização inicial com o Firebase. Isso evita que um valor remoto antigo volte a aparecer depois que uma migração pontual já tenha sido marcada como concluída. A rotina continua limitada aos IDs auditados e ao campo `altPlacements`; nenhum outro dado da lesão é alterado.
