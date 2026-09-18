@@ -1597,6 +1597,151 @@ body{
   }
 }
 
+
+/* 2026-09-18 — TARGET LAYOUT: composição estável igual ao preview aprovado.
+   Esta camada neutraliza as tentativas anteriores de grid global. */
+.study-dashboard{
+  display:block!important;
+  width:min(96vw,1540px)!important;
+  max-width:1540px!important;
+  max-height:94vh!important;
+  overflow:auto!important;
+  padding:18px 20px!important;
+  box-sizing:border-box!important;
+}
+
+/* Cabeçalho normal horizontal */
+.study-dashboard>.study-title{
+  display:flex!important;
+  align-items:flex-start!important;
+  justify-content:space-between!important;
+  width:100%!important;
+  margin:0 0 12px!important;
+  padding:0!important;
+  height:auto!important;
+  min-height:0!important;
+}
+.study-dashboard>.study-title>div:first-child{min-width:0!important}
+.study-dashboard>.study-title h2{white-space:nowrap!important}
+.study-dashboard>.study-title .study-subtitle{white-space:normal!important}
+
+/* 4 KPIs em uma única linha */
+.study-dashboard>.study-kpis{
+  display:grid!important;
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:12px!important;
+  width:100%!important;
+  margin:0 0 12px!important;
+  height:auto!important;
+  min-height:0!important;
+}
+.study-dashboard>.study-kpis .study-kpi{
+  width:auto!important;
+  min-width:0!important;
+  min-height:74px!important;
+  height:auto!important;
+}
+
+/* Reativa os wrappers reais. */
+.study-dashboard>.study-primary{
+  display:grid!important;
+  grid-template-columns:minmax(390px,.92fr) minmax(470px,1.08fr)!important;
+  gap:12px!important;
+  align-items:start!important;
+  width:100%!important;
+  margin:0 0 12px!important;
+}
+.study-dashboard>.study-lower{
+  display:grid!important;
+  grid-template-columns:minmax(350px,.72fr) minmax(560px,1.28fr)!important;
+  gap:12px!important;
+  align-items:stretch!important;
+  width:100%!important;
+  margin:0 0 12px!important;
+}
+
+/* Primeira área: controles/revisões à esquerda; evolução à direita.
+   Nada de grid-row/grid-column herdado. */
+.study-dashboard .study-start-card,
+.study-dashboard .study-primary>.study-chart{
+  grid-column:auto!important;
+  grid-row:auto!important;
+  width:auto!important;
+  height:auto!important;
+  min-height:0!important;
+  align-self:start!important;
+  order:initial!important;
+}
+.study-dashboard .study-primary>.study-chart .study-line-svg{
+  height:178px!important;
+  min-height:178px!important;
+  max-height:178px!important;
+  flex:0 0 178px!important;
+}
+
+/* Ciclo panorâmico REAL: bloco independente, largura total, logo abaixo. */
+.study-dashboard>.study-cycle-feature{
+  display:block!important;
+  width:100%!important;
+  margin:0 0 12px!important;
+  padding:5px 10px 8px!important;
+  grid-column:auto!important;
+  grid-row:auto!important;
+  order:initial!important;
+  box-sizing:border-box!important;
+}
+.study-dashboard .study-cycle-feature .study-cycle-row{
+  grid-template-columns:170px minmax(0,1fr) 82px 42px!important;
+}
+.study-dashboard .study-cycle-feature .study-cycle-track{height:17px!important}
+
+/* Linha inferior: Estado + Domínio. */
+.study-dashboard .study-lower>.study-chart{
+  grid-column:auto!important;
+  grid-row:auto!important;
+  order:initial!important;
+  width:auto!important;
+  height:auto!important;
+  min-height:0!important;
+}
+
+/* Resumo panorâmico separado e quiz abaixo. */
+.study-dashboard>.study-cycle-overall,
+.study-dashboard>.study-embedded-section,
+.study-dashboard>.study-close-row{
+  display:block!important;
+  width:100%!important;
+  grid-column:auto!important;
+  grid-row:auto!important;
+  order:initial!important;
+  box-sizing:border-box!important;
+}
+.study-dashboard>.study-cycle-overall{margin:0 0 12px!important}
+.study-dashboard>.study-embedded-section{margin:0 0 12px!important}
+
+/* Desktop largo: composição alvo de 3 colunas na faixa principal, sem desmontar wrappers.
+   O Estado do acervo é visualmente promovido para a direita usando uma área auxiliar
+   somente quando suportado, mantendo fallback estável acima. */
+@media(min-width:1250px){
+  .study-dashboard>.study-primary{
+    grid-template-columns:minmax(390px,.92fr) minmax(500px,1.25fr)!important;
+  }
+  .study-dashboard>.study-lower{
+    grid-template-columns:minmax(360px,.72fr) minmax(600px,1.28fr)!important;
+  }
+}
+
+/* Responsivo sem empilhamento estreito do cabeçalho/KPIs. */
+@media(max-width:900px){
+  .study-dashboard{width:97vw!important;padding:14px!important}
+  .study-dashboard>.study-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .study-dashboard>.study-primary,
+  .study-dashboard>.study-lower{grid-template-columns:1fr!important}
+  .study-dashboard .study-cycle-feature .study-cycle-row{
+    grid-template-columns:105px minmax(0,1fr) 62px 34px!important;
+  }
+}
+
 </style>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
