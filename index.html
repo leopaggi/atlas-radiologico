@@ -6146,77 +6146,6 @@ function buildSmartStudyQueue(limit){
   [due,difficult,fresh,stable].forEach(group=>group.forEach(e=>{if(out.length<limit&&!seen.has(e.id)){seen.add(e.id);out.push(e);}}));
   return out;
 }
-function startDailyStudy(){ const q=buildSmartStudyQueue(15); if(q.length) startQuizSession(q); else toast('Nenhum caso disponível.'); }
-function startQuickStudy(){ const q=buildSmartStudyQueue(5); if(q.length) startQuizSession(q); }
-function startCBRStudy(){
-  const bySection={}; DATA.forEach(e=>(bySection[e.s]||(bySection[e.s]=[])).push(e));
-  const secs=shuffleArr(Object.keys(bySection)), q=[], seen=new Set();
-  while(q.length<20 && secs.length){
-    for(const s of secs){ const pool=shuffleArr(bySection[s]); const e=pool.find(x=>!seen.has(x.id)); if(e){seen.add(e.id);q.push(e);} if(q.length>=20)break; }
-    if(q.length>=DATA.length)break;
-  }
-  if(q.length<20) shuffleArr(DATA).forEach(e=>{if(q.length<20&&!seen.has(e.id)){seen.add(e.id);q.push(e);}});
-  startQuizSession(q);
-}
-
-function openQuizSetup(){
-  const inScope = scopedEntries();
-  const dueScope=countDue(inScope), dueAll=countDue(DATA);
-  const areaStats=computeAreaStats();
-  const weak=areaStats.filter(a=>a.c0+a.c1>0).sort((a,b)=>a.pct2-b.pct2 || b.total-a.total)[0];
-  const ov = document.createElement('div');
-  ov.className = 'overlay';
-  ov.onclick = (ev)=>{ if(ev.target===ov) closeOverlay(); };
-  ov.innerHTML = `
-    <div class="modal quiz-setup-modal">
-      <h2>🧠 Sessão de revisão</h2>
-      <div class="modal-sub">monte uma sessão curta e direcionada ao que mais precisa de reforço</div>
-      <div class="quiz-setup-hero">
-        <div class="quiz-setup-card"><div class="v" style="color:var(--amber)">${dueAll}</div><div class="t">pendentes no acervo</div></div>
-        <div class="quiz-setup-card"><div class="v">${dueScope}</div><div class="t">pendentes nesta seleção</div></div>
-        <div class="quiz-setup-card"><div class="v" style="color:var(--teal)">${weak?Math.round(weak.pct2*100)+'%':'—'}</div><div class="t">domínio da área mais fraca${weak?' · '+weak.site:''}</div></div>
-      </div>
-      <div class="quiz-options-box">
-        <div class="progress-section-label" style="margin-top:0">ESCOPO</div>
-        <label class="quiz-radio"><input type="radio" name="quiz-scope" value="scope" checked> Seleção atual (${inScope.length} lesões)</label>
-        <label class="quiz-radio"><input type="radio" name="quiz-scope" value="all"> Todo o acervo (${DATA.length} lesões)</label>
-        <div class="progress-section-label">FOCO DA SESSÃO</div>
-        <label class="quiz-check"><input type="checkbox" id="quiz-only-due" checked> Priorizar somente revisões pendentes</label>
-        <label class="quiz-check"><input type="checkbox" id="quiz-shuffle" checked> Embaralhar casos</label>
-      </div>
-      <div id="quiz-count-preview" class="quiz-count-preview"></div>
-      <div class="modal-actions"><button class="btn btn-ghost" id="quiz-cancel">cancelar</button><button class="btn btn-primary" id="quiz-start">Começar revisão</button></div>
-    </div>`;
-  document.body.appendChild(ov);
-  function currentCandidates(){
-    const useAll=ov.querySelector('input[name="quiz-scope"]:checked').value==='all';
-    let base=useAll?DATA.slice():inScope.slice();
-    if(document.getElementById('quiz-only-due').checked) base=base.filter(e=>isDue(e.id));
-    return base;
-  }
-  function updatePreview(){
-    const n=currentCandidates().length, shown=Math.min(n,30);
-    document.getElementById('quiz-count-preview').textContent=n?`${shown} caso(s) serão usados agora${n>30?' · '+(n-30)+' ficam para a próxima sessão':''}.`:'Nenhum caso disponível com estes filtros.';
-    document.getElementById('quiz-start').disabled=!n;
-  }
-  ov.querySelectorAll('input').forEach(inp=>inp.addEventListener('change',updatePreview)); updatePreview();
-  document.getElementById('quiz-cancel').onclick=closeOverlay;
-  document.getElementById('quiz-start').onclick=()=>{
-    let queue=currentCandidates();
-    if(document.getElementById('quiz-shuffle').checked) queue=shuffleArr(queue); else queue.sort((a,b)=>((SRS[a.id]&&SRS[a.id].due)||0)-((SRS[b.id]&&SRS[b.id].due)||0));
-    closeOverlay(); startQuizSession(queue.slice(0,30));
-  };
-}
-
-function startQuizSession(queue){
-  quizQueue = queue;
-  quizIndex = 0;
-  quizStats = {right:0, wrong:0, easy:0, medium:0, hard:0, again:0};
-  quizSessionWrongIds = [];
-  renderQuizCard();
-}
-
-
 function buildQuizChoices(target){
   const sameSite=shuffleArr(DATA.filter(x=>x.id!==target.id && x.s===target.s && x.site===target.site));
   const sameSection=shuffleArr(DATA.filter(x=>x.id!==target.id && x.s===target.s && x.site!==target.site));
@@ -6250,85 +6179,6 @@ function countActuallyDue(entries){
     const s=SRS[e.id];
     return !!(s && Number(s.due)>0 && Number(s.due)<=now);
   }).length;
-}
-
-function renderQuizCard(){
-  closeOverlay();
-  if(quizIndex>=quizQueue.length){renderQuizSummary();return;}
-  const e=quizQueue[quizIndex], choices=buildQuizChoices(e), pct=Math.round(quizIndex/Math.max(quizQueue.length,1)*100), letters=['A','B','C','D'];
-  const ov=document.createElement('div');ov.className='overlay';
-  ov.innerHTML=`<div class="modal quiz-modal">
-    <div class="quiz-integrated-title"><b>🧠 Modo Estudo</b><span>QUESTÃO ${quizIndex+1}/${quizQueue.length}</span></div>
-    <div class="quiz-session-track"><div class="quiz-session-fill" style="width:${pct}%"></div></div>
-    <div class="quiz-study-shell">
-      <div class="quiz-study-media" id="quiz-media"></div>
-      <div class="quiz-study-question">
-        <div class="quiz-meta-hint">${esc(e.s)} · ${esc(e.site)}</div>
-        <h3 style="margin:10px 0 5px">Qual é o diagnóstico mais provável?</h3>
-        <div class="quiz-mcq-grid">${choices.map((x,i)=>`<button class="quiz-mcq-option" data-id="${escAttr(x.id)}"><span class="quiz-mcq-letter">${letters[i]}</span><span>${esc(x.name)}</span></button>`).join('')}</div>
-        <div id="quiz-feedback"></div>
-      </div>
-    </div>
-    <div class="modal-actions"><button class="btn btn-ghost" id="quiz-quit">encerrar sessão</button></div>
-  </div>`;
-  document.body.appendChild(ov);
-  const media=document.getElementById('quiz-media');
-  if(hasEntryImgs(e)){
-    getEntryImgs(e).then(imgs=>{
-      const all=imgs.length?imgs:(e.img?[{data:e.img,label:''}]:[]);
-      if(!all.length){media.innerHTML=`<div class="quiz-noimage"><b>Caso teórico</b><span>Use as características do Atlas para reconhecer a lesão.</span></div>`;return;}
-      media.innerHTML=`<img src="${all[0].data}" id="quiz-main-img">${all[0].label?`<div class="quiz-img-label">${esc(all[0].label)}</div>`:''}${all.length>1?`<div class="quiz-img-gallery" style="margin-top:7px">${all.slice(1,4).map((im,i)=>`<div class="quiz-img-item"><img src="${im.data}" data-i="${i+1}"></div>`).join('')}</div>`:''}`;
-      media.querySelectorAll('img').forEach((im,i)=>im.onclick=()=>openImageLightbox(all[i]?.data||im.src));
-    });
-  }else{
-    const q=quizTheoryPrompt(e);
-    media.innerHTML=`<div class="quiz-noimage"><b>CASO TEÓRICO</b><span>Reconheça a lesão pelas características registradas no seu Atlas.</span><div class="quiz-theory-clues">${q.clues.map(t=>`<span>${esc(t)}</span>`).join('')}</div></div>`;
-  }
-  document.getElementById('quiz-quit').onclick=()=>{closeOverlay();renderAll();};
-  ov.querySelectorAll('.quiz-mcq-option').forEach(btn=>btn.onclick=()=>{
-    if(ov.dataset.answered)return; ov.dataset.answered='1';
-    const picked=btn.dataset.id, objectiveCorrect=picked===e.id;
-    ov.querySelectorAll('.quiz-mcq-option').forEach(b=>{b.disabled=true;if(b.dataset.id===e.id)b.classList.add('is-correct');else if(b===btn)b.classList.add('is-wrong');});
-    const fb=document.getElementById('quiz-feedback'), links=ensureLinks(e);
-    fb.innerHTML=`<div class="${objectiveCorrect?'quiz-feedback-good':'quiz-feedback-bad'}">${objectiveCorrect?'✓ Resposta correta!':'✕ Resposta incorreta — veja a alternativa correta acima.'}</div>
-      <div class="quiz-answer-detail"><b>${esc(e.name)}</b>
-        <div class="quiz-points">${(e.tags||[]).slice(0,8).map(t=>`<span class="quiz-point">${esc(t)}</span>`).join('')}</div>
-        ${e.notes?`<div class="detail-notes">${esc(e.notes)}</div>`:''}
-        ${links.length?`<a class="detail-link" href="${links[0].url}" target="_blank" rel="noopener">↗ referência / imagens</a>`:''}
-      </div>
-      <div class="quiz-learning-label">Como foi reconhecer este caso? Sua segurança define quando ele volta no SRS.</div>
-      <div class="quiz-grade-4">
-        <button class="g-easy" data-grade="easy">🟢 Fácil<small>reconheci com segurança</small></button>
-        <button class="g-medium" data-grade="medium">🔵 Média<small>precisei pensar</small></button>
-        <button class="g-hard" data-grade="hard">🟠 Difícil<small>baixa segurança</small></button>
-        <button class="g-again" data-grade="again">⚪ Não sei<small>revisar cedo</small></button>
-      </div>`;
-    fb.querySelectorAll('[data-grade]').forEach(gb=>gb.onclick=()=>{
-      const g=gb.dataset.grade; srsGradeLevel(e.id,g); quizStats[g]++;
-      recordQuizAnswerToday(objectiveCorrect,g);
-      // Objective correctness remains objective; confidence is independent.
-      if(objectiveCorrect)quizStats.right++;else{quizStats.wrong++;if(!quizSessionWrongIds.includes(e.id))quizSessionWrongIds.push(e.id);}
-      quizIndex++;renderQuizCard();
-    });
-  });
-}
-function renderQuizSummary(){
-  logSessionResult(quizStats.right, quizStats.wrong);
-  const total=quizStats.right+quizStats.wrong, accuracy=total?Math.round(quizStats.right/total*100):0;
-  const dueAfter=countDue(DATA);
-  const ring=`conic-gradient(var(--teal) ${accuracy}%, var(--panel-2) ${accuracy}% 100%)`;
-  const ov=document.createElement('div'); ov.className='overlay';
-  ov.innerHTML=`<div class="modal quiz-modal" style="text-align:center;max-width:560px">
-    <h2>Sessão concluída</h2><div class="modal-sub">resultado da revisão e próximo passo sugerido</div>
-    <div class="quiz-summary-ring" style="background:${ring}"><div class="quiz-summary-ring-inner"><div class="v">${accuracy}%</div><div class="t">de acerto</div></div></div>
-    <div class="quiz-session-kpis"><div class="quiz-session-kpi"><div class="v" style="color:#4E9A6A">${quizStats.easy}</div><div class="t">fáceis</div></div><div class="quiz-session-kpi"><div class="v" style="color:var(--teal)">${quizStats.medium}</div><div class="t">médias</div></div><div class="quiz-session-kpi"><div class="v" style="color:var(--amber)">${quizStats.hard}</div><div class="t">difíceis</div></div><div class="quiz-session-kpi"><div class="v">${quizStats.again}</div><div class="t">não sei</div></div><div class="quiz-session-kpi"><div class="v">${dueAfter}</div><div class="t">pendentes</div></div></div>
-    <div class="quiz-next-hint">${quizStats.wrong?`Você errou ${quizStats.wrong} caso(s). Vale refazê-los agora enquanto os pontos de confusão ainda estão frescos.`:'Sessão sem erros. Continue pelas revisões pendentes ou avance para uma área menos dominada.'}</div>
-    <div class="quiz-summary-actions">${quizSessionWrongIds.length?'<button class="btn btn-ghost" id="quiz-retry-wrong">↻ refazer erros</button>':''}<button class="btn btn-ghost" id="quiz-open-progress">📊 ver progresso</button><button class="btn btn-primary" id="quiz-finish">fechar</button></div>
-  </div>`;
-  document.body.appendChild(ov);
-  const retry=document.getElementById('quiz-retry-wrong'); if(retry) retry.onclick=()=>{const ids=new Set(quizSessionWrongIds), items=quizQueue.filter(e=>ids.has(e.id)); closeOverlay();startQuizSession(shuffleArr(items));};
-  document.getElementById('quiz-open-progress').onclick=()=>{closeOverlay();renderAll();openProgressDashboard();};
-  document.getElementById('quiz-finish').onclick=()=>{closeOverlay();renderAll();};
 }
 
 function updateQuizDueBadge(){
@@ -6389,15 +6239,22 @@ function startQuizInsideDashboard(queue){
   quizIndex=0;
   quizStats={right:0,wrong:0,easy:0,medium:0,hard:0,again:0};
   quizSessionWrongIds=[];
-  const current=document.querySelector('.overlay .study-dashboard');
-  if(!current){ toast('Abra Quiz & Progresso para iniciar a sessão.'); return; }
-  current.className='modal progress-modal study-dashboard quiz-modal';
-  current.dataset.integratedQuiz='1';
-  current.dataset.answered='0';
-  renderQuizCardIntegrated(current);
+  // Sempre a MESMA overlay (#study-overlay) — nunca cria uma nova, nunca
+  // depende de um seletor frágil que poderia falhar em achar o host certo.
+  const ov=getStudyOverlay();
+  let host=ov.querySelector('.study-dashboard');
+  if(!host){
+    host=document.createElement('div');
+    ov.innerHTML='';
+    ov.appendChild(host);
+  }
+  host.className='modal progress-modal study-dashboard quiz-modal';
+  host.dataset.integratedQuiz='1';
+  host.dataset.answered='0';
+  renderQuizCardIntegrated(host);
 }
 function renderQuizCardIntegrated(host){
-  if(quizIndex>=quizQueue.length){ openProgressDashboardReplacing(host); return; }
+  if(quizIndex>=quizQueue.length){ renderQuizSummaryIntegrated(host); return; }
   const e=quizQueue[quizIndex],choices=buildQuizChoices(e),pct=Math.round(quizIndex/Math.max(quizQueue.length,1)*100),letters=['A','B','C','D'];
   host.innerHTML=`<div class="quiz-integrated-title"><b>🧠 Quiz & Progresso · Modo Estudo</b><span>QUESTÃO ${quizIndex+1}/${quizQueue.length}</span></div>
     <div class="quiz-session-track"><div class="quiz-session-fill" style="width:${pct}%"></div></div>
@@ -6434,6 +6291,29 @@ function renderQuizCardIntegrated(host){
       quizIndex++;host.dataset.answered='0';renderQuizCardIntegrated(host);
     });
   });
+}
+/* Tela de resultado renderizada DENTRO da mesma overlay/host — nunca cria
+   uma overlay nova. É o que faltava: sem isso, o fim da sessão pulava
+   direto pro dashboard sem mostrar o resumo. */
+function renderQuizSummaryIntegrated(host){
+  logSessionResult(quizStats.right, quizStats.wrong);
+  const total=quizStats.right+quizStats.wrong, accuracy=total?Math.round(quizStats.right/total*100):0;
+  const dueAfter=countActuallyDue(DATA);
+  const ring=`conic-gradient(var(--v-blue-2,var(--teal)) ${accuracy}%, var(--panel-2) ${accuracy}% 100%)`;
+  host.className='modal progress-modal study-dashboard';
+  host.innerHTML=`<div style="text-align:center">
+    <h2>Sessão concluída</h2><div class="modal-sub">resultado da revisão e próximo passo sugerido</div>
+    <div class="quiz-summary-ring" style="background:${ring}"><div class="quiz-summary-ring-inner"><div class="v">${accuracy}%</div><div class="t">de acerto</div></div></div>
+    <div class="quiz-session-kpis"><div class="quiz-session-kpi"><div class="v" style="color:#4E9A6A">${quizStats.easy}</div><div class="t">fáceis</div></div><div class="quiz-session-kpi"><div class="v" style="color:var(--v-blue-2,var(--teal))">${quizStats.medium}</div><div class="t">médias</div></div><div class="quiz-session-kpi"><div class="v" style="color:var(--amber)">${quizStats.hard}</div><div class="t">difíceis</div></div><div class="quiz-session-kpi"><div class="v">${quizStats.again}</div><div class="t">não sei</div></div><div class="quiz-session-kpi"><div class="v">${dueAfter}</div><div class="t">pendentes</div></div></div>
+    <div class="quiz-next-hint">${quizStats.wrong?`Você errou ${quizStats.wrong} caso(s). Vale refazê-los agora enquanto os pontos de confusão ainda estão frescos.`:'Sessão sem erros. Continue pelas revisões pendentes ou avance para uma área menos dominada.'}</div>
+    <div class="quiz-summary-actions">${quizSessionWrongIds.length?'<button class="btn btn-ghost" id="quiz-retry-wrong">↻ refazer erros</button>':''}<button class="btn btn-primary" id="quiz-back-to-dashboard">📊 ver progresso</button></div>
+  </div>`;
+  const retry=host.querySelector('#quiz-retry-wrong');
+  if(retry) retry.onclick=()=>{
+    const ids=new Set(quizSessionWrongIds), items=quizQueue.filter(e=>ids.has(e.id));
+    startQuizInsideDashboard(shuffleArr(items));
+  };
+  host.querySelector('#quiz-back-to-dashboard').onclick=()=>{ renderAll(); openProgressDashboardReplacing(host); };
 }
 function openProgressDashboardReplacing(host){
   // Não remove mais a overlay: openProgressDashboard() reusa a overlay única
