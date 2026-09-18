@@ -6397,13 +6397,31 @@ function renderCustomSetupInside(){
 }
 
 function openProgressDashboard(){
-  const total=DATA.length||1, c0=DATA.filter(e=>getReview(e.id)===0).length, c1=DATA.filter(e=>getReview(e.id)===1).length, c2=DATA.filter(e=>getReview(e.id)===2).length;
+  const total=DATA.length||1;
+  const confidenceCounts={easy:0,medium:0,hard:0,again:0,fresh:0};
+  DATA.forEach(e=>{
+    const s=SRS[e.id];
+    if(!s || !s.lastGrade) confidenceCounts.fresh++;
+    else if(Object.prototype.hasOwnProperty.call(confidenceCounts,s.lastGrade)) confidenceCounts[s.lastGrade]++;
+    else confidenceCounts.fresh++;
+  });
   const due=countActuallyDue(DATA), streak=getStudyStreak(), todayRec=SESSIONLOG[todayKey()]||{}, todayN=Number(todayRec.reviewed)||0, goal=15;
   let r14=0,w14=0; const trend=[];
   for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const rec=SESSIONLOG[todayKey(d)]||{};const r=Number(rec.right)||0,w=Number(rec.wrong)||0;r14+=r;w14+=w;trend.push({label:String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'),acc:(r+w)?Math.round(r/(r+w)*100):null});}
   const acc14=(r14+w14)?Math.round(r14/(r14+w14)*100):0;
-  const sectionMap={}; DATA.forEach(e=>{const k=e.s||'Outros';if(!sectionMap[k])sectionMap[k]={name:k,total:0,mastered:0};sectionMap[k].total++;if(getReview(e.id)===2)sectionMap[k].mastered++;});
-  const sections=Object.values(sectionMap).map(x=>({...x,pct:Math.round(x.mastered/x.total*100)})).sort((a,b)=>a.pct-b.pct);
+  const gradeWeight={easy:1,medium:.70,hard:.35,again:0};
+  const sectionMap={};
+  DATA.forEach(e=>{
+    const k=e.s||'Outros';
+    if(!sectionMap[k]) sectionMap[k]={name:k,total:0,studied:0,score:0};
+    sectionMap[k].total++;
+    const g=SRS[e.id] && SRS[e.id].lastGrade;
+    if(g && Object.prototype.hasOwnProperty.call(gradeWeight,g)){
+      sectionMap[k].studied++;
+      sectionMap[k].score+=gradeWeight[g];
+    }
+  });
+  const sections=Object.values(sectionMap).map(x=>({...x,pct:x.studied?Math.round((x.score/x.studied)*100):0,coverage:Math.round((x.studied/x.total)*100)})).sort((a,b)=>a.pct-b.pct || a.studied-b.studied);
   // Área útil do gráfico: y=10 (topo, 100%) até y=126 (base, 0%), x=10 até x=346.
   const CHART_TOP=10, CHART_BOTTOM=126, CHART_LEFT=10, CHART_RIGHT=346;
   const yForPct=pct=>CHART_BOTTOM-(pct/100)*(CHART_BOTTOM-CHART_TOP);
@@ -6413,8 +6431,10 @@ function openProgressDashboard(){
   // Mostra ~6 rótulos de data no eixo X (todos poluiria com 14 dias), sempre incluindo o último.
   const xLabelStep=Math.max(1,Math.ceil(trend.length/6));
   const xLabels=trend.map((d,i)=>({x:CHART_LEFT+i*((CHART_RIGHT-CHART_LEFT)/(trend.length-1)),label:d.label,show:(i%xLabelStep===0)||i===trend.length-1}));
-  const p0=c0/total*100,p1=c1/total*100,p2=c2/total*100;
-  const donut=`conic-gradient(${REVIEW_COLORS[2]} 0 ${p2}%, ${REVIEW_COLORS[1]} ${p2}% ${p2+p1}%, ${REVIEW_COLORS[0]} ${p2+p1}% 100%)`;
+  const ce=confidenceCounts.easy/total*100, cm=confidenceCounts.medium/total*100, ch=confidenceCounts.hard/total*100, ca=confidenceCounts.again/total*100, cf=confidenceCounts.fresh/total*100;
+  const CONF_COLORS={easy:'#22e27a',medium:'#2d8cff',hard:'#ff9f43',again:'#94a3b8',fresh:'#344454'};
+  const donut=`conic-gradient(${CONF_COLORS.easy} 0 ${ce}%, ${CONF_COLORS.medium} ${ce}% ${ce+cm}%, ${CONF_COLORS.hard} ${ce+cm}% ${ce+cm+ch}%, ${CONF_COLORS.again} ${ce+cm+ch}% ${ce+cm+ch+ca}%, ${CONF_COLORS.fresh} ${ce+cm+ch+ca}% 100%)`;
+
   const ov=getStudyOverlay();
   ov.innerHTML=`<div class="modal progress-modal study-dashboard">
     <h2>🧠 Quiz & Progresso</h2><div class="modal-sub">treino diário guiado pelo seu progresso real e pelas revisões SRS</div>
@@ -6450,12 +6470,14 @@ function openProgressDashboard(){
       </div>
     </div>
     <div class="study-lower">
-      <div class="study-chart"><h3>Estado do acervo</h3><div class="study-donut-row"><div class="study-donut" style="background:${donut}"><div class="study-donut-center"><b>${DATA.length}</b><span>lesões</span></div></div><div class="study-state-list">
-        <div class="study-state-row"><span><i style="background:${REVIEW_COLORS[2]}"></i>Dominadas</span><b>${c2} (${Math.round(p2)}%)</b></div>
-        <div class="study-state-row"><span><i style="background:${REVIEW_COLORS[1]}"></i>Em aprendizado</span><b>${c1} (${Math.round(p1)}%)</b></div>
-        <div class="study-state-row"><span><i style="background:${REVIEW_COLORS[0]}"></i>Nunca estudadas</span><b>${c0} (${Math.round(p0)}%)</b></div>
-      </div></div></div>
-      <div class="study-chart"><h3>Domínio por área</h3><div class="study-chart-sub">clique em uma área para treiná-la</div><div class="study-domain-list">${sections.map(s=>`<div class="study-domain-row" data-sec="${escAttr(s.name)}"><div class="study-domain-head"><span>${esc(s.name)}</span><b>${s.pct}%</b></div><div class="study-domain-track"><div class="study-domain-fill" style="width:${s.pct}%"></div></div></div>`).join('')}</div></div>
+      <div class="study-chart"><h3>Estado do acervo</h3><div class="study-chart-sub">última autoavaliação registrada em cada caso</div><div class="study-donut-row"><div class="study-donut" style="background:${donut}"><div class="study-donut-center"><b>${DATA.length}</b><span>lesões</span></div></div><div class="study-state-list">
+          <div class="study-state-row"><span><i style="background:${CONF_COLORS.easy}"></i>🟢 Fácil</span><b>${confidenceCounts.easy} (${Math.round(ce)}%)</b></div>
+          <div class="study-state-row"><span><i style="background:${CONF_COLORS.medium}"></i>🔵 Média</span><b>${confidenceCounts.medium} (${Math.round(cm)}%)</b></div>
+          <div class="study-state-row"><span><i style="background:${CONF_COLORS.hard}"></i>🟠 Difícil</span><b>${confidenceCounts.hard} (${Math.round(ch)}%)</b></div>
+          <div class="study-state-row"><span><i style="background:${CONF_COLORS.again}"></i>⚪ Não sei</span><b>${confidenceCounts.again} (${Math.round(ca)}%)</b></div>
+          <div class="study-state-row"><span><i style="background:${CONF_COLORS.fresh}"></i>Nunca estudadas</span><b>${confidenceCounts.fresh} (${Math.round(cf)}%)</b></div>
+        </div></div></div>
+        <div class="study-chart"><h3>Domínio por área</h3><div class="study-chart-sub">confiança média nos casos já estudados · clique em uma área para treiná-la</div><div class="study-domain-list">${sections.map(s=>`<div class="study-domain-row" data-sec="${escAttr(s.name)}"><div class="study-domain-head"><span>${esc(s.name)} <small style="color:var(--muted-2)">· ${s.studied}/${s.total} estudados</small></span><b>${s.studied?s.pct+'%':'—'}</b></div><div class="study-domain-track"><div class="study-domain-fill" style="width:${s.studied?s.pct:0}%"></div></div></div>`).join('')}</div></div>
     </div>
     <div class="modal-actions"><button class="btn btn-primary" id="progress-close">fechar</button></div>
   </div>`;
