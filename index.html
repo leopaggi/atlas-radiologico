@@ -6084,6 +6084,28 @@ function quizTheoryPrompt(e){
   return {title:'Qual é o diagnóstico mais provável?',clues:tags};
 }
 
+
+function recordQuizAnswerToday(objectiveCorrect, grade){
+  const key=todayKey(), rec=SESSIONLOG[key]||{};
+  rec.reviewed=(Number(rec.reviewed)||0)+1;
+  rec.right=(Number(rec.right)||0)+(objectiveCorrect?1:0);
+  rec.wrong=(Number(rec.wrong)||0)+(objectiveCorrect?0:1);
+  rec.easy=(Number(rec.easy)||0)+(grade==='easy'?1:0);
+  rec.medium=(Number(rec.medium)||0)+(grade==='medium'?1:0);
+  rec.hard=(Number(rec.hard)||0)+(grade==='hard'?1:0);
+  rec.again=(Number(rec.again)||0)+(grade==='again'?1:0);
+  rec.updatedAt=Date.now();
+  SESSIONLOG[key]=rec;
+  saveSessionLog();
+}
+function countActuallyDue(entries){
+  const now=Date.now();
+  return entries.filter(e=>{
+    const s=SRS[e.id];
+    return !!(s && Number(s.due)>0 && Number(s.due)<=now);
+  }).length;
+}
+
 function renderQuizCard(){
   closeOverlay();
   if(quizIndex>=quizQueue.length){renderQuizSummary();return;}
@@ -6137,6 +6159,7 @@ function renderQuizCard(){
       </div>`;
     fb.querySelectorAll('[data-grade]').forEach(gb=>gb.onclick=()=>{
       const g=gb.dataset.grade; srsGradeLevel(e.id,g); quizStats[g]++;
+      recordQuizAnswerToday(objectiveCorrect,g);
       // Objective correctness remains objective; confidence is independent.
       if(objectiveCorrect)quizStats.right++;else{quizStats.wrong++;if(!quizSessionWrongIds.includes(e.id))quizSessionWrongIds.push(e.id);}
       quizIndex++;renderQuizCard();
@@ -6213,9 +6236,79 @@ function buildAreaRow(label, stats, onStart){
   return row;
 }
 
+
+function startQuizInsideDashboard(queue){
+  if(!queue||!queue.length){toast('Nenhum caso disponível.');return;}
+  quizQueue=queue; quizIndex=0; quizStats={right:0,wrong:0,easy:0,medium:0,hard:0,again:0}; quizSessionWrongIds=[];
+  const current=document.querySelector('.overlay .study-dashboard');
+  if(!current){ startQuizSession(queue); return; }
+  // Keep the SAME Quiz & Progresso overlay. renderQuizCard normally creates a modal;
+  // capture that modal, then transplant its contents into the existing dashboard shell.
+  const originalAppend=document.body.appendChild.bind(document.body);
+  let captured=null;
+  document.body.appendChild=function(node){
+    if(node && node.classList && node.classList.contains('overlay')){captured=node;return node;}
+    return originalAppend(node);
+  };
+  try{ renderQuizCard(); }finally{ document.body.appendChild=originalAppend; }
+  if(captured){
+    const qm=captured.querySelector('.quiz-modal');
+    current.className='modal progress-modal study-dashboard quiz-modal';
+    current.innerHTML=qm?qm.innerHTML:captured.innerHTML;
+    // Event listeners were attached to captured DOM, so re-run render directly into same overlay via mode flag.
+    current.innerHTML='';
+    current.dataset.integratedQuiz='1';
+    renderQuizCardIntegrated(current);
+  }
+}
+function renderQuizCardIntegrated(host){
+  if(quizIndex>=quizQueue.length){ openProgressDashboardReplacing(host); return; }
+  const e=quizQueue[quizIndex],choices=buildQuizChoices(e),pct=Math.round(quizIndex/Math.max(quizQueue.length,1)*100),letters=['A','B','C','D'];
+  host.innerHTML=`<div class="quiz-integrated-title"><b>🧠 Quiz & Progresso · Modo Estudo</b><span>QUESTÃO ${quizIndex+1}/${quizQueue.length}</span></div>
+    <div class="quiz-session-track"><div class="quiz-session-fill" style="width:${pct}%"></div></div>
+    <div class="quiz-study-shell"><div class="quiz-study-media" id="quiz-media"></div><div class="quiz-study-question">
+      <div class="quiz-meta-hint">${esc(e.s)} · ${esc(e.site)}</div><h3 style="margin:10px 0 5px">Qual é o diagnóstico mais provável?</h3>
+      <div class="quiz-mcq-grid">${choices.map((x,i)=>`<button class="quiz-mcq-option" data-id="${escAttr(x.id)}"><span class="quiz-mcq-letter">${letters[i]}</span><span>${esc(x.name)}</span></button>`).join('')}</div><div id="quiz-feedback"></div>
+    </div></div>
+    <div class="modal-actions"><button class="btn btn-ghost" id="quiz-back-dashboard">← voltar ao progresso</button></div>`;
+  const media=host.querySelector('#quiz-media');
+  if(hasEntryImgs(e)){
+    getEntryImgs(e).then(imgs=>{
+      const all=imgs.length?imgs:(e.img?[{data:e.img,label:''}]:[]);
+      if(!all.length){media.innerHTML=`<div class="quiz-noimage"><b>CASO TEÓRICO</b><span>Use as características registradas no Atlas.</span></div>`;return;}
+      media.innerHTML=`<img src="${all[0].data}">${all[0].label?`<div class="quiz-img-label">${esc(all[0].label)}</div>`:''}`;
+      const im=media.querySelector('img');if(im)im.onclick=()=>openImageLightbox(all[0].data);
+    });
+  }else{
+    const q=quizTheoryPrompt(e);
+    media.innerHTML=`<div class="quiz-noimage"><b>CASO TEÓRICO</b><span>Reconheça a lesão pelas características registradas no seu Atlas.</span><div class="quiz-theory-clues">${q.clues.map(t=>`<span>${esc(t)}</span>`).join('')}</div></div>`;
+  }
+  host.querySelector('#quiz-back-dashboard').onclick=()=>openProgressDashboardReplacing(host);
+  host.querySelectorAll('.quiz-mcq-option').forEach(btn=>btn.onclick=()=>{
+    if(host.dataset.answered==='1')return;host.dataset.answered='1';
+    const objectiveCorrect=btn.dataset.id===e.id;
+    host.querySelectorAll('.quiz-mcq-option').forEach(b=>{b.disabled=true;if(b.dataset.id===e.id)b.classList.add('is-correct');else if(b===btn)b.classList.add('is-wrong');});
+    const fb=host.querySelector('#quiz-feedback'),links=ensureLinks(e);
+    fb.innerHTML=`<div class="${objectiveCorrect?'quiz-feedback-good':'quiz-feedback-bad'}">${objectiveCorrect?'✓ Resposta correta!':'✕ Resposta incorreta — a correta está destacada.'}</div>
+      <div class="quiz-answer-detail"><b>${esc(e.name)}</b><div class="quiz-points">${(e.tags||[]).slice(0,8).map(t=>`<span class="quiz-point">${esc(t)}</span>`).join('')}</div>${e.notes?`<div class="detail-notes">${esc(e.notes)}</div>`:''}${links.length?`<a class="detail-link" href="${links[0].url}" target="_blank" rel="noopener">↗ referência / imagens</a>`:''}</div>
+      <div class="quiz-learning-label">Como foi reconhecer este caso?</div><div class="quiz-grade-4">
+      <button class="g-easy" data-grade="easy">🟢 Fácil<small>segurança alta</small></button><button class="g-medium" data-grade="medium">🔵 Média<small>precisei pensar</small></button><button class="g-hard" data-grade="hard">🟠 Difícil<small>baixa segurança</small></button><button class="g-again" data-grade="again">⚪ Não sei<small>revisar cedo</small></button></div>`;
+    fb.querySelectorAll('[data-grade]').forEach(gb=>gb.onclick=()=>{
+      const g=gb.dataset.grade;srsGradeLevel(e.id,g);quizStats[g]++;recordQuizAnswerToday(objectiveCorrect,g);
+      if(objectiveCorrect)quizStats.right++;else{quizStats.wrong++;if(!quizSessionWrongIds.includes(e.id))quizSessionWrongIds.push(e.id);}
+      quizIndex++;host.dataset.answered='0';renderQuizCardIntegrated(host);
+    });
+  });
+}
+function openProgressDashboardReplacing(host){
+  const ov=host.closest('.overlay');
+  if(ov)ov.remove();
+  openProgressDashboard();
+}
+
 function openProgressDashboard(){
   const total=DATA.length||1, c0=DATA.filter(e=>getReview(e.id)===0).length, c1=DATA.filter(e=>getReview(e.id)===1).length, c2=DATA.filter(e=>getReview(e.id)===2).length;
-  const due=countDue(DATA), streak=getStudyStreak(), todayRec=SESSIONLOG[todayKey()]||{}, todayN=Number(todayRec.reviewed)||0, goal=15;
+  const due=countActuallyDue(DATA), streak=getStudyStreak(), todayRec=SESSIONLOG[todayKey()]||{}, todayN=Number(todayRec.reviewed)||0, goal=15;
   let r14=0,w14=0; const trend=[];
   for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const rec=SESSIONLOG[todayKey(d)]||{};const r=Number(rec.right)||0,w=Number(rec.wrong)||0;r14+=r;w14+=w;trend.push({label:d.getDate(),acc:(r+w)?Math.round(r/(r+w)*100):null});}
   const acc14=(r14+w14)?Math.round(r14/(r14+w14)*100):0;
@@ -6258,11 +6351,11 @@ function openProgressDashboard(){
     <div class="modal-actions"><button class="btn btn-primary" id="progress-close">fechar</button></div>
   </div>`;
   document.body.appendChild(ov);
-  document.getElementById('study-today').onclick=()=>{closeOverlay();startDailyStudy();};
-  document.getElementById('study-quick').onclick=()=>{closeOverlay();startQuickStudy();};
-  document.getElementById('study-cbr').onclick=()=>{closeOverlay();startCBRStudy();};
+  document.getElementById('study-today').onclick=()=>{const q=buildSmartStudyQueue(15);if(q.length)startQuizInsideDashboard(q);};
+  document.getElementById('study-quick').onclick=()=>{const q=buildSmartStudyQueue(5);if(q.length)startQuizInsideDashboard(q);};
+  document.getElementById('study-cbr').onclick=()=>{const bySection={};DATA.forEach(e=>(bySection[e.s]||(bySection[e.s]=[])).push(e));const q=[],seen=new Set();while(q.length<20){let added=0;for(const s of shuffleArr(Object.keys(bySection))){const e=shuffleArr(bySection[s]).find(x=>!seen.has(x.id));if(e){seen.add(e.id);q.push(e);added++;if(q.length>=20)break;}}if(!added)break;}if(q.length)startQuizInsideDashboard(q);};
   document.getElementById('study-custom').onclick=()=>{closeOverlay();openQuizSetup();};
-  ov.querySelectorAll('.study-domain-row').forEach(row=>row.onclick=()=>{const sec=row.dataset.sec;closeOverlay();startQuizSession(shuffleArr(DATA.filter(e=>e.s===sec)).slice(0,15));});
+  ov.querySelectorAll('.study-domain-row').forEach(row=>row.onclick=()=>{const sec=row.dataset.sec;startQuizInsideDashboard(shuffleArr(DATA.filter(e=>e.s===sec)).slice(0,15));});
   document.getElementById('progress-close').onclick=closeOverlay;
 }
 
