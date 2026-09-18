@@ -991,6 +991,62 @@ body{
 .study-dashboard .study-cycle-summary b{font:800 9px 'IBM Plex Mono',monospace;color:#e9f2f8}.study-dashboard .study-cycle-summary span{font-size:7.5px;color:#7890a2;white-space:nowrap}
 @media(max-width:900px){.study-dashboard .study-cycle-row{grid-template-columns:90px minmax(100px,1fr) 52px 28px}.study-dashboard .study-cycle-summary{grid-template-columns:repeat(3,1fr)}}
 
+
+/* Dashboard panorâmico — Ciclo de revisão em destaque */
+.study-dashboard{
+  width:min(96vw,1540px)!important;
+  max-width:1540px!important;
+}
+.study-dashboard .study-grid{
+  grid-template-columns:minmax(390px,.82fr) minmax(650px,1.55fr)!important;
+}
+.study-dashboard .study-chart:has(.study-cycle-mini){
+  min-width:0;
+}
+.study-dashboard .study-cycle-mini{
+  margin-top:14px!important;
+  padding:15px 14px 8px!important;
+}
+.study-dashboard .study-cycle-head{margin-bottom:14px!important}
+.study-dashboard .study-cycle-head>div>b{font-size:14px!important}
+.study-dashboard .study-cycle-head>div>span{font-size:10.5px!important}
+.study-dashboard .study-cycle-total{font-size:10.5px!important}
+.study-dashboard .study-cycle-rows{gap:8px!important}
+.study-dashboard .study-cycle-row{
+  grid-template-columns:minmax(120px,155px) minmax(360px,1fr) 72px 38px!important;
+  gap:10px!important;
+}
+.study-dashboard .study-cycle-name{font-size:10.5px!important}
+.study-dashboard .study-cycle-track{height:14px!important}
+.study-dashboard .study-cycle-track em{font-size:8px!important}
+.study-dashboard .study-cycle-count,
+.study-dashboard .study-cycle-row>b{font-size:9.5px!important}
+.study-dashboard .study-cycle-legend{
+  margin-top:13px!important;
+  gap:7px 16px!important;
+  font-size:9px!important;
+}
+.study-dashboard .study-cycle-legend i{width:9px!important;height:9px!important}
+.study-dashboard .study-cycle-summary{
+  margin-top:11px!important;
+  padding-top:11px!important;
+  gap:8px!important;
+}
+.study-dashboard .study-cycle-summary b{font-size:10px!important}
+.study-dashboard .study-cycle-summary span{font-size:8.5px!important}
+@media(min-width:1250px){
+  .study-dashboard .study-chart:has(.study-cycle-mini){
+    padding-left:18px!important;padding-right:18px!important;
+  }
+}
+@media(max-width:1050px){
+  .study-dashboard{width:96vw!important}
+  .study-dashboard .study-grid{grid-template-columns:1fr!important}
+  .study-dashboard .study-cycle-row{
+    grid-template-columns:110px minmax(180px,1fr) 62px 34px!important;
+  }
+}
+
 </style>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
