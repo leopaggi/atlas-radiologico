@@ -6147,8 +6147,24 @@ function buildSmartStudyQueue(limit){
   const fresh=shuffleArr(DATA.filter(e=>!SRS[e.id]));
   const stable=shuffleArr(DATA.filter(e=>SRS[e.id] && !isDue(e.id) && !difficult.includes(e)));
   const out=[], seen=new Set();
-  [due,difficult,fresh,stable].forEach(group=>group.forEach(e=>{if(out.length<limit&&!seen.has(e.id)){seen.add(e.id);out.push(e);}}));
-  return out;
+  // Reserva pelo menos 60% da sessão para casos NUNCA estudados, sempre que
+  // houver disponibilidade — sem isso, sessões repetidas de "due"/"difficult"
+  // (poucos casos que você já errou) dominam a fila inteira e os 1200+ casos
+  // do acervo nunca entram, dando a sensação de "sempre as mesmas perguntas".
+  const freshQuota=Math.ceil(limit*0.6);
+  const dueDifficultCap=Math.max(0,limit-freshQuota);
+  let dueDifficultUsed=0;
+  [due,difficult].forEach(group=>group.forEach(e=>{
+    if(out.length<limit && dueDifficultUsed<dueDifficultCap && !seen.has(e.id)){
+      seen.add(e.id);out.push(e);dueDifficultUsed++;
+    }
+  }));
+  [fresh,stable].forEach(group=>group.forEach(e=>{if(out.length<limit&&!seen.has(e.id)){seen.add(e.id);out.push(e);}}));
+  // Se ainda sobrar espaço (acervo pequeno de due/difficult/fresh/stable), completa com o que faltar.
+  if(out.length<limit){
+    [due,difficult,fresh,stable].forEach(group=>group.forEach(e=>{if(out.length<limit&&!seen.has(e.id)){seen.add(e.id);out.push(e);}}));
+  }
+  return shuffleArr(out);
 }
 function buildQuizChoices(target){
   const sameSite=shuffleArr(DATA.filter(x=>x.id!==target.id && x.s===target.s && x.site===target.site));
