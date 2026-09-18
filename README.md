@@ -81,3 +81,9 @@ A limpeza auditada de associações secundárias erradas agora é reaplicada ap�
 ### Auditoria de classificações — 2026-09-18
 
 O banco foi auditado globalmente para associações indevidas de sistemas de classificação. Entre 117 lesões com `classification`, **54 atribuições claramente incompatíveis** foram removidas e **63 compatíveis** foram preservadas. A limpeza é idempotente após a sincronização inicial com Firebase e altera exclusivamente `classification` nos IDs auditados.
+
+### Quiz & Progresso — dashboard visual
+
+A área de estudo agora possui painel visual com sequência, meta diária, acurácia recente, pendências SRS, gráfico de evolução, estado do acervo e domínio por área. Há sessões de Hoje (15), Rápida (5), CBR (20) e Personalizada.
+
+Durante o quiz, a avaliação passa a usar quatro níveis — Fácil, Média, Difícil e Não sei — que controlam o intervalo da repetição espaçada. O histórico anterior continua compatível.

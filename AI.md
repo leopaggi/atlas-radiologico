@@ -186,3 +186,13 @@ Após identificação de Apendicite aguda com `AAST_LIVER`, foi auditado o campo
 A correção atua somente no campo `classification` dos IDs auditados, tanto no `SEED` quanto após a leitura inicial do Firebase. É idempotente para impedir reintrodução por estado remoto antigo. Não altera `s`, `site`, imagens, tags, `notes`, revisão/SRS ou IDs.
 
 Compatibilidade usada: BI-RADS→mama; LI-RADS→fígado; Bosniak→rim; O-RADS→ovário/adnexo; PI-RADS→próstata; VI-RADS→bexiga; TI-RADS→tireoide; Lung-RADS→nódulo pulmonar; C-RADS→cólon/CT colonografia; CAD-RADS→coronárias; ASPECTS→AVC/isquemia cerebral; AAST liver/spleen/kidney→trauma do órgão correspondente; Node-RADS→linfonodos.
+
+## Atualização 2026-09-18 — Quiz & Progresso visual
+
+Implementado o dashboard visual aprovado para Quiz/Progresso sem refatorar a arquitetura do Atlas. O botão Quiz passa a abrir a central de estudo com dados reais: sequência de estudo, meta diária de 15 casos, acurácia dos últimos 14 dias, revisões SRS pendentes, evolução temporal, estado do acervo e domínio por seção.
+
+Foram adicionados três atalhos: Sessão de hoje (15 casos priorizando SRS vencido, casos difíceis, novos e depois estáveis), Sessão rápida (5) e Sessão CBR (20 casos distribuídos entre seções), além da sessão personalizada já existente.
+
+A autoavaliação binária “Acertei/Não sabia” foi substituída por quatro graus: Fácil, Média, Difícil e Não sei. O SRS usa intervalos diferentes para cada grau. O formato legado `right/wrong` do histórico foi preservado para compatibilidade: Fácil/Média contam no grupo de reconhecimento satisfatório; Difícil/Não sei entram no grupo a reforçar. `lastGrade` é salvo no SRS para priorização futura.
+
+Não foram alterados dados clínicos das lesões, imagens, IDs, `s`, `site`, tags ou classificações. A mudança é de interface e lógica de estudo/progresso.

@@ -615,6 +615,40 @@ body{
 .progress-hero,.progress-charts,.progress-two-col{grid-template-columns:1fr}
 .progress-kpis{grid-template-columns:repeat(2,1fr)}
 
+
+/* ===== Quiz + Progresso — dashboard visual aprovado 2026-09-18 ===== */
+.study-dashboard{max-width:1120px!important}
+.study-top-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}
+.study-kpi{background:linear-gradient(145deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;gap:11px;align-items:center}
+.study-kpi-icon{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--tag-bg-active);font-size:19px}
+.study-kpi .v{font:700 22px 'IBM Plex Mono',monospace;line-height:1.05}.study-kpi .t{font-size:10px;color:var(--muted-2);text-transform:uppercase;margin-top:4px}
+.study-primary{display:grid;grid-template-columns:1.05fr 1fr;gap:12px;margin-bottom:12px}
+.study-start-card{background:linear-gradient(135deg,#0b6f9f33,var(--panel-2));border:1px solid var(--teal-dim);border-radius:10px;padding:16px}
+.study-start-main{width:100%;border:1px solid var(--teal);background:linear-gradient(135deg,#087fc0,#0a9ec5);color:white;border-radius:8px;padding:16px;cursor:pointer;font-weight:800;font-size:15px;box-shadow:0 8px 24px #008fc433}
+.study-start-main small{display:block;font-weight:500;opacity:.85;margin-top:3px}
+.study-mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:9px}
+.study-mode{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:10px 7px;cursor:pointer;font-size:11px}.study-mode:hover{border-color:var(--teal)}
+.study-chart{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:14px}
+.study-chart h3{margin:0 0 4px;font-size:13px}.study-chart-sub{font-size:10px;color:var(--muted-2);margin-bottom:10px}
+.study-line-svg{width:100%;height:145px;overflow:visible}.study-line-grid{stroke:var(--line);stroke-width:1}.study-line{fill:none;stroke:var(--teal);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.study-dot{fill:var(--teal)}
+.study-lower{display:grid;grid-template-columns:.9fr 1.1fr;gap:12px}
+.study-donut-row{display:flex;gap:18px;align-items:center;min-height:165px}.study-donut{width:138px;height:138px;border-radius:50%;position:relative;flex:none}.study-donut:after{content:'';position:absolute;inset:18px;background:var(--panel-2);border-radius:50%}.study-donut-center{position:absolute;inset:0;z-index:1;display:grid;place-content:center;text-align:center}.study-donut-center b{font:700 21px 'IBM Plex Mono',monospace}.study-donut-center span{font-size:9px;color:var(--muted-2)}
+.study-state-list{display:grid;gap:7px;font-size:11px;flex:1}.study-state-row{display:flex;justify-content:space-between;gap:8px}.study-state-row i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.study-domain-list{display:grid;gap:8px;max-height:220px;overflow:auto}.study-domain-row{cursor:pointer}.study-domain-head{display:flex;justify-content:space-between;font-size:10.5px;margin-bottom:3px}.study-domain-track{height:8px;border-radius:5px;background:var(--panel);overflow:hidden}.study-domain-fill{height:100%;border-radius:5px;background:var(--teal)}
+.study-streak-note{font-size:10.5px;color:var(--muted);margin-top:8px}
+.quiz-modal{max-width:900px}
+.quiz-progress-head{display:flex;justify-content:space-between;gap:10px;align-items:center;font:600 10.5px 'IBM Plex Mono',monospace;color:var(--muted-2);margin-bottom:7px}
+.quiz-reveal-panel{margin-top:12px;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:14px}
+.quiz-learning-label{text-align:center;color:var(--muted);font-size:11px;margin:15px 0 8px}
+.quiz-grade-4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.quiz-grade-4 button{border-radius:8px;padding:11px 7px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer;font-weight:700;font-size:11.5px}
+.quiz-grade-4 button small{display:block;color:var(--muted-2);font-weight:400;font-size:9.5px;margin-top:3px}
+.quiz-grade-4 .g-easy{border-color:#4E9A6A77}.quiz-grade-4 .g-medium{border-color:var(--teal-dim)}.quiz-grade-4 .g-hard{border-color:#E8935B77}.quiz-grade-4 .g-again{border-color:#d65b5b77}
+.quiz-grade-4 button:hover{background:var(--tag-bg-active);transform:translateY(-1px)}
+.quiz-points{display:flex;gap:6px;flex-wrap:wrap;margin:9px 0}.quiz-point{font-size:10.5px;background:var(--tag-bg);border:1px solid var(--line);padding:4px 7px;border-radius:12px}
+.quiz-session-kpis{gap:8px}.quiz-session-kpi{min-width:82px}
+@media(max-width:760px){.study-top-kpis{grid-template-columns:repeat(2,1fr)}.study-primary,.study-lower{grid-template-columns:1fr}.quiz-grade-4{grid-template-columns:repeat(2,1fr)}}
+
 </style>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
@@ -1636,23 +1670,35 @@ function isDue(id){
   if(!s) return true; // nunca estudada = sempre pendente
   return s.due <= Date.now();
 }
-function srsGrade(id, correct){
+function srsGradeLevel(id, grade){
   const s = SRS[id] || {interval:0, due:0, streak:0};
-  const steps = [1,3,7,14,30,60,120];
-  if(correct){
-    s.streak = (s.streak||0) + 1;
-    s.interval = steps[Math.min(s.streak-1, steps.length-1)];
-    setReview(id, s.interval>=30 ? 2 : 1);
-  } else {
-    s.streak = 0;
-    s.interval = 1;
-    setReview(id, 1);
+  const now=Date.now(), day=24*60*60*1000;
+  if(grade==='easy'){
+    s.streak=(s.streak||0)+1;
+    const steps=[3,7,14,30,60,120,180];
+    s.interval=steps[Math.min(s.streak-1,steps.length-1)];
+    setReview(id,s.interval>=30?2:1);
+  }else if(grade==='medium'){
+    s.streak=(s.streak||0)+1;
+    const steps=[1,3,7,14,30,60,120];
+    s.interval=steps[Math.min(s.streak-1,steps.length-1)];
+    setReview(id,s.interval>=30?2:1);
+  }else if(grade==='hard'){
+    s.streak=Math.max(0,(s.streak||0)-1);
+    s.interval=1;
+    setReview(id,1);
+  }else{
+    s.streak=0;
+    s.interval=0.25; // rever em ~6 horas
+    setReview(id,1);
   }
-  s.due = Date.now() + s.interval*24*60*60*1000;
-  s.updatedAt = Date.now();
-  SRS[id] = s;
+  s.lastGrade=grade;
+  s.due=now+s.interval*day;
+  s.updatedAt=now;
+  SRS[id]=s;
   saveSRS();
 }
+function srsGrade(id, correct){ srsGradeLevel(id, correct?'medium':'again'); }
 function countDue(entries){
   return entries.filter(e=>isDue(e.id)).length;
 }
@@ -5899,8 +5945,43 @@ function attachThumbHoverPreview(thumbEl, e){
    ============================================================ */
 let quizQueue = [];
 let quizIndex = 0;
-let quizStats = {right:0, wrong:0};
+let quizStats = {right:0, wrong:0, easy:0, medium:0, hard:0, again:0};
 let quizSessionWrongIds = []; // ids errados nesta sessão de quiz, usado no resumo pra "refazer erros"
+
+
+function getStudyStreak(){
+  let streak=0, d=new Date();
+  for(let i=0;i<365;i++){
+    const rec=SESSIONLOG[todayKey(d)]||{};
+    if((Number(rec.reviewed)||0)>0) streak++;
+    else if(i===0){ d.setDate(d.getDate()-1); continue; }
+    else break;
+    d.setDate(d.getDate()-1);
+  }
+  return streak;
+}
+function buildSmartStudyQueue(limit){
+  limit=limit||15;
+  const due=shuffleArr(DATA.filter(e=>SRS[e.id] && isDue(e.id)));
+  const difficult=shuffleArr(DATA.filter(e=>SRS[e.id] && (SRS[e.id].lastGrade==='hard'||SRS[e.id].lastGrade==='again') && !due.includes(e)));
+  const fresh=shuffleArr(DATA.filter(e=>!SRS[e.id]));
+  const stable=shuffleArr(DATA.filter(e=>SRS[e.id] && !isDue(e.id) && !difficult.includes(e)));
+  const out=[], seen=new Set();
+  [due,difficult,fresh,stable].forEach(group=>group.forEach(e=>{if(out.length<limit&&!seen.has(e.id)){seen.add(e.id);out.push(e);}}));
+  return out;
+}
+function startDailyStudy(){ const q=buildSmartStudyQueue(15); if(q.length) startQuizSession(q); else toast('Nenhum caso disponível.'); }
+function startQuickStudy(){ const q=buildSmartStudyQueue(5); if(q.length) startQuizSession(q); }
+function startCBRStudy(){
+  const bySection={}; DATA.forEach(e=>(bySection[e.s]||(bySection[e.s]=[])).push(e));
+  const secs=shuffleArr(Object.keys(bySection)), q=[], seen=new Set();
+  while(q.length<20 && secs.length){
+    for(const s of secs){ const pool=shuffleArr(bySection[s]); const e=pool.find(x=>!seen.has(x.id)); if(e){seen.add(e.id);q.push(e);} if(q.length>=20)break; }
+    if(q.length>=DATA.length)break;
+  }
+  if(q.length<20) shuffleArr(DATA).forEach(e=>{if(q.length<20&&!seen.has(e.id)){seen.add(e.id);q.push(e);}});
+  startQuizSession(q);
+}
 
 function openQuizSetup(){
   const inScope = scopedEntries();
@@ -5954,78 +6035,62 @@ function openQuizSetup(){
 function startQuizSession(queue){
   quizQueue = queue;
   quizIndex = 0;
-  quizStats = {right:0, wrong:0};
+  quizStats = {right:0, wrong:0, easy:0, medium:0, hard:0, again:0};
   quizSessionWrongIds = [];
   renderQuizCard();
 }
 
 function renderQuizCard(){
   closeOverlay();
-  if(quizIndex >= quizQueue.length){
-    renderQuizSummary();
-    return;
-  }
-  const e = quizQueue[quizIndex];
-  const ov = document.createElement('div');
-  ov.className = 'overlay';
-  ov.innerHTML = `
-    <div class="modal quiz-modal">
-      <div class="quiz-progress">CASO ${quizIndex+1} DE ${quizQueue.length} · ${Math.round(quizIndex/Math.max(quizQueue.length,1)*100)}% concluído · ✅ ${quizStats.right} · ❌ ${quizStats.wrong}</div>
-      <div class="quiz-session-track"><div class="quiz-session-fill" style="width:${quizIndex/Math.max(quizQueue.length,1)*100}%"></div></div>
-      <div class="quiz-stage" id="quiz-stage"></div>
-      <div id="quiz-reveal-area"></div>
-      <div class="modal-actions">
-        <button class="btn btn-ghost" id="quiz-quit">encerrar sessão</button>
-        <button class="btn btn-primary" id="quiz-reveal-btn">Revelar resposta</button>
-      </div>
-    </div>`;
+  if(quizIndex >= quizQueue.length){ renderQuizSummary(); return; }
+  const e=quizQueue[quizIndex], pct=Math.round(quizIndex/Math.max(quizQueue.length,1)*100);
+  const ov=document.createElement('div'); ov.className='overlay';
+  ov.innerHTML=`<div class="modal quiz-modal">
+    <div class="quiz-progress-head"><span>CASO ${quizIndex+1} DE ${quizQueue.length}</span><span>${pct}% · sequência ${quizStats.right}</span></div>
+    <div class="quiz-session-track"><div class="quiz-session-fill" style="width:${pct}%"></div></div>
+    <div class="quiz-stage" id="quiz-stage"></div>
+    <div id="quiz-reveal-area"></div>
+    <div class="modal-actions"><button class="btn btn-ghost" id="quiz-quit">encerrar sessão</button><button class="btn btn-primary" id="quiz-reveal-btn">Revelar diagnóstico</button></div>
+  </div>`;
   document.body.appendChild(ov);
-
-  const stage = document.getElementById('quiz-stage');
+  const stage=document.getElementById('quiz-stage');
   if(hasEntryImgs(e)){
-    stage.innerHTML = `<div class="quiz-img-gallery" id="quiz-img-gallery"></div><div class="quiz-meta-hint">${e.s} · ${e.site}</div>`;
+    stage.innerHTML=`<div class="quiz-img-gallery" id="quiz-img-gallery"></div><div class="quiz-meta-hint">${esc(e.s)} · ${esc(e.site)}</div>`;
     getEntryImgs(e).then(imgs=>{
-      const gal=document.getElementById('quiz-img-gallery'); if(!gal) return;
+      const gal=document.getElementById('quiz-img-gallery'); if(!gal)return;
       const all=imgs.length?imgs:(e.img?[{data:e.img,label:''}]:[]);
-      gal.innerHTML=all.map((img,i)=>`<div class="quiz-img-item"><img src="${img.data}" data-idx="${i}">${img.label?`<div class="quiz-img-label">${img.label.replace(/</g,'&lt;')}</div>`:''}</div>`).join('');
-      gal.querySelectorAll('img').forEach(imgEl=>{
-        imgEl.addEventListener('click', ()=> openImageLightbox(all[+imgEl.dataset.idx].data));
-      });
+      gal.innerHTML=all.map((img,i)=>`<div class="quiz-img-item"><img src="${img.data}" data-idx="${i}">${img.label?`<div class="quiz-img-label">${esc(img.label)}</div>`:''}</div>`).join('');
+      gal.querySelectorAll('img').forEach(el=>el.onclick=()=>openImageLightbox(all[+el.dataset.idx].data));
     });
-  } else {
-    const links = ensureLinks(e);
-    stage.innerHTML = `
-      <div class="quiz-meta-hint">${e.s} · ${e.site}</div>
-      <div class="detail-tags">${e.tags.map(t=>`<span class="mini-tag match">${t}</span>`).join('')}</div>
-      <div class="inc-badge" style="background:${incColor(e.inc||2)}22;color:${incColor(e.inc||2)};border-color:${incColor(e.inc||2)}55;margin-top:10px;display:inline-block;">${incLabel(e.inc||2)}</div>
-      ${links.length?`<a class="detail-link quiz-radiopaedia-link" href="${links[0].url}" target="_blank" rel="noopener">↗ Ver imagens no Radiopaedia</a>`:''}
-    `;
+  }else{
+    const links=ensureLinks(e);
+    stage.innerHTML=`<div class="quiz-meta-hint">${esc(e.s)} · ${esc(e.site)}</div><div class="detail-tags">${(e.tags||[]).map(t=>`<span class="mini-tag match">${esc(t)}</span>`).join('')}</div><div class="inc-badge" style="background:${incColor(e.inc||2)}22;color:${incColor(e.inc||2)};border-color:${incColor(e.inc||2)}55;margin-top:10px;display:inline-block;">${incLabel(e.inc||2)}</div>${links.length?`<a class="detail-link quiz-radiopaedia-link" href="${links[0].url}" target="_blank" rel="noopener">↗ Ver imagens no Radiopaedia</a>`:''}`;
   }
-
-  document.getElementById('quiz-quit').onclick = ()=>{ closeOverlay(); renderAll(); };
-  document.getElementById('quiz-reveal-btn').onclick = ()=>{
+  document.getElementById('quiz-quit').onclick=()=>{closeOverlay();renderAll();};
+  document.getElementById('quiz-reveal-btn').onclick=()=>{
     document.getElementById('quiz-reveal-btn').style.display='none';
-    const area = document.getElementById('quiz-reveal-area');
-    const links = ensureLinks(e);
-    area.innerHTML = `
-      <div class="detail-title-row"><h2>${e.name}</h2></div>
-      <div class="detail-tags">${e.tags.map(t=>`<span class="mini-tag match">${t}</span>`).join('')}</div>
-      <div class="detail-notes">${(e.notes||'').replace(/</g,'&lt;')}</div>
-      ${e.classification && CLASSIFICATION_SYSTEMS[e.classification] ? renderClassificationBox(e.classification) : ''}
-      ${!hasEntryImgs(e) ? `<button class="btn btn-ghost quiz-add-img-btn" id="quiz-add-img">+ colar imagem desta lesão</button>` : ''}
-      <div class="quiz-grade-row">
-        <button class="btn quiz-grade-wrong" id="quiz-wrong">❌ Não sabia</button>
-        <button class="btn quiz-grade-right" id="quiz-right">✅ Acertei</button>
-      </div>
-    `;
-    if(!hasEntryImgs(e)){
-      document.getElementById('quiz-add-img').onclick = ()=>{ closeOverlay(); openForm(e.id); };
-    }
-    document.getElementById('quiz-wrong').onclick = ()=>{ srsGrade(e.id, false); quizStats.wrong++; if(!quizSessionWrongIds.includes(e.id)) quizSessionWrongIds.push(e.id); quizIndex++; renderQuizCard(); };
-    document.getElementById('quiz-right').onclick = ()=>{ srsGrade(e.id, true); quizStats.right++; quizIndex++; renderQuizCard(); };
+    const area=document.getElementById('quiz-reveal-area'), links=ensureLinks(e);
+    area.innerHTML=`<div class="quiz-reveal-panel">
+      <div class="detail-title-row"><h2>${esc(e.name)}</h2></div>
+      <div class="quiz-points">${(e.tags||[]).map(t=>`<span class="quiz-point">${esc(t)}</span>`).join('')}</div>
+      <div class="detail-notes">${esc(e.notes||'')}</div>
+      ${e.classification&&CLASSIFICATION_SYSTEMS[e.classification]?renderClassificationBox(e.classification):''}
+      ${!hasEntryImgs(e)?`<button class="btn btn-ghost quiz-add-img-btn" id="quiz-add-img">+ colar imagem desta lesão</button>`:''}
+      <div class="quiz-learning-label">Como foi reconhecer este caso? Isso define quando ele volta no SRS.</div>
+      <div class="quiz-grade-4">
+        <button class="g-easy" data-grade="easy">🟢 Fácil<small>reconheci com segurança</small></button>
+        <button class="g-medium" data-grade="medium">🔵 Média<small>acertei, mas pensei</small></button>
+        <button class="g-hard" data-grade="hard">🟠 Difícil<small>baixa segurança</small></button>
+        <button class="g-again" data-grade="again">⚪ Não sei<small>revisar cedo</small></button>
+      </div></div>`;
+    const add=document.getElementById('quiz-add-img'); if(add)add.onclick=()=>{closeOverlay();openForm(e.id);};
+    area.querySelectorAll('[data-grade]').forEach(btn=>btn.onclick=()=>{
+      const g=btn.dataset.grade; srsGradeLevel(e.id,g); quizStats[g]++;
+      if(g==='easy'||g==='medium'){quizStats.right++;}else{quizStats.wrong++;if(!quizSessionWrongIds.includes(e.id))quizSessionWrongIds.push(e.id);}
+      quizIndex++; renderQuizCard();
+    });
   };
 }
-
 function renderQuizSummary(){
   logSessionResult(quizStats.right, quizStats.wrong);
   const total=quizStats.right+quizStats.wrong, accuracy=total?Math.round(quizStats.right/total*100):0;
@@ -6035,7 +6100,7 @@ function renderQuizSummary(){
   ov.innerHTML=`<div class="modal quiz-modal" style="text-align:center;max-width:560px">
     <h2>Sessão concluída</h2><div class="modal-sub">resultado da revisão e próximo passo sugerido</div>
     <div class="quiz-summary-ring" style="background:${ring}"><div class="quiz-summary-ring-inner"><div class="v">${accuracy}%</div><div class="t">de acerto</div></div></div>
-    <div class="quiz-session-kpis"><div class="quiz-session-kpi"><div class="v" style="color:var(--teal)">${quizStats.right}</div><div class="t">acertos</div></div><div class="quiz-session-kpi"><div class="v" style="color:var(--amber)">${quizStats.wrong}</div><div class="t">a reforçar</div></div><div class="quiz-session-kpi"><div class="v">${dueAfter}</div><div class="t">pendentes agora</div></div></div>
+    <div class="quiz-session-kpis"><div class="quiz-session-kpi"><div class="v" style="color:#4E9A6A">${quizStats.easy}</div><div class="t">fáceis</div></div><div class="quiz-session-kpi"><div class="v" style="color:var(--teal)">${quizStats.medium}</div><div class="t">médias</div></div><div class="quiz-session-kpi"><div class="v" style="color:var(--amber)">${quizStats.hard}</div><div class="t">difíceis</div></div><div class="quiz-session-kpi"><div class="v">${quizStats.again}</div><div class="t">não sei</div></div><div class="quiz-session-kpi"><div class="v">${dueAfter}</div><div class="t">pendentes</div></div></div>
     <div class="quiz-next-hint">${quizStats.wrong?`Você errou ${quizStats.wrong} caso(s). Vale refazê-los agora enquanto os pontos de confusão ainda estão frescos.`:'Sessão sem erros. Continue pelas revisões pendentes ou avance para uma área menos dominada.'}</div>
     <div class="quiz-summary-actions">${quizSessionWrongIds.length?'<button class="btn btn-ghost" id="quiz-retry-wrong">↻ refazer erros</button>':''}<button class="btn btn-ghost" id="quiz-open-progress">📊 ver progresso</button><button class="btn btn-primary" id="quiz-finish">fechar</button></div>
   </div>`;
@@ -6097,51 +6162,60 @@ function buildAreaRow(label, stats, onStart){
 }
 
 function openProgressDashboard(){
-  const areaStats = computeAreaStats();
-  const totalAll = DATA.length || 1;
-  const c0 = DATA.filter(e=>getReview(e.id)===0).length;
-  const c1 = DATA.filter(e=>getReview(e.id)===1).length;
-  const c2 = DATA.filter(e=>getReview(e.id)===2).length;
-  const dueToday = countDue(DATA);
-  const masteredPct = Math.round(c2/totalAll*100);
-  const touchedPct = Math.round((c1+c2)/totalAll*100);
-  const weakest = areaStats.slice().filter(a=>a.c0+a.c1>0).sort((a,b)=> a.pct2-b.pct2 || b.total-a.total).slice(0,6);
-  const strongest = areaStats.slice().filter(a=>a.pct2>0).sort((a,b)=> b.pct2-a.pct2 || b.total-a.total).slice(0,5);
-  let right=0, wrong=0, reviewed14=0;
-  const today=new Date(), days=[]; let maxReviewed=1;
-  for(let i=13;i>=0;i--){
-    const d=new Date(today); d.setDate(d.getDate()-i); const key=todayKey(d); const rec=SESSIONLOG[key]||{};
-    const n=Number(rec.reviewed)||0; right+=Number(rec.right)||0; wrong+=Number(rec.wrong)||0; reviewed14+=n; maxReviewed=Math.max(maxReviewed,n);
-    days.push({key,n,label:d.getDate()});
-  }
-  const accuracy=(right+wrong)?Math.round(right/(right+wrong)*100):0;
-  const sectionMap={};
-  DATA.forEach(e=>{ const k=e.s||'Outros'; if(!sectionMap[k]) sectionMap[k]={section:k,total:0,c0:0,c1:0,c2:0}; const m=sectionMap[k];m.total++;m['c'+getReview(e.id)]++; });
-  const sections=Object.values(sectionMap).sort((a,b)=>((b.c2/b.total)-(a.c2/a.total)));
-  const circ=2*Math.PI*62, off=circ*(1-masteredPct/100);
-  const ov=document.createElement('div'); ov.className='overlay'; ov.onclick=ev=>{if(ev.target===ov)closeOverlay();};
-  ov.innerHTML=`<div class="modal progress-modal">
-    <h2>📊 Central de estudo</h2><div class="modal-sub">visão prática do que você já consolidou e do que merece atenção agora</div>
-    <div class="progress-hero">
-      <div class="progress-ring-card"><div class="progress-ring-wrap"><svg class="progress-ring" viewBox="0 0 140 140"><circle class="progress-ring-bg" cx="70" cy="70" r="62"></circle><circle class="progress-ring-value" cx="70" cy="70" r="62" stroke-dasharray="${circ}" stroke-dashoffset="${off}"></circle></svg><div class="progress-ring-center"><div class="big">${masteredPct}%</div><div class="small">dominado</div></div></div><div class="progress-legend"><span><i style="background:${REVIEW_COLORS[2]}"></i>${c2} dominadas</span><span><i style="background:${REVIEW_COLORS[1]}"></i>${c1} revisando</span><span><i style="background:${REVIEW_COLORS[0]}"></i>${c0} novas</span></div></div>
-      <div class="progress-focus-card"><h3>Seu estudo agora</h3><div class="progress-focus-sub">Priorize revisões vencidas e depois as áreas com menor domínio.</div><div class="progress-kpis"><div class="progress-kpi"><div class="v" style="color:var(--amber)">${dueToday}</div><div class="t">revisões hoje</div></div><div class="progress-kpi"><div class="v">${touchedPct}%</div><div class="t">já estudado</div></div><div class="progress-kpi"><div class="v">${reviewed14}</div><div class="t">revisões / 14d</div></div><div class="progress-kpi"><div class="v">${accuracy?accuracy+'%':'—'}</div><div class="t">acerto quiz / 14d</div></div></div><div class="progress-action-row"><button class="progress-action" id="progress-due">🧠 revisar pendentes (${dueToday})</button><button class="progress-action" id="progress-weak">🎯 praticar área mais fraca</button></div></div>
+  const total=DATA.length||1, c0=DATA.filter(e=>getReview(e.id)===0).length, c1=DATA.filter(e=>getReview(e.id)===1).length, c2=DATA.filter(e=>getReview(e.id)===2).length;
+  const due=countDue(DATA), streak=getStudyStreak(), todayRec=SESSIONLOG[todayKey()]||{}, todayN=Number(todayRec.reviewed)||0, goal=15;
+  let r14=0,w14=0; const trend=[];
+  for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const rec=SESSIONLOG[todayKey(d)]||{};const r=Number(rec.right)||0,w=Number(rec.wrong)||0;r14+=r;w14+=w;trend.push({label:d.getDate(),acc:(r+w)?Math.round(r/(r+w)*100):null});}
+  const acc14=(r14+w14)?Math.round(r14/(r14+w14)*100):0;
+  const sectionMap={}; DATA.forEach(e=>{const k=e.s||'Outros';if(!sectionMap[k])sectionMap[k]={name:k,total:0,mastered:0};sectionMap[k].total++;if(getReview(e.id)===2)sectionMap[k].mastered++;});
+  const sections=Object.values(sectionMap).map(x=>({...x,pct:Math.round(x.mastered/x.total*100)})).sort((a,b)=>a.pct-b.pct);
+  const points=trend.map((d,i)=>{const x=12+i*(336/13),y=d.acc==null?null:126-d.acc*1.05;return d.acc==null?null:{x,y,acc:d.acc,label:d.label};}).filter(Boolean);
+  const poly=points.map(p=>`${p.x},${p.y}`).join(' ');
+  const p0=c0/total*100,p1=c1/total*100,p2=c2/total*100;
+  const donut=`conic-gradient(${REVIEW_COLORS[2]} 0 ${p2}%, ${REVIEW_COLORS[1]} ${p2}% ${p2+p1}%, ${REVIEW_COLORS[0]} ${p2+p1}% 100%)`;
+  const ov=document.createElement('div');ov.className='overlay';ov.onclick=e=>{if(e.target===ov)closeOverlay();};
+  ov.innerHTML=`<div class="modal progress-modal study-dashboard">
+    <h2>🧠 Quiz & Progresso</h2><div class="modal-sub">treino diário guiado pelo seu progresso real e pelas revisões SRS</div>
+    <div class="study-top-kpis">
+      <div class="study-kpi"><div class="study-kpi-icon">🔥</div><div><div class="v">${streak} ${streak===1?'dia':'dias'}</div><div class="t">sequência</div></div></div>
+      <div class="study-kpi"><div class="study-kpi-icon">🎯</div><div><div class="v">${todayN} / ${goal}</div><div class="t">questões hoje</div></div></div>
+      <div class="study-kpi"><div class="study-kpi-icon">📈</div><div><div class="v">${(r14+w14)?acc14+'%':'—'}</div><div class="t">acerto · 14 dias</div></div></div>
+      <div class="study-kpi"><div class="study-kpi-icon">🧠</div><div><div class="v" style="color:var(--amber)">${due}</div><div class="t">revisões pendentes</div></div></div>
     </div>
-    <div class="progress-charts"><div class="progress-chart-card"><h3>Ritmo de estudo · últimos 14 dias</h3><div class="activity-chart">${days.map(d=>`<div class="activity-col" title="${d.key}: ${d.n} revisões"><div class="activity-bar-wrap"><div class="activity-bar" style="height:${d.n?Math.max(7,d.n/maxReviewed*100):2}%;opacity:${d.n?0.85:0.12}"></div></div><div class="activity-day">${d.label}</div></div>`).join('')}</div></div><div class="progress-chart-card"><h3>Domínio por seção</h3><div class="section-progress-list">${sections.map(a=>`<div class="section-progress-row" data-section="${escAttr(a.section)}"><div class="section-progress-head"><span>${esc(a.section)}</span><span>${Math.round(a.c2/a.total*100)}% · ${a.total}</span></div><div class="section-progress-bar"><div class="section-progress-seg" style="width:${a.c2/a.total*100}%;background:${REVIEW_COLORS[2]}"></div><div class="section-progress-seg" style="width:${a.c1/a.total*100}%;background:${REVIEW_COLORS[1]}"></div><div class="section-progress-seg" style="width:${a.c0/a.total*100}%;background:${REVIEW_COLORS[0]}"></div></div></div>`).join('')}</div></div></div>
-    <div class="progress-two-col"><div class="progress-chart-card"><h3>🎯 Prioridade de revisão</h3><div id="weak-areas" class="area-list"></div></div><div class="progress-chart-card"><h3>✓ Áreas mais consolidadas</h3><div id="strong-areas" class="area-list"></div></div></div>
-    <div class="modal-actions"><button class="btn btn-primary" id="progress-close">fechar</button></div></div>`;
+    <div class="study-primary">
+      <div class="study-start-card">
+        <button class="study-start-main" id="study-today">▶ INICIAR SESSÃO DE HOJE<small>15 casos · SRS + difíceis + novos</small></button>
+        <div class="study-mode-grid"><button class="study-mode" id="study-quick">⚡ Sessão rápida<br><small>5 casos</small></button><button class="study-mode" id="study-cbr">🎓 Sessão CBR<br><small>20 casos mistos</small></button><button class="study-mode" id="study-custom">☷ Personalizada<br><small>área e filtros</small></button></div>
+        <div class="study-streak-note">${todayN>=goal?'✓ Meta diária concluída.':`Faltam ${Math.max(0,goal-todayN)} questões para a meta de hoje.`}</div>
+      </div>
+      <div class="study-chart"><h3>Evolução do desempenho</h3><div class="study-chart-sub">% de acerto nas sessões dos últimos 14 dias</div>
+        <svg class="study-line-svg" viewBox="0 0 360 145" preserveAspectRatio="none">
+          <line class="study-line-grid" x1="10" y1="21" x2="350" y2="21"/><line class="study-line-grid" x1="10" y1="73" x2="350" y2="73"/><line class="study-line-grid" x1="10" y1="126" x2="350" y2="126"/>
+          ${points.length>1?`<polyline class="study-line" points="${poly}"/>`:''}${points.map(p=>`<circle class="study-dot" cx="${p.x}" cy="${p.y}" r="3"><title>dia ${p.label}: ${p.acc}%</title></circle>`).join('')}
+        </svg>
+      </div>
+    </div>
+    <div class="study-lower">
+      <div class="study-chart"><h3>Estado do acervo</h3><div class="study-donut-row"><div class="study-donut" style="background:${donut}"><div class="study-donut-center"><b>${DATA.length}</b><span>lesões</span></div></div><div class="study-state-list">
+        <div class="study-state-row"><span><i style="background:${REVIEW_COLORS[2]}"></i>Dominadas</span><b>${c2} (${Math.round(p2)}%)</b></div>
+        <div class="study-state-row"><span><i style="background:${REVIEW_COLORS[1]}"></i>Em aprendizado</span><b>${c1} (${Math.round(p1)}%)</b></div>
+        <div class="study-state-row"><span><i style="background:${REVIEW_COLORS[0]}"></i>Nunca estudadas</span><b>${c0} (${Math.round(p0)}%)</b></div>
+      </div></div></div>
+      <div class="study-chart"><h3>Domínio por área</h3><div class="study-chart-sub">clique em uma área para treiná-la</div><div class="study-domain-list">${sections.map(s=>`<div class="study-domain-row" data-sec="${escAttr(s.name)}"><div class="study-domain-head"><span>${esc(s.name)}</span><b>${s.pct}%</b></div><div class="study-domain-track"><div class="study-domain-fill" style="width:${s.pct}%"></div></div></div>`).join('')}</div></div>
+    </div>
+    <div class="modal-actions"><button class="btn btn-primary" id="progress-close">fechar</button></div>
+  </div>`;
   document.body.appendChild(ov);
-  const weakEl=document.getElementById('weak-areas');
-  if(!weakest.length) weakEl.innerHTML='<div class="progress-empty">Sem áreas pendentes.</div>'; else weakest.forEach(a=>weakEl.appendChild(buildAreaRow(`${a.site} <span style="color:var(--muted-2)">· ${a.section}</span>`,a,()=>{closeOverlay();startQuizSession(shuffleArr(DATA.filter(e=>e.s===a.section&&e.site===a.site)).slice(0,30));})));
-  const strongEl=document.getElementById('strong-areas');
-  if(!strongest.length) strongEl.innerHTML='<div class="progress-empty">Ainda não há áreas dominadas.</div>'; else strongest.forEach(a=>strongEl.appendChild(buildAreaRow(`${a.site} <span style="color:var(--muted-2)">· ${a.section}</span>`,a,null)));
-  document.getElementById('progress-due').onclick=()=>{const items=DATA.filter(e=>isDue(e.id)); if(!items.length){toast('Nenhuma revisão pendente hoje.');return;} closeOverlay();startQuizSession(shuffleArr(items).slice(0,30));};
-  document.getElementById('progress-weak').onclick=()=>{if(!weakest.length){toast('Sem área fraca identificada.');return;}const a=weakest[0];closeOverlay();startQuizSession(shuffleArr(DATA.filter(e=>e.s===a.section&&e.site===a.site)).slice(0,30));};
-  ov.querySelectorAll('.section-progress-row').forEach(row=>row.onclick=()=>{const sec=row.dataset.section;closeOverlay();scope={section:sec,site:null};renderAll();});
+  document.getElementById('study-today').onclick=()=>{closeOverlay();startDailyStudy();};
+  document.getElementById('study-quick').onclick=()=>{closeOverlay();startQuickStudy();};
+  document.getElementById('study-cbr').onclick=()=>{closeOverlay();startCBRStudy();};
+  document.getElementById('study-custom').onclick=()=>{closeOverlay();openQuizSetup();};
+  ov.querySelectorAll('.study-domain-row').forEach(row=>row.onclick=()=>{const sec=row.dataset.sec;closeOverlay();startQuizSession(shuffleArr(DATA.filter(e=>e.s===sec)).slice(0,15));});
   document.getElementById('progress-close').onclick=closeOverlay;
 }
 
 document.getElementById('progress-btn').onclick = openProgressDashboard;
-document.getElementById('quiz-btn').onclick = openQuizSetup;
+document.getElementById('quiz-btn').onclick = openProgressDashboard;
 
 /* Portão de acesso: o app só carrega (loadData) depois de confirmar login
    Google com a conta autorizada. Isso é uma barreira de UI — a proteção de
