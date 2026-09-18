@@ -968,6 +968,29 @@ body{
 /* Domínio por área usa exatamente o mesmo mapa anatômico */
 .study-dashboard .study-domain-fill{background:var(--section-color)!important;color:var(--section-color)!important}
 
+
+/* Ciclo de revisão do acervo — substitui o insight genérico de desempenho */
+.study-dashboard .study-cycle-mini{margin-top:10px;border-top:1px solid #26394a;padding:11px 10px 3px}
+.study-dashboard .study-cycle-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
+.study-dashboard .study-cycle-head>div>b{display:block;font-size:11.5px;color:#eef6ff}
+.study-dashboard .study-cycle-head>div>span{display:block;font-size:9px;color:#7890a2;margin-top:2px}
+.study-dashboard .study-cycle-total{font:700 9.5px 'IBM Plex Mono',monospace;color:#8fb7d7;white-space:nowrap}
+.study-dashboard .study-cycle-rows{display:flex;flex-direction:column;gap:6px}
+.study-dashboard .study-cycle-row{display:grid;grid-template-columns:104px minmax(150px,1fr) 58px 31px;gap:7px;align-items:center}
+.study-dashboard .study-cycle-name{font-size:9px;color:#cbd8e5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.study-dashboard .study-cycle-track{height:10px;background:#142b3a;border-radius:99px;overflow:hidden;display:flex}
+.study-dashboard .study-cycle-track>i{height:100%;display:flex;align-items:center;justify-content:center;min-width:0;font-style:normal}
+.study-dashboard .study-cycle-track em{font:700 7px 'IBM Plex Mono',monospace;color:#fff;font-style:normal;text-shadow:0 1px 2px #0008}
+.study-dashboard .study-cycle-count,.study-dashboard .study-cycle-row>b{font:700 8.5px 'IBM Plex Mono',monospace;color:#a9bfd0;text-align:right;white-space:nowrap}
+.study-dashboard .study-cycle-row>b{color:#e2edf5}
+.study-dashboard .cycle-recent{background:#16d99a!important}.study-dashboard .cycle-short{background:#218cff!important}.study-dashboard .cycle-medium{background:#8b4df0!important}.study-dashboard .cycle-late{background:#ff8b38!important}.study-dashboard .cycle-never{background:#49647a!important}
+.study-dashboard .study-cycle-legend{display:flex;flex-wrap:wrap;gap:5px 10px;margin-top:10px;font-size:8px;color:#8da3b4}
+.study-dashboard .study-cycle-legend span{display:flex;align-items:center;gap:4px}.study-dashboard .study-cycle-legend i,.study-dashboard .study-cycle-summary i{width:7px;height:7px;border-radius:50%;display:inline-block}
+.study-dashboard .study-cycle-summary{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-top:8px;border-top:1px solid #203545;padding-top:8px}
+.study-dashboard .study-cycle-summary>div{display:grid;grid-template-columns:auto auto 1fr;gap:4px;align-items:center}
+.study-dashboard .study-cycle-summary b{font:800 9px 'IBM Plex Mono',monospace;color:#e9f2f8}.study-dashboard .study-cycle-summary span{font-size:7.5px;color:#7890a2;white-space:nowrap}
+@media(max-width:900px){.study-dashboard .study-cycle-row{grid-template-columns:90px minmax(100px,1fr) 52px 28px}.study-dashboard .study-cycle-summary{grid-template-columns:repeat(3,1fr)}}
+
 </style>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
@@ -6370,6 +6393,28 @@ function studySectionColor(name){
   return STUDY_SECTION_COLORS[studySectionIndex(name)%STUDY_SECTION_COLORS.length];
 }
 
+
+const REVIEW_CYCLE_COLORS={recent:'#16d99a',short:'#218cff',medium:'#8b4df0',late:'#ff8b38',never:'#49647a'};
+function getReviewCycleStats(entries){
+  const now=Date.now(), day=86400000, d45=45*day, d6m=183*day;
+  const out={recent:0,short:0,medium:0,late:0,never:0,total:0};
+  (entries||[]).forEach(e=>{
+    out.total++;
+    const s=SRS[e.id], t=s&&Number(s.updatedAt);
+    if(!t){out.never++;return;}
+    const age=Math.max(0,now-t);
+    if(age<=7*day) out.recent++;
+    else if(age<=d45) out.short++;
+    else if(age<=d6m) out.medium++;
+    else out.late++;
+  });
+  return out;
+}
+function reviewCycleSegments(stats){
+  const total=Math.max(1,stats.total);
+  return ['recent','short','medium','late','never'].map(k=>({k,n:stats[k],pct:stats[k]/total*100}));
+}
+
 function countActuallyDue(entries){
   const now=Date.now();
   return entries.filter(e=>{
@@ -6481,6 +6526,22 @@ function refreshStudyDashboardLive(){
     if(val) val.textContent=s.studied?pct+'%':'—';
     row.title=`${s.studied} de ${s.total} casos estudados · cobertura ${coverage}%`;
   });
+
+  ov.querySelectorAll('.study-cycle-row').forEach(row=>{
+    const entries=DATA.filter(e=>(e.s||'Outros')===row.dataset.cycleSec);
+    const c=getReviewCycleStats(entries), seg=reviewCycleSegments(c), seen=c.total-c.never;
+    const track=row.querySelector('.study-cycle-track');
+    if(track) track.innerHTML=seg.map(z=>`<i class="cycle-${z.k}" style="width:${z.pct}%"><em>${z.pct>=8?Math.round(z.pct)+'%':''}</em></i>`).join('');
+    const count=row.querySelector('.study-cycle-count');
+    if(count) count.textContent=`${seen} / ${c.total}`;
+    const pct=row.querySelector(':scope > b');
+    if(pct) pct.textContent=Math.round(seen/Math.max(1,c.total)*100)+'%';
+  });
+  const cg=getReviewCycleStats(DATA), cgs=reviewCycleSegments(cg);
+  const cycleTotal=ov.querySelector('.study-cycle-total');
+  if(cycleTotal) cycleTotal.textContent=`${cg.total-cg.never} / ${cg.total} vistas`;
+  const cycleSummary=ov.querySelector('.study-cycle-summary');
+  if(cycleSummary) cycleSummary.innerHTML=cgs.map(z=>`<div><i class="cycle-${z.k}"></i><b>${z.n}</b><span>${z.k==='recent'?'≤7d':z.k==='short'?'8–45d':z.k==='medium'?'46d–6m':z.k==='late'?'>6m':'nunca'} · ${Math.round(z.pct)}%</span></div>`).join('');
 
   const counts={easy:0,medium:0,hard:0,again:0,fresh:0};
   DATA.forEach(e=>{
@@ -6672,6 +6733,10 @@ function openProgressDashboard(){
     if(bi>=0) return 1;
     return a.name.localeCompare(b.name,'pt-BR');
   });
+  const cycleBySection={};
+  sections.forEach(s=>{cycleBySection[s.name]=getReviewCycleStats(DATA.filter(e=>(e.s||'Outros')===s.name));});
+  const cycleGlobal=getReviewCycleStats(DATA);
+  const cycleGlobalSeg=reviewCycleSegments(cycleGlobal);
   // Área útil do gráfico: y=10 (topo, 100%) até y=126 (base, 0%), x=10 até x=346.
   const CHART_TOP=10, CHART_BOTTOM=126, CHART_LEFT=10, CHART_RIGHT=346;
   const yForPct=pct=>CHART_BOTTOM-(pct/100)*(CHART_BOTTOM-CHART_TOP);
@@ -6721,10 +6786,11 @@ function openProgressDashboard(){
           ${xLabels.filter(l=>l.show).map(l=>`<text x="${l.x}" y="148" class="study-line-x-label" text-anchor="middle">${esc(l.label)}</text>`).join('')}
         </svg>
         ${points.length<2?`<div class="study-chart-empty">Ainda não há dados suficientes dos últimos 14 dias. Complete algumas sessões para ver a evolução aqui.</div>`:''}
-        <div class="study-performance-insight">
-          <span class="study-insight-icon">${(r14+w14)?'↗':'◎'}</span>
-          <div><b>${(r14+w14)?(acc14>=80?'Ótimo desempenho!':acc14>=60?'Boa evolução.':'Continue praticando.'):'A evolução começa aqui.'}</b>
-          <small>${(r14+w14)?`Você respondeu ${r14+w14} questões nos últimos 14 dias, com ${acc14}% de acerto.`:'Complete novas sessões para formar sua curva de desempenho e acompanhar a evolução.'}</small></div>
+        <div class="study-cycle-mini">
+          <div class="study-cycle-head"><div><b>▰ Ciclo de revisão do acervo</b><span>Quando cada lesão foi revisada pela última vez</span></div><b class="study-cycle-total">${cycleGlobal.total-cycleGlobal.never} / ${cycleGlobal.total} vistas</b></div>
+          <div class="study-cycle-rows">${sections.map(s=>{const c=cycleBySection[s.name], seg=reviewCycleSegments(c), seen=c.total-c.never, seenPct=Math.round(seen/Math.max(1,c.total)*100);return `<div class="study-cycle-row" data-cycle-sec="${escAttr(s.name)}"><span class="study-cycle-name">${esc(s.name)}</span><div class="study-cycle-track">${seg.map(z=>`<i class="cycle-${z.k}" style="width:${z.pct}%"><em>${z.pct>=8?Math.round(z.pct)+'%':''}</em></i>`).join('')}</div><span class="study-cycle-count">${seen} / ${c.total}</span><b>${seenPct}%</b></div>`;}).join('')}</div>
+          <div class="study-cycle-legend"><span><i class="cycle-recent"></i>≤ 7 dias</span><span><i class="cycle-short"></i>8–45 dias</span><span><i class="cycle-medium"></i>46 dias–6 meses</span><span><i class="cycle-late"></i>&gt; 6 meses</span><span><i class="cycle-never"></i>Nunca</span></div>
+          <div class="study-cycle-summary">${cycleGlobalSeg.map(z=>`<div><i class="cycle-${z.k}"></i><b>${z.n}</b><span>${z.k==='recent'?'≤7d':z.k==='short'?'8–45d':z.k==='medium'?'46d–6m':z.k==='late'?'>6m':'nunca'} · ${Math.round(z.pct)}%</span></div>`).join('')}</div>
         </div>
       </div>
     </div>
