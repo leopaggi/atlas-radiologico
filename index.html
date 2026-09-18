@@ -740,6 +740,10 @@ body{
 .study-dashboard .study-line{fill:none;stroke:var(--v-blue-2);stroke-width:2.5;}
 .study-dashboard .study-dot{fill:var(--v-blue-2);}
 .study-dashboard .study-line-grid{stroke:#243240;stroke-width:1;}
+.study-dashboard .study-line-axis-label{font-size:9px;fill:#7E93A1;font-family:inherit;}
+.study-dashboard .study-line-x-label{font-size:8.5px;fill:#7E93A1;font-family:inherit;}
+.study-dashboard .study-line-value-label{font-size:11px;fill:var(--v-blue-2);font-weight:700;font-family:inherit;}
+.study-dashboard .study-chart-empty{font-size:11px;color:#7E93A1;text-align:center;padding:20px 10px;}
 
 /* Barras de domínio por área — multicoloridas e vivas */
 .study-dashboard .study-domain-row{display:flex;align-items:center;gap:10px;padding:6px 0;cursor:pointer;border-radius:6px;transition:background .12s ease;}
@@ -6380,12 +6384,19 @@ function openProgressDashboard(){
   const total=DATA.length||1, c0=DATA.filter(e=>getReview(e.id)===0).length, c1=DATA.filter(e=>getReview(e.id)===1).length, c2=DATA.filter(e=>getReview(e.id)===2).length;
   const due=countActuallyDue(DATA), streak=getStudyStreak(), todayRec=SESSIONLOG[todayKey()]||{}, todayN=Number(todayRec.reviewed)||0, goal=15;
   let r14=0,w14=0; const trend=[];
-  for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const rec=SESSIONLOG[todayKey(d)]||{};const r=Number(rec.right)||0,w=Number(rec.wrong)||0;r14+=r;w14+=w;trend.push({label:d.getDate(),acc:(r+w)?Math.round(r/(r+w)*100):null});}
+  for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const rec=SESSIONLOG[todayKey(d)]||{};const r=Number(rec.right)||0,w=Number(rec.wrong)||0;r14+=r;w14+=w;trend.push({label:String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'),acc:(r+w)?Math.round(r/(r+w)*100):null});}
   const acc14=(r14+w14)?Math.round(r14/(r14+w14)*100):0;
   const sectionMap={}; DATA.forEach(e=>{const k=e.s||'Outros';if(!sectionMap[k])sectionMap[k]={name:k,total:0,mastered:0};sectionMap[k].total++;if(getReview(e.id)===2)sectionMap[k].mastered++;});
   const sections=Object.values(sectionMap).map(x=>({...x,pct:Math.round(x.mastered/x.total*100)})).sort((a,b)=>a.pct-b.pct);
-  const points=trend.map((d,i)=>{const x=12+i*(336/13),y=d.acc==null?null:126-d.acc*1.05;return d.acc==null?null:{x,y,acc:d.acc,label:d.label};}).filter(Boolean);
+  // Área útil do gráfico: y=10 (topo, 100%) até y=126 (base, 0%), x=10 até x=346.
+  const CHART_TOP=10, CHART_BOTTOM=126, CHART_LEFT=10, CHART_RIGHT=346;
+  const yForPct=pct=>CHART_BOTTOM-(pct/100)*(CHART_BOTTOM-CHART_TOP);
+  const points=trend.map((d,i)=>{const x=CHART_LEFT+i*((CHART_RIGHT-CHART_LEFT)/(trend.length-1));const y=d.acc==null?null:yForPct(d.acc);return d.acc==null?null:{x,y,acc:d.acc,label:d.label};}).filter(Boolean);
   const poly=points.map(p=>`${p.x},${p.y}`).join(' ');
+  const lastPoint=points.length?points[points.length-1]:null;
+  // Mostra ~6 rótulos de data no eixo X (todos poluiria com 14 dias), sempre incluindo o último.
+  const xLabelStep=Math.max(1,Math.ceil(trend.length/6));
+  const xLabels=trend.map((d,i)=>({x:CHART_LEFT+i*((CHART_RIGHT-CHART_LEFT)/(trend.length-1)),label:d.label,show:(i%xLabelStep===0)||i===trend.length-1}));
   const p0=c0/total*100,p1=c1/total*100,p2=c2/total*100;
   const donut=`conic-gradient(${REVIEW_COLORS[2]} 0 ${p2}%, ${REVIEW_COLORS[1]} ${p2}% ${p2+p1}%, ${REVIEW_COLORS[0]} ${p2+p1}% 100%)`;
   const ov=getStudyOverlay();
@@ -6404,10 +6415,22 @@ function openProgressDashboard(){
         <div class="study-streak-note">${todayN>=goal?'✓ Meta diária concluída.':`Faltam ${Math.max(0,goal-todayN)} questões para a meta de hoje.`}</div>
       </div>
       <div class="study-chart"><h3>Evolução do desempenho</h3><div class="study-chart-sub">% de acerto nas sessões dos últimos 14 dias</div>
-        <svg class="study-line-svg" viewBox="0 0 360 145" preserveAspectRatio="none">
-          <line class="study-line-grid" x1="10" y1="21" x2="350" y2="21"/><line class="study-line-grid" x1="10" y1="73" x2="350" y2="73"/><line class="study-line-grid" x1="10" y1="126" x2="350" y2="126"/>
+        <svg class="study-line-svg" viewBox="0 0 380 160" preserveAspectRatio="none">
+          <line class="study-line-grid" x1="10" y1="10" x2="346" y2="10"/>
+          <line class="study-line-grid" x1="10" y1="39" x2="346" y2="39"/>
+          <line class="study-line-grid" x1="10" y1="68" x2="346" y2="68"/>
+          <line class="study-line-grid" x1="10" y1="97" x2="346" y2="97"/>
+          <line class="study-line-grid" x1="10" y1="126" x2="346" y2="126"/>
+          <text x="352" y="13" class="study-line-axis-label">100%</text>
+          <text x="352" y="42" class="study-line-axis-label">75%</text>
+          <text x="352" y="71" class="study-line-axis-label">50%</text>
+          <text x="352" y="100" class="study-line-axis-label">25%</text>
+          <text x="352" y="129" class="study-line-axis-label">0%</text>
           ${points.length>1?`<polyline class="study-line" points="${poly}"/>`:''}${points.map(p=>`<circle class="study-dot" cx="${p.x}" cy="${p.y}" r="3"><title>dia ${p.label}: ${p.acc}%</title></circle>`).join('')}
+          ${lastPoint?`<text x="${Math.min(lastPoint.x+4,320)}" y="${Math.max(lastPoint.y-6,12)}" class="study-line-value-label">${lastPoint.acc}%</text>`:''}
+          ${xLabels.filter(l=>l.show).map(l=>`<text x="${l.x}" y="148" class="study-line-x-label" text-anchor="middle">${esc(l.label)}</text>`).join('')}
         </svg>
+        ${points.length<2?`<div class="study-chart-empty">Ainda não há dados suficientes dos últimos 14 dias. Complete algumas sessões para ver a evolução aqui.</div>`:''}
       </div>
     </div>
     <div class="study-lower">
