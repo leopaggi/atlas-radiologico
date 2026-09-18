@@ -30,10 +30,12 @@ esse arquivo pra edição direta**. O fluxo é:
 Tudo num arquivo único (`index.html`), por opção explícita — mais fácil de
 manter e atualizar sem depender de build step. Por dentro, três camadas:
 
-- **Dados** — `const SEED = [...]`: ~1.283 lesões, cada uma com `id`, `s`
+- **Dados** — `const SEED = [...]`: ~1.213 lesões, cada uma com `id`, `s`
   (seção), `site` (subseção), `name`, `tags`, `notes`, `inc` (frequência:
   1=muito comum ... 4=raro), `enTerm` (termo em inglês pra busca), `links`,
-  `images`.
+  `images`, e opcionalmente `classification` (sistema padronizado de
+  classificação radiológica — BI-RADS, PI-RADS, TI-RADS, etc.; ver
+  `AI.md` pra a lista completa e qual órgão cada um cobre).
 - **Armazenamento local** — IndexedDB (banco `atlas_radiologico_idb`), não
   `localStorage`. Ver `AI.md` pra entender por quê.
 - **Sincronização** — Firebase Firestore (projeto `atlas-radiologico`),

@@ -86,6 +86,18 @@ node tests/duplicate-detection.test.js
 Se você adicionar lesões novas ao `SEED`, rode isso depois pra confirmar
 que não introduziu duplicata nenhuma.
 
+## Antes de qualquer correção em massa nos dados
+
+O estado que uma IA tem "em mãos" (de uma sessão anterior, um arquivo já
+processado, etc.) pode estar desatualizado — o usuário edita o app
+diretamente pela interface o tempo todo. **Antes de aplicar qualquer
+correção em lote no SEED, peça um backup fresco** (o próprio app tem
+função de exportar backup em JSON) em vez de assumir que uma cópia local
+de sessões anteriores ainda reflete o estado atual. Já aconteceu de uma
+cópia local ter 1283 lesões enquanto o backup real do usuário tinha 1213
+— divergência grande o suficiente pra invalidar qualquer correção feita
+em cima dos dados errados.
+
 ## Ao adicionar lesões novas ao SEED
 
 - Confira duplicata de `s + site + name` contra o que já existe antes de
@@ -95,6 +107,40 @@ que não introduziu duplicata nenhuma.
   aparece automaticamente na tag "🚫 sem imagens".
 - IDs seguem o padrão `seed_<N>`, `N` sequencial a partir do maior
   existente.
+
+## Campo `classification` — sistemas de classificação radiológica
+
+Algumas lesões têm um campo `classification` (ex: `"BIRADS"`, `"LIRADS"`,
+`"PIRADS"`, `"TIRADS"`, `"CRADS"`, `"ORADS"`, `"VIRADS"`, `"NODERADS"`,
+`"CADRADS"`, `"LUNGRADS"`, `"BOSNIAK"`, `"ASPECTS"`, `"AAST_KIDNEY"`,
+`"AAST_LIVER"`, `"AAST_SPLEEN"`), referenciando sistemas padronizados de
+classificação/relatório em radiologia. **Cada sistema é específico de um
+órgão/contexto** — não é um campo genérico de "gravidade":
+
+| Sistema | Órgão/contexto |
+|---|---|
+| BI-RADS | Mama |
+| LI-RADS | Fígado (nódulo hepático) |
+| PI-RADS | Próstata |
+| TI-RADS | Tireoide |
+| C-RADS | Cólon (colonografia por TC) |
+| O-RADS | Ovário |
+| VI-RADS | Bexiga |
+| Node-RADS | Linfonodo |
+| CAD-RADS | Artéria coronária |
+| Lung-RADS | Nódulo pulmonar (rastreio) |
+| Bosniak | Cisto renal |
+| ASPECTS | AVC isquêmico (score de imagem) |
+| AAST_KIDNEY/LIVER/SPLEEN | Grau de trauma do respectivo órgão |
+
+**Já apareceram 30 casos de classificação atribuída errada** (ex:
+"Ventriculomegalia fetal" com C-RADS, "Lesão meniscal" com BI-RADS,
+"Cólica renal" com ASPECTS) — provavelmente de um preenchimento em lote
+sem checar a correspondência anatômica. Corrigidos em 2026-09-18. **Ao
+adicionar ou editar esse campo, confirme que o sistema corresponde ao
+órgão/site da lesão** — uma lesão de rim nunca deveria ter BI-RADS, por
+exemplo. Se a lesão não se enquadra em nenhum sistema padronizado, o
+campo deve ficar ausente (não force um valor só pra preencher).
 
 ## Firebase
 
