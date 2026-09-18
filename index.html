@@ -807,6 +807,93 @@ body{
 .study-dashboard .study-state-row{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:3px 0;}
 .study-dashboard .study-state-row i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:-1px;}
 
+
+/* Domínio por área — layout visual compacto aprovado */
+.study-dashboard .study-domain-card{padding:14px 15px 13px}
+.study-dashboard .study-domain-card h3{margin:0 0 11px;font-size:12.5px}
+.study-dashboard .study-domain-list{display:flex;flex-direction:column;gap:9px;max-height:none;overflow:visible}
+.study-dashboard .study-domain-row{
+  display:grid!important;
+  grid-template-columns:minmax(105px,1.05fr) minmax(150px,2.2fr) 38px;
+  align-items:center;
+  gap:10px;
+  padding:0!important;
+  cursor:pointer;
+}
+.study-dashboard .study-domain-name{
+  min-width:0;
+  color:#cbd8e5;
+  font-size:10.5px;
+  line-height:1.1;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.study-dashboard .study-domain-track{
+  height:9px!important;
+  margin:0!important;
+  background:#173344!important;
+  border-radius:99px!important;
+  overflow:hidden;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.025);
+}
+.study-dashboard .study-domain-fill{
+  height:100%;
+  border-radius:99px!important;
+  box-shadow:0 0 10px currentColor;
+  transition:width .28s ease;
+}
+.study-dashboard .study-domain-pct{
+  text-align:right;
+  font:700 10.5px 'IBM Plex Mono',monospace;
+  color:#dce8f2;
+}
+.study-dashboard .study-domain-row:nth-child(8n+1) .study-domain-fill{background:#38d47d!important;color:#38d47d}
+.study-dashboard .study-domain-row:nth-child(8n+2) .study-domain-fill{background:#2f91ff!important;color:#2f91ff}
+.study-dashboard .study-domain-row:nth-child(8n+3) .study-domain-fill{background:#ff8d3c!important;color:#ff8d3c}
+.study-dashboard .study-domain-row:nth-child(8n+4) .study-domain-fill{background:#ff5664!important;color:#ff5664}
+.study-dashboard .study-domain-row:nth-child(8n+5) .study-domain-fill{background:#7965f2!important;color:#7965f2}
+.study-dashboard .study-domain-row:nth-child(8n+6) .study-domain-fill{background:#d34fc2!important;color:#d34fc2}
+.study-dashboard .study-domain-row:nth-child(8n+7) .study-domain-fill{background:#1dd3e8!important;color:#1dd3e8}
+.study-dashboard .study-domain-row:nth-child(8n) .study-domain-fill{background:#ffd25a!important;color:#ffd25a}
+.study-dashboard .study-domain-row:hover .study-domain-name,
+.study-dashboard .study-domain-row:hover .study-domain-pct{color:#fff}
+@media(max-width:700px){
+  .study-dashboard .study-domain-row{grid-template-columns:minmax(88px,1fr) minmax(90px,1.7fr) 34px;gap:7px}
+  .study-dashboard .study-domain-name,.study-dashboard .study-domain-pct{font-size:9.5px}
+}
+
+
+/* Próximas revisões + Modo Estudo embutido — composição final do dashboard */
+.study-dashboard .study-start-card{display:flex;flex-direction:column}
+.study-dashboard .study-upcoming{margin-top:12px;border-top:1px solid #26394a;padding-top:12px}
+.study-dashboard .study-upcoming-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}
+.study-dashboard .study-upcoming-head b{display:block;font-size:12px;color:#eef6ff}
+.study-dashboard .study-upcoming-head span:not(.study-upcoming-count){display:block;font-size:9.5px;color:#7890a2;margin-top:2px}
+.study-dashboard .study-upcoming-count{font:700 9.5px 'IBM Plex Mono',monospace;color:#ffad5c;background:#ff9f4315;border:1px solid #ff9f4338;border-radius:99px;padding:4px 7px}
+.study-dashboard .study-upcoming-list{display:flex;flex-direction:column;gap:5px}
+.study-dashboard .study-upcoming-row{width:100%;display:grid;grid-template-columns:9px minmax(0,1fr) auto;gap:8px;align-items:center;text-align:left;border:1px solid #263746;background:#111e29;color:var(--text);border-radius:8px;padding:7px 9px;cursor:pointer}
+.study-dashboard .study-upcoming-row:hover{border-color:#2d8cff;background:#142536}
+.study-dashboard .study-upcoming-dot{width:7px;height:7px;border-radius:50%;background:#2d8cff;box-shadow:0 0 8px currentColor}
+.study-dashboard .study-upcoming-dot.grade-easy{background:#22e27a;color:#22e27a}
+.study-dashboard .study-upcoming-dot.grade-medium{background:#2d8cff;color:#2d8cff}
+.study-dashboard .study-upcoming-dot.grade-hard{background:#ff9f43;color:#ff9f43}
+.study-dashboard .study-upcoming-dot.grade-again{background:#94a3b8;color:#94a3b8}
+.study-dashboard .study-upcoming-case{min-width:0}.study-dashboard .study-upcoming-case b{display:block;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.study-dashboard .study-upcoming-case small{display:block;font-size:8.8px;color:#71889a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.study-dashboard .study-upcoming-time{font:700 9px 'IBM Plex Mono',monospace;color:#8fb7d7;white-space:nowrap}
+.study-dashboard .study-upcoming-empty{font-size:10px;color:#7890a2;border:1px dashed #2a3b49;border-radius:8px;padding:11px}
+.study-dashboard .study-embedded-section{margin-top:14px;border:1px solid #294157;background:linear-gradient(145deg,#111e2a,#0d1923);border-radius:12px;padding:15px;scroll-margin-top:15px}
+.study-dashboard .study-embedded-head{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:12px}
+.study-dashboard .study-embedded-kicker{font:800 9px 'IBM Plex Mono',monospace;letter-spacing:.11em;color:#2dd4e7}
+.study-dashboard .study-embedded-head h3{margin:3px 0 2px;font-size:16px;color:#f2f7fb}
+.study-dashboard .study-embedded-head p{margin:0;font-size:10.5px;color:#7f96a8}
+.study-dashboard .study-embedded-host{min-height:115px}
+.study-dashboard .study-embedded-placeholder{min-height:105px;border:1px dashed #2b465b;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:12px;background:#0c1822;padding:18px;color:#bcd0df}
+.study-dashboard .study-embedded-placeholder>span{font-size:28px}.study-dashboard .study-embedded-placeholder b{display:block;font-size:12px}.study-dashboard .study-embedded-placeholder small{display:block;color:#71899b;font-size:10px;margin-top:4px}
+.study-dashboard #study-embedded-host .quiz-study-shell{margin-top:8px}
+.study-dashboard #study-embedded-host .modal-actions{margin-bottom:0}
+@media(max-width:800px){.study-dashboard .study-embedded-head{align-items:flex-start;flex-direction:column}.study-dashboard .study-upcoming-time{font-size:8px}}
+
 </style>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
@@ -6259,19 +6346,14 @@ function startQuizInsideDashboard(queue){
   quizIndex=0;
   quizStats={right:0,wrong:0,easy:0,medium:0,hard:0,again:0};
   quizSessionWrongIds=[];
-  // Sempre a MESMA overlay (#study-overlay) — nunca cria uma nova, nunca
-  // depende de um seletor frágil que poderia falhar em achar o host certo.
   const ov=getStudyOverlay();
-  let host=ov.querySelector('.study-dashboard');
-  if(!host){
-    host=document.createElement('div');
-    ov.innerHTML='';
-    ov.appendChild(host);
-  }
-  host.className='modal progress-modal study-dashboard quiz-modal';
+  const host=ov.querySelector('#study-embedded-host');
+  const section=ov.querySelector('#study-embedded-section');
+  if(!host || !section){ toast('Abra Quiz & Progresso para iniciar a sessão.'); return; }
   host.dataset.integratedQuiz='1';
   host.dataset.answered='0';
   renderQuizCardIntegrated(host);
+  section.scrollIntoView({behavior:'smooth',block:'start'});
 }
 function renderQuizCardIntegrated(host){
   if(quizIndex>=quizQueue.length){ renderQuizSummaryIntegrated(host); return; }
@@ -6295,7 +6377,7 @@ function renderQuizCardIntegrated(host){
     const q=quizTheoryPrompt(e);
     media.innerHTML=`<div class="quiz-noimage"><b>CASO TEÓRICO</b><span>Reconheça a lesão pelas características registradas no seu Atlas.</span><div class="quiz-theory-clues">${q.clues.map(t=>`<span>${esc(t)}</span>`).join('')}</div></div>`;
   }
-  host.querySelector('#quiz-back-dashboard').onclick=()=>openProgressDashboardReplacing(host);
+  host.querySelector('#quiz-back-dashboard').onclick=()=>{openProgressDashboard();};
   host.querySelectorAll('.quiz-mcq-option').forEach(btn=>btn.onclick=()=>{
     if(host.dataset.answered==='1')return;host.dataset.answered='1';
     const objectiveCorrect=btn.dataset.id===e.id;
@@ -6406,6 +6488,19 @@ function openProgressDashboard(){
     else confidenceCounts.fresh++;
   });
   const due=countActuallyDue(DATA), streak=getStudyStreak(), todayRec=SESSIONLOG[todayKey()]||{}, todayN=Number(todayRec.reviewed)||0, goal=15;
+  const nowTs=Date.now();
+  const upcomingReviews=DATA.map(e=>({e,s:SRS[e.id]}))
+    .filter(x=>x.s && Number(x.s.due)>nowTs)
+    .sort((a,b)=>Number(a.s.due)-Number(b.s.due))
+    .slice(0,5);
+  const fmtDue=(ts)=>{
+    const diff=Number(ts)-Date.now(), hour=60*60*1000, day=24*hour;
+    if(diff<=hour) return 'em < 1 h';
+    if(diff<day) return 'em '+Math.max(1,Math.round(diff/hour))+' h';
+    const d=new Date(Number(ts));
+    if(diff<2*day) return 'amanhã · '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+' · '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  };
   let r14=0,w14=0; const trend=[];
   for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const rec=SESSIONLOG[todayKey(d)]||{};const r=Number(rec.right)||0,w=Number(rec.wrong)||0;r14+=r;w14+=w;trend.push({label:String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'),acc:(r+w)?Math.round(r/(r+w)*100):null});}
   const acc14=(r14+w14)?Math.round(r14/(r14+w14)*100):0;
@@ -6421,7 +6516,13 @@ function openProgressDashboard(){
       sectionMap[k].score+=gradeWeight[g];
     }
   });
-  const sections=Object.values(sectionMap).map(x=>({...x,pct:x.studied?Math.round((x.score/x.studied)*100):0,coverage:Math.round((x.studied/x.total)*100)})).sort((a,b)=>a.pct-b.pct || a.studied-b.studied);
+  const sections=Object.values(sectionMap).map(x=>({...x,pct:x.studied?Math.round((x.score/x.studied)*100):0,coverage:Math.round((x.studied/x.total)*100)})).sort((a,b)=>{
+    const ai=sectionOrder.indexOf(a.name), bi=sectionOrder.indexOf(b.name);
+    if(ai>=0 && bi>=0) return ai-bi;
+    if(ai>=0) return -1;
+    if(bi>=0) return 1;
+    return a.name.localeCompare(b.name,'pt-BR');
+  });
   // Área útil do gráfico: y=10 (topo, 100%) até y=126 (base, 0%), x=10 até x=346.
   const CHART_TOP=10, CHART_BOTTOM=126, CHART_LEFT=10, CHART_RIGHT=346;
   const yForPct=pct=>CHART_BOTTOM-(pct/100)*(CHART_BOTTOM-CHART_TOP);
@@ -6449,6 +6550,10 @@ function openProgressDashboard(){
         <button class="study-start-main" id="study-today">▶ INICIAR SESSÃO DE HOJE<small>15 casos · SRS + difíceis + novos</small></button>
         <div class="study-mode-grid"><button class="study-mode" id="study-quick">⚡ Sessão rápida<br><small>5 casos</small></button><button class="study-mode" id="study-cbr">🎓 Sessão CBR<br><small>20 casos mistos</small></button><button class="study-mode" id="study-custom">☷ Personalizada<br><small>área e filtros</small></button></div>
         <div class="study-streak-note">${todayN>=goal?'✓ Meta diária concluída.':`Faltam ${Math.max(0,goal-todayN)} questões para a meta de hoje.`}</div>
+        <div class="study-upcoming">
+          <div class="study-upcoming-head"><div><b>Próximas revisões</b><span>SRS · casos clínicos agendados</span></div><span class="study-upcoming-count">${due?due+' vencida'+(due===1?'':'s'):'em dia'}</span></div>
+          <div class="study-upcoming-list">${upcomingReviews.length?upcomingReviews.map(x=>`<button class="study-upcoming-row" data-id="${escAttr(x.e.id)}"><span class="study-upcoming-dot grade-${escAttr((x.s.lastGrade||'medium'))}"></span><span class="study-upcoming-case"><b>${esc(x.e.name)}</b><small>${esc(x.e.s)} · ${esc(x.e.site)}</small></span><span class="study-upcoming-time">${fmtDue(x.s.due)}</span></button>`).join(''):`<div class="study-upcoming-empty">Nenhuma revisão futura agendada ainda. As próximas aparecem aqui conforme você responde ao quiz.</div>`}</div>
+        </div>
       </div>
       <div class="study-chart"><h3>Evolução do desempenho</h3><div class="study-chart-sub">% de acerto nas sessões dos últimos 14 dias</div>
         <svg class="study-line-svg" viewBox="0 0 380 160" preserveAspectRatio="none">
@@ -6477,7 +6582,16 @@ function openProgressDashboard(){
           <div class="study-state-row"><span><i style="background:${CONF_COLORS.again}"></i>⚪ Não sei</span><b>${confidenceCounts.again} (${Math.round(ca)}%)</b></div>
           <div class="study-state-row"><span><i style="background:${CONF_COLORS.fresh}"></i>Nunca estudadas</span><b>${confidenceCounts.fresh} (${Math.round(cf)}%)</b></div>
         </div></div></div>
-        <div class="study-chart"><h3>Domínio por área</h3><div class="study-chart-sub">confiança média nos casos já estudados · clique em uma área para treiná-la</div><div class="study-domain-list">${sections.map(s=>`<div class="study-domain-row" data-sec="${escAttr(s.name)}"><div class="study-domain-head"><span>${esc(s.name)} <small style="color:var(--muted-2)">· ${s.studied}/${s.total} estudados</small></span><b>${s.studied?s.pct+'%':'—'}</b></div><div class="study-domain-track"><div class="study-domain-fill" style="width:${s.studied?s.pct:0}%"></div></div></div>`).join('')}</div></div>
+        <div class="study-chart study-domain-card"><h3>Domínio por área</h3><div class="study-domain-list">${sections.map((s,i)=>`<div class="study-domain-row" data-sec="${escAttr(s.name)}" title="${s.studied} de ${s.total} casos estudados · cobertura ${s.coverage}%"><span class="study-domain-name">${esc(s.name)}</span><div class="study-domain-track"><div class="study-domain-fill" style="width:${s.studied?s.pct:0}%"></div></div><b class="study-domain-pct">${s.studied?s.pct+'%':'—'}</b></div>`).join('')}</div></div>
+    </div>
+    <div class="study-embedded-section" id="study-embedded-section">
+      <div class="study-embedded-head">
+        <div><span class="study-embedded-kicker">MODO ESTUDO</span><h3>Quiz clínico</h3><p>Questões, imagens, feedback e confiança sem sair desta tela.</p></div>
+        <button class="btn btn-primary" id="study-embedded-start">▶ iniciar 5 casos</button>
+      </div>
+      <div id="study-embedded-host" class="study-embedded-host">
+        <div class="study-embedded-placeholder"><span>🧠</span><div><b>Sua próxima questão aparecerá aqui.</b><small>Inicie uma sessão acima ou use o botão ao lado. O dashboard permanece visível durante todo o estudo.</small></div></div>
+      </div>
     </div>
     <div class="modal-actions"><button class="btn btn-primary" id="progress-close">fechar</button></div>
   </div>`;
@@ -6485,6 +6599,11 @@ function openProgressDashboard(){
   document.getElementById('study-quick').onclick=()=>{const q=buildSmartStudyQueue(5);if(q.length)startQuizInsideDashboard(q);};
   document.getElementById('study-cbr').onclick=()=>{const bySection={};DATA.forEach(e=>(bySection[e.s]||(bySection[e.s]=[])).push(e));const q=[],seen=new Set();while(q.length<20){let added=0;for(const s of shuffleArr(Object.keys(bySection))){const e=shuffleArr(bySection[s]).find(x=>!seen.has(x.id));if(e){seen.add(e.id);q.push(e);added++;if(q.length>=20)break;}}if(!added)break;}if(q.length)startQuizInsideDashboard(q);};
   document.getElementById('study-custom').onclick=()=>{ renderCustomSetupInside(); };
+  document.getElementById('study-embedded-start').onclick=()=>{const q=buildSmartStudyQueue(5);if(q.length)startQuizInsideDashboard(q);};
+  ov.querySelectorAll('.study-upcoming-row').forEach(row=>row.onclick=()=>{
+    const target=DATA.find(e=>e.id===row.dataset.id);
+    if(target) startQuizInsideDashboard([target,...buildSmartStudyQueue(5).filter(e=>e.id!==target.id)].slice(0,5));
+  });
   ov.querySelectorAll('.study-domain-row').forEach(row=>row.onclick=()=>{const sec=row.dataset.sec;startQuizInsideDashboard(shuffleArr(DATA.filter(e=>e.s===sec)).slice(0,15));});
   document.getElementById('progress-close').onclick=closeOverlay;
 }
