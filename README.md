@@ -65,3 +65,11 @@ garantir que nenhuma duplicata escapa.
 
 Ver `AI.md` para o histórico de bugs já resolvidos e decisões de design —
 essencial antes de mexer na lógica de sincronização ou de dados.
+
+## Atualização 2026-09-18 — correção de subseções secundárias
+
+Foi realizada uma auditoria de `altPlacements`, campo usado para exibir uma lesão também em uma segunda localização anatômica. A partir de um backup fresco, 86 registros foram revisados: 18 associações secundárias coerentes foram mantidas e 68 associações espúrias foram removidas pela migração do `index.html`.
+
+A correção é restrita a `altPlacements`: não muda a seção/subseção principal (`s`/`site`), imagens, tags, descrições, IDs ou progresso de revisão/SRS.
+
+**Regra de manutenção do projeto:** qualquer nova alteração no `index.html` deve ser acompanhada, na mesma entrega, pelas versões atualizadas de `AI.md` e `README.md`.

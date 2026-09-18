@@ -163,3 +163,12 @@ arquivo e o `README.md` no mesmo commit/entrega.** Isso vale tanto para
 você (a IA lendo isso agora) quanto pra qualquer IA que trabalhar aqui
 depois. O objetivo é nunca mais alguém (humano ou IA) refazer do zero algo
 que já foi resolvido, por falta de contexto.
+
+## Atualização 2026-09-18 — auditoria de `altPlacements`
+
+- Regra obrigatória de manutenção: **toda alteração do `index.html` deve ser entregue junto com `AI.md` e `README.md` atualizados**.
+- Foi usado backup fresco exportado em 2026-09-18 para auditar associações secundárias (`altPlacements`).
+- Foram revisados 86 registros com `altPlacements`: 18 associações anatômicas secundárias coerentes foram preservadas e 68 associações espúrias foram marcadas para remoção.
+- A correção não altera `s` nem `site` (localização anatômica principal), nem imagens, tags, descrições, revisão/SRS ou IDs.
+- O `index.html` corrigido contém migração pontual pós-Firebase para remover apenas os `altPlacements` auditados como errados, evitando que o estado remoto os reintroduza.
+- Arquivo correspondente desta entrega: `index-atlas-altplacements-corrigido-20260918.html`.
