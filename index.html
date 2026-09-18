@@ -649,6 +649,36 @@ body{
 .quiz-session-kpis{gap:8px}.quiz-session-kpi{min-width:82px}
 @media(max-width:760px){.study-top-kpis{grid-template-columns:repeat(2,1fr)}.study-primary,.study-lower{grid-template-columns:1fr}.quiz-grade-4{grid-template-columns:repeat(2,1fr)}}
 
+
+/* ===== Quiz & Progresso v2 — visual vibrante + múltipla escolha integrada ===== */
+.study-kpi:nth-child(1){border-color:#23d97955;box-shadow:inset 0 0 30px #23d9790c}.study-kpi:nth-child(1) .study-kpi-icon{background:#23d97922;color:#35ef8b}.study-kpi:nth-child(1) .v{color:#35ef8b}
+.study-kpi:nth-child(2){border-color:#178cff55;box-shadow:inset 0 0 30px #178cff0c}.study-kpi:nth-child(2) .study-kpi-icon{background:#178cff22;color:#43a4ff}.study-kpi:nth-child(2) .v{color:#43a4ff}
+.study-kpi:nth-child(3){border-color:#8b5cf655;box-shadow:inset 0 0 30px #8b5cf60c}.study-kpi:nth-child(3) .study-kpi-icon{background:#8b5cf622;color:#a987ff}.study-kpi:nth-child(3) .v{color:#a987ff}
+.study-kpi:nth-child(4){border-color:#ff9f4355;box-shadow:inset 0 0 30px #ff9f430c}.study-kpi:nth-child(4) .study-kpi-icon{background:#ff9f4322;color:#ffad5c}
+.study-start-main{background:linear-gradient(105deg,#087fff,#00c6e6)!important;border-color:#35d9ff!important;box-shadow:0 10px 30px #009fff38!important}
+.study-mode:nth-child(1):hover{border-color:#22d3ee;color:#67e8f9}.study-mode:nth-child(2):hover{border-color:#a78bfa;color:#c4b5fd}.study-mode:nth-child(3):hover{border-color:#fb923c;color:#fdba74}
+.study-domain-fill{box-shadow:0 0 13px currentColor}
+.study-domain-row:nth-child(8n+1) .study-domain-fill{background:#2fdf7f}.study-domain-row:nth-child(8n+2) .study-domain-fill{background:#2d8cff}.study-domain-row:nth-child(8n+3) .study-domain-fill{background:#ff9b3f}.study-domain-row:nth-child(8n+4) .study-domain-fill{background:#ff5964}.study-domain-row:nth-child(8n+5) .study-domain-fill{background:#8b63f6}.study-domain-row:nth-child(8n+6) .study-domain-fill{background:#d94fc5}.study-domain-row:nth-child(8n+7) .study-domain-fill{background:#23cde3}.study-domain-row:nth-child(8n) .study-domain-fill{background:#ffd057}
+.study-line{stroke:#20a4ff!important;filter:drop-shadow(0 0 5px #20a4ff)}.study-dot{fill:#51baff!important}
+.quiz-mcq-grid{display:grid;gap:8px;margin:12px 0}
+.quiz-mcq-option{display:flex;align-items:center;gap:10px;text-align:left;width:100%;padding:11px 12px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer;transition:.15s}
+.quiz-mcq-option:hover:not(:disabled){border-color:#2ca7ff;background:#0c80b51a;transform:translateX(2px)}
+.quiz-mcq-letter{width:27px;height:27px;border:1px solid #36b8d9;border-radius:50%;display:grid;place-items:center;color:#66d9ef;font-weight:800;flex:none}
+.quiz-mcq-option.is-correct{border-color:#2fdf7f;background:#2fdf7f18;box-shadow:0 0 20px #2fdf7f16}.quiz-mcq-option.is-correct .quiz-mcq-letter{background:#2fdf7f;color:#06140c;border-color:#2fdf7f}
+.quiz-mcq-option.is-wrong{border-color:#ff5964;background:#ff596414}.quiz-mcq-option.is-wrong .quiz-mcq-letter{background:#ff5964;color:white;border-color:#ff5964}
+.quiz-feedback-good{border:1px solid #2fdf7f66;background:#2fdf7f12;color:#58ef99;border-radius:8px;padding:10px 12px;font-weight:800;margin:10px 0}
+.quiz-feedback-bad{border:1px solid #ff596466;background:#ff596412;color:#ff7b84;border-radius:8px;padding:10px 12px;font-weight:800;margin:10px 0}
+.quiz-study-shell{display:grid;grid-template-columns:minmax(260px,.85fr) minmax(360px,1.15fr);gap:14px;margin-top:12px}
+.quiz-study-media,.quiz-study-question{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px}
+.quiz-study-media img{width:100%;max-height:390px;object-fit:contain;border-radius:7px;background:#07111b}
+.quiz-noimage{min-height:220px;display:grid;place-content:center;text-align:center;border:1px dashed var(--line);border-radius:8px;color:var(--muted);padding:18px}
+.quiz-noimage b{color:#60d7ef;font-size:14px;margin-bottom:7px}
+.quiz-theory-clues{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:10px}
+.quiz-theory-clues span{background:var(--tag-bg);border:1px solid var(--line);border-radius:13px;padding:4px 7px;font-size:10px}
+.quiz-answer-detail{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}
+.quiz-integrated-title{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px}.quiz-integrated-title b{font-size:13px}.quiz-integrated-title span{font:600 10px 'IBM Plex Mono',monospace;color:#55c7ef}
+@media(max-width:780px){.quiz-study-shell{grid-template-columns:1fr}}
+
 </style>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
@@ -701,8 +731,8 @@ body{
     <div id="header">
       <div id="scope-title"><span class="path" id="scope-path"></span><div id="scope-name">Todas as seções</div></div>
       <div id="search-wrap"><input id="search" placeholder="Buscar lesão…"></div>
-      <button id="progress-btn">📊 Progresso</button>
-      <button id="quiz-btn">🧠 Quiz<span id="quiz-due-badge" class="quiz-due-badge" style="display:none;"></span></button>
+      <button id="progress-btn">🧠 Quiz &amp; Progresso</button>
+      <button id="quiz-btn" style="display:none">🧠 Quiz<span id="quiz-due-badge" class="quiz-due-badge" style="display:none;"></span></button>
       <button id="add-btn">+ Nova lesão</button>
     </div>
     <div id="tagbar"></div>
@@ -6040,56 +6070,78 @@ function startQuizSession(queue){
   renderQuizCard();
 }
 
+
+function buildQuizChoices(target){
+  const sameSite=shuffleArr(DATA.filter(x=>x.id!==target.id && x.s===target.s && x.site===target.site));
+  const sameSection=shuffleArr(DATA.filter(x=>x.id!==target.id && x.s===target.s && x.site!==target.site));
+  const pool=[], seen=new Set([target.id]);
+  [...sameSite,...sameSection].forEach(x=>{if(pool.length<3&&!seen.has(x.id)){seen.add(x.id);pool.push(x);}});
+  if(pool.length<3) shuffleArr(DATA.filter(x=>x.id!==target.id)).forEach(x=>{if(pool.length<3&&!seen.has(x.id)){seen.add(x.id);pool.push(x);}});
+  return shuffleArr([target,...pool]).slice(0,4);
+}
+function quizTheoryPrompt(e){
+  const tags=(e.tags||[]).slice(0,5);
+  return {title:'Qual é o diagnóstico mais provável?',clues:tags};
+}
+
 function renderQuizCard(){
   closeOverlay();
-  if(quizIndex >= quizQueue.length){ renderQuizSummary(); return; }
-  const e=quizQueue[quizIndex], pct=Math.round(quizIndex/Math.max(quizQueue.length,1)*100);
-  const ov=document.createElement('div'); ov.className='overlay';
+  if(quizIndex>=quizQueue.length){renderQuizSummary();return;}
+  const e=quizQueue[quizIndex], choices=buildQuizChoices(e), pct=Math.round(quizIndex/Math.max(quizQueue.length,1)*100), letters=['A','B','C','D'];
+  const ov=document.createElement('div');ov.className='overlay';
   ov.innerHTML=`<div class="modal quiz-modal">
-    <div class="quiz-progress-head"><span>CASO ${quizIndex+1} DE ${quizQueue.length}</span><span>${pct}% · sequência ${quizStats.right}</span></div>
+    <div class="quiz-integrated-title"><b>🧠 Modo Estudo</b><span>QUESTÃO ${quizIndex+1}/${quizQueue.length}</span></div>
     <div class="quiz-session-track"><div class="quiz-session-fill" style="width:${pct}%"></div></div>
-    <div class="quiz-stage" id="quiz-stage"></div>
-    <div id="quiz-reveal-area"></div>
-    <div class="modal-actions"><button class="btn btn-ghost" id="quiz-quit">encerrar sessão</button><button class="btn btn-primary" id="quiz-reveal-btn">Revelar diagnóstico</button></div>
+    <div class="quiz-study-shell">
+      <div class="quiz-study-media" id="quiz-media"></div>
+      <div class="quiz-study-question">
+        <div class="quiz-meta-hint">${esc(e.s)} · ${esc(e.site)}</div>
+        <h3 style="margin:10px 0 5px">Qual é o diagnóstico mais provável?</h3>
+        <div class="quiz-mcq-grid">${choices.map((x,i)=>`<button class="quiz-mcq-option" data-id="${escAttr(x.id)}"><span class="quiz-mcq-letter">${letters[i]}</span><span>${esc(x.name)}</span></button>`).join('')}</div>
+        <div id="quiz-feedback"></div>
+      </div>
+    </div>
+    <div class="modal-actions"><button class="btn btn-ghost" id="quiz-quit">encerrar sessão</button></div>
   </div>`;
   document.body.appendChild(ov);
-  const stage=document.getElementById('quiz-stage');
+  const media=document.getElementById('quiz-media');
   if(hasEntryImgs(e)){
-    stage.innerHTML=`<div class="quiz-img-gallery" id="quiz-img-gallery"></div><div class="quiz-meta-hint">${esc(e.s)} · ${esc(e.site)}</div>`;
     getEntryImgs(e).then(imgs=>{
-      const gal=document.getElementById('quiz-img-gallery'); if(!gal)return;
       const all=imgs.length?imgs:(e.img?[{data:e.img,label:''}]:[]);
-      gal.innerHTML=all.map((img,i)=>`<div class="quiz-img-item"><img src="${img.data}" data-idx="${i}">${img.label?`<div class="quiz-img-label">${esc(img.label)}</div>`:''}</div>`).join('');
-      gal.querySelectorAll('img').forEach(el=>el.onclick=()=>openImageLightbox(all[+el.dataset.idx].data));
+      if(!all.length){media.innerHTML=`<div class="quiz-noimage"><b>Caso teórico</b><span>Use as características do Atlas para reconhecer a lesão.</span></div>`;return;}
+      media.innerHTML=`<img src="${all[0].data}" id="quiz-main-img">${all[0].label?`<div class="quiz-img-label">${esc(all[0].label)}</div>`:''}${all.length>1?`<div class="quiz-img-gallery" style="margin-top:7px">${all.slice(1,4).map((im,i)=>`<div class="quiz-img-item"><img src="${im.data}" data-i="${i+1}"></div>`).join('')}</div>`:''}`;
+      media.querySelectorAll('img').forEach((im,i)=>im.onclick=()=>openImageLightbox(all[i]?.data||im.src));
     });
   }else{
-    const links=ensureLinks(e);
-    stage.innerHTML=`<div class="quiz-meta-hint">${esc(e.s)} · ${esc(e.site)}</div><div class="detail-tags">${(e.tags||[]).map(t=>`<span class="mini-tag match">${esc(t)}</span>`).join('')}</div><div class="inc-badge" style="background:${incColor(e.inc||2)}22;color:${incColor(e.inc||2)};border-color:${incColor(e.inc||2)}55;margin-top:10px;display:inline-block;">${incLabel(e.inc||2)}</div>${links.length?`<a class="detail-link quiz-radiopaedia-link" href="${links[0].url}" target="_blank" rel="noopener">↗ Ver imagens no Radiopaedia</a>`:''}`;
+    const q=quizTheoryPrompt(e);
+    media.innerHTML=`<div class="quiz-noimage"><b>CASO TEÓRICO</b><span>Reconheça a lesão pelas características registradas no seu Atlas.</span><div class="quiz-theory-clues">${q.clues.map(t=>`<span>${esc(t)}</span>`).join('')}</div></div>`;
   }
   document.getElementById('quiz-quit').onclick=()=>{closeOverlay();renderAll();};
-  document.getElementById('quiz-reveal-btn').onclick=()=>{
-    document.getElementById('quiz-reveal-btn').style.display='none';
-    const area=document.getElementById('quiz-reveal-area'), links=ensureLinks(e);
-    area.innerHTML=`<div class="quiz-reveal-panel">
-      <div class="detail-title-row"><h2>${esc(e.name)}</h2></div>
-      <div class="quiz-points">${(e.tags||[]).map(t=>`<span class="quiz-point">${esc(t)}</span>`).join('')}</div>
-      <div class="detail-notes">${esc(e.notes||'')}</div>
-      ${e.classification&&CLASSIFICATION_SYSTEMS[e.classification]?renderClassificationBox(e.classification):''}
-      ${!hasEntryImgs(e)?`<button class="btn btn-ghost quiz-add-img-btn" id="quiz-add-img">+ colar imagem desta lesão</button>`:''}
-      <div class="quiz-learning-label">Como foi reconhecer este caso? Isso define quando ele volta no SRS.</div>
+  ov.querySelectorAll('.quiz-mcq-option').forEach(btn=>btn.onclick=()=>{
+    if(ov.dataset.answered)return; ov.dataset.answered='1';
+    const picked=btn.dataset.id, objectiveCorrect=picked===e.id;
+    ov.querySelectorAll('.quiz-mcq-option').forEach(b=>{b.disabled=true;if(b.dataset.id===e.id)b.classList.add('is-correct');else if(b===btn)b.classList.add('is-wrong');});
+    const fb=document.getElementById('quiz-feedback'), links=ensureLinks(e);
+    fb.innerHTML=`<div class="${objectiveCorrect?'quiz-feedback-good':'quiz-feedback-bad'}">${objectiveCorrect?'✓ Resposta correta!':'✕ Resposta incorreta — veja a alternativa correta acima.'}</div>
+      <div class="quiz-answer-detail"><b>${esc(e.name)}</b>
+        <div class="quiz-points">${(e.tags||[]).slice(0,8).map(t=>`<span class="quiz-point">${esc(t)}</span>`).join('')}</div>
+        ${e.notes?`<div class="detail-notes">${esc(e.notes)}</div>`:''}
+        ${links.length?`<a class="detail-link" href="${links[0].url}" target="_blank" rel="noopener">↗ referência / imagens</a>`:''}
+      </div>
+      <div class="quiz-learning-label">Como foi reconhecer este caso? Sua segurança define quando ele volta no SRS.</div>
       <div class="quiz-grade-4">
         <button class="g-easy" data-grade="easy">🟢 Fácil<small>reconheci com segurança</small></button>
-        <button class="g-medium" data-grade="medium">🔵 Média<small>acertei, mas pensei</small></button>
+        <button class="g-medium" data-grade="medium">🔵 Média<small>precisei pensar</small></button>
         <button class="g-hard" data-grade="hard">🟠 Difícil<small>baixa segurança</small></button>
         <button class="g-again" data-grade="again">⚪ Não sei<small>revisar cedo</small></button>
-      </div></div>`;
-    const add=document.getElementById('quiz-add-img'); if(add)add.onclick=()=>{closeOverlay();openForm(e.id);};
-    area.querySelectorAll('[data-grade]').forEach(btn=>btn.onclick=()=>{
-      const g=btn.dataset.grade; srsGradeLevel(e.id,g); quizStats[g]++;
-      if(g==='easy'||g==='medium'){quizStats.right++;}else{quizStats.wrong++;if(!quizSessionWrongIds.includes(e.id))quizSessionWrongIds.push(e.id);}
-      quizIndex++; renderQuizCard();
+      </div>`;
+    fb.querySelectorAll('[data-grade]').forEach(gb=>gb.onclick=()=>{
+      const g=gb.dataset.grade; srsGradeLevel(e.id,g); quizStats[g]++;
+      // Objective correctness remains objective; confidence is independent.
+      if(objectiveCorrect)quizStats.right++;else{quizStats.wrong++;if(!quizSessionWrongIds.includes(e.id))quizSessionWrongIds.push(e.id);}
+      quizIndex++;renderQuizCard();
     });
-  };
+  });
 }
 function renderQuizSummary(){
   logSessionResult(quizStats.right, quizStats.wrong);
