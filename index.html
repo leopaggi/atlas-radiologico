@@ -1289,6 +1289,222 @@ body{
   }
 }
 
+
+/* 2026-09-18 — compactação final dos vazios do dashboard panorâmico */
+.study-dashboard{
+  grid-template-rows:auto auto auto auto auto auto!important;
+  align-content:start!important;
+}
+/* Cabeçalho e KPIs na mesma faixa: remove o grande vazio acima dos cards. */
+.study-dashboard>.study-title{
+  grid-column:1 / 2!important;
+  grid-row:1!important;
+  align-self:center!important;
+  margin:0!important;
+  padding:0 8px 0 0!important;
+}
+.study-dashboard>.study-kpis{
+  grid-column:2 / 4!important;
+  grid-row:1!important;
+  margin:0!important;
+  align-self:center!important;
+}
+/* A primeira linha de conteúdo começa imediatamente após o cabeçalho. */
+.study-dashboard .study-start-card{grid-column:1!important;grid-row:2!important}
+.study-dashboard .study-primary>.study-chart{grid-column:2!important;grid-row:2!important}
+.study-dashboard .study-lower>.study-chart:first-child{grid-column:3!important;grid-row:2!important}
+
+/* Não esticar os três cards pela altura do mais alto: elimina vazio inferior
+   em Evolução e Estado do acervo. */
+.study-dashboard .study-start-card,
+.study-dashboard .study-primary>.study-chart,
+.study-dashboard .study-lower>.study-chart:first-child{
+  align-self:start!important;
+  height:auto!important;
+}
+.study-dashboard .study-primary>.study-chart{
+  min-height:0!important;
+  padding-bottom:10px!important;
+}
+.study-dashboard .study-lower>.study-chart:first-child{
+  min-height:0!important;
+  padding-bottom:12px!important;
+}
+
+/* Ciclo volta a ocupar TODA a largura: remove a coluna vazia à esquerda. */
+.study-dashboard .study-cycle-feature{
+  grid-column:1 / 4!important;
+  grid-row:3!important;
+  margin-top:0!important;
+}
+.study-dashboard .study-cycle-feature .study-cycle-row{
+  grid-template-columns:minmax(140px,185px) minmax(650px,1fr) 82px 42px!important;
+}
+
+/* Linha inferior panorâmica. */
+.study-dashboard .study-lower>.study-chart:last-child{
+  grid-column:1!important;
+  grid-row:4!important;
+  align-self:stretch!important;
+}
+.study-dashboard .study-cycle-overall{
+  grid-column:2 / 4!important;
+  grid-row:4!important;
+  align-self:stretch!important;
+}
+.study-dashboard>.study-embedded-section{
+  grid-column:1 / 4!important;
+  grid-row:5!important;
+}
+.study-dashboard>.study-close-row{
+  grid-column:1 / 4!important;
+  grid-row:6!important;
+}
+
+/* Evita alturas mínimas herdadas dos cards antigos. */
+.study-dashboard .study-chart,
+.study-dashboard .study-cycle-feature,
+.study-dashboard .study-cycle-overall{
+  min-height:0!important;
+}
+@media(max-width:1180px){
+  .study-dashboard>.study-title,
+  .study-dashboard>.study-kpis{display:block!important;width:auto!important;margin-bottom:10px!important}
+  .study-dashboard .study-cycle-feature .study-cycle-row{
+    grid-template-columns:110px minmax(180px,1fr) 62px 34px!important;
+  }
+}
+
+
+/* 2026-09-18 — FIX definitivo da grade panorâmica.
+   Regra: nenhum item depende da altura de outro item de uma coluna vizinha. */
+.study-dashboard{
+  display:grid!important;
+  grid-template-columns:repeat(12,minmax(0,1fr))!important;
+  grid-template-rows:none!important;
+  grid-auto-rows:max-content!important;
+  gap:12px!important;
+  align-items:start!important;
+  align-content:start!important;
+  width:calc(100vw - 24px)!important;
+  max-width:1780px!important;
+  padding:16px 18px!important;
+}
+.study-dashboard>.study-title{
+  grid-column:1 / span 4!important;
+  grid-row:auto!important;
+  align-self:center!important;
+  margin:0!important;
+  padding:0!important;
+}
+.study-dashboard>.study-kpis{
+  grid-column:5 / -1!important;
+  grid-row:auto!important;
+  align-self:center!important;
+  margin:0!important;
+}
+/* Força título e KPIs a ocuparem a MESMA linha real do grid. */
+.study-dashboard>.study-title{grid-row:1!important}
+.study-dashboard>.study-kpis{grid-row:1!important}
+
+/* Wrappers transparentes apenas para seus filhos entrarem no grid raiz. */
+.study-dashboard>.study-primary,
+.study-dashboard>.study-lower{display:contents!important}
+
+/* Linha 2: 4 + 5 + 3 colunas, como o preview. */
+.study-dashboard .study-start-card{
+  grid-column:1 / span 4!important;
+  grid-row:2!important;
+  align-self:start!important;
+  height:auto!important;min-height:0!important;
+}
+.study-dashboard .study-primary>.study-chart{
+  grid-column:5 / span 5!important;
+  grid-row:2!important;
+  align-self:start!important;
+  height:auto!important;min-height:0!important;
+  padding-bottom:10px!important;
+}
+.study-dashboard .study-lower>.study-chart:first-child{
+  grid-column:10 / span 3!important;
+  grid-row:2!important;
+  align-self:start!important;
+  height:auto!important;min-height:0!important;
+  padding-bottom:10px!important;
+}
+/* O gráfico de evolução é compacto; não pode herdar flex-grow. */
+.study-dashboard .study-primary>.study-chart .study-line-svg{
+  height:145px!important;min-height:145px!important;max-height:145px!important;
+  flex:0 0 145px!important;
+}
+.study-dashboard .study-primary>.study-chart .study-chart-empty{
+  min-height:0!important;margin:3px 0 0!important;padding:3px 6px!important;
+}
+
+/* Linha 3: ciclo realmente de ponta a ponta. */
+.study-dashboard>.study-cycle-feature{
+  grid-column:1 / -1!important;
+  grid-row:3!important;
+  width:auto!important;
+  margin:0!important;
+  align-self:start!important;
+}
+.study-dashboard .study-cycle-feature .study-cycle-row{
+  grid-template-columns:170px minmax(0,1fr) 82px 42px!important;
+}
+.study-dashboard .study-cycle-feature .study-cycle-track{height:17px!important}
+
+/* Linha 4: domínio 4/12 + resumo 8/12, exatamente panorâmico. */
+.study-dashboard .study-lower>.study-chart:last-child{
+  grid-column:1 / span 4!important;
+  grid-row:4!important;
+  align-self:stretch!important;
+  height:100%!important;
+  min-height:0!important;
+}
+.study-dashboard>.study-cycle-overall{
+  grid-column:5 / -1!important;
+  grid-row:4!important;
+  align-self:stretch!important;
+  height:100%!important;
+  min-height:0!important;
+  margin:0!important;
+  box-sizing:border-box!important;
+}
+
+/* Linha 5: quiz em largura total. */
+.study-dashboard>.study-embedded-section{
+  grid-column:1 / -1!important;
+  grid-row:5!important;
+  margin:0!important;
+}
+.study-dashboard>.study-close-row{
+  grid-column:1 / -1!important;
+  grid-row:6!important;
+  margin:0!important;
+}
+
+/* Remove alturas/ordens antigas que criavam buracos. */
+.study-dashboard .study-chart,
+.study-dashboard .study-cycle-feature,
+.study-dashboard .study-cycle-overall{order:initial!important}
+.study-dashboard .study-upcoming-list{gap:5px!important}
+.study-dashboard .study-domain-list{max-height:none!important;overflow:visible!important}
+
+@media(max-width:1180px){
+  .study-dashboard{display:block!important;width:96vw!important}
+  .study-dashboard>.study-title,.study-dashboard>.study-kpis,
+  .study-dashboard>.study-primary,.study-dashboard>.study-lower{display:block!important}
+  .study-dashboard .study-start-card,.study-dashboard .study-primary>.study-chart,
+  .study-dashboard .study-lower>.study-chart,.study-dashboard>.study-cycle-feature,
+  .study-dashboard>.study-cycle-overall,.study-dashboard>.study-embedded-section{
+    width:auto!important;height:auto!important;margin:0 0 12px!important;
+  }
+  .study-dashboard .study-cycle-feature .study-cycle-row{
+    grid-template-columns:110px minmax(0,1fr) 62px 34px!important;
+  }
+}
+
 </style>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
