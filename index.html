@@ -679,6 +679,17 @@ body{
 .quiz-integrated-title{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px}.quiz-integrated-title b{font-size:13px}.quiz-integrated-title span{font:600 10px 'IBM Plex Mono',monospace;color:#55c7ef}
 @media(max-width:780px){.quiz-study-shell{grid-template-columns:1fr}}
 
+
+/* v4 — Quiz e Progresso: um único painel persistente */
+.study-view{display:block}
+.study-view[hidden]{display:none!important}
+.study-shell-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.study-shell-brand h2{margin:0}.study-shell-brand .modal-sub{margin-top:3px}
+.study-shell-tabs{display:flex;gap:6px;background:#09131d;border:1px solid var(--line);padding:4px;border-radius:9px}
+.study-shell-tab{border:0;background:transparent;color:var(--muted);padding:7px 11px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700}
+.study-shell-tab.active{background:linear-gradient(100deg,#167df5,#16bdd7);color:#fff;box-shadow:0 4px 15px #079dd52c}
+#study-session-view{border-top:1px solid var(--line);padding-top:12px}
+
 </style>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
@@ -6295,59 +6306,66 @@ function openProgressDashboardReplacing(host){
   openProgressDashboard();
 }
 
+
+function renderQuizCardEmbedded(host,onBack){
+  if(quizIndex>=quizQueue.length){ host.innerHTML=`<div class="quiz-reveal-panel" style="text-align:center"><h2>✓ Sessão concluída</h2><p>${quizStats.right} acertos · ${quizStats.wrong} erros</p><button class="btn btn-primary" id="embedded-back">ver progresso atualizado</button></div>`;host.querySelector('#embedded-back').onclick=()=>{const ov=host.closest('.overlay');if(ov)ov.remove();openProgressDashboard();};return; }
+  const e=quizQueue[quizIndex],choices=buildQuizChoices(e),pct=Math.round(quizIndex/Math.max(quizQueue.length,1)*100),letters=['A','B','C','D'];
+  host.innerHTML=`<div class="quiz-integrated-title"><b>Modo Estudo</b><span>QUESTÃO ${quizIndex+1}/${quizQueue.length}</span></div><div class="quiz-session-track"><div class="quiz-session-fill" style="width:${pct}%"></div></div>
+  <div class="quiz-study-shell"><div class="quiz-study-media" id="embedded-media"></div><div class="quiz-study-question"><div class="quiz-meta-hint">${esc(e.s)} · ${esc(e.site)}</div><h3>Qual é o diagnóstico mais provável?</h3><div class="quiz-mcq-grid">${choices.map((x,i)=>`<button class="quiz-mcq-option" data-id="${escAttr(x.id)}"><span class="quiz-mcq-letter">${letters[i]}</span><span>${esc(x.name)}</span></button>`).join('')}</div><div id="embedded-feedback"></div></div></div>
+  <div class="modal-actions"><button class="btn btn-ghost" id="embedded-progress">← progresso</button></div>`;
+  const media=host.querySelector('#embedded-media');
+  if(hasEntryImgs(e)){getEntryImgs(e).then(imgs=>{const all=imgs.length?imgs:(e.img?[{data:e.img,label:''}]:[]);if(all.length){media.innerHTML=`<img src="${all[0].data}">${all[0].label?`<div class="quiz-img-label">${esc(all[0].label)}</div>`:''}`;const im=media.querySelector('img');if(im)im.onclick=()=>openImageLightbox(all[0].data);}else media.innerHTML=`<div class="quiz-noimage"><b>CASO TEÓRICO</b><span>Use as características registradas no Atlas.</span></div>`;});}
+  else{const q=quizTheoryPrompt(e);media.innerHTML=`<div class="quiz-noimage"><b>CASO TEÓRICO</b><span>Reconheça a lesão pelas características registradas no seu Atlas.</span><div class="quiz-theory-clues">${q.clues.map(t=>`<span>${esc(t)}</span>`).join('')}</div></div>`;}
+  host.querySelector('#embedded-progress').onclick=()=>{const ov=host.closest('.overlay');if(ov)ov.remove();openProgressDashboard();};
+  host.querySelectorAll('.quiz-mcq-option').forEach(btn=>btn.onclick=()=>{if(host.dataset.answered==='1')return;host.dataset.answered='1';const ok=btn.dataset.id===e.id;host.querySelectorAll('.quiz-mcq-option').forEach(b=>{b.disabled=true;if(b.dataset.id===e.id)b.classList.add('is-correct');else if(b===btn)b.classList.add('is-wrong');});const fb=host.querySelector('#embedded-feedback'),links=ensureLinks(e);fb.innerHTML=`<div class="${ok?'quiz-feedback-good':'quiz-feedback-bad'}">${ok?'✓ Resposta correta!':'✕ Resposta incorreta — a correta está destacada.'}</div><div class="quiz-answer-detail"><b>${esc(e.name)}</b><div class="quiz-points">${(e.tags||[]).slice(0,8).map(t=>`<span class="quiz-point">${esc(t)}</span>`).join('')}</div>${e.notes?`<div class="detail-notes">${esc(e.notes)}</div>`:''}${links.length?`<a class="detail-link" href="${links[0].url}" target="_blank" rel="noopener">↗ referência / imagens</a>`:''}</div><div class="quiz-learning-label">Como foi reconhecer este caso?</div><div class="quiz-grade-4"><button data-grade="easy">🟢 Fácil<small>segurança alta</small></button><button data-grade="medium">🔵 Média<small>precisei pensar</small></button><button data-grade="hard">🟠 Difícil<small>baixa segurança</small></button><button data-grade="again">⚪ Não sei<small>revisar cedo</small></button></div>`;fb.querySelectorAll('[data-grade]').forEach(g=>g.onclick=()=>{const grade=g.dataset.grade;srsGradeLevel(e.id,grade);quizStats[grade]++;recordQuizAnswerToday(ok,grade);if(ok)quizStats.right++;else{quizStats.wrong++;if(!quizSessionWrongIds.includes(e.id))quizSessionWrongIds.push(e.id);}quizIndex++;host.dataset.answered='0';renderQuizCardEmbedded(host,onBack);});});
+}
+
 function openProgressDashboard(){
-  const total=DATA.length||1, c0=DATA.filter(e=>getReview(e.id)===0).length, c1=DATA.filter(e=>getReview(e.id)===1).length, c2=DATA.filter(e=>getReview(e.id)===2).length;
-  const due=countActuallyDue(DATA), streak=getStudyStreak(), todayRec=SESSIONLOG[todayKey()]||{}, todayN=Number(todayRec.reviewed)||0, goal=15;
-  let r14=0,w14=0; const trend=[];
+  const total=DATA.length||1,c0=DATA.filter(e=>getReview(e.id)===0).length,c1=DATA.filter(e=>getReview(e.id)===1).length,c2=DATA.filter(e=>getReview(e.id)===2).length;
+  const due=countActuallyDue(DATA),streak=getStudyStreak(),todayRec=SESSIONLOG[todayKey()]||{},todayN=Number(todayRec.reviewed)||0,goal=15;
+  let r14=0,w14=0;const trend=[];
   for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const rec=SESSIONLOG[todayKey(d)]||{};const r=Number(rec.right)||0,w=Number(rec.wrong)||0;r14+=r;w14+=w;trend.push({label:d.getDate(),acc:(r+w)?Math.round(r/(r+w)*100):null});}
   const acc14=(r14+w14)?Math.round(r14/(r14+w14)*100):0;
-  const sectionMap={}; DATA.forEach(e=>{const k=e.s||'Outros';if(!sectionMap[k])sectionMap[k]={name:k,total:0,mastered:0};sectionMap[k].total++;if(getReview(e.id)===2)sectionMap[k].mastered++;});
+  const sectionMap={};DATA.forEach(e=>{const k=e.s||'Outros';if(!sectionMap[k])sectionMap[k]={name:k,total:0,mastered:0};sectionMap[k].total++;if(getReview(e.id)===2)sectionMap[k].mastered++;});
   const sections=Object.values(sectionMap).map(x=>({...x,pct:Math.round(x.mastered/x.total*100)})).sort((a,b)=>a.pct-b.pct);
   const points=trend.map((d,i)=>{const x=12+i*(336/13),y=d.acc==null?null:126-d.acc*1.05;return d.acc==null?null:{x,y,acc:d.acc,label:d.label};}).filter(Boolean);
-  const poly=points.map(p=>`${p.x},${p.y}`).join(' ');
-  const p0=c0/total*100,p1=c1/total*100,p2=c2/total*100;
-  const donut=`conic-gradient(${REVIEW_COLORS[2]} 0 ${p2}%, ${REVIEW_COLORS[1]} ${p2}% ${p2+p1}%, ${REVIEW_COLORS[0]} ${p2+p1}% 100%)`;
+  const poly=points.map(p=>`${p.x},${p.y}`).join(' '),p0=c0/total*100,p1=c1/total*100,p2=c2/total*100;
+  const donut=`conic-gradient(${REVIEW_COLORS[2]} 0 ${p2}%,${REVIEW_COLORS[1]} ${p2}% ${p2+p1}%,${REVIEW_COLORS[0]} ${p2+p1}% 100%)`;
   const ov=document.createElement('div');ov.className='overlay';ov.onclick=e=>{if(e.target===ov)closeOverlay();};
-  ov.innerHTML=`<div class="modal progress-modal study-dashboard">
-    <h2>🧠 Quiz & Progresso</h2><div class="modal-sub">treino diário guiado pelo seu progresso real e pelas revisões SRS</div>
-    <div class="study-top-kpis">
-      <div class="study-kpi"><div class="study-kpi-icon">🔥</div><div><div class="v">${streak} ${streak===1?'dia':'dias'}</div><div class="t">sequência</div></div></div>
-      <div class="study-kpi"><div class="study-kpi-icon">🎯</div><div><div class="v">${todayN} / ${goal}</div><div class="t">questões hoje</div></div></div>
-      <div class="study-kpi"><div class="study-kpi-icon">📈</div><div><div class="v">${(r14+w14)?acc14+'%':'—'}</div><div class="t">acerto · 14 dias</div></div></div>
-      <div class="study-kpi"><div class="study-kpi-icon">🧠</div><div><div class="v" style="color:var(--amber)">${due}</div><div class="t">revisões pendentes</div></div></div>
-    </div>
-    <div class="study-primary">
-      <div class="study-start-card">
+  ov.innerHTML=`<div class="modal progress-modal study-dashboard" id="study-unified-shell">
+    <div class="study-shell-head"><div class="study-shell-brand"><h2>🧠 Quiz & Progresso</h2><div class="modal-sub">treino diário guiado pelo seu progresso real e pelas revisões SRS</div></div>
+      <div class="study-shell-tabs"><button class="study-shell-tab active" id="study-tab-progress">📊 Progresso</button><button class="study-shell-tab" id="study-tab-session">🧠 Estudo</button></div></div>
+    <div id="study-progress-view" class="study-view">
+      <div class="study-top-kpis">
+        <div class="study-kpi"><div class="study-kpi-icon">🔥</div><div><div class="v">${streak} ${streak===1?'dia':'dias'}</div><div class="t">sequência</div></div></div>
+        <div class="study-kpi"><div class="study-kpi-icon">🎯</div><div><div class="v">${todayN} / ${goal}</div><div class="t">questões hoje</div></div></div>
+        <div class="study-kpi"><div class="study-kpi-icon">📈</div><div><div class="v">${(r14+w14)?acc14+'%':'—'}</div><div class="t">acerto · 14 dias</div></div></div>
+        <div class="study-kpi"><div class="study-kpi-icon">🧠</div><div><div class="v" style="color:var(--amber)">${due}</div><div class="t">revisões pendentes</div></div></div>
+      </div>
+      <div class="study-primary"><div class="study-start-card">
         <button class="study-start-main" id="study-today">▶ INICIAR SESSÃO DE HOJE<small>15 casos · SRS + difíceis + novos</small></button>
         <div class="study-mode-grid"><button class="study-mode" id="study-quick">⚡ Sessão rápida<br><small>5 casos</small></button><button class="study-mode" id="study-cbr">🎓 Sessão CBR<br><small>20 casos mistos</small></button><button class="study-mode" id="study-custom">☷ Personalizada<br><small>área e filtros</small></button></div>
-        <div class="study-streak-note">${todayN>=goal?'✓ Meta diária concluída.':`Faltam ${Math.max(0,goal-todayN)} questões para a meta de hoje.`}</div>
-      </div>
-      <div class="study-chart"><h3>Evolução do desempenho</h3><div class="study-chart-sub">% de acerto nas sessões dos últimos 14 dias</div>
-        <svg class="study-line-svg" viewBox="0 0 360 145" preserveAspectRatio="none">
-          <line class="study-line-grid" x1="10" y1="21" x2="350" y2="21"/><line class="study-line-grid" x1="10" y1="73" x2="350" y2="73"/><line class="study-line-grid" x1="10" y1="126" x2="350" y2="126"/>
-          ${points.length>1?`<polyline class="study-line" points="${poly}"/>`:''}${points.map(p=>`<circle class="study-dot" cx="${p.x}" cy="${p.y}" r="3"><title>dia ${p.label}: ${p.acc}%</title></circle>`).join('')}
-        </svg>
-      </div>
+        <div class="study-streak-note">${todayN>=goal?'✓ Meta diária concluída.':`Faltam ${Math.max(0,goal-todayN)} questões para a meta de hoje.`}</div></div>
+        <div class="study-chart"><h3>Evolução do desempenho</h3><div class="study-chart-sub">% de acerto nas sessões dos últimos 14 dias</div><svg class="study-line-svg" viewBox="0 0 360 145" preserveAspectRatio="none"><line class="study-line-grid" x1="10" y1="21" x2="350" y2="21"/><line class="study-line-grid" x1="10" y1="73" x2="350" y2="73"/><line class="study-line-grid" x1="10" y1="126" x2="350" y2="126"/>${points.length>1?`<polyline class="study-line" points="${poly}"/>`:''}${points.map(p=>`<circle class="study-dot" cx="${p.x}" cy="${p.y}" r="3"><title>dia ${p.label}: ${p.acc}%</title></circle>`).join('')}</svg></div></div>
+      <div class="study-lower"><div class="study-chart"><h3>Estado do acervo</h3><div class="study-donut-row"><div class="study-donut" style="background:${donut}"><div class="study-donut-center"><b>${DATA.length}</b><span>lesões</span></div></div><div class="study-state-list"><div class="study-state-row"><span><i style="background:${REVIEW_COLORS[2]}"></i>Dominadas</span><b>${c2} (${Math.round(p2)}%)</b></div><div class="study-state-row"><span><i style="background:${REVIEW_COLORS[1]}"></i>Em aprendizado</span><b>${c1} (${Math.round(p1)}%)</b></div><div class="study-state-row"><span><i style="background:${REVIEW_COLORS[0]}"></i>Nunca estudadas</span><b>${c0} (${Math.round(p0)}%)</b></div></div></div></div>
+        <div class="study-chart"><h3>Domínio por área</h3><div class="study-chart-sub">clique em uma área para treiná-la</div><div class="study-domain-list">${sections.map(s=>`<div class="study-domain-row" data-sec="${escAttr(s.name)}"><div class="study-domain-head"><span>${esc(s.name)}</span><b>${s.pct}%</b></div><div class="study-domain-track"><div class="study-domain-fill" style="width:${s.pct}%"></div></div></div>`).join('')}</div></div></div>
     </div>
-    <div class="study-lower">
-      <div class="study-chart"><h3>Estado do acervo</h3><div class="study-donut-row"><div class="study-donut" style="background:${donut}"><div class="study-donut-center"><b>${DATA.length}</b><span>lesões</span></div></div><div class="study-state-list">
-        <div class="study-state-row"><span><i style="background:${REVIEW_COLORS[2]}"></i>Dominadas</span><b>${c2} (${Math.round(p2)}%)</b></div>
-        <div class="study-state-row"><span><i style="background:${REVIEW_COLORS[1]}"></i>Em aprendizado</span><b>${c1} (${Math.round(p1)}%)</b></div>
-        <div class="study-state-row"><span><i style="background:${REVIEW_COLORS[0]}"></i>Nunca estudadas</span><b>${c0} (${Math.round(p0)}%)</b></div>
-      </div></div></div>
-      <div class="study-chart"><h3>Domínio por área</h3><div class="study-chart-sub">clique em uma área para treiná-la</div><div class="study-domain-list">${sections.map(s=>`<div class="study-domain-row" data-sec="${escAttr(s.name)}"><div class="study-domain-head"><span>${esc(s.name)}</span><b>${s.pct}%</b></div><div class="study-domain-track"><div class="study-domain-fill" style="width:${s.pct}%"></div></div></div>`).join('')}</div></div>
-    </div>
+    <div id="study-session-view" class="study-view" hidden><div id="study-session-content"></div></div>
     <div class="modal-actions"><button class="btn btn-primary" id="progress-close">fechar</button></div>
   </div>`;
   document.body.appendChild(ov);
-  document.getElementById('study-today').onclick=()=>{const q=buildSmartStudyQueue(15);if(q.length)startQuizInsideDashboard(q);};
-  document.getElementById('study-quick').onclick=()=>{const q=buildSmartStudyQueue(5);if(q.length)startQuizInsideDashboard(q);};
-  document.getElementById('study-cbr').onclick=()=>{const bySection={};DATA.forEach(e=>(bySection[e.s]||(bySection[e.s]=[])).push(e));const q=[],seen=new Set();while(q.length<20){let added=0;for(const s of shuffleArr(Object.keys(bySection))){const e=shuffleArr(bySection[s]).find(x=>!seen.has(x.id));if(e){seen.add(e.id);q.push(e);added++;if(q.length>=20)break;}}if(!added)break;}if(q.length)startQuizInsideDashboard(q);};
-  document.getElementById('study-custom').onclick=()=>{closeOverlay();openQuizSetup();};
-  ov.querySelectorAll('.study-domain-row').forEach(row=>row.onclick=()=>{const sec=row.dataset.sec;startQuizInsideDashboard(shuffleArr(DATA.filter(e=>e.s===sec)).slice(0,15));});
-  document.getElementById('progress-close').onclick=closeOverlay;
+  const shell=ov.querySelector('#study-unified-shell'),progressView=ov.querySelector('#study-progress-view'),sessionView=ov.querySelector('#study-session-view');
+  function showProgress(){progressView.hidden=false;sessionView.hidden=true;ov.querySelector('#study-tab-progress').classList.add('active');ov.querySelector('#study-tab-session').classList.remove('active');}
+  function launch(q){if(!q||!q.length){toast('Nenhum caso disponível.');return;}quizQueue=q;quizIndex=0;quizStats={right:0,wrong:0,easy:0,medium:0,hard:0,again:0};quizSessionWrongIds=[];progressView.hidden=true;sessionView.hidden=false;ov.querySelector('#study-tab-progress').classList.remove('active');ov.querySelector('#study-tab-session').classList.add('active');renderQuizCardEmbedded(ov.querySelector('#study-session-content'),showProgress);}
+  ov.querySelector('#study-tab-progress').onclick=showProgress;
+  ov.querySelector('#study-tab-session').onclick=()=>{if(quizQueue&&quizQueue.length&&quizIndex<quizQueue.length){progressView.hidden=true;sessionView.hidden=false;ov.querySelector('#study-tab-progress').classList.remove('active');ov.querySelector('#study-tab-session').classList.add('active');}};
+  ov.querySelector('#study-today').onclick=()=>launch(buildSmartStudyQueue(15));
+  ov.querySelector('#study-quick').onclick=()=>launch(buildSmartStudyQueue(5));
+  ov.querySelector('#study-cbr').onclick=()=>{const by={};DATA.forEach(e=>(by[e.s]||(by[e.s]=[])).push(e));const q=[],seen=new Set();while(q.length<20){let a=0;for(const s of shuffleArr(Object.keys(by))){const e=shuffleArr(by[s]).find(x=>!seen.has(x.id));if(e){seen.add(e.id);q.push(e);a++;if(q.length>=20)break;}}if(!a)break;}launch(q);};
+  ov.querySelector('#study-custom').onclick=()=>{closeOverlay();openQuizSetup();};
+  ov.querySelectorAll('.study-domain-row').forEach(row=>row.onclick=()=>launch(shuffleArr(DATA.filter(e=>e.s===row.dataset.sec)).slice(0,15)));
+  ov.querySelector('#progress-close').onclick=closeOverlay;
 }
-
 document.getElementById('progress-btn').onclick = openProgressDashboard;
 document.getElementById('quiz-btn').onclick = openProgressDashboard;
 
