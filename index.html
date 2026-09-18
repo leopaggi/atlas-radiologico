@@ -1505,6 +1505,98 @@ body{
   }
 }
 
+
+/* 2026-09-18 — remoção dos dois últimos vazios apontados no screenshot */
+
+/* TOPO: título e KPIs formam uma única faixa compacta, sem reservar altura extra. */
+.study-dashboard>.study-title{
+  grid-column:1 / span 3!important;
+  grid-row:1!important;
+  align-self:center!important;
+  min-height:0!important;
+  height:auto!important;
+}
+.study-dashboard>.study-kpis{
+  grid-column:4 / -1!important;
+  grid-row:1!important;
+  align-self:center!important;
+  min-height:0!important;
+  height:auto!important;
+}
+.study-dashboard>.study-kpis .study-kpi{
+  min-height:64px!important;
+}
+
+/* CORPO SUPERIOR:
+   esquerda = sessões/revisões;
+   centro+direita = evolução/estado e, logo abaixo deles, ciclo.
+   Assim o Ciclo preenche exatamente o vazio vermelho sem esperar o card esquerdo terminar. */
+.study-dashboard .study-start-card{
+  grid-column:1 / span 4!important;
+  grid-row:2 / span 2!important;
+  align-self:start!important;
+}
+.study-dashboard .study-primary>.study-chart{
+  grid-column:5 / span 5!important;
+  grid-row:2!important;
+  align-self:start!important;
+}
+.study-dashboard .study-lower>.study-chart:first-child{
+  grid-column:10 / span 3!important;
+  grid-row:2!important;
+  align-self:start!important;
+}
+.study-dashboard>.study-cycle-feature{
+  grid-column:5 / -1!important;
+  grid-row:3!important;
+  align-self:start!important;
+  margin:0!important;
+}
+
+/* Faz a linha 2 ter só a altura real de Evolução/Estado, e a linha 3 só a do Ciclo. */
+.study-dashboard{
+  grid-auto-rows:max-content!important;
+}
+.study-dashboard .study-primary>.study-chart,
+.study-dashboard .study-lower>.study-chart:first-child{
+  height:auto!important;
+  min-height:0!important;
+}
+.study-dashboard .study-primary>.study-chart .study-line-svg{
+  height:132px!important;
+  min-height:132px!important;
+  max-height:132px!important;
+  flex:0 0 132px!important;
+}
+
+/* Após o bloco superior, Domínio + Resumo continuam juntos. */
+.study-dashboard .study-lower>.study-chart:last-child{
+  grid-column:1 / span 4!important;
+  grid-row:4!important;
+}
+.study-dashboard>.study-cycle-overall{
+  grid-column:5 / -1!important;
+  grid-row:4!important;
+}
+.study-dashboard>.study-embedded-section{
+  grid-column:1 / -1!important;
+  grid-row:5!important;
+}
+.study-dashboard>.study-close-row{
+  grid-column:1 / -1!important;
+  grid-row:6!important;
+}
+
+/* Em telas menores mantém fluxo simples. */
+@media(max-width:1180px){
+  .study-dashboard>.study-title,.study-dashboard>.study-kpis{display:block!important}
+  .study-dashboard .study-start-card,.study-dashboard .study-primary>.study-chart,
+  .study-dashboard .study-lower>.study-chart,.study-dashboard>.study-cycle-feature,
+  .study-dashboard>.study-cycle-overall,.study-dashboard>.study-embedded-section{
+    grid-column:auto!important;grid-row:auto!important;
+  }
+}
+
 </style>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
