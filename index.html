@@ -652,6 +652,7 @@ body{
       <details class="advanced-tools">
         <summary>⚙️ ferramentas avançadas</summary>
         <div class="advanced-tools-list">
+          <button class="foot-btn" id="btn-system-diagnostic" title="Gera um relatório de texto (armazenamento, duplicatas, imagens, sincronização) pra copiar e enviar se algo der errado">🩺 diagnóstico do sistema<br><span class="foot-btn-sub">gera um relatório pra copiar e enviar — não altera nada</span></button>
           <button class="foot-btn" id="btn-audit-images" title="Verifica se cada imagem está anexada à lesão certa, usando a etiqueta guardada na própria imagem">🔍 auditar vínculo de imagens<br><span class="foot-btn-sub">usa isso depois de qualquer atualização, pra conferir se as imagens ficaram no lugar certo</span></button>
           <button class="foot-btn" id="btn-force-dedup" title="Funde agora mesmo qualquer lesão duplicada (mesmo nome/seção/sítio), preservando a melhor imagem e o melhor progresso de revisão entre as cópias">🔗 fundir duplicatas agora<br><span class="foot-btn-sub">usa se perceber a mesma lesão aparecendo duas vezes, ou progresso de revisão sumindo</span></button>
           <button class="foot-btn" id="btn-recover-data" title="Procurar imagens e progresso em dados locais, snapshots e Firebase">🛟 procurar dados antigos / recuperar<br><span class="foot-btn-sub">último recurso: vasculha tudo que existe neste navegador atrás de algo perdido</span></button>
@@ -1192,46 +1193,117 @@ function hasNativeStorage(){
   return typeof window !== 'undefined' && window.storage && typeof window.storage.get === 'function';
 }
 const usingOfflineStorage = !hasNativeStorage();
-const storage = hasNativeStorage() ? window.storage : {
-  async get(key, shared){
-    const raw = localStorage.getItem(LOCAL_PREFIX+key);
-    if(raw === null){ throw new Error('key not found: '+key); }
-    return { key, value: raw, shared: !!shared };
-  },
-  async set(key, value, shared){
-    try{
-      localStorage.setItem(LOCAL_PREFIX+key, value);
-    }catch(e){
-      const isQuotaError = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
-      if(!isQuotaError) throw e;
-      // Espaço estourou. Libera o que dá pra liberar sem risco (os snapshots de
-      // segurança não são mais criados desde a v194 — ver createSafetySnapshot —
-      // então essa chave só ocupa espaço de forma legada) e tenta gravar de novo
-      // uma única vez antes de desistir e deixar o chamador tratar o erro.
-      console.warn('localStorage cheio ao gravar "'+key+'" ('+(value?value.length:0)+' chars). Tentando liberar espaço...');
-      try{ localStorage.removeItem(SAFETY_SNAPSHOTS_KEY); }catch(_e){}
-      try{
-        localStorage.setItem(LOCAL_PREFIX+key, value);
-        console.warn('Gravação de "'+key+'" bem-sucedida após liberar espaço.');
-      }catch(e2){
-        throw e2;
+/* ============================================================
+   ARMAZENAMENTO LOCAL — IndexedDB em vez de localStorage (a partir desta
+   versão). localStorage tem uma cota fixa e pequena (tipicamente 5 MB) que
+   é COMPARTILHADA por todo o domínio leopaggi.github.io — ou seja, dividida
+   entre este app e qualquer outro projeto hospedado no mesmo GitHub Pages.
+   IndexedDB tem uma cota muito maior (centenas de MB, escalando com o
+   espaço livre em disco) e praticamente elimina esse tipo de colisão.
+   A interface (get/set/delete/list) é idêntica à anterior — só o que está
+   por trás mudou — então nenhuma outra parte do código precisou mudar.
+   ============================================================ */
+const IDB_NAME = 'atlas_radiologico_idb';
+const IDB_STORE = 'kv';
+const IDB_MIGRATION_FLAG = LOCAL_PREFIX + '__migrated_to_indexeddb_v251__';
+let _idbPromise = null;
+
+function openIdb(){
+  if(_idbPromise) return _idbPromise;
+  _idbPromise = new Promise((resolve, reject)=>{
+    if(typeof indexedDB === 'undefined'){ reject(new Error('IndexedDB indisponível neste navegador.')); return; }
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = ()=>{
+      const db = req.result;
+      if(!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error || new Error('Falha ao abrir IndexedDB.'));
+  });
+  return _idbPromise;
+}
+
+function idbGet(key){
+  return openIdb().then(db=> new Promise((resolve, reject)=>{
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  }));
+}
+function idbSet(key, value){
+  return openIdb().then(db=> new Promise((resolve, reject)=>{
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(value, key);
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> reject(tx.error);
+  }));
+}
+function idbDelete(key){
+  return openIdb().then(db=> new Promise((resolve, reject)=>{
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).delete(key);
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> reject(tx.error);
+  }));
+}
+function idbKeys(){
+  return openIdb().then(db=> new Promise((resolve, reject)=>{
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).getAllKeys();
+    req.onsuccess = ()=> resolve(req.result || []);
+    req.onerror = ()=> reject(req.error);
+  }));
+}
+
+// Migração automática, uma única vez: copia o que já estava salvo no
+// localStorage (chaves com o prefixo do Atlas) para o IndexedDB, e então
+// libera esse espaço do localStorage — devolvendo-o pro pote compartilhado
+// do domínio, pra não atrapalhar outros projetos seus no mesmo GitHub Pages.
+async function migrateLocalStorageToIdbOnce(){
+  try{
+    if(localStorage.getItem(IDB_MIGRATION_FLAG)) return;
+    const toMigrate = [];
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if(k && k.indexOf(LOCAL_PREFIX)===0 && k!==IDB_MIGRATION_FLAG){
+        toMigrate.push([k.slice(LOCAL_PREFIX.length), localStorage.getItem(k)]);
       }
     }
+    for(const [bareKey, value] of toMigrate){
+      await idbSet(bareKey, value);
+    }
+    for(const [bareKey] of toMigrate){
+      localStorage.removeItem(LOCAL_PREFIX+bareKey);
+    }
+    localStorage.setItem(IDB_MIGRATION_FLAG, '1');
+    if(toMigrate.length) console.info(`[Atlas] Migradas ${toMigrate.length} chave(s) de localStorage para IndexedDB.`);
+  }catch(e){
+    console.warn('Migração para IndexedDB não pôde ser concluída agora; tentará de novo no próximo carregamento.', e);
+  }
+}
+
+const storage = hasNativeStorage() ? window.storage : {
+  async get(key, shared){
+    await migrateLocalStorageToIdbOnce();
+    const value = await idbGet(key);
+    if(value === undefined || value === null){ throw new Error('key not found: '+key); }
+    return { key, value, shared: !!shared };
+  },
+  async set(key, value, shared){
+    await migrateLocalStorageToIdbOnce();
+    await idbSet(key, value);
     return { key, value, shared: !!shared };
   },
   async delete(key, shared){
-    localStorage.removeItem(LOCAL_PREFIX+key);
+    await migrateLocalStorageToIdbOnce();
+    await idbDelete(key);
     return { key, deleted:true, shared: !!shared };
   },
   async list(prefix, shared){
-    const keys = [];
-    for(let i=0;i<localStorage.length;i++){
-      const k = localStorage.key(i);
-      if(k && k.indexOf(LOCAL_PREFIX)===0){
-        const bare = k.slice(LOCAL_PREFIX.length);
-        if(!prefix || bare.indexOf(prefix)===0) keys.push(bare);
-      }
-    }
+    await migrateLocalStorageToIdbOnce();
+    const allKeys = await idbKeys();
+    const keys = allKeys.filter(k => !prefix || String(k).indexOf(prefix)===0);
     return { keys, prefix, shared: !!shared };
   }
  };
@@ -5301,6 +5373,135 @@ async function openRecoveryInspector(){
    AÇÕES GLOBAIS
    ============================================================ */
 document.getElementById('add-btn').onclick = ()=> openForm(null);
+/* ============================================================
+   DIAGNÓSTICO DO SISTEMA — gera um relatório de texto com tudo que
+   normalmente precisamos pedir manualmente pelo console (armazenamento,
+   duplicatas, imagens, sincronização, navegador) pra facilitar reportar
+   um problema sem precisar colar comandos JS.
+   ============================================================ */
+async function buildSystemDiagnosticReport(){
+  const lines = [];
+  const push = (s='') => lines.push(s);
+
+  push('=== DIAGNÓSTICO DO ATLAS RADIOLÓGICO ===');
+  push('Gerado em: ' + new Date().toLocaleString('pt-BR'));
+  push('');
+
+  // --- Dados ---
+  const total = Array.isArray(DATA) ? DATA.length : 0;
+  const grupos = new Map();
+  (DATA||[]).forEach(e=>{
+    if(!e) return;
+    const key = `${e.s}|||${e.site}|||${e.name}`;
+    if(!grupos.has(key)) grupos.set(key, []);
+    grupos.get(key).push(e);
+  });
+  const dups = [...grupos.entries()].filter(([,v])=>v.length>1);
+  const comImgs = (DATA||[]).filter(e=>e && hasEntryImgs(e));
+  const totalImgs = comImgs.reduce((n,e)=>n+((e.images||[]).length),0);
+  let imgsBase64 = 0, bytesBase64 = 0;
+  (DATA||[]).forEach(e=>{
+    (e && e.images || []).forEach(im=>{
+      if(im && typeof im.data==='string' && im.data.startsWith('data:')){
+        imgsBase64++; bytesBase64 += im.data.length;
+      }
+    });
+  });
+
+  push('--- DADOS ---');
+  push('Total de lesões: ' + total);
+  push('Grupos com nome+seção+sítio duplicado: ' + dups.length);
+  if(dups.length){
+    dups.slice(0,10).forEach(([k,v])=> push('  "'+k.split('|||')[2]+'" -> '+v.map(e=>e.id).join(', ')));
+    if(dups.length>10) push('  ... e mais ' + (dups.length-10));
+  }
+  push('Lesões com imagem: ' + comImgs.length + ' | Total de imagens: ' + totalImgs);
+  push('Imagens locais em base64 (ainda não no Cloudinary): ' + imgsBase64 + ' (~' + (bytesBase64/1024/1024).toFixed(2) + ' MB)');
+  push('');
+
+  // --- Armazenamento local ---
+  push('--- ARMAZENAMENTO LOCAL (localStorage) ---');
+  let totalChars = 0;
+  const porChave = [];
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if(!k || k.indexOf(LOCAL_PREFIX)!==0) continue;
+      const v = localStorage.getItem(k) || '';
+      totalChars += v.length;
+      porChave.push([k.replace(LOCAL_PREFIX,''), v.length]);
+    }
+    porChave.sort((a,b)=>b[1]-a[1]);
+    push('Total usado: ' + (totalChars/1024/1024).toFixed(2) + ' MB');
+    porChave.forEach(([k,len])=> push('  ' + k + ' -> ' + (len/1024).toFixed(0) + ' KB'));
+  }catch(e){
+    push('Não foi possível ler localStorage: ' + (e.message||e));
+  }
+  if(navigator.storage && navigator.storage.estimate){
+    try{
+      const est = await navigator.storage.estimate();
+      push('Cota do navegador (estimativa): usado ' + ((est.usage||0)/1024/1024).toFixed(2) +
+           ' MB de ' + ((est.quota||0)/1024/1024).toFixed(0) + ' MB disponíveis');
+    }catch(_e){ /* nem todo navegador suporta */ }
+  }
+  push('');
+
+  // --- Sincronização ---
+  push('--- SINCRONIZAÇÃO ---');
+  const syncEl = document.getElementById('sync-status');
+  const syncOk = !syncEl || syncEl.style.display === 'none';
+  push('Status atual: ' + (syncOk ? 'OK (sem aviso ativo)' : (syncEl.textContent||'erro sem detalhe')));
+  push('recoveryVersion: ' + (localStorage.getItem(LOCAL_PREFIX+'atlas:recoveryVersion') || '(vazio)'));
+  push('Firebase conectado: ' + (typeof fbDb !== 'undefined' && !!fbDb));
+  push('');
+
+  // --- Navegador ---
+  push('--- NAVEGADOR ---');
+  push('User-Agent: ' + navigator.userAgent);
+  push('Online: ' + navigator.onLine);
+  push('URL: ' + location.href);
+
+  return lines.join('\n');
+}
+
+function openSystemDiagnosticModal(){
+  const cov = document.createElement('div');
+  cov.className = 'overlay';
+  cov.innerHTML = `<div class="modal audit-modal">
+    <h2>🩺 Diagnóstico do sistema</h2>
+    <div class="modal-sub">Gerando relatório...</div>
+    <textarea id="diag-report" readonly style="width:100%;min-height:320px;font-family:monospace;font-size:12px;margin-top:10px;"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="diag-copy">📋 copiar relatório</button>
+      <button class="btn btn-ghost" id="diag-close">fechar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(cov);
+  const closeIt = ()=> cov.remove();
+  cov.querySelector('#diag-close').onclick = closeIt;
+  cov.addEventListener('click', (ev)=>{ if(ev.target===cov) closeIt(); });
+
+  buildSystemDiagnosticReport().then(report=>{
+    const ta = cov.querySelector('#diag-report');
+    if(ta) ta.value = report;
+    const sub = cov.querySelector('.modal-sub');
+    if(sub) sub.textContent = 'Relatório pronto. Copie e cole na conversa com o Claude pra investigar qualquer problema.';
+  });
+
+  cov.querySelector('#diag-copy').onclick = async ()=>{
+    const ta = cov.querySelector('#diag-report');
+    try{
+      await navigator.clipboard.writeText(ta.value);
+      toast('Relatório copiado.');
+    }catch(_e){
+      ta.select();
+      document.execCommand('copy');
+      toast('Relatório copiado.');
+    }
+  };
+}
+
+
 /* Auditoria de vínculo imagem↔lesão. Cada imagem carrega, desde que foi
    enviada, uma etiqueta permanente (lesionId/lesionName) guardada dentro
    dela mesma — é essa etiqueta que permitiu reconstruir imagens perdidas
@@ -5398,6 +5599,7 @@ function openImageAuditModal(){
     };
   }
 }
+document.getElementById('btn-system-diagnostic').onclick = openSystemDiagnosticModal;
 document.getElementById('btn-audit-images').onclick = openImageAuditModal;
 document.getElementById('btn-force-dedup').onclick = async ()=>{
   if(!confirm('Isso funde qualquer lesão duplicada (mesmo nome/seção/sítio) agora mesmo, mantendo a imagem e o progresso de revisão mais completos entre as cópias. Continuar?')) return;
