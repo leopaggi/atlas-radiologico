@@ -1085,6 +1085,54 @@ body{
  .study-dashboard .study-cycle-overall-values span{font-size:7.5px;white-space:normal}
 }
 
+
+/* Otimização espacial do dashboard — composição alinhada ao preview */
+.study-dashboard .study-primary{
+  grid-template-columns:minmax(390px,.9fr) minmax(560px,1.35fr)!important;
+  align-items:stretch!important;
+}
+.study-dashboard .study-primary>.study-start-card,
+.study-dashboard .study-primary>.study-chart{
+  height:auto!important;
+  min-height:0!important;
+}
+.study-dashboard .study-primary>.study-chart{
+  display:flex;flex-direction:column;
+}
+.study-dashboard .study-primary>.study-chart .study-line-svg{flex:1;min-height:150px}
+.study-dashboard .study-cycle-feature{
+  margin:0 0 12px;
+  border:1px solid #294157;
+  border-radius:12px;
+  background:linear-gradient(145deg,#101d29,#0c1924);
+  padding:4px 8px 8px;
+}
+.study-dashboard .study-cycle-feature .study-cycle-mini{
+  border-top:0!important;
+  margin-top:0!important;
+  padding:14px 12px 8px!important;
+}
+.study-dashboard .study-cycle-feature .study-cycle-row{
+  grid-template-columns:minmax(135px,170px) minmax(500px,1fr) 78px 42px!important;
+}
+.study-dashboard .study-cycle-feature .study-cycle-track{height:16px!important}
+.study-dashboard .study-cycle-feature .study-cycle-name{font-size:11px!important}
+.study-dashboard .study-cycle-feature .study-cycle-count,
+.study-dashboard .study-cycle-feature .study-cycle-row>b{font-size:10px!important}
+.study-dashboard .study-lower{
+  grid-template-columns:.72fr 1.28fr!important;
+  align-items:stretch;
+}
+.study-dashboard .study-lower>.study-chart{height:100%}
+.study-dashboard .study-domain-list{max-height:none!important;overflow:visible!important}
+.study-dashboard .study-cycle-overall{margin-top:12px!important}
+@media(max-width:1050px){
+  .study-dashboard .study-primary,.study-dashboard .study-lower{grid-template-columns:1fr!important}
+  .study-dashboard .study-cycle-feature .study-cycle-row{
+    grid-template-columns:105px minmax(160px,1fr) 62px 34px!important;
+  }
+}
+
 </style>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
@@ -6884,13 +6932,16 @@ function openProgressDashboard(){
           ${xLabels.filter(l=>l.show).map(l=>`<text x="${l.x}" y="148" class="study-line-x-label" text-anchor="middle">${esc(l.label)}</text>`).join('')}
         </svg>
         ${points.length<2?`<div class="study-chart-empty">Ainda não há dados suficientes dos últimos 14 dias. Complete algumas sessões para ver a evolução aqui.</div>`:''}
+
+      </div>
+    </div>
+    <div class="study-cycle-feature">
         <div class="study-cycle-mini">
           <div class="study-cycle-head"><div><b>▰ Ciclo de revisão do acervo</b><span>Quando cada lesão foi revisada pela última vez</span></div><b class="study-cycle-total">${cycleGlobal.total-cycleGlobal.never} / ${cycleGlobal.total} vistas</b></div>
           <div class="study-cycle-rows">${sections.map(s=>{const c=cycleBySection[s.name], seg=reviewCycleSegments(c), seen=c.total-c.never, seenPct=Math.round(seen/Math.max(1,c.total)*100);return `<div class="study-cycle-row" data-cycle-sec="${escAttr(s.name)}"><span class="study-cycle-name">${esc(s.name)}</span><div class="study-cycle-track">${seg.map(z=>`<i class="cycle-${z.k}" style="width:${z.pct}%"><em>${z.pct>=8?Math.round(z.pct)+'%':''}</em></i>`).join('')}</div><span class="study-cycle-count">${seen} / ${c.total}</span><b>${seenPct}%</b></div>`;}).join('')}</div>
           <div class="study-cycle-legend"><span><i class="cycle-recent"></i>≤ 7 dias</span><span><i class="cycle-short"></i>8–45 dias</span><span><i class="cycle-medium"></i>46 dias–6 meses</span><span><i class="cycle-late"></i>&gt; 6 meses</span><span><i class="cycle-never"></i>Nunca</span></div>
           <div class="study-cycle-summary">${cycleGlobalSeg.map(z=>`<div><i class="cycle-${z.k}"></i><b>${z.n}</b><span>${z.k==='recent'?'≤7d':z.k==='short'?'8–45d':z.k==='medium'?'46d–6m':z.k==='late'?'>6m':'nunca'} · ${Math.round(z.pct)}%</span></div>`).join('')}</div>
         </div>
-      </div>
     </div>
     <div class="study-lower">
       <div class="study-chart"><h3>Estado do acervo</h3><div class="study-chart-sub">última autoavaliação registrada em cada caso</div><div class="study-donut-row"><div class="study-donut" style="background:${donut}"><div class="study-donut-center"><b>${DATA.length}</b><span>lesões</span></div></div><div class="study-state-list">
