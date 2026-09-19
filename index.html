@@ -1742,6 +1742,102 @@ body{
   }
 }
 
+
+/* 2026-09-18 — REBUILD visual usando a estrutura DOM real do dashboard */
+.study-dashboard{
+  display:block!important;
+  width:min(96vw,1600px)!important;
+  max-width:1600px!important;
+  max-height:94vh!important;
+  overflow:auto!important;
+  padding:18px!important;
+  box-sizing:border-box!important;
+}
+/* Cabeçalho real: h2 + .modal-sub, sem grid fantasma. */
+.study-dashboard>h2{margin:0 0 2px!important;white-space:nowrap!important}
+.study-dashboard>.modal-sub{margin:0 0 12px!important;white-space:normal!important}
+
+/* KPIs reais: a classe correta é study-top-kpis. */
+.study-dashboard>.study-top-kpis{
+  display:grid!important;
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:12px!important;
+  margin:0 0 12px!important;
+  width:100%!important;
+}
+.study-dashboard>.study-top-kpis>.study-kpi{
+  min-width:0!important;width:auto!important;height:auto!important;min-height:72px!important;
+}
+
+/* Linha principal IGUAL ao preview: sessão | evolução | estado. */
+.study-dashboard>.study-primary{
+  display:grid!important;
+  grid-template-columns:minmax(390px,.95fr) minmax(500px,1.18fr) minmax(330px,.78fr)!important;
+  gap:12px!important;
+  align-items:start!important;
+  width:100%!important;
+  margin:0 0 12px!important;
+}
+.study-dashboard>.study-primary>.study-start-card,
+.study-dashboard>.study-primary>.study-chart{
+  grid-column:auto!important;grid-row:auto!important;
+  width:auto!important;height:auto!important;min-height:0!important;
+  align-self:start!important;order:initial!important;
+}
+.study-dashboard>.study-primary>.study-chart .study-line-svg{
+  height:178px!important;min-height:178px!important;max-height:178px!important;flex:0 0 178px!important;
+}
+.study-dashboard>.study-primary>.study-state-card{padding-bottom:14px!important}
+
+/* Ciclo panorâmico integral. */
+.study-dashboard>.study-cycle-feature{
+  display:block!important;
+  width:100%!important;
+  margin:0 0 12px!important;
+  box-sizing:border-box!important;
+  grid-column:auto!important;grid-row:auto!important;order:initial!important;
+}
+.study-dashboard .study-cycle-feature .study-cycle-row{
+  grid-template-columns:175px minmax(0,1fr) 82px 42px!important;
+}
+.study-dashboard .study-cycle-feature .study-cycle-track{height:17px!important}
+
+/* Linha inferior IGUAL ao preview: domínio à esquerda, resumo largo à direita. */
+.study-dashboard>.study-lower{
+  display:grid!important;
+  grid-template-columns:minmax(390px,.82fr) minmax(650px,1.58fr)!important;
+  gap:12px!important;
+  align-items:stretch!important;
+  width:100%!important;
+  margin:0 0 12px!important;
+}
+.study-dashboard>.study-lower>.study-domain-card,
+.study-dashboard>.study-lower>.study-cycle-overall{
+  grid-column:auto!important;grid-row:auto!important;order:initial!important;
+  width:auto!important;height:100%!important;min-height:0!important;margin:0!important;
+  box-sizing:border-box!important;
+}
+.study-dashboard>.study-lower .study-domain-list{max-height:none!important;overflow:visible!important}
+
+/* Quiz em largura total. */
+.study-dashboard>.study-embedded-section,
+.study-dashboard>.modal-actions{
+  width:100%!important;margin:0 0 12px!important;
+  grid-column:auto!important;grid-row:auto!important;order:initial!important;
+}
+
+/* Neutraliza seletores antigos que miravam classes inexistentes ou filhos reposicionados. */
+.study-dashboard>.study-title,.study-dashboard>.study-kpis{display:none!important}
+
+@media(max-width:1180px){
+  .study-dashboard{width:97vw!important;padding:14px!important}
+  .study-dashboard>.study-top-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .study-dashboard>.study-primary,.study-dashboard>.study-lower{grid-template-columns:1fr!important}
+  .study-dashboard .study-cycle-feature .study-cycle-row{
+    grid-template-columns:110px minmax(0,1fr) 62px 34px!important;
+  }
+}
+
 </style>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
@@ -7543,6 +7639,13 @@ function openProgressDashboard(){
         ${points.length<2?`<div class="study-chart-empty">Ainda não há dados suficientes dos últimos 14 dias. Complete algumas sessões para ver a evolução aqui.</div>`:''}
 
       </div>
+      <div class="study-chart study-state-card"><h3>Estado do acervo</h3><div class="study-chart-sub">última autoavaliação registrada em cada caso</div><div class="study-donut-row"><div class="study-donut" style="background:${donut}"><div class="study-donut-center"><b>${DATA.length}</b><span>lesões</span></div></div><div class="study-state-list">
+          <div class="study-state-row"><span><i style="background:${CONF_COLORS.easy}"></i>🟢 Fácil</span><b>${confidenceCounts.easy} (${Math.round(ce)}%)</b></div>
+          <div class="study-state-row"><span><i style="background:${CONF_COLORS.medium}"></i>🔵 Média</span><b>${confidenceCounts.medium} (${Math.round(cm)}%)</b></div>
+          <div class="study-state-row"><span><i style="background:${CONF_COLORS.hard}"></i>🟠 Difícil</span><b>${confidenceCounts.hard} (${Math.round(ch)}%)</b></div>
+          <div class="study-state-row"><span><i style="background:${CONF_COLORS.again}"></i>⚪ Não sei</span><b>${confidenceCounts.again} (${Math.round(ca)}%)</b></div>
+          <div class="study-state-row"><span><i style="background:${CONF_COLORS.fresh}"></i>Nunca estudadas</span><b>${confidenceCounts.fresh} (${Math.round(cf)}%)</b></div>
+        </div></div></div>
     </div>
     <div class="study-cycle-feature">
         <div class="study-cycle-mini">
@@ -7553,22 +7656,15 @@ function openProgressDashboard(){
         </div>
     </div>
     <div class="study-lower">
-      <div class="study-chart"><h3>Estado do acervo</h3><div class="study-chart-sub">última autoavaliação registrada em cada caso</div><div class="study-donut-row"><div class="study-donut" style="background:${donut}"><div class="study-donut-center"><b>${DATA.length}</b><span>lesões</span></div></div><div class="study-state-list">
-          <div class="study-state-row"><span><i style="background:${CONF_COLORS.easy}"></i>🟢 Fácil</span><b>${confidenceCounts.easy} (${Math.round(ce)}%)</b></div>
-          <div class="study-state-row"><span><i style="background:${CONF_COLORS.medium}"></i>🔵 Média</span><b>${confidenceCounts.medium} (${Math.round(cm)}%)</b></div>
-          <div class="study-state-row"><span><i style="background:${CONF_COLORS.hard}"></i>🟠 Difícil</span><b>${confidenceCounts.hard} (${Math.round(ch)}%)</b></div>
-          <div class="study-state-row"><span><i style="background:${CONF_COLORS.again}"></i>⚪ Não sei</span><b>${confidenceCounts.again} (${Math.round(ca)}%)</b></div>
-          <div class="study-state-row"><span><i style="background:${CONF_COLORS.fresh}"></i>Nunca estudadas</span><b>${confidenceCounts.fresh} (${Math.round(cf)}%)</b></div>
-        </div></div></div>
         <div class="study-chart study-domain-card"><h3>Domínio por área</h3><div class="study-domain-list">${sections.map((s,i)=>`<div class="study-domain-row" data-sec="${escAttr(s.name)}" style="--section-color:${studySectionColor(s.name)}" title="${s.studied} de ${s.total} casos estudados · cobertura ${s.coverage}%"><span class="study-domain-name">${esc(s.name)}</span><div class="study-domain-track"><div class="study-domain-fill" style="width:${s.studied?s.pct:0}%"></div></div><b class="study-domain-pct">${s.studied?s.pct+'%':'—'}</b></div>`).join('')}</div></div>
-    </div>
-    <div class="study-cycle-overall">
+      <div class="study-cycle-overall">
       <div class="study-cycle-overall-head">
         <div><b>◷ Resumo geral do ciclo de revisão</b><span>Distribuição de todas as ${cycleGlobal.total} lesões do acervo por tempo desde a última revisão</span></div>
       </div>
       <div class="study-cycle-overall-track">${cycleGlobalSeg.map(z=>`<i class="cycle-${z.k}" style="width:${z.pct}%"><b>${Math.round(z.pct)}%</b></i>`).join('')}</div>
       <div class="study-cycle-overall-values">${cycleGlobalSeg.map(z=>`<div style="width:${z.pct}%"><b>${z.n}</b><span>${z.k==='recent'?'≤ 7 dias':z.k==='short'?'8–45 dias':z.k==='medium'?'46 dias–6 meses':z.k==='late'?'> 6 meses':'nunca revisadas'}</span></div>`).join('')}</div>
       <div class="study-cycle-tip"><span>💡</span><p>Mesmo quando você revisar 100% do acervo, este gráfico continuará útil, mostrando o quanto seu estudo está recente e o que precisa de nova revisão.</p></div>
+    </div>
     </div>
     <div class="study-embedded-section" id="study-embedded-section">
       <div class="study-embedded-head">
