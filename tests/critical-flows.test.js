@@ -107,8 +107,14 @@ const importHandler = extractImportHandler(html);
 test('fluxos criticos sao localizados estaticamente no index.html', () => {
   assert.equal(recovery.line, 4312);
   assert.equal(brokenArtifacts.line, 4302);
-  assert.equal(loadData.line, 4731);
-  assert.equal(importHandler.line, 6642);
+  // loadData e importHandler foram deslocados pela adicao dos motores de
+  // migracao de legacy IDs (V1, inerte) e do reconciliador por identidade
+  // semantica (V2, inerte) entre deduplicateV171 e o bloco de auditoria de
+  // altPlacements — ver LEGACY_ID_MIGRATION_MAP_V1 e reconcileCatalogByIdentityV2.
+  // Atualizado novamente apos o hardening do V2 (blocking/provenance/safeToApply
+  // e merge conservador de altPlacements) dentro do mesmo bloco inerte.
+  assert.equal(loadData.line, 5757);
+  assert.equal(importHandler.line, 7668);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

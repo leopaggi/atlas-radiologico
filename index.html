@@ -4681,6 +4681,1032 @@ async function deduplicateV171(){
 }
 
 
+/* ============================================================
+   MOTOR DE MIGRACAO DE LEGACY IDS (V1) — INERTE, NAO CONECTADO
+   ============================================================
+   Origem: investigacao read-only dos 126 grupos duplicados reais do
+   DATA do navegador (auditoria-duplicatas-126.json), cruzados contra
+   o SEED atual por identidade (name+s+site nunca por numero de ID).
+   Todo legacyId abaixo foi confirmado como REAPROVEITADO no SEED
+   atual (aponta hoje para outra lesao legitima) — nunca ausente.
+
+   ESTE BLOCO NAO E CHAMADO POR NENHUM FLUXO DE PRODUCAO ainda.
+   Nao ha nenhuma referencia a LEGACY_ID_MIGRATION_MAP_V1 ou a
+   applyLegacyIdMigrationToState fora desta definicao e dos
+   comentarios/testes. Ligar isto a loadData, syncFromFirebase,
+   importacao ou a qualquer botao e uma etapa FUTURA e separada.
+
+   Todas as funcoes abaixo sao PURAS: recebem dados por parametro e
+   devolvem dados novos, sem ler/escrever DATA, REVIEW, SRS, SEED,
+   IndexedDB, localStorage, Firebase ou o DOM, e sem mutar os
+   argumentos recebidos. Isso permite executa-las isoladamente em
+   Node/vm nos testes (ver tests/legacy-id-migration.test.js).
+   ------------------------------------------------------------ */
+const LEGACY_ID_MIGRATION_MAP_V1 = [
+  { legacyId:"seed_8", canonicalId:"seed_9", expectedLegacyName:"Astrocitoma difuso de baixo grau", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Intra-axial (parênquima)" },
+  { legacyId:"seed_16", canonicalId:"seed_18", expectedLegacyName:"Schwannoma vestibular", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Extra-axial / meninges" },
+  { legacyId:"seed_21", canonicalId:"seed_24", expectedLegacyName:"Pineocitoma", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Região pineal" },
+  { legacyId:"seed_28", canonicalId:"seed_32", expectedLegacyName:"Osteoma craniano", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Crânio ósseo" },
+  { legacyId:"seed_30", canonicalId:"seed_34", expectedLegacyName:"Hemangioma craniano", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Crânio ósseo" },
+  { legacyId:"seed_35", canonicalId:"seed_40", expectedLegacyName:"Ependimoma intraventricular", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Ventrículos" },
+  { legacyId:"seed_36", canonicalId:"seed_41", expectedLegacyName:"Papiloma de plexo coroide", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Ventrículos" },
+  { legacyId:"seed_355", canonicalId:"seed_360", expectedLegacyName:"Trombose de artéria mesentérica superior", expectedLegacySection:"Vascular", expectedLegacySite:"Artérias viscerais abdominais" },
+  { legacyId:"seed_356", canonicalId:"seed_361", expectedLegacyName:"Tumor de Wilms (nefroblastoma)", expectedLegacySection:"Abdômen Superior", expectedLegacySite:"Rim" },
+  { legacyId:"seed_359", canonicalId:"seed_364", expectedLegacyName:"Linfangioma cístico (malformação linfática)", expectedLegacySection:"Abdômen Superior", expectedLegacySite:"Retroperitônio" },
+  { legacyId:"seed_362", canonicalId:"seed_369", expectedLegacyName:"Meduloblastoma", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Fossa posterior / cerebelo" },
+  { legacyId:"seed_363", canonicalId:"seed_370", expectedLegacyName:"Astrocitoma pilocítico", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Fossa posterior / cerebelo" },
+  { legacyId:"seed_377", canonicalId:"seed_384", expectedLegacyName:"Hemorragia intraventricular do prematuro", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Ventrículos" },
+  { legacyId:"seed_397", canonicalId:"seed_404", expectedLegacyName:"Fratura de bacia com sangramento ativo", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Osso" },
+  { legacyId:"seed_398", canonicalId:"seed_405", expectedLegacyName:"Ruptura de bexiga traumática", expectedLegacySection:"Pelve Masculina", expectedLegacySite:"Bexiga" },
+  { legacyId:"seed_409", canonicalId:"seed_418", expectedLegacyName:"Ruptura traumática da aorta", expectedLegacySection:"Vascular", expectedLegacySite:"Aorta" },
+  { legacyId:"seed_410", canonicalId:"seed_419", expectedLegacyName:"Hemotórax traumático", expectedLegacySection:"Tórax", expectedLegacySite:"Pleura" },
+  { legacyId:"seed_421", canonicalId:"seed_432", expectedLegacyName:"Hemorragia intracraniana espontânea (hipertensiva)", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Intra-axial (parênquima)" },
+  { legacyId:"seed_422", canonicalId:"seed_433", expectedLegacyName:"Hemorragia subaracnóidea aneurismática", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Extra-axial / meninges" },
+  { legacyId:"seed_424", canonicalId:"seed_435", expectedLegacyName:"Herniação cerebral (transtentorial/subfalcina)", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Intra-axial (parênquima)" },
+  { legacyId:"seed_451", canonicalId:"seed_462", expectedLegacyName:"Papiloma escamoso oral (HPV)", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Cavidade oral e orofaringe" },
+  { legacyId:"seed_452", canonicalId:"seed_463", expectedLegacyName:"Carcinoma de laringe (glótico)", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Laringe" },
+  { legacyId:"seed_453", canonicalId:"seed_464", expectedLegacyName:"Laringocele", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Laringe" },
+  { legacyId:"seed_458", canonicalId:"seed_469", expectedLegacyName:"Pólipo antrocoanal", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Seios paranasais" },
+  { legacyId:"seed_466", canonicalId:"seed_481", expectedLegacyName:"PRES (síndrome de encefalopatia posterior reversível)", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Intra-axial (parênquima)" },
+  { legacyId:"seed_468", canonicalId:"seed_483", expectedLegacyName:"Encefalomielite aguda disseminada (ADEM)", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Intra-axial (parênquima)" },
+  { legacyId:"seed_471", canonicalId:"seed_488", expectedLegacyName:"Hidrocefalia de pressão normal", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Ventrículos" },
+  { legacyId:"seed_534", canonicalId:"seed_552", expectedLegacyName:"Tecoma ovariano", expectedLegacySection:"Pelve Feminina", expectedLegacySite:"Ovário" },
+  { legacyId:"seed_556", canonicalId:"seed_576", expectedLegacyName:"Empiema subdural intracraniano", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Extra-axial / meninges" },
+  { legacyId:"seed_560", canonicalId:"seed_581", expectedLegacyName:"Metástases ósseas vertebrais", expectedLegacySection:"Coluna Vertebral", expectedLegacySite:"Corpo vertebral" },
+  { legacyId:"seed_585", canonicalId:"seed_612", expectedLegacyName:"Hipotensão intracraniana espontânea", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Extra-axial / meninges" },
+  { legacyId:"seed_606", canonicalId:"seed_638", expectedLegacyName:"Neurite óptica", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Vias ópticas" },
+  { legacyId:"seed_626", canonicalId:"seed_659", expectedLegacyName:"Calcificações cutâneas mamárias", expectedLegacySection:"Mamas", expectedLegacySite:"Calcificações" },
+  { legacyId:"seed_635", canonicalId:"seed_668", expectedLegacyName:"Agenesia de vesícula seminal", expectedLegacySection:"Pelve Masculina", expectedLegacySite:"Vesículas seminais" },
+  { legacyId:"seed_669", canonicalId:"seed_706", expectedLegacyName:"Hiperostose frontal interna", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Crânio ósseo" },
+  { legacyId:"seed_707", canonicalId:"seed_748", expectedLegacyName:"Leiomioma vaginal", expectedLegacySection:"Pelve Feminina", expectedLegacySite:"Vagina" },
+  { legacyId:"seed_742", canonicalId:"seed_787", expectedLegacyName:"Inflamação do quiasma óptico", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Vias ópticas" },
+  { legacyId:"seed_743", canonicalId:"seed_788", expectedLegacyName:"Hidrocefalia comunicante", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Ventrículos" },
+  { legacyId:"seed_762", canonicalId:"seed_810", expectedLegacyName:"Meningioma da região pineal", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Região pineal" },
+  { legacyId:"seed_763", canonicalId:"seed_811", expectedLegacyName:"Metástase da região pineal", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Região pineal" },
+  { legacyId:"seed_778", canonicalId:"seed_828", expectedLegacyName:"Hipofisite granulomatosa", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Região selar" },
+  { legacyId:"seed_801", canonicalId:"seed_856", expectedLegacyName:"Infarto cerebelar", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Fossa posterior / cerebelo" },
+  { legacyId:"seed_802", canonicalId:"seed_857", expectedLegacyName:"Abscesso cerebelar", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Fossa posterior / cerebelo" },
+  { legacyId:"seed_851", canonicalId:"seed_909", expectedLegacyName:"Holoprosencefalia", expectedLegacySection:"Medicina Fetal", expectedLegacySite:"Anomalias fetais estruturais" },
+  { legacyId:"seed_864", canonicalId:"seed_923", expectedLegacyName:"Agenesia do corpo caloso", expectedLegacySection:"Medicina Fetal", expectedLegacySite:"Anomalias fetais estruturais" },
+  { legacyId:"seed_919", canonicalId:"seed_978", expectedLegacyName:"Infecção de bolsa de gerador (marca-passo/desfibrilador)", expectedLegacySection:"Tórax", expectedLegacySite:"Parede torácica" },
+  { legacyId:"seed_920", canonicalId:"seed_979", expectedLegacyName:"Fratura de cateter com embolização de fragmento", expectedLegacySection:"Vascular", expectedLegacySite:"Veias" },
+  { legacyId:"seed_928", canonicalId:"seed_987", expectedLegacyName:"Depósito de gadolínio no SNC", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Intra-axial (parênquima)" },
+  { legacyId:"seed_981", canonicalId:"seed_1046", expectedLegacyName:"Metástase cervical de sítio primário desconhecido", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Linfonodos cervicais" },
+  { legacyId:"seed_996", canonicalId:"seed_1061", expectedLegacyName:"Malformação de Chiari tipo II", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Fossa posterior / cerebelo" },
+  { legacyId:"seed_997", canonicalId:"seed_1062", expectedLegacyName:"Cisto aracnoide de fossa posterior", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Fossa posterior / cerebelo" },
+  { legacyId:"seed_1056", canonicalId:"seed_1126", expectedLegacyName:"Lisencefalia", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Intra-axial (parênquima)" },
+  { legacyId:"seed_1057", canonicalId:"seed_1127", expectedLegacyName:"Polimicrogiria", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Intra-axial (parênquima)" },
+  { legacyId:"seed_1058", canonicalId:"seed_1128", expectedLegacyName:"Displasia septo-óptica", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Região selar" },
+  { legacyId:"seed_1059", canonicalId:"seed_1129", expectedLegacyName:"Esquizencefalia", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Ventrículos" },
+  { legacyId:"seed_1063", canonicalId:"seed_1133", expectedLegacyName:"Capsulite adesiva (ombro congelado)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Ombro" },
+  { legacyId:"seed_1064", canonicalId:"seed_1134", expectedLegacyName:"Síndrome do impacto subacromial", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Ombro" },
+  { legacyId:"seed_1065", canonicalId:"seed_1135", expectedLegacyName:"Bursite subacromial-subdeltóidea", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Ombro" },
+  { legacyId:"seed_1066", canonicalId:"seed_1136", expectedLegacyName:"Artropatia do manguito rotador (cuff tear arthropathy)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Ombro" },
+  { legacyId:"seed_1067", canonicalId:"seed_1137", expectedLegacyName:"Osteólise da clavícula distal", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Ombro" },
+  { legacyId:"seed_1068", canonicalId:"seed_1138", expectedLegacyName:"Cisto paralabral com compressão do nervo supraescapular", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Ombro" },
+  { legacyId:"seed_1069", canonicalId:"seed_1139", expectedLegacyName:"Artropatia por hidroxiapatita (ombro de Milwaukee)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Ombro" },
+  { legacyId:"seed_1070", canonicalId:"seed_1140", expectedLegacyName:"Luxação acromioclavicular", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Ombro" },
+  { legacyId:"seed_1071", canonicalId:"seed_1141", expectedLegacyName:"Malformação de Dandy-Walker", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Fossa posterior / cerebelo" },
+  { legacyId:"seed_1072", canonicalId:"seed_1142", expectedLegacyName:"Malformação de Chiari tipo I", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Fossa posterior / cerebelo" },
+  { legacyId:"seed_1073", canonicalId:"seed_1143", expectedLegacyName:"Epicondilite medial (cotovelo de golfista)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Cotovelo" },
+  { legacyId:"seed_1074", canonicalId:"seed_1144", expectedLegacyName:"Lesão do ligamento colateral ulnar do cotovelo", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Cotovelo" },
+  { legacyId:"seed_1075", canonicalId:"seed_1145", expectedLegacyName:"Bursite do olécrano", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Cotovelo" },
+  { legacyId:"seed_1076", canonicalId:"seed_1146", expectedLegacyName:"Instabilidade posterolateral rotatória do cotovelo", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Cotovelo" },
+  { legacyId:"seed_1077", canonicalId:"seed_1147", expectedLegacyName:"Corpo livre articular do cotovelo (osteocondral)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Cotovelo" },
+  { legacyId:"seed_1078", canonicalId:"seed_1148", expectedLegacyName:"Fratura da cabeça do rádio", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Cotovelo" },
+  { legacyId:"seed_1079", canonicalId:"seed_1149", expectedLegacyName:"Síndrome do túnel radial (neuropatia do nervo interósseo posterior)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Cotovelo" },
+  { legacyId:"seed_1080", canonicalId:"seed_1150", expectedLegacyName:"Cotovelo de babá (subluxação da cabeça do rádio)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Cotovelo" },
+  { legacyId:"seed_1081", canonicalId:"seed_1151", expectedLegacyName:"Ruptura do tendão do tríceps", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Cotovelo" },
+  { legacyId:"seed_1082", canonicalId:"seed_1152", expectedLegacyName:"Síndrome de Lemierre", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Espaços cervicais" },
+  { legacyId:"seed_1083", canonicalId:"seed_1153", expectedLegacyName:"Fascite necrosante cervical", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Espaços cervicais" },
+  { legacyId:"seed_1084", canonicalId:"seed_1154", expectedLegacyName:"Mediastinite necrosante descendente", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Espaços cervicais" },
+  { legacyId:"seed_1085", canonicalId:"seed_1155", expectedLegacyName:"Trombose do seio cavernoso", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Base do crânio" },
+  { legacyId:"seed_1086", canonicalId:"seed_1156", expectedLegacyName:"Epiglotite aguda", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Laringe" },
+  { legacyId:"seed_1087", canonicalId:"seed_1157", expectedLegacyName:"Síndrome de Grisel", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Espaços cervicais" },
+  { legacyId:"seed_1088", canonicalId:"seed_1158", expectedLegacyName:"Osteomielite da mandíbula", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Mandíbula e maxila" },
+  { legacyId:"seed_1090", canonicalId:"seed_1160", expectedLegacyName:"Colesteatoma adquirido", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Osso temporal" },
+  { legacyId:"seed_1091", canonicalId:"seed_1161", expectedLegacyName:"Perfuração timpânica traumática", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Osso temporal" },
+  { legacyId:"seed_1092", canonicalId:"seed_1162", expectedLegacyName:"Cisto do segundo arco branquial", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Espaços cervicais" },
+  { legacyId:"seed_1093", canonicalId:"seed_1163", expectedLegacyName:"Linfadenite bacteriana supurativa cervical", expectedLegacySection:"Cabeça e Pescoço", expectedLegacySite:"Linfonodos cervicais" },
+  { legacyId:"seed_1094", canonicalId:"seed_1164", expectedLegacyName:"Craniofaringioma papilar", expectedLegacySection:"Neurorradiologia", expectedLegacySite:"Região selar" },
+  { legacyId:"seed_1095", canonicalId:"seed_1165", expectedLegacyName:"Cisto de Baker (cisto poplíteo)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Joelho" },
+  { legacyId:"seed_1098", canonicalId:"seed_1168", expectedLegacyName:"Ressalto do quadril (snapping hip syndrome)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Quadril" },
+  { legacyId:"seed_1099", canonicalId:"seed_1169", expectedLegacyName:"Tenossinovite estenosante (dedo em gatilho)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Punho e Mão" },
+  { legacyId:"seed_1100", canonicalId:"seed_1170", expectedLegacyName:"Subluxação/luxação do tendão da cabeça longa do bíceps", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Ombro" },
+  { legacyId:"seed_1101", canonicalId:"seed_1171", expectedLegacyName:"Impacto femoroacetabular", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Quadril" },
+  { legacyId:"seed_1102", canonicalId:"seed_1172", expectedLegacyName:"Lesão labral acetabular", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Quadril" },
+  { legacyId:"seed_1103", canonicalId:"seed_1173", expectedLegacyName:"Ruptura parcial do tendão do manguito rotador", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Ombro" },
+  { legacyId:"seed_1104", canonicalId:"seed_1174", expectedLegacyName:"Bursite pré-patelar", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Joelho" },
+  { legacyId:"seed_1105", canonicalId:"seed_1175", expectedLegacyName:"Derrame da bainha da longa porção do bíceps", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Ombro" },
+  { legacyId:"seed_1106", canonicalId:"seed_1176", expectedLegacyName:"Ruptura do tendão do subescapular", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Ombro" },
+  { legacyId:"seed_1107", canonicalId:"seed_1177", expectedLegacyName:"Instabilidade dinâmica do nervo ulnar no cotovelo", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Cotovelo" },
+  { legacyId:"seed_1108", canonicalId:"seed_1178", expectedLegacyName:"Bursite bicipitorradial", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Cotovelo" },
+  { legacyId:"seed_1109", canonicalId:"seed_1179", expectedLegacyName:"Gânglio dorsal do punho (cisto escafolunar)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Punho e Mão" },
+  { legacyId:"seed_1110", canonicalId:"seed_1180", expectedLegacyName:"Lesão do complexo fibrocartilagem triangular (TFCC)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Punho e Mão" },
+  { legacyId:"seed_1111", canonicalId:"seed_1181", expectedLegacyName:"Instabilidade escafolunar", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Punho e Mão" },
+  { legacyId:"seed_1112", canonicalId:"seed_1182", expectedLegacyName:"Cisto mucoide digital", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Punho e Mão" },
+  { legacyId:"seed_1113", canonicalId:"seed_1183", expectedLegacyName:"Neuropatia compressiva do nervo ulnar no canal de Guyon", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Punho e Mão" },
+  { legacyId:"seed_1114", canonicalId:"seed_1184", expectedLegacyName:"Bursite isquiática", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Quadril" },
+  { legacyId:"seed_1115", canonicalId:"seed_1185", expectedLegacyName:"Meralgia parestésica (neuropatia do nervo cutâneo femoral lateral)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Quadril" },
+  { legacyId:"seed_1116", canonicalId:"seed_1186", expectedLegacyName:"Tendinopatia do iliopsoas / bursite do iliopsoas", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Quadril" },
+  { legacyId:"seed_1117", canonicalId:"seed_1187", expectedLegacyName:"Disfunção/ruptura do tendão tibial posterior", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Tornozelo e Pé" },
+  { legacyId:"seed_1118", canonicalId:"seed_1188", expectedLegacyName:"Lesão do ligamento deltoide do tornozelo", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Tornozelo e Pé" },
+  { legacyId:"seed_1119", canonicalId:"seed_1189", expectedLegacyName:"Lesão da sindesmose tibiofibular", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Tornozelo e Pé" },
+  { legacyId:"seed_1120", canonicalId:"seed_1190", expectedLegacyName:"Bursite retrocalcânea (deformidade de Haglund)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Tornozelo e Pé" },
+  { legacyId:"seed_1121", canonicalId:"seed_1191", expectedLegacyName:"Sinovite reumatoide (achado ao USG com Doppler)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Articulações" },
+  { legacyId:"seed_1122", canonicalId:"seed_1192", expectedLegacyName:"Cisto meniscal (parameniscal)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Joelho" },
+  { legacyId:"seed_1123", canonicalId:"seed_1193", expectedLegacyName:"Bursite anserina (pata de ganso)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Joelho" },
+  { legacyId:"seed_1130", canonicalId:"seed_1200", expectedLegacyName:"Síndrome do espaço quadrilátero (neuropatia do nervo axilar)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Ombro" },
+  { legacyId:"seed_1131", canonicalId:"seed_1201", expectedLegacyName:"Síndrome do desfiladeiro torácico (compressão neurovascular)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Nervos periféricos" },
+  { legacyId:"seed_1202", canonicalId:"seed_1272", expectedLegacyName:"Ruptura do cisto de Baker", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Joelho" },
+  { legacyId:"seed_1203", canonicalId:"seed_1273", expectedLegacyName:"Degeneração mucoide do ligamento cruzado anterior", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Joelho" },
+  { legacyId:"seed_1204", canonicalId:"seed_1274", expectedLegacyName:"Menisco discoide", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Joelho" },
+  { legacyId:"seed_1205", canonicalId:"seed_1275", expectedLegacyName:"Tendinopatia insercional do Aquiles", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Tornozelo e Pé" },
+  { legacyId:"seed_1206", canonicalId:"seed_1276", expectedLegacyName:"Impacto anterior do tornozelo (osteófitos tibiotalares)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Tornozelo e Pé" },
+  { legacyId:"seed_1207", canonicalId:"seed_1277", expectedLegacyName:"Impacto posterior do tornozelo (os trigonum / processo trigonal)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Tornozelo e Pé" },
+  { legacyId:"seed_1208", canonicalId:"seed_1278", expectedLegacyName:"Lesão osteocondral do tálus", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Tornozelo e Pé" },
+  { legacyId:"seed_1209", canonicalId:"seed_1279", expectedLegacyName:"Fratura de estresse do calcâneo", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Tornozelo e Pé" },
+  { legacyId:"seed_1210", canonicalId:"seed_1280", expectedLegacyName:"Fratura de estresse dos metatarsais (fratura da marcha)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Tornozelo e Pé" },
+  { legacyId:"seed_1211", canonicalId:"seed_1281", expectedLegacyName:"Pé plano adquirido do adulto (estágio avançado)", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Tornozelo e Pé" },
+  { legacyId:"seed_1212", canonicalId:"seed_1282", expectedLegacyName:"Cisto ganglionar periarticular do tornozelo", expectedLegacySection:"Musculoesquelético", expectedLegacySite:"Tornozelo e Pé" }
+];
+
+function normalizeLegacyIdentity(entry){
+  const norm = (v) => String(v == null ? '' : v).normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase();
+  return {
+    name: norm(entry && entry.name),
+    s: norm(entry && entry.s),
+    site: norm(entry && entry.site)
+  };
+}
+
+/* Protecao mais importante do motor: um legacyId pode ter sido
+   reaproveitado no SEED atual para uma lesao totalmente diferente
+   (ex.: seed_28 hoje e' "Cisto aracnoide da regiao pineal", nao
+   "Osteoma craniano"). So' tratamos uma entrada como copia historica
+   quando o ID *e* o conteudo batem com o que o mapa espera. */
+function validateLegacyContent(entry, rule){
+  if(!entry || entry.id !== rule.legacyId){
+    return { valid:false, reason:'id_mismatch' };
+  }
+  const actual = normalizeLegacyIdentity(entry);
+  const expected = normalizeLegacyIdentity({ name: rule.expectedLegacyName, s: rule.expectedLegacySection, site: rule.expectedLegacySite });
+  const matches = actual.name === expected.name && actual.s === expected.s && actual.site === expected.site;
+  return matches ? { valid:true, reason:null } : { valid:false, reason:'content_mismatch_id_reused' };
+}
+
+/* Verifica estaticamente a integridade do proprio mapa contra uma
+   lista de entradas tipo-SEED: legacyIds unicos, canonicalId != legacyId,
+   canonicalId existente, identidade canonica batendo com a esperada,
+   e ausencia de pares ambiguos (mais de uma correspondencia no SEED
+   para a mesma identidade esperada). Funcao pura, usada em testes e
+   em auditoria manual — nao e chamada automaticamente. */
+function validateLegacyIdMigrationMap(migrationMap, seedEntries){
+  const issues = [];
+  const seenLegacyIds = new Set();
+  const bySeedId = new Map((seedEntries || []).map((e) => [e.id, e]));
+  const identityIndex = new Map();
+  (seedEntries || []).forEach((e) => {
+    const key = JSON.stringify(normalizeLegacyIdentity(e));
+    if(!identityIndex.has(key)) identityIndex.set(key, []);
+    identityIndex.get(key).push(e.id);
+  });
+
+  (migrationMap || []).forEach((rule, index) => {
+    if(!rule || !rule.legacyId || !rule.canonicalId){
+      issues.push({ index, rule, reason:'rule_incompleta' });
+      return;
+    }
+    if(rule.legacyId === rule.canonicalId){
+      issues.push({ index, rule, reason:'legacyId_igual_canonicalId' });
+    }
+    if(seenLegacyIds.has(rule.legacyId)){
+      issues.push({ index, rule, reason:'legacyId_duplicado_no_mapa' });
+    }
+    seenLegacyIds.add(rule.legacyId);
+
+    const canonicalEntry = bySeedId.get(rule.canonicalId);
+    if(!canonicalEntry){
+      issues.push({ index, rule, reason:'canonicalId_ausente_no_seed' });
+      return;
+    }
+    const canonicalIdentity = normalizeLegacyIdentity(canonicalEntry);
+    const expectedIdentity = normalizeLegacyIdentity({ name: rule.expectedLegacyName, s: rule.expectedLegacySection, site: rule.expectedLegacySite });
+    if(canonicalIdentity.name !== expectedIdentity.name || canonicalIdentity.s !== expectedIdentity.s || canonicalIdentity.site !== expectedIdentity.site){
+      issues.push({ index, rule, reason:'canonical_nao_corresponde_a_expected_identity' });
+    }
+    const matches = identityIndex.get(JSON.stringify(expectedIdentity)) || [];
+    if(matches.length === 0){
+      issues.push({ index, rule, reason:'nenhuma_correspondencia_no_seed' });
+    } else if(matches.length > 1){
+      issues.push({ index, rule, reason:'par_ambiguo_multiplas_correspondencias_no_seed', matches });
+    }
+  });
+
+  return {
+    valid: issues.length === 0,
+    issues,
+    totalRules: (migrationMap || []).length,
+    uniqueLegacyIds: seenLegacyIds.size
+  };
+}
+
+/* REVIEW e uma escala ordinal (0 "Nao revisado" < 1 "Revisando" < 2
+   "Dominado" — ver REVIEW_LABELS). O merge preserva o maior estagio,
+   tratando ausencia de chave separadamente de um 0 explicito apenas
+   para permitir null quando NENHUM dos dois lados tem entrada.
+   Nunca usa SRS para decidir o resultado. */
+function mergeLegacyReview(legacyReview, canonicalReview){
+  const l = (legacyReview === undefined || legacyReview === null) ? null : legacyReview;
+  const c = (canonicalReview === undefined || canonicalReview === null) ? null : canonicalReview;
+  if(l === null && c === null) return null;
+  return Math.max(l ?? 0, c ?? 0);
+}
+
+/* SRS (ver srsGradeLevel) nao e cumulativo — e' inteiramente derivado
+   da ultima jogada de estudo. Por isso NUNCA somamos streak, tiramos
+   media de interval, nem escolhemos pelo maior due/streak isolado:
+   sempre preservamos o objeto INTEIRO de um dos lados. Quando os dois
+   lados tem SRS e sao diferentes, o conflito e' SEMPRE reportado
+   (mesmo quando o updatedAt permite resolver automaticamente). */
+function mergeLegacySrs(legacySrs, canonicalSrs){
+  const hasLegacy = !!legacySrs;
+  const hasCanonical = !!canonicalSrs;
+  if(!hasLegacy && !hasCanonical) return { value:null, conflict:false };
+  if(hasLegacy && !hasCanonical) return { value:legacySrs, conflict:false };
+  if(!hasLegacy && hasCanonical) return { value:canonicalSrs, conflict:false };
+
+  if(JSON.stringify(legacySrs) === JSON.stringify(canonicalSrs)){
+    return { value:canonicalSrs, conflict:false };
+  }
+  const legacyUpdatedAt = Number(legacySrs.updatedAt) || 0;
+  const canonicalUpdatedAt = Number(canonicalSrs.updatedAt) || 0;
+  if(legacyUpdatedAt === canonicalUpdatedAt){
+    return { value:null, conflict:true, reason:'srs_conflict_unresolved_no_timestamp' };
+  }
+  const winner = legacyUpdatedAt > canonicalUpdatedAt ? legacySrs : canonicalSrs;
+  return { value:winner, conflict:true, reason:'srs_conflict_resolved_by_updatedAt' };
+}
+
+/* Notes: quando ha um _userUpdatedAt confiavel e diferente, a versao
+   mais recente vence deterministicamente (sem marcar conflito). Sem
+   timestamp utilizavel para decidir, NUNCA descarta uma das versoes
+   por suposicao — reporta conflito com value:null para revisao humana. */
+function mergeLegacyNotes(legacyNotes, canonicalNotes, legacyUpdatedAt, canonicalUpdatedAt){
+  const hasLegacy = typeof legacyNotes === 'string' && legacyNotes.length > 0;
+  const hasCanonical = typeof canonicalNotes === 'string' && canonicalNotes.length > 0;
+  if(!hasLegacy && !hasCanonical) return { value:'', conflict:false };
+  if(hasLegacy && !hasCanonical) return { value:legacyNotes, conflict:false };
+  if(!hasLegacy && hasCanonical) return { value:canonicalNotes, conflict:false };
+  if(legacyNotes === canonicalNotes) return { value:canonicalNotes, conflict:false };
+
+  const legacyUp = Number(legacyUpdatedAt) || 0;
+  const canonicalUp = Number(canonicalUpdatedAt) || 0;
+  if(legacyUp === canonicalUp){
+    return { value:null, conflict:true, reason:'notes_conflict_unresolved_no_timestamp' };
+  }
+  return { value: legacyUp > canonicalUp ? legacyNotes : canonicalNotes, conflict:false };
+}
+
+function mergeLegacyTags(legacyTags, canonicalTags){
+  const seen = new Set();
+  const result = [];
+  for(const tag of [...(canonicalTags || []), ...(legacyTags || [])]){
+    if(!seen.has(tag)){ seen.add(tag); result.push(tag); }
+  }
+  return result;
+}
+
+/* Uniao por URL normalizada (nunca por igualdade do objeto inteiro):
+   a mesma URL com labels diferentes nao duplica — o label do lado
+   canonico prevalece. Nenhuma URL exclusiva de qualquer lado se perde. */
+function mergeLegacyLinks(legacyLinks, canonicalLinks){
+  const normalizeUrl = (url) => String(url || '').trim();
+  const byUrl = new Map();
+  for(const link of (canonicalLinks || [])){
+    const key = normalizeUrl(link.url);
+    if(key) byUrl.set(key, { ...link });
+  }
+  for(const link of (legacyLinks || [])){
+    const key = normalizeUrl(link.url);
+    if(key && !byUrl.has(key)) byUrl.set(key, { ...link });
+  }
+  return [...byUrl.values()];
+}
+
+/* Reescreve a posse de uma imagem migrada para o ID canonico, incluindo
+   o metadado espelhado em cloudinaryContext.custom.lesion_id quando
+   presente. Demais metadados (width/height/format/label/etc.) ficam
+   intactos. Nao muta o objeto de imagem recebido. */
+function rewriteMigratedImageOwner(img, canonicalId){
+  const next = { ...img, lesionId: canonicalId };
+  if(next.cloudinaryContext && next.cloudinaryContext.custom){
+    next.cloudinaryContext = {
+      ...next.cloudinaryContext,
+      custom: { ...next.cloudinaryContext.custom, lesion_id: canonicalId }
+    };
+  }
+  return next;
+}
+
+/* Uniao de images[] sem perda, deduplicada pela MESMA chave de
+   conteudo usada em producao (stableImageKeyV208: assetId > publicId >
+   originalUrl > data > thumb — ver definicao acima neste arquivo).
+   Em colisao de chave, os metadados do lado CANONICO prevalecem e o
+   legacy so' preenche o que estiver faltando. */
+function mergeLegacyImages(legacyImages, canonicalImages, canonicalId){
+  const byKey = new Map();
+  for(const img of (canonicalImages || [])){
+    const key = stableImageKeyV208(img);
+    if(key) byKey.set(key, rewriteMigratedImageOwner(img, canonicalId));
+  }
+  for(const img of (legacyImages || [])){
+    const key = stableImageKeyV208(img);
+    if(key && !byKey.has(key)) byKey.set(key, rewriteMigratedImageOwner(img, canonicalId));
+  }
+  return [...byKey.values()];
+}
+
+/* Identidade estrutural (name/s/site/inc) e' SEMPRE a do objeto
+   canonico — o legacy nunca a sobrescreve. Campos de conteudo
+   (enTerm/classification/img/localImg) sao herdados do legacy SOMENTE
+   quando o canonico nao tem valor; quando os dois tem valores
+   diferentes, isso e' registrado como conflito (nunca sobrescrito
+   silenciosamente). altPlacements e' copiado do legacy quando o
+   canonico nao tiver. _userUpdatedAt final e' o maior dos dois. */
+function mergeLegacyBaseFields(canonicalEntry, legacyEntry){
+  const merged = { ...canonicalEntry };
+  const conflicts = [];
+  const isEmpty = (v) => v === undefined || v === null || v === '' || v === false;
+
+  for(const field of ['enTerm', 'classification', 'img', 'localImg']){
+    const canonicalValue = canonicalEntry[field];
+    const legacyValue = legacyEntry[field];
+    if(isEmpty(canonicalValue) && !isEmpty(legacyValue)){
+      merged[field] = legacyValue;
+    }else if(!isEmpty(canonicalValue) && !isEmpty(legacyValue) && JSON.stringify(canonicalValue) !== JSON.stringify(legacyValue)){
+      conflicts.push({ field, canonicalValue, legacyValue });
+    }
+  }
+
+  if((!Array.isArray(canonicalEntry.altPlacements) || !canonicalEntry.altPlacements.length)
+    && Array.isArray(legacyEntry.altPlacements) && legacyEntry.altPlacements.length){
+    merged.altPlacements = legacyEntry.altPlacements;
+  }
+
+  const maxUpdatedAt = Math.max(Number(canonicalEntry._userUpdatedAt) || 0, Number(legacyEntry._userUpdatedAt) || 0);
+  if(maxUpdatedAt) merged._userUpdatedAt = maxUpdatedAt; else delete merged._userUpdatedAt;
+
+  return { merged, conflicts };
+}
+
+/* Funcao principal — ainda NAO chamada por nenhum fluxo de producao.
+   Recebe um estado {data, review, srs} e devolve um estado NOVO
+   (nunca muta os argumentos) mais um relatorio estruturado. Para cada
+   par do mapa: se o legacyId nao existir mais em `data`, e' um no-op
+   (idempotencia); se existir mas o conteudo nao bater com o esperado,
+   vira anomaly e NADA e alterado para aquele par (protecao contra
+   ID reaproveitado); caso contrario, funde os campos usando as
+   funcoes puras acima e remove a entrada legada. */
+function applyLegacyIdMigrationToState(state, migrationMap, seedById){
+  let entries = JSON.parse(JSON.stringify((state && state.data) || []));
+  const review = JSON.parse(JSON.stringify((state && state.review) || {}));
+  const srs = JSON.parse(JSON.stringify((state && state.srs) || {}));
+
+  const migrated = [];
+  const skipped = [];
+  const conflicts = [];
+  const anomalies = [];
+
+  for(const rule of (migrationMap || [])){
+    const legacyIndex = entries.findIndex((e) => e && e.id === rule.legacyId);
+    if(legacyIndex === -1){
+      skipped.push({ rule, reason:'legacy_ausente' });
+      continue;
+    }
+
+    const legacyEntry = entries[legacyIndex];
+    const validation = validateLegacyContent(legacyEntry, rule);
+    if(!validation.valid){
+      anomalies.push({ rule, reason: validation.reason });
+      continue;
+    }
+
+    const canonicalIndex = entries.findIndex((e) => e && e.id === rule.canonicalId);
+    const canonicalSeedEntry = seedById
+      ? (seedById.get ? seedById.get(rule.canonicalId) : seedById[rule.canonicalId])
+      : null;
+    const canonicalBase = canonicalIndex >= 0
+      ? entries[canonicalIndex]
+      : (canonicalSeedEntry ? JSON.parse(JSON.stringify(canonicalSeedEntry)) : null);
+
+    if(!canonicalBase){
+      anomalies.push({ rule, reason:'canonical_indisponivel' });
+      continue;
+    }
+
+    const { merged, conflicts: baseConflicts } = mergeLegacyBaseFields(canonicalBase, legacyEntry);
+    baseConflicts.forEach((c) => conflicts.push({ rule, kind:'base_field', ...c }));
+
+    merged.id = rule.canonicalId;
+    merged.tags = mergeLegacyTags(legacyEntry.tags, canonicalBase.tags);
+    merged.links = mergeLegacyLinks(legacyEntry.links, canonicalBase.links);
+    merged.images = mergeLegacyImages(legacyEntry.images, canonicalBase.images, rule.canonicalId);
+
+    const notesResult = mergeLegacyNotes(legacyEntry.notes, canonicalBase.notes, legacyEntry._userUpdatedAt, canonicalBase._userUpdatedAt);
+    if(notesResult.conflict) conflicts.push({ rule, kind:'notes', reason: notesResult.reason });
+    if(notesResult.value !== null) merged.notes = notesResult.value;
+
+    const mergedReview = mergeLegacyReview(review[rule.legacyId], review[rule.canonicalId]);
+    if(mergedReview === null) delete review[rule.canonicalId]; else review[rule.canonicalId] = mergedReview;
+    delete review[rule.legacyId];
+
+    const srsResult = mergeLegacySrs(srs[rule.legacyId], srs[rule.canonicalId]);
+    if(srsResult.conflict) conflicts.push({ rule, kind:'srs', reason: srsResult.reason });
+    if(srsResult.value !== null) srs[rule.canonicalId] = srsResult.value; else delete srs[rule.canonicalId];
+    delete srs[rule.legacyId];
+
+    if(canonicalIndex >= 0) entries[canonicalIndex] = merged; else entries.push(merged);
+    entries = entries.filter((e) => e.id !== rule.legacyId);
+
+    migrated.push({ rule });
+  }
+
+  return {
+    state: { data: entries, review, srs },
+    report: { migrated, skipped, conflicts, anomalies }
+  };
+}
+
+
+/* ============================================================
+   RECONCILIADOR DE CATALOGO POR IDENTIDADE SEMANTICA (V2)
+   — INERTE, NAO CONECTADO
+   ============================================================
+   Origem: a auditoria read-only do catalogo completo (1213 DATA vs
+   SEED atual) mostrou que o problema real e' muito maior que os 126
+   pares conhecidos — 1001 dos 1213 registros (82,5%) tem conteudo
+   que nao corresponde mais a identidade atual do proprio ID
+   (875 nao cobertos por nenhuma regra do motor V1). O V1 (mapa
+   estatico de 126 pares legacyId->canonicalId) continua correto
+   para o que ele cobre, mas nao escala para esse problema maior.
+
+   O V2 NAO usa nenhuma tabela de deslocamento de IDs. Ele reconstroi
+   o catalogo inteiro a partir de UMA UNICA REGRA: a identidade
+   semantica (name+s+site, normalizada exatamente como
+   normalizeLegacyIdentity) e' o que importa — nunca o numero do ID.
+
+   ESTE BLOCO NAO E CHAMADO POR NENHUM FLUXO DE PRODUCAO. Nao ha
+   nenhuma referencia a reconcileCatalogByIdentityV2 fora desta
+   definicao e dos comentarios/testes. O motor V1 (LEGACY_ID_MIGRATION_MAP_V1,
+   applyLegacyIdMigrationToState) permanece integralmente inalterado
+   e tambem inerte — o V2 nao o substitui nem o remove.
+
+   Todas as funcoes abaixo sao PURAS e reaproveitam, sem duplicar, as
+   funcoes de merge ja testadas do V1 (normalizeLegacyIdentity,
+   mergeLegacyBaseFields, mergeLegacyTags, mergeLegacyLinks,
+   mergeLegacyImages, mergeLegacyNotes, mergeLegacyReview,
+   mergeLegacySrs, stableImageKeyV208). Nenhuma le/escreve DATA,
+   REVIEW, SRS, SEED, IndexedDB, localStorage, Firebase ou o DOM, e
+   nenhuma muta os argumentos recebidos.
+   ------------------------------------------------------------ */
+
+function identityKeyOfV2(entry){
+  const identity = normalizeLegacyIdentity(entry);
+  return `${identity.name}|||${identity.s}|||${identity.site}`;
+}
+
+/* Indexa o SEED por identidade semantica. Uma identidade com mais de
+   um ID e' ambigua no proprio SEED — isso e' uma inconsistencia do
+   catalogo fonte, nao um problema do DATA, e e' tratada como anomaly
+   (nunca escolhemos um dos IDs "vencedor" silenciosamente). */
+function buildSeedIdentityIndexV2(seedEntries){
+  const byKey = new Map();
+  const byId = new Map();
+  for(const entry of (seedEntries || [])){
+    if(!entry || !entry.id) continue;
+    byId.set(entry.id, entry);
+    const key = identityKeyOfV2(entry);
+    if(!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(entry.id);
+  }
+  return { byKey, byId };
+}
+
+/* Campos ja tratados explicitamente pelo restante do reconciliador —
+   qualquer outro campo (inc, ou qualquer chave futura desconhecida)
+   passa pelo caminho generico abaixo: uma copia so' de um lado e'
+   preservada sem drama; duas copias com valores DIFERENTES viram
+   conflito explicito, nunca escolha silenciosa. */
+const V2_KNOWN_FIELDS = new Set([
+  'id','name','s','site','enTerm','classification','img','localImg',
+  'altPlacements','_userUpdatedAt','tags','links','images','notes'
+]);
+
+function mergeUnknownFieldsV2(merged, primary, secondary, conflicts, context){
+  const isEmpty = (v) => v === undefined || v === null || v === '' || v === false;
+  const keys = new Set([...Object.keys(primary || {}), ...Object.keys(secondary || {})]);
+  for(const field of keys){
+    if(V2_KNOWN_FIELDS.has(field)) continue;
+    const a = primary ? primary[field] : undefined;
+    const b = secondary ? secondary[field] : undefined;
+    if(isEmpty(a) && !isEmpty(b)){
+      merged[field] = b;
+    }else if(!isEmpty(a) && !isEmpty(b) && JSON.stringify(a) !== JSON.stringify(b)){
+      conflicts.push({ ...context, kind:'unknown_field', blocking:false, field, primaryValue:a, secondaryValue:b });
+    }
+    // demais casos (so' 'a', ou 'a'==='b', ou ambos vazios): 'a' ja esta em merged via spread inicial.
+  }
+}
+
+/* Chave normalizada SOMENTE para comparacao de altPlacements (nunca
+   reescreve o objeto original — ver mergeAltPlacementsV2). Mesma
+   convencao de normalizeLegacyIdentity: NFC, trim, colapsa espacos,
+   minusculas. Duas associacoes com s/site que so' diferem em
+   maiusculas/espacos sao a MESMA associacao semantica. */
+function normalizeAltPlacementKeyV2(entry){
+  const clean = (v) => typeof v === 'string' ? v.normalize('NFC').trim().toLowerCase().replace(/\s+/g, ' ') : '';
+  return `${clean(entry && entry.s)}|||${clean(entry && entry.site)}`;
+}
+
+/* Uniao de altPlacements por ASSOCIACAO SEMANTICA (s+site normalizados
+   somente para comparacao — o objeto armazenado nunca e' reescrito com
+   o valor normalizado, ver requisito D da auditoria). Substitui o
+   tratamento de altPlacements herdado de mergeLegacyBaseFields (que so'
+   preenche do lado vazio e SILENCIOSAMENTE descarta divergencias reais
+   — ver 'V2 hardening (limitacao documentada...)' — comportamento
+   aceitavel para o V1, que continua intocado, mas insuficiente para o
+   V2): aqui, cada associacao aparece UMA unica vez no resultado,
+   mesclando metadata complementar de TODAS as ocorrencias recebidas
+   (de qualquer lado, inclusive duplicatas dentro do mesmo lado — ver
+   requisito C). Quando duas ocorrencias da MESMA associacao tem o
+   MESMO campo de metadata com valores DIFERENTES, a prioridade do
+   primeiro lado vence deterministicamente e o conflito fica registrado
+   com os dois valores e o resultado escolhido (nunca escolha invisivel).
+   Objetos de metadata complementares sao fundidos recursivamente e
+   arrays recebem uniao sem duplicatas. Incompatibilidades estruturais
+   (objeto vs escalar, por exemplo) e itens sem s+site validos geram
+   conflito BLOQUEANTE. A ordem final usa a chave semantica normalizada;
+   a representacao original escolhida nunca e' substituida pela forma
+   normalizada. Esta funcao NUNCA decide qual secao/local e' medicamente
+   correto — so' conserva e reconcilia o que ja existe. */
+function mergeAltPlacementsV2(primaryList, secondaryList, conflicts, context){
+  const report = Array.isArray(conflicts) ? conflicts : [];
+  const reportContext = context || {};
+  const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+  const hasIdentityPart = (v) => typeof v === 'string' && v.normalize('NFC').trim().length > 0;
+  const cloneValue = (v) => {
+    if(Array.isArray(v)) return v.map(cloneValue);
+    if(isPlainObject(v)){
+      const copy = {};
+      for(const key of Object.keys(v)) copy[key] = cloneValue(v[key]);
+      return copy;
+    }
+    return v;
+  };
+  const stableValueKey = (v) => {
+    if(v === undefined) return 'undefined';
+    if(v === null) return 'null';
+    if(Array.isArray(v)) return `[${v.map(stableValueKey).join(',')}]`;
+    if(isPlainObject(v)) return `{${Object.keys(v).sort().map((key) => `${JSON.stringify(key)}:${stableValueKey(v[key])}`).join(',')}}`;
+    return `${typeof v}:${JSON.stringify(v)}`;
+  };
+  const compareText = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+  const source = [];
+  const invalidObjects = [];
+
+  const collect = (list, sourceName, sourceRank) => {
+    if(list === undefined || list === null) return;
+    if(!Array.isArray(list)){
+      report.push({ ...reportContext, kind:'alt_placement', blocking:true, reason:'alt_placements_container_invalid', source:sourceName, value:cloneValue(list) });
+      return;
+    }
+    list.forEach((item, sourceIndex) => {
+      if(!isPlainObject(item)){
+        report.push({ ...reportContext, kind:'alt_placement', blocking:true, reason:'alt_placement_item_invalid', source:sourceName, sourceIndex, value:cloneValue(item) });
+        return;
+      }
+      if(!hasIdentityPart(item.s) || !hasIdentityPart(item.site)){
+        const copy = cloneValue(item);
+        invalidObjects.push({ item:copy, sourceName, sourceRank, sourceIndex, stableKey:stableValueKey(copy) });
+        report.push({ ...reportContext, kind:'alt_placement', blocking:true, reason:'alt_placement_sem_identidade_semantica', source:sourceName, sourceIndex, value:copy });
+        return;
+      }
+      const copy = cloneValue(item);
+      source.push({ item:copy, key:normalizeAltPlacementKeyV2(copy), sourceName, sourceRank, sourceIndex, stableKey:stableValueKey(copy) });
+    });
+  };
+
+  collect(primaryList, 'primary', 0);
+  collect(secondaryList, 'secondary', 1);
+  source.sort((a, b) => compareText(a.key, b.key) || a.sourceRank - b.sourceRank || compareText(a.stableKey, b.stableKey) || a.sourceIndex - b.sourceIndex);
+
+  const mergeMetadataValue = (a, b, path, semanticKey, primaryPlacement, secondaryPlacement) => {
+    if(a === undefined) return cloneValue(b);
+    if(b === undefined || stableValueKey(a) === stableValueKey(b)) return cloneValue(a);
+    if(isPlainObject(a) && isPlainObject(b)){
+      const mergedObject = cloneValue(a);
+      for(const field of Object.keys(b).sort()){
+        mergedObject[field] = Object.prototype.hasOwnProperty.call(a, field)
+          ? mergeMetadataValue(a[field], b[field], [...path, field], semanticKey, primaryPlacement, secondaryPlacement)
+          : cloneValue(b[field]);
+      }
+      return mergedObject;
+    }
+    if(Array.isArray(a) && Array.isArray(b)){
+      const byValue = new Map();
+      for(const value of [...a, ...b]){
+        const key = stableValueKey(value);
+        if(!byValue.has(key)) byValue.set(key, cloneValue(value));
+      }
+      return [...byValue.entries()].sort((x, y) => compareText(x[0], y[0])).map((entry) => entry[1]);
+    }
+
+    const structuralMismatch = isPlainObject(a) || isPlainObject(b) || Array.isArray(a) || Array.isArray(b);
+    report.push({
+      ...reportContext,
+      kind:'alt_placement',
+      blocking:structuralMismatch,
+      reason:structuralMismatch ? 'alt_placement_metadata_conflict_unresolved' : 'alt_placement_metadata_conflict_resolved_by_priority',
+      key:semanticKey,
+      field:path.join('.'),
+      primaryValue:cloneValue(a),
+      secondaryValue:cloneValue(b),
+      resolvedValue:structuralMismatch ? null : cloneValue(a),
+      primaryPlacement:cloneValue(primaryPlacement),
+      secondaryPlacement:cloneValue(secondaryPlacement)
+    });
+    return cloneValue(a);
+  };
+
+  const byKey = new Map();
+  for(const candidate of source){
+    if(!byKey.has(candidate.key)){
+      byKey.set(candidate.key, candidate.item);
+      continue;
+    }
+    const current = byKey.get(candidate.key);
+    if(stableValueKey(current) === stableValueKey(candidate.item)) continue;
+    const mergedItem = cloneValue(current);
+    for(const field of Object.keys(candidate.item).sort()){
+      if(field === 's' || field === 'site') continue;
+      mergedItem[field] = Object.prototype.hasOwnProperty.call(current, field)
+        ? mergeMetadataValue(current[field], candidate.item[field], [field], candidate.key, current, candidate.item)
+        : cloneValue(candidate.item[field]);
+    }
+    byKey.set(candidate.key, mergedItem);
+  }
+
+  invalidObjects.sort((a, b) => a.sourceRank - b.sourceRank || compareText(a.stableKey, b.stableKey) || a.sourceIndex - b.sourceIndex);
+  return [
+    ...[...byKey.entries()].sort((a, b) => compareText(a[0], b[0])).map((entry) => entry[1]),
+    ...invalidObjects.map((entry) => entry.item)
+  ];
+}
+
+/* Funde DUAS entradas de DATA que compartilham a mesma identidade
+   (o caso de duplicata — ex.: os 126 grupos conhecidos, ou qualquer
+   outro grupo de 2+ que a identidade semantica revele). 'primary' tem
+   prioridade de conteudo (usado para desempate deterministico —
+   quem foi editado manualmente mais recentemente vence, ver
+   reconcileCatalogByIdentityV2); 'secondary' so' preenche o que
+   faltar e nunca e' descartado sem chance de aparecer no resultado
+   ou em conflicts. */
+function foldDataEntriesByIdentityV2(primary, secondary, conflicts, context){
+  // "blocking" marca conflitos em que o merge NAO conseguiu produzir um
+  // valor deterministico (o campo fica vazio/null ate revisao humana).
+  // Conflitos "nao-bloqueantes" tem um valor final deterministico e
+  // documentado (a regra de prioridade ja testada venceu), mas ainda
+  // assim sao reportados para visibilidade — nunca escolha silenciosa.
+  const { merged, conflicts: baseConflicts } = mergeLegacyBaseFields(primary, secondary);
+  baseConflicts.forEach((c) => conflicts.push({ ...context, kind:'base_field', blocking:false, ...c }));
+
+  merged.tags = mergeLegacyTags(secondary.tags, primary.tags);
+  merged.links = mergeLegacyLinks(secondary.links, primary.links);
+  merged.images = mergeLegacyImages(secondary.images, primary.images, primary.id);
+
+  const notesResult = mergeLegacyNotes(secondary.notes, primary.notes, secondary._userUpdatedAt, primary._userUpdatedAt);
+  if(notesResult.conflict) conflicts.push({ ...context, kind:'notes', blocking:true, reason: notesResult.reason, primaryValue: primary.notes, secondaryValue: secondary.notes });
+  merged.notes = notesResult.value !== null ? notesResult.value : (primary.notes || secondary.notes || '');
+
+  // Substitui o altPlacements que mergeLegacyBaseFields ja' copiou para
+  // 'merged' (que so' preenche do lado vazio) por uma uniao completa e
+  // segura via mergeAltPlacementsV2 — ver comentario da funcao.
+  const mergedAltPlacements = mergeAltPlacementsV2(primary.altPlacements, secondary.altPlacements, conflicts, context);
+  if(mergedAltPlacements.length) merged.altPlacements = mergedAltPlacements; else delete merged.altPlacements;
+
+  mergeUnknownFieldsV2(merged, primary, secondary, conflicts, context);
+  return merged;
+}
+
+/* Funde o conteudo de DATA (ja' consolidado, se havia duplicata) com
+   o registro CANONICO do SEED atual. Diferenca crucial em relacao ao
+   V1: aqui o SEED e' quem fornece IDENTIDADE ESTRUTURAL (id/name/s/site),
+   mas o CONTEUDO tem prioridade do DATA (o usuario) — o SEED so'
+   preenche o que o DATA nao tiver. Por isso construimos um objeto
+   temporario ("shim") com o conteudo do DATA e a identidade do SEED
+   antes de reaproveitar mergeLegacyBaseFields, que sempre da'
+   prioridade de conteudo ao seu primeiro argumento. */
+function mergeSeedIdentityWithDataV2(seedEntry, dataContent, conflicts, context){
+  const shim = { ...dataContent, id: seedEntry.id, name: seedEntry.name, s: seedEntry.s, site: seedEntry.site };
+  const { merged, conflicts: baseConflicts } = mergeLegacyBaseFields(shim, seedEntry);
+  baseConflicts.forEach((c) => conflicts.push({ ...context, finalId: seedEntry.id, kind:'base_field_vs_seed', blocking:false, ...c }));
+
+  merged.tags = mergeLegacyTags(seedEntry.tags, dataContent.tags);
+  merged.links = mergeLegacyLinks(seedEntry.links, dataContent.links);
+  merged.images = mergeLegacyImages(seedEntry.images, dataContent.images, seedEntry.id);
+
+  const notesResult = mergeLegacyNotes(seedEntry.notes, dataContent.notes, seedEntry._userUpdatedAt, dataContent._userUpdatedAt);
+  if(notesResult.conflict) conflicts.push({ ...context, finalId: seedEntry.id, kind:'notes', blocking:true, reason: notesResult.reason, dataValue: dataContent.notes, seedValue: seedEntry.notes });
+  merged.notes = notesResult.value !== null ? notesResult.value : (dataContent.notes || seedEntry.notes || '');
+
+  // Mesma substituicao feita em foldDataEntriesByIdentityV2: uniao completa
+  // via mergeAltPlacementsV2 no lugar do preenchimento simples de
+  // mergeLegacyBaseFields. dataContent (usuario) tem prioridade de conteudo,
+  // igual aos demais campos acima.
+  const mergedAltPlacements = mergeAltPlacementsV2(dataContent.altPlacements, seedEntry.altPlacements, conflicts, { ...context, finalId: seedEntry.id });
+  if(mergedAltPlacements.length) merged.altPlacements = mergedAltPlacements; else delete merged.altPlacements;
+
+  mergeUnknownFieldsV2(merged, dataContent, seedEntry, conflicts, { ...context, finalId: seedEntry.id });
+  return merged;
+}
+
+/* Reescreve a posse interna de UMA imagem para a identidade final
+   (id + name) — nunca toca nos identificadores fisicos do arquivo
+   (publicId, assetId, originalUrl, source, sourcePage, sourceSite,
+   license, artist, attribution, data, thumb, width, height, bytes,
+   format, label, createdAt, panels, ...), que sobrevivem intactos
+   via spread. lesionId/lesionName sao sempre definidos; os campos
+   espelhados em cloudinaryContext.custom so' sao tocados quando essa
+   estrutura ja existir (nunca fabricamos um cloudinaryContext novo). */
+function rewriteImageOwnershipV2(img, finalId, finalName){
+  const next = { ...img, lesionId: finalId, lesionName: finalName };
+  if(next.cloudinaryContext && next.cloudinaryContext.custom){
+    next.cloudinaryContext = {
+      ...next.cloudinaryContext,
+      custom: { ...next.cloudinaryContext.custom, lesion_id: finalId, lesion_name: finalName }
+    };
+  }
+  return next;
+}
+
+/* Funcao principal — ainda NAO chamada por nenhum fluxo de producao.
+   Recebe um estado {data, review, srs} MAIS o SEED explicito, e
+   devolve um estado NOVO (nunca muta os argumentos) mais um
+   relatorio estruturado exaustivo. Ver comentario de topo para o
+   principio geral: identidade semantica do SEED manda na
+   reconstrucao; DATA manda no conteudo associado aquela identidade;
+   nada e' decidido por numero de ID. */
+function reconcileCatalogByIdentityV2(state, seed){
+  const inputData = JSON.parse(JSON.stringify((state && state.data) || []));
+  const inputReview = JSON.parse(JSON.stringify((state && state.review) || {}));
+  const inputSrs = JSON.parse(JSON.stringify((state && state.srs) || {}));
+  const seedEntries = JSON.parse(JSON.stringify(seed || []));
+
+  const { byKey: seedIndex, byId: seedById } = buildSeedIdentityIndexV2(seedEntries);
+  const dataById = new Map(inputData.map((e) => [e.id, e]));
+
+  const dataGroupsByKey = new Map();
+  for(const entry of inputData){
+    const key = identityKeyOfV2(entry);
+    if(!dataGroupsByKey.has(key)) dataGroupsByKey.set(key, []);
+    dataGroupsByKey.get(key).push(entry);
+  }
+
+  const conflicts = [];
+  const anomalies = [];
+  const materializedFromSeed = [];
+  const reconciled = [];
+  const unreconciledEntries = [];
+  const finalEntriesByKey = new Map();
+  const keyToFinalId = new Map();
+
+  const ambiguousSeedKeys = new Set();
+  for(const [key, ids] of seedIndex){
+    if(ids.length > 1){
+      ambiguousSeedKeys.add(key);
+      anomalies.push({ kind:'seed_identity_ambiguous', key, ids });
+    }
+  }
+
+  // ---- reconstrucao orientada pelas identidades UNICAS e nao-ambiguas do SEED ----
+  for(const [key, ids] of seedIndex){
+    if(ambiguousSeedKeys.has(key)) continue;
+    const seedId = ids[0];
+    const seedEntry = seedById.get(seedId);
+    const group = dataGroupsByKey.get(key) || [];
+
+    if(group.length === 0){
+      const clone = JSON.parse(JSON.stringify(seedEntry));
+      const mergedAltPlacements = mergeAltPlacementsV2(clone.altPlacements, null, conflicts, { identityKey:key, finalId:seedId });
+      if(mergedAltPlacements.length) clone.altPlacements = mergedAltPlacements; else delete clone.altPlacements;
+      finalEntriesByKey.set(key, clone);
+      keyToFinalId.set(key, seedId);
+      materializedFromSeed.push({ id: seedId, name: seedEntry.name, s: seedEntry.s, site: seedEntry.site, imagesInputCount: Array.isArray(seedEntry.images) ? seedEntry.images.length : 0 });
+      continue;
+    }
+
+    // Desempate deterministico ao consolidar 2+ copias da mesma identidade:
+    // quem foi editado manualmente mais recentemente vence primeiro (nunca
+    // deve virar o lado "descartado" de uma fusao), id como desempate final.
+    const sortedGroup = [...group].sort((a, b) =>
+      (Number(b._userUpdatedAt) || 0) - (Number(a._userUpdatedAt) || 0)
+      || String(a.id).localeCompare(String(b.id), undefined, { numeric:true }));
+
+    let dataContent = sortedGroup[0];
+    for(let i = 1; i < sortedGroup.length; i += 1){
+      dataContent = foldDataEntriesByIdentityV2(dataContent, sortedGroup[i], conflicts, { identityKey:key, finalId:seedId });
+    }
+
+    const finalEntry = mergeSeedIdentityWithDataV2(seedEntry, dataContent, conflicts, { identityKey:key });
+    finalEntriesByKey.set(key, finalEntry);
+    keyToFinalId.set(key, seedId);
+    const imagesInputCount = sortedGroup.reduce((acc, e) => acc + (Array.isArray(e.images) ? e.images.length : 0), 0)
+      + (Array.isArray(seedEntry.images) ? seedEntry.images.length : 0);
+    reconciled.push({
+      finalId: seedId, name: seedEntry.name, s: seedEntry.s, site: seedEntry.site,
+      fromIds: sortedGroup.map((e) => e.id),
+      // Distincao explicita pedida na auditoria: nem toda identidade "reconciliada"
+      // estava deslocada — algumas ja tinham o DATA no ID correto (classe A da
+      // investigacao); outras vieram de um ID diferente do atual do SEED (classe B).
+      alreadyAtCorrectId: sortedGroup.some((e) => e.id === seedId),
+      displacedFromIds: sortedGroup.filter((e) => e.id !== seedId).map((e) => e.id),
+      imagesInputCount
+    });
+  }
+
+  // ---- identidades ambiguas no proprio SEED: materializa cada ID isoladamente, nunca funde DATA nelas ----
+  for(const key of ambiguousSeedKeys){
+    for(const seedId of seedIndex.get(key)){
+      const seedEntry = seedById.get(seedId);
+      const clone = JSON.parse(JSON.stringify(seedEntry));
+      const mergedAltPlacements = mergeAltPlacementsV2(clone.altPlacements, null, conflicts, { identityKey:key, finalId:seedId });
+      if(mergedAltPlacements.length) clone.altPlacements = mergedAltPlacements; else delete clone.altPlacements;
+      finalEntriesByKey.set(`${key}::seed::${seedId}`, clone);
+    }
+    const group = dataGroupsByKey.get(key) || [];
+    for(const entry of group){
+      unreconciledEntries.push({ originalId: entry.id, name: entry.name, s: entry.s, site: entry.site, reason:'seed_identity_ambiguous', entry });
+    }
+  }
+
+  // ---- identidades do DATA sem NENHUMA correspondencia no SEED atual ----
+  for(const [key, group] of dataGroupsByKey){
+    if(seedIndex.has(key)) continue;
+    anomalies.push({ kind:'data_identity_not_in_seed', key, ids: group.map((e) => e.id), name: group[0].name, s: group[0].s, site: group[0].site });
+    for(const entry of group){
+      unreconciledEntries.push({ originalId: entry.id, name: entry.name, s: entry.s, site: entry.site, reason:'identity_not_in_seed', entry });
+    }
+  }
+
+  // ---- monta o array final, reescrevendo posse de imagens por ultimo ----
+  const finalData = [];
+  const seenFinalIds = new Set();
+  for(const entry of finalEntriesByKey.values()){
+    if(seenFinalIds.has(entry.id)){
+      anomalies.push({ kind:'internal_duplicate_final_id', id: entry.id });
+      continue;
+    }
+    seenFinalIds.add(entry.id);
+    entry.images = (entry.images || []).map((img) => rewriteImageOwnershipV2(img, entry.id, entry.name));
+    finalData.push(entry);
+  }
+
+  // ---- REVIEW / SRS: seguem a IDENTIDADE que estava no ID de origem, nunca o numero do ID ----
+  const orphanReview = {};
+  const orphanSrs = {};
+  const unresolvedReview = [];
+  const unresolvedSrs = [];
+  const reviewContribByFinalId = new Map();
+  const srsContribByFinalId = new Map();
+
+  function classifySourceIdentity(id){
+    const sourceEntry = dataById.get(id);
+    if(!sourceEntry) return { status:'orphan' };
+    const key = identityKeyOfV2(sourceEntry);
+    if(ambiguousSeedKeys.has(key)) return { status:'unresolved', reason:'seed_identity_ambiguous' };
+    if(!seedIndex.has(key)) return { status:'unresolved', reason:'identity_not_in_seed' };
+    return { status:'resolved', finalId: keyToFinalId.get(key) };
+  }
+
+  for(const [id, value] of Object.entries(inputReview)){
+    const outcome = classifySourceIdentity(id);
+    if(outcome.status === 'orphan'){ orphanReview[id] = value; continue; }
+    if(outcome.status === 'unresolved'){ unresolvedReview.push({ id, value, reason: outcome.reason }); continue; }
+    if(!reviewContribByFinalId.has(outcome.finalId)) reviewContribByFinalId.set(outcome.finalId, []);
+    reviewContribByFinalId.get(outcome.finalId).push({ id, value });
+  }
+  for(const [id, value] of Object.entries(inputSrs)){
+    const outcome = classifySourceIdentity(id);
+    if(outcome.status === 'orphan'){ orphanSrs[id] = value; continue; }
+    if(outcome.status === 'unresolved'){ unresolvedSrs.push({ id, value, reason: outcome.reason }); continue; }
+    if(!srsContribByFinalId.has(outcome.finalId)) srsContribByFinalId.set(outcome.finalId, []);
+    srsContribByFinalId.get(outcome.finalId).push({ id, value });
+  }
+
+  // "blocking:false" — o maior estagio ordinal (mergeLegacyReview) e' sempre
+  // deterministico; reportar a convergencia de multiplas origens e' so'
+  // transparencia, nunca uma decisao incerta.
+  const finalReview = {};
+  for(const [finalId, contribs] of reviewContribByFinalId){
+    const sorted = [...contribs].sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric:true }));
+    let acc = null;
+    for(const c of sorted) acc = mergeLegacyReview(acc, c.value);
+    if(acc !== null) finalReview[finalId] = acc;
+    const distinctValues = new Set(sorted.map((c) => c.value));
+    if(distinctValues.size > 1) conflicts.push({ finalId, kind:'review', blocking:false, reason:'multiple_sources_merged_by_max_ordinal', sources: sorted, resolved: acc });
+  }
+
+  // "blocking" so' quando mergeLegacySrs nao conseguiu decidir (sem
+  // timestamp confiavel — value:null); quando resolveu por updatedAt, o
+  // resultado e' deterministico e o conflito e' so' para visibilidade.
+  const finalSrs = {};
+  for(const [finalId, contribs] of srsContribByFinalId){
+    const sorted = [...contribs].sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric:true }));
+    let acc = null;
+    for(const c of sorted){
+      if(acc === null){ acc = c.value; continue; }
+      const result = mergeLegacySrs(acc, c.value);
+      if(result.conflict) conflicts.push({ finalId, kind:'srs', blocking: result.reason === 'srs_conflict_unresolved_no_timestamp', reason: result.reason, sources: sorted });
+      acc = result.value;
+    }
+    if(acc !== null && acc !== undefined) finalSrs[finalId] = acc;
+  }
+
+  // ---- PROVENIENCIA: para cada identidade final, de onde veio cada pedaco ----
+  const finalIdToKey = new Map([...keyToFinalId.entries()].map(([k, id]) => [id, k]));
+  const conflictsByFinalId = new Map();
+  for(const c of conflicts){
+    const fid = c.finalId || null;
+    if(!fid) continue;
+    conflictsByFinalId.set(fid, (conflictsByFinalId.get(fid) || 0) + 1);
+  }
+  const finalDataById = new Map(finalData.map((e) => [e.id, e]));
+  const provenance = [];
+  for(const m of materializedFromSeed){
+    provenance.push({
+      identityKey: finalIdToKey.get(m.id) || null, finalId: m.id, name: m.name, s: m.s, site: m.site,
+      origin: 'materialized_from_seed', sourceIds: [],
+      reviewContributors: (reviewContribByFinalId.get(m.id) || []).map((c) => c.id),
+      srsContributors: (srsContribByFinalId.get(m.id) || []).map((c) => c.id),
+      imagesInputCount: m.imagesInputCount,
+      imagesOutputCount: finalDataById.has(m.id) ? (finalDataById.get(m.id).images || []).length : 0,
+      conflictsCount: conflictsByFinalId.get(m.id) || 0
+    });
+  }
+  for(const r of reconciled){
+    provenance.push({
+      identityKey: finalIdToKey.get(r.finalId) || null, finalId: r.finalId, name: r.name, s: r.s, site: r.site,
+      origin: r.fromIds.length > 1 ? 'duplicate_consolidated' : 'single_source_reconciled',
+      sourceIds: r.fromIds,
+      reviewContributors: (reviewContribByFinalId.get(r.finalId) || []).map((c) => c.id),
+      srsContributors: (srsContribByFinalId.get(r.finalId) || []).map((c) => c.id),
+      imagesInputCount: r.imagesInputCount,
+      imagesOutputCount: finalDataById.has(r.finalId) ? (finalDataById.get(r.finalId).images || []).length : 0,
+      conflictsCount: conflictsByFinalId.get(r.finalId) || 0
+    });
+  }
+
+  // ---- SAFE TO APPLY: trava explicita — so' true quando TODAS as
+  // invariantes de conservacao forem verificaveis, nunca forcado. ----
+  const blockingConflicts = conflicts.filter((c) => c.blocking);
+  const nonAmbiguousSeedKeyCount = [...seedIndex.keys()].filter((k) => !ambiguousSeedKeys.has(k)).length;
+  const coveredKeyCount = [...finalIdToKey.keys()].length;
+  const outIds = finalData.map((e) => e.id);
+  const finalIdsAreUnique = new Set(outIds).size === outIds.length;
+
+  const safeToApplyReasons = [];
+  if(anomalies.length > 0) safeToApplyReasons.push(`${anomalies.length} anomaly(ies): identidade ambigua no SEED, identidade DATA sem correspondencia, ou colisao interna de ID final`);
+  if(unreconciledEntries.length > 0) safeToApplyReasons.push(`${unreconciledEntries.length} entrada(s) DATA preservada(s) em unreconciledEntries mas NAO aplicada(s) a nenhuma identidade final`);
+  if(unresolvedReview.length > 0) safeToApplyReasons.push(`${unresolvedReview.length} REVIEW sem destino determinavel (unresolvedReview)`);
+  if(unresolvedSrs.length > 0) safeToApplyReasons.push(`${unresolvedSrs.length} SRS sem destino determinavel (unresolvedSrs)`);
+  if(blockingConflicts.length > 0) safeToApplyReasons.push(`${blockingConflicts.length} conflito(s) BLOQUEANTE(S) sem resolucao deterministica (ver conflicts com blocking:true)`);
+  if(!finalIdsAreUnique) safeToApplyReasons.push('colisao de ID final detectada no array de saida');
+  if(coveredKeyCount !== nonAmbiguousSeedKeyCount) safeToApplyReasons.push(`cobertura incompleta: ${coveredKeyCount} de ${nonAmbiguousSeedKeyCount} identidades nao-ambiguas do SEED foram cobertas`);
+
+  const safeToApply = safeToApplyReasons.length === 0;
+
+  return {
+    state: { data: finalData, review: finalReview, srs: finalSrs },
+    report: {
+      materializedFromSeed,
+      reconciled,
+      consolidatedGroups: reconciled.filter((r) => r.fromIds.length > 1),
+      conflicts,
+      anomalies,
+      unreconciledEntries,
+      orphanReview,
+      orphanSrs,
+      provenance,
+      safeToApply,
+      safeToApplyReasons,
+      unresolvedReview,
+      unresolvedSrs
+    }
+  };
+}
+
+
 /* 2026-09-18 — correção auditada de altPlacements (revisão 2: idempotente).
    Fonte: backup fresco do usuário. Remove SOMENTE associações secundárias
    comprovadamente espúrias; não altera seção principal, site, imagens,

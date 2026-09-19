@@ -490,3 +490,13 @@ Campos historicamente opcionais continuam opcionais, incluindo metadados do back
 `createSafetySnapshot()` permanece inerte. Sua chamada foi apenas reposicionada para ocorrer depois da validação e da confirmação do usuário, imediatamente antes da primeira mutação, sem implementar snapshots.
 
 Após a correção, `tests/critical-flows.test.js` totaliza **14 PASS e 0 FAIL**. `tests/duplicate-detection.test.js` permanece com **6 PASS e 1 FAIL** conhecido e não relacionado nas 28 entradas malformadas de `DUPLICATE_PAIRS_V171`. Esse defeito não foi corrigido. O `SEED` permanece com exatamente 1.213 registros.
+
+## Alteração 006 — hardening inerte de `altPlacements` no reconciliador V2
+
+O reconciliador por identidade semântica V2 continua **inerte e sem qualquer call site de produção**. Seu merge de `altPlacements` passou a unir associações distintas, deduplicar associações equivalentes por `s + site` normalizados somente para comparação e preservar a representação original escolhida.
+
+Metadados complementares são fundidos sem perda. Divergências escalares usam a prioridade determinística já definida pelo V2 e são registradas com os dois valores de origem e o valor resultante. Identidades incompletas, containers inválidos e incompatibilidades estruturais geram conflitos `blocking:true`; esses conflitos alimentam `safeToApply` e impedem aplicação.
+
+A auditoria em memória do snapshot completo confirmou 18 associações em DATA, 18 no SEED e 29 associações semânticas únicas no resultado, sem perda, conflitos de `altPlacements` ou bloqueios. O arquivo de snapshot não foi modificado e nenhum armazenamento local/remoto foi acessado.
+
+Resultados: `tests/legacy-id-migration.test.js` com **119 PASS, 0 FAIL e 5 TODO**; `tests/critical-flows.test.js` com **14 PASS e 0 FAIL**; `tests/duplicate-detection.test.js` permanece com **6 PASS e 1 FAIL** histórico e não relacionado em `DUPLICATE_PAIRS_V171`.

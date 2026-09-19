@@ -463,3 +463,71 @@ Ainda não criado.
 ### Instruções de recuperação, se necessárias
 
 Antes de qualquer recuperação, executar `git status` e confirmar que nenhum trabalho recente será perdido. Reverter esta alteração retiraria as validações anteriores à mutação e voltaria a permitir que backups estruturalmente inválidos alcançassem persistência e sincronização.
+
+## ALTERAÇÃO 006 — Hardening de `altPlacements` no reconciliador V2 inerte
+
+**Número da alteração:** 006
+
+**Data:** 19/09/2026
+
+**Commit-base:** `8b1e274` — `Valida importacao de backups antes de alterar dados`
+
+### Objetivo
+
+Impedir que duas cópias da mesma identidade percam silenciosamente associações secundárias (`altPlacements`) durante uma futura reconciliação, sem conectar o reconciliador V2 à aplicação.
+
+### Estado antes
+
+O V2 já reconciliava o catálogo por `name + s + site`, mas o tratamento herdado do V1 só copiava `altPlacements` quando um dos lados estava vazio. Se ambos possuíssem valores diferentes, um lado poderia ser descartado silenciosamente. O agente anterior havia iniciado uma função dedicada, mas a montagem do engine de teste ainda não incluía suas dependências e o teste antigo continuava documentando a limitação.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/legacy-id-migration.test.js`
+- `tests/critical-flows.test.js`
+- `AI.md`
+- `README.md`
+- `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+- `mergeAltPlacementsV2` passou a unir associações semanticamente diferentes e deduplicar equivalentes por `s + site` normalizados apenas para comparação.
+- A representação original e campos extras são preservados; objetos complementares são mesclados recursivamente e arrays recebem união sem duplicatas.
+- Divergências escalares são resolvidas pela prioridade determinística do V2 e registradas com ambos os valores. Identidades incompletas e incompatibilidades estruturais são bloqueantes.
+- Conflitos bloqueantes alimentam `safeToApply=false` pela trava já existente.
+- O mesmo hardening é aplicado ao fold DATA+DATA, ao merge DATA+SEED e à materialização a partir do SEED.
+- O engine isolado de testes passou a carregar as novas funções na ordem correta de dependências.
+- O teste que documentava descarte silencioso foi substituído por cenários positivos, bloqueantes, determinísticos, idempotentes e pelo snapshot completo somente leitura.
+
+O V1 não foi alterado. O V2 continua sem call sites de produção. Não houve escrita em IndexedDB, Firebase/Firestore, Cloudinary ou no snapshot.
+
+### Testes realizados
+
+```text
+node --check tests/legacy-id-migration.test.js
+node tests/legacy-id-migration.test.js
+node --check tests/critical-flows.test.js
+node tests/critical-flows.test.js
+node tests/duplicate-detection.test.js
+git diff --check
+```
+
+Resultados:
+
+- V1+V2: **119 PASS, 0 FAIL e 5 TODO**;
+- fluxos críticos: **14 PASS e 0 FAIL**;
+- integridade/duplicatas: **6 PASS e 1 FAIL** histórico nas mesmas 28 entradas malformadas de `DUPLICATE_PAIRS_V171`;
+- snapshot: 18 `altPlacements` no DATA, 18 no SEED, 29 associações semânticas únicas no resultado, 0 conflitos de `altPlacements` e 0 bloqueios;
+- JavaScript inline: sintaxe válida pela verificação estática existente.
+
+### Resultado
+
+O gap de perda silenciosa de `altPlacements` foi fechado no motor V2 inerte. O snapshot completo foi reconciliado somente em memória sem perda dessas associações. O reconciliador não foi integrado à produção e nenhum dado real foi alterado.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+### Instruções de recuperação, se necessárias
+
+Antes de qualquer recuperação, executar `git status` e preservar as alterações anteriores já existentes no mesmo `index.html`. Uma eventual reversão deve remover somente o hardening do bloco V2 e seus testes/documentação correspondentes, sem tocar no V1, dashboard ou dados do acervo.

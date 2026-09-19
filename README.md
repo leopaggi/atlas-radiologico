@@ -264,3 +264,11 @@ O cabeçalho divide a faixa superior com os KPIs; os cards de Evolução e Estad
 ### Grade panorâmica determinística
 
 O desktop usa uma grade explícita de 12 colunas: Sessões 4/12, Evolução 5/12 e Estado 3/12; Ciclo 12/12; Domínio 4/12 e Resumo 8/12. As linhas usam altura pelo conteúdo, eliminando reservas verticais vazias.
+
+### Reconciliador V2 — hardening de `altPlacements`
+
+O reconciliador experimental por identidade semântica continua inerte e não participa de carregamento, sincronização, importação ou qualquer outro fluxo da aplicação. O merge de `altPlacements` agora faz união sem perda, deduplicação por `s + site` normalizados somente para comparação e preservação de campos extras.
+
+Metadados complementares são mesclados; valores incompatíveis são reportados explicitamente. Casos estruturalmente irresolvíveis são bloqueantes e deixam `safeToApply` como `false`. No snapshot completo lido somente em memória, as 18 associações do DATA e as 18 do SEED resultaram em 29 associações semânticas únicas, sem perda nem conflitos de `altPlacements`.
+
+Validação: motor V1+V2 com **119 PASS, 0 FAIL e 5 TODO**; fluxos críticos com **14 PASS e 0 FAIL**. O teste de duplicatas mantém exclusivamente o FAIL histórico das 28 entradas malformadas de `DUPLICATE_PAIRS_V171`, fora do escopo desta alteração.
