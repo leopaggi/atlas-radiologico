@@ -147,3 +147,47 @@ Explique como retornar ao estado anterior. Antes de qualquer recuperacao, execut
 - Liste todos os arquivos modificados.
 - Registre o commit somente depois da aprovacao e da criacao real do commit.
 - Nunca inclua dados identificaveis de pacientes, senhas, tokens ou outras credenciais.
+
+## Registro 002
+
+**Numero da alteracao:** 002  
+**Data:** 18/09/2026
+
+### Objetivo
+
+Padronizar os nomes dos tres arquivos principais do projeto, retirando os carimbos de data e hora dos nomes para facilitar sua identificacao e manutencao.
+
+### Estado antes
+
+Os arquivos principais usavam os nomes `AI(20260918-233115).md`, `README(20260918-233118).md` e `index(20260918-233112).html`. As instrucoes permanentes em `AGENTS.md` ainda apontavam para os nomes antigos da documentacao.
+
+### Arquivos renomeados
+
+- `AI(20260918-233115).md` para `AI.md`
+- `README(20260918-233118).md` para `README.md`
+- `index(20260918-233112).html` para `index.html`
+
+### Arquivos com conteudo modificado
+
+- `AGENTS.md`
+- `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+As referencias atuais de leitura obrigatoria em `AGENTS.md` foram atualizadas para `AI.md` e `README.md`. Este registro documenta a padronizacao; nenhuma funcionalidade da aplicacao, dado do `SEED` ou conteudo clinico foi alterado.
+
+### Testes realizados
+
+Foi feita uma busca em todos os arquivos do projeto pelos tres nomes antigos. As unicas referencias atuais encontradas estavam em `AGENTS.md`. Ao final, o estado do Git foi inspecionado.
+
+### Resultado
+
+Os nomes principais ficaram padronizados e as instrucoes permanentes agora apontam para os arquivos atuais. Os nomes antigos permanecem neste registro apenas para documentar quais arquivos foram renomeados.
+
+### Commit apos aprovacao
+
+Ainda nao criado.
+
+### Instrucoes de recuperacao, se necessarias
+
+Antes de qualquer recuperacao, executar `git status` e confirmar que nenhum trabalho recente sera perdido. As renomeacoes e as atualizacoes de conteudo devem ser avaliadas em conjunto antes de qualquer reversao.

@@ -2,8 +2,8 @@
 
 Este arquivo define as regras de trabalho para qualquer agente de IA que atue no Atlas Radiologico. Antes de propor ou aplicar mudancas, leia integralmente:
 
-- `AI(20260918-233115).md`
-- `README(20260918-233118).md`
+- `AI.md`
+- `README.md`
 - `LOG_DESENVOLVIMENTO.md`
 
 Consulte tambem o estado atual do repositorio e o codigo relevante. Nao suponha que uma copia antiga, uma sessao anterior ou apenas a documentacao represente o estado atual dos dados.
