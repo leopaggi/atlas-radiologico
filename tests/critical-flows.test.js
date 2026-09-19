@@ -105,16 +105,26 @@ const loadData = extractFunction(html, 'loadData');
 const importHandler = extractImportHandler(html);
 
 test('fluxos criticos sao localizados estaticamente no index.html', () => {
-  assert.equal(recovery.line, 4312);
-  assert.equal(brokenArtifacts.line, 4302);
-  // loadData e importHandler foram deslocados pela adicao dos motores de
-  // migracao de legacy IDs (V1, inerte) e do reconciliador por identidade
-  // semantica (V2, inerte) entre deduplicateV171 e o bloco de auditoria de
-  // altPlacements — ver LEGACY_ID_MIGRATION_MAP_V1 e reconcileCatalogByIdentityV2.
-  // Atualizado novamente apos o hardening do V2 (blocking/provenance/safeToApply
-  // e merge conservador de altPlacements) dentro do mesmo bloco inerte.
-  assert.equal(loadData.line, 5757);
-  assert.equal(importHandler.line, 7668);
+  // recovery/brokenArtifacts sobem +1 desta vez (novo botao "Exportar
+  // checkpoint V2" no HTML das ferramentas avancadas, antes deles no
+  // arquivo). loadData/importHandler sobem +160 cada (mesmo botao +1, e o
+  // bloco de funcoes do checkpoint pos-reconciliacao — buildCheckpointIntegrityReportV2/
+  // buildCheckpointV2/downloadCheckpointV2/exportCheckpointV2/
+  // openExportCheckpointV2Modal — inserido entre reconcileCatalogByIdentityV2
+  // e o bloco de auditoria de altPlacements, antes de loadData). Historico
+  // anterior: ja haviam sido deslocadas pela adicao dos motores de migracao
+  // de legacy IDs (V1, inerte), do reconciliador por identidade semantica
+  // (V2, inerte), da ferramenta manual original (ALTERACAO 007), da
+  // correcao da politica de imagens (rewriteDataImagesOnlyV2), do
+  // diagnostico read-only (buildRealStateDiagnosticV2), da correcao
+  // automatica de ownership por evidencia de metadados com overrides
+  // manuais explicitos e da validacao pos-aplicacao
+  // (buildPostApplyValidationReportV2) — ver LEGACY_ID_MIGRATION_MAP_V1 e
+  // reconcileCatalogByIdentityV2.
+  assert.equal(recovery.line, 4314);
+  assert.equal(brokenArtifacts.line, 4304);
+  assert.equal(loadData.line, 6614);
+  assert.equal(importHandler.line, 8527);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

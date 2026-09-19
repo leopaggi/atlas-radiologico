@@ -126,6 +126,26 @@ Nessas areas:
 - Resuma o que mudou, quais testes foram realizados, o resultado e qualquer risco ou passo manual restante.
 - Nao faca commit sem pedido explicito do usuario.
 
+## Notificacao de conclusao
+
+Ao terminar qualquer tarefa solicitada neste projeto — depois de testes, validacoes e relatorio final — a ULTIMA acao operacional deve ser enviar uma notificacao ntfy para `https://ntfy.sh/acervo-leo-7k29-radiologia`.
+
+Comando padrao no Windows:
+
+```
+powershell.exe -NoProfile -Command "Invoke-RestMethod -Method Post -Uri 'https://ntfy.sh/acervo-leo-7k29-radiologia' -Body 'Acervo Radiologico: tarefa concluida. Verifique o terminal para o resultado.'"
+```
+
+Regras:
+
+- a notificacao deve ser a ULTIMA acao operacional da tarefa;
+- envie somente depois que a tarefa realmente tiver terminado;
+- se houver erro ou bloqueio que exija intervencao do usuario, notifique tambem, deixando isso claro na mensagem;
+- nao remova nem altere esta regra em tarefas futuras;
+- nao inclua segredos ou dados sensiveis na mensagem;
+- falha no envio da notificacao NAO deve alterar nem repetir operacoes ja concluidas;
+- se o envio falhar, apenas informe a falha no relatorio final.
+
 ## Conduta em caso de incerteza
 
 Pare e pergunte antes de continuar quando houver risco de:

@@ -776,6 +776,7 @@ const V2_FUNCTION_NAMES = [
   'normalizeAltPlacementKeyV2',
   'mergeAltPlacementsV2',
   'foldDataEntriesByIdentityV2',
+  'rewriteDataImagesOnlyV2',
   'mergeSeedIdentityWithDataV2',
   'rewriteImageOwnershipV2',
   'reconcileCatalogByIdentityV2'
@@ -811,6 +812,7 @@ function buildV2Engine() {
     v2ExtractedFns.normalizeAltPlacementKeyV2.source,
     v2ExtractedFns.mergeAltPlacementsV2.source,
     v2ExtractedFns.foldDataEntriesByIdentityV2.source,
+    v2ExtractedFns.rewriteDataImagesOnlyV2.source,
     v2ExtractedFns.mergeSeedIdentityWithDataV2.source,
     v2ExtractedFns.rewriteImageOwnershipV2.source,
     v2ExtractedFns.reconcileCatalogByIdentityV2.source,
@@ -832,10 +834,26 @@ test('V2: motor real e localizado estaticamente no index.html, todas as funcoes 
   }
 });
 
-test('V2 PASSO 14: ZERO call sites de producao para reconcileCatalogByIdentityV2 (fora da propria definicao)', () => {
+// ---------------------------------------------------------------------------
+// ALTERACAO 007 — a partir daqui reconcileCatalogByIdentityV2 deixa de ter
+// ZERO call sites: ganha exatamente UM, dentro de reconcileV2Preview, que so'
+// e' acionado pela ferramenta manual (botao "reconciliar catalogo V2"). O
+// teste abaixo substitui o antigo "ZERO call sites" e prova as duas metades
+// da garantia: (1) so' existe esse unico call site de producao, em nenhum
+// outro lugar; (2) reconcileV2Preview/applyReconcileV2/openReconcileV2Modal
+// NUNCA aparecem dentro de loadData, syncFromFirebase ou do handler de
+// importacao — os tres fluxos automaticos que rodam sem acao manual do
+// usuario.
+// ---------------------------------------------------------------------------
+test('V2 PASSO 14 (ALTERACAO 007): reconcileCatalogByIdentityV2 tem exatamente 1 call site de producao, dentro de reconcileV2Preview', () => {
   const fn = extractFunction(html, 'reconcileCatalogByIdentityV2');
   const mentions = callSitesOutsideDefinition(html, 'reconcileCatalogByIdentityV2', fn.index);
-  for (const index of mentions) {
+  const preview = extractFunction(html, 'reconcileV2Preview');
+  const realCalls = mentions.filter((index) => index >= preview.index && index < preview.index + preview.source.length);
+  const commentMentions = mentions.filter((index) => !realCalls.includes(index));
+
+  assert.equal(realCalls.length, 1, `Esperava exatamente 1 chamada real (dentro de reconcileV2Preview), encontrei ${realCalls.length}`);
+  for (const index of commentMentions) {
     const before = html.slice(Math.max(0, index - 400), index);
     const lastCommentOpen = before.lastIndexOf('/*');
     const lastCommentClose = before.lastIndexOf('*/');
@@ -843,9 +861,45 @@ test('V2 PASSO 14: ZERO call sites de producao para reconcileCatalogByIdentityV2
     const lineSoFar = html.slice(lastLineStart, index);
     const insideBlockComment = lastCommentOpen > lastCommentClose;
     const insideLineComment = /\/\//.test(lineSoFar);
-    assert.ok(insideBlockComment || insideLineComment, `Mencao inesperada a reconcileCatalogByIdentityV2 fora de comentario na linha ${lineNumberAt(html, index)}`);
+    assert.ok(insideBlockComment || insideLineComment, `Mencao inesperada a reconcileCatalogByIdentityV2 fora de comentario e fora de reconcileV2Preview na linha ${lineNumberAt(html, index)}`);
   }
-  console.log(`reconcileCatalogByIdentityV2: 1 definicao + ${mentions.length} mencao(oes) em comentario, 0 chamadas.`);
+  console.log(`reconcileCatalogByIdentityV2: 1 definicao + 1 chamada real (em reconcileV2Preview) + ${commentMentions.length} mencao(oes) em comentario.`);
+});
+
+test('V2 PASSO 14 (ALTERACAO 007): reconcileV2Preview/applyReconcileV2/openReconcileV2Modal NUNCA aparecem em loadData, syncFromFirebase ou no handler de importacao', () => {
+  const toolNames = ['reconcileV2Preview', 'applyReconcileV2', 'openReconcileV2Modal', 'downloadPreMigrationBackupV2', 'buildPreMigrationBackupV2', 'buildRealStateDiagnosticV2', 'openRealStateDiagnosticModal', 'buildPostApplyValidationReportV2', 'buildCheckpointIntegrityReportV2', 'buildCheckpointV2', 'downloadCheckpointV2', 'exportCheckpointV2', 'openExportCheckpointV2Modal'];
+  const loadDataFn = extractFunction(html, 'loadData');
+  const syncFn = extractFunction(html, 'syncFromFirebase');
+  const importMarker = "document.getElementById('import-file').addEventListener('change', async (ev)=>";
+  const importStart = html.indexOf(importMarker);
+  assert.notEqual(importStart, -1, 'Handler de importacao nao encontrado');
+  const importBrace = html.indexOf('{', importStart + importMarker.length);
+  const importBody = extractBlock(html, importBrace);
+
+  for (const name of toolNames) {
+    assert.ok(!loadDataFn.source.includes(name), `${name} NAO pode ser mencionado dentro de loadData (fluxo automatico de inicializacao)`);
+    assert.ok(!syncFn.source.includes(name), `${name} NAO pode ser mencionado dentro de syncFromFirebase (fluxo automatico de sincronizacao)`);
+    assert.ok(!importBody.includes(name), `${name} NAO pode ser mencionado dentro do handler de importacao (fluxo automatico de importacao)`);
+  }
+});
+
+test('V2 PASSO 14 (ALTERACAO 007): reconcileCatalogByIdentityV2 continua sem nenhuma chamada de Firebase/Firestore ou Cloudinary em toda a cadeia da ferramenta manual', () => {
+  // Termos exatos de identificador — nunca aparecem como nome de campo de
+  // imagem, entao substring simples e seguro pra estes.
+  const forbiddenIdentifiers = ['pushToFirebase', 'pushToFirebaseNow', 'fbDb', 'fbAuth', 'getCloudinaryConfig', 'hasCloudinaryConfig', 'uploadToCloudinary'];
+  // "cloudinary"/"Cloudinary" tambem aparecem em CAMPOS DE METADADO legitimos
+  // de imagem (img.cloudinaryContext, img.source==='cloudinary') — ler esses
+  // campos nao e' uma chamada de rede. So' bloqueia CHAMADA de funcao/endpoint
+  // (ex.: api.cloudinary.com, ou qualquer identificador terminando em "(").
+  const forbiddenCloudinaryCallPattern = /(api\.cloudinary\.com|\bcloudinary\w*\s*\()/i;
+  const chain = ['classifyImageOwnershipDivergenceV2', 'buildImageOwnershipCorrectionPlanV2', 'applyImageOwnershipCorrectionV2', 'reconcileV2Preview', 'buildPreMigrationBackupV2', 'downloadPreMigrationBackupV2', 'applyReconcileV2', 'openReconcileV2Modal', 'openReconcileV2ResultModal', 'buildRealStateDiagnosticV2', 'openRealStateDiagnosticModal', 'buildPostApplyValidationReportV2', 'buildCheckpointIntegrityReportV2', 'buildCheckpointV2', 'downloadCheckpointV2', 'exportCheckpointV2', 'openExportCheckpointV2Modal'];
+  for (const name of chain) {
+    const fn = extractFunction(html, name);
+    for (const term of forbiddenIdentifiers) {
+      assert.ok(!fn.source.includes(term), `${name} NAO pode mencionar ${term}`);
+    }
+    assert.ok(!forbiddenCloudinaryCallPattern.test(fn.source), `${name} NAO pode chamar a API do Cloudinary (ler um campo de metadado como cloudinaryContext e' permitido, invocar o servico nao e')`);
+  }
 });
 
 // ---- fixtures sinteticas: SEED pequeno cobrindo os cenarios pedidos ----
@@ -923,16 +977,14 @@ test('V2 teste 6: duplicata conhecida — duas cópias convergem para o ID atual
   assert.deepEqual(plain(consolidated.fromIds).sort(), ['seed_28', 'seed_32']);
 });
 
-test('V2 teste 7: imagem — ownership interno reescrito para o ID/nome atual, identificadores físicos preservados', () => {
+test('V2 teste 7 (POLITICA CORRIGIDA): imagem — so a imagem do DATA real sobrevive, ownership reescrito para o ID/nome atual, identificador fisico preservado; a imagem SO-DO-SEED nao e materializada', () => {
   const result = v2.reconcileCatalogByIdentityV2(buildV2StateFixture(), V2_SEED_FIXTURE);
   const seed47Final = result.state.data.find((e) => e.id === 'seed_47');
-  assert.equal(seed47Final.images.length, 2, 'imagens de ambos os lados (data + seed) devem sobreviver, sem duplicar por conteudo');
-  for (const img of seed47Final.images) {
-    assert.equal(img.lesionId, 'seed_47');
-    assert.equal(img.lesionName, 'Item Alfa');
-  }
-  const physicalAssetIds = plain(seed47Final.images.map((i) => i.assetId)).sort();
-  assert.deepEqual(physicalAssetIds, ['data-asset', 'seed-asset'], 'assetId (identificador fisico) nunca pode ser alterado');
+  assert.equal(seed47Final.images.length, 1, 'DATA real (seed_10) e a UNICA fonte de verdade — a imagem exclusiva do SEED (seed-asset) nao pode ser materializada');
+  assert.equal(seed47Final.images[0].assetId, 'data-asset', 'a imagem que sobrevive precisa ser a que ja existia no DATA real');
+  assert.equal(seed47Final.images[0].lesionId, 'seed_47', 'ownership reescrito para a identidade final (registro estava preso em seed_10, um ID deslocado)');
+  assert.equal(seed47Final.images[0].lesionName, 'Item Alfa');
+  assert.ok(!seed47Final.images.some((i) => i.assetId === 'seed-asset'), 'seed-asset (imagem exclusiva do SEED, sem correspondente no DATA) nunca pode aparecer no resultado');
 });
 
 test('V2 teste 8 OBRIGATORIO: identidade sem SEED — anomaly, conteúdo preservado sem perda silenciosa', () => {
@@ -989,6 +1041,70 @@ test('V2: não muta os argumentos recebidos (state nem seed)', () => {
   v2.reconcileCatalogByIdentityV2(state, V2_SEED_FIXTURE);
   assert.deepEqual(plain(state), stateSnapshot);
   assert.deepEqual(plain(V2_SEED_FIXTURE), seedCopy);
+});
+
+// ===========================================================================
+// POLITICA DE IMAGENS CORRIGIDA — DATA real e' a UNICA fonte de verdade para
+// associacoes de imagem do usuario; o SEED (fotografia congelada de um
+// backup antigo) NUNCA cria/restaura uma imagem ausente no DATA atual. Ver
+// rewriteDataImagesOnlyV2 (substitui mergeLegacyImages(seedEntry.images,...)
+// no merge DATA vs SEED). Casos A-E pedidos explicitamente.
+// ===========================================================================
+
+test('POLITICA DE IMAGENS: mergeSeedIdentityWithDataV2 usa rewriteDataImagesOnlyV2 (DATA-only), nunca uma uniao com seedEntry.images', () => {
+  const fn = extractFunction(html, 'mergeSeedIdentityWithDataV2');
+  assert.ok(fn.source.includes('rewriteDataImagesOnlyV2'), 'precisa chamar rewriteDataImagesOnlyV2');
+  assert.ok(!/mergeLegacyImages\s*\(\s*seedEntry\.images/.test(fn.source), 'nao pode mais unir imagens do SEED no merge DATA vs SEED');
+});
+
+test('POLITICA DE IMAGENS A: DATA sem imagem + SEED com imagem => resultado continua SEM imagem', () => {
+  const seed = [{ id: 'seed_A', name: 'Lesão A', s: 'X', site: 'Y', images: [{ assetId: 'seed-only-asset', lesionId: 'seed_A', lesionName: 'Lesão A' }] }];
+  const data = { data: [{ id: 'seed_A', name: 'Lesão A', s: 'X', site: 'Y', images: [] }], review: {}, srs: {} };
+  const result = v2.reconcileCatalogByIdentityV2(data, seed);
+  const final = result.state.data.find((e) => e.id === 'seed_A');
+  assert.deepEqual(plain(final.images), [], 'SEED nao pode materializar imagem ausente no DATA real');
+});
+
+test('POLITICA DE IMAGENS B: DATA com imagem + SEED sem imagem => imagem do DATA preservada', () => {
+  const seed = [{ id: 'seed_B', name: 'Lesão B', s: 'X', site: 'Y' }];
+  const data = { data: [{ id: 'seed_B', name: 'Lesão B', s: 'X', site: 'Y', images: [{ assetId: 'data-only-asset', lesionId: 'seed_B', lesionName: 'Lesão B' }] }], review: {}, srs: {} };
+  const result = v2.reconcileCatalogByIdentityV2(data, seed);
+  const final = result.state.data.find((e) => e.id === 'seed_B');
+  assert.equal(final.images.length, 1);
+  assert.equal(final.images[0].assetId, 'data-only-asset');
+});
+
+test('POLITICA DE IMAGENS C: DATA e SEED com imagens diferentes => somente a associação do DATA real é preservada', () => {
+  const seed = [{ id: 'seed_C', name: 'Lesão C', s: 'X', site: 'Y', images: [{ assetId: 'seed-c-asset', lesionId: 'seed_C', lesionName: 'Lesão C' }] }];
+  const data = { data: [{ id: 'seed_C', name: 'Lesão C', s: 'X', site: 'Y', images: [{ assetId: 'data-c-asset', lesionId: 'seed_C', lesionName: 'Lesão C' }] }], review: {}, srs: {} };
+  const result = v2.reconcileCatalogByIdentityV2(data, seed);
+  const final = result.state.data.find((e) => e.id === 'seed_C');
+  assert.equal(final.images.length, 1, 'so a imagem do DATA real sobrevive, a do SEED e descartada');
+  assert.equal(final.images[0].assetId, 'data-c-asset');
+  assert.ok(!final.images.some((i) => i.assetId === 'seed-c-asset'));
+});
+
+test('POLITICA DE IMAGENS D: imagem presa num registro DATA com ID antigo/reutilizado acompanha a identidade semântica correta', () => {
+  const seed = [{ id: 'seed_D_novo', name: 'Lesão D', s: 'X', site: 'Y' }];
+  const data = { data: [{ id: 'seed_D_antigo', name: 'Lesão D', s: 'X', site: 'Y', images: [{ assetId: 'stale-asset', lesionId: 'seed_D_antigo', lesionName: 'Lesão D' }] }], review: {}, srs: {} };
+  const result = v2.reconcileCatalogByIdentityV2(data, seed);
+  assert.equal(result.state.data.some((e) => e.id === 'seed_D_antigo'), false, 'o ID antigo nao pode sobreviver como entrada separada');
+  const final = result.state.data.find((e) => e.id === 'seed_D_novo');
+  assert.ok(final, 'a identidade deve ser encontrada sob o ID atual do SEED');
+  assert.equal(final.images.length, 1);
+  assert.equal(final.images[0].assetId, 'stale-asset', 'identificador fisico preservado');
+  assert.equal(final.images[0].lesionId, 'seed_D_novo', 'ownership reescrito para o ID atual');
+  assert.equal(final.images[0].lesionName, 'Lesão D');
+});
+
+test('POLITICA DE IMAGENS E: identidade sem NENHUM registro DATA (materializada do SEED) nunca herda imagem do SEED', () => {
+  const seed = [{ id: 'seed_E', name: 'Lesão E sem DATA', s: 'X', site: 'Y', images: [{ assetId: 'seed-e-asset', lesionId: 'seed_E', lesionName: 'Lesão E sem DATA' }] }];
+  const data = { data: [], review: {}, srs: {} };
+  const result = v2.reconcileCatalogByIdentityV2(data, seed);
+  const final = result.state.data.find((e) => e.id === 'seed_E');
+  assert.ok(final, 'a identidade e materializada a partir do SEED (name/s/site)');
+  assert.deepEqual(plain(final.images), [], 'mas NENHUMA imagem pode ser materializada — DATA nao tinha nenhum registro pra essa identidade');
+  assert.ok(result.report.materializedFromSeed.some((m) => m.id === 'seed_E'));
 });
 
 // ===========================================================================
@@ -1483,14 +1599,29 @@ test('V2 auditoria consolidada: snapshot real reporta todas as metricas de conse
   const displacedRecords = parsed.entries.filter((entry) => seedIdByIdentity.get(v2.identityKeyOfV2(entry)) !== entry.id).length;
   const countImages = (entries) => entries.reduce((total, entry) => total + (Array.isArray(entry.images) ? entry.images.length : 0), 0);
   const countAltPlacements = (entries) => entries.reduce((total, entry) => total + (Array.isArray(entry.altPlacements) ? entry.altPlacements.length : 0), 0);
-  const expectedImageAssociations = new Set();
-  for (const entry of [...parsed.entries, ...REAL_SEED]) {
+  // POLITICA DE IMAGENS CORRIGIDA: DATA real e' a UNICA fonte de verdade
+  // para associacoes de imagem — o SEED nunca contribui uma imagem que o
+  // DATA atual nao tem (ver rewriteDataImagesOnlyV2). Por isso, diferente
+  // da versao anterior deste teste, NAO existe mais uma "uniao DATA+SEED"
+  // esperada — a expectativa e' exatamente o conjunto DATA-only, e nenhuma
+  // associacao exclusiva do SEED pode vazar pro resultado final.
+  const dataOnlyImageAssociations = new Set();
+  for (const entry of parsed.entries) {
     const identityKey = v2.identityKeyOfV2(entry);
     for (const image of (entry.images || [])) {
       const imageKey = engine.stableImageKeyV208(image);
-      if (imageKey) expectedImageAssociations.add(`${identityKey}|||${imageKey}`);
+      if (imageKey) dataOnlyImageAssociations.add(`${identityKey}|||${imageKey}`);
     }
   }
+  const seedOnlyImageAssociations = new Set();
+  for (const entry of REAL_SEED) {
+    const identityKey = v2.identityKeyOfV2(entry);
+    for (const image of (entry.images || [])) {
+      const imageKey = engine.stableImageKeyV208(image);
+      if (imageKey) seedOnlyImageAssociations.add(`${identityKey}|||${imageKey}`);
+    }
+  }
+  const seedExclusiveImageAssociations = [...seedOnlyImageAssociations].filter((a) => !dataOnlyImageAssociations.has(a));
   const finalImageAssociations = new Set();
   let ownershipMismatches = 0;
   for (const entry of result.state.data) {
@@ -1502,6 +1633,7 @@ test('V2 auditoria consolidada: snapshot real reporta todas as metricas de conse
       if (custom && custom.lesion_id !== undefined && custom.lesion_id !== entry.id) ownershipMismatches += 1;
     }
   }
+  const seedExclusiveLeaked = seedExclusiveImageAssociations.filter((a) => finalImageAssociations.has(a)).length;
 
   const audit = {
     seedTotal: REAL_SEED.length,
@@ -1522,9 +1654,11 @@ test('V2 auditoria consolidada: snapshot real reporta todas as metricas de conse
     orphanSrs: Object.keys(result.report.orphanSrs),
     imagesBefore: countImages(parsed.entries),
     imagesSeedBefore: countImages(REAL_SEED),
-    uniqueImageAssociationsBefore: expectedImageAssociations.size,
+    uniqueImageAssociationsDataOnly: dataOnlyImageAssociations.size,
+    seedExclusiveImageAssociations: seedExclusiveImageAssociations.length,
     imagesAfter: countImages(result.state.data),
     uniqueImageAssociationsAfter: finalImageAssociations.size,
+    seedExclusiveLeaked,
     ownershipMismatches,
     altPlacementsDataBefore: countAltPlacements(parsed.entries),
     altPlacementsSeedBefore: countAltPlacements(REAL_SEED),
@@ -1558,10 +1692,12 @@ test('V2 auditoria consolidada: snapshot real reporta todas as metricas de conse
   assert.equal(audit.srsAfter, 26);
   assert.equal(audit.imagesBefore, 102);
   assert.equal(audit.imagesSeedBefore, 68);
-  assert.equal(audit.uniqueImageAssociationsBefore, 73);
-  assert.equal(audit.imagesAfter, 73);
-  assert.equal(audit.uniqueImageAssociationsAfter, 73);
-  for (const association of expectedImageAssociations) assert.ok(finalImageAssociations.has(association), `associacao de imagem perdida: ${association}`);
+  assert.equal(audit.uniqueImageAssociationsDataOnly, 63);
+  assert.equal(audit.seedExclusiveImageAssociations, 10, '10 associacoes de imagem existem SOMENTE no SEED (nao no DATA real) — precisam ficar de fora do resultado');
+  assert.equal(audit.imagesAfter, 63, 'apos a correcao, so as imagens do DATA real sobrevivem — nao mais a uniao com o SEED (era 73 antes da correcao)');
+  assert.equal(audit.uniqueImageAssociationsAfter, 63);
+  for (const association of dataOnlyImageAssociations) assert.ok(finalImageAssociations.has(association), `associacao de imagem do DATA real perdida: ${association}`);
+  assert.equal(audit.seedExclusiveLeaked, 0, 'NENHUMA associacao exclusiva do SEED pode vazar pro resultado final');
   assert.equal(audit.ownershipMismatches, 0);
   assert.equal(audit.altPlacementConflicts, 0);
   assert.equal(audit.blockingConflicts, 0);
@@ -1755,9 +1891,749 @@ test('TODO: decidir a relacao entre o motor V1 (mapa de 126 pares) e o V2 (ident
 });
 
 test('TODO: ligar reconcileCatalogByIdentityV2 a loadData/syncFromFirebase/importacao e uma decisao FUTURA separada', { todo: true }, () => {
-  // Mesma cautela do V1: o motor V2 esta pronto, testado com fixtures
-  // sinteticas e com o snapshot real de 1213 registros, mas 100% inerte.
-  // Conectar a producao exige nova aprovacao explicita, backup/snapshot
-  // real antes de qualquer escrita, e provavelmente uma tela de dry-run
-  // visivel ao usuario antes de aplicar qualquer resultado.
+  // ALTERACAO 007 deu ao motor V2 seu unico call site de producao dentro
+  // de reconcileV2Preview, acionado exclusivamente pelo botao manual
+  // "reconciliar catalogo V2" (ver testes "V2 PASSO 14 (ALTERACAO 007)"
+  // e a suite ALTERACAO 007 — ferramenta manual). O motor deixou de ser
+  // 100% inerte, mas continua sem NENHUMA integracao automatica: loadData,
+  // syncFromFirebase e o handler de importacao nao mencionam nenhuma
+  // funcao da ferramenta (comprovado estaticamente). Ligar o V2 a esses
+  // fluxos automaticos continua sendo uma decisao FUTURA separada, nao
+  // tomada aqui.
+});
+
+// ===========================================================================
+// ALTERACAO 007 — ferramenta manual "reconciliar catalogo V2": testes
+// comportamentais de reconcileV2Preview/applyReconcileV2 extraidos e
+// executados de verdade (via vm), com storage.set/confirm/download
+// injetados/mockados — nunca window.confirm, Blob, URL ou document reais.
+// ===========================================================================
+
+function buildToolEngine() {
+  const toolNames = ['classifyImageOwnershipDivergenceV2', 'dedupeEntryImagesByStableKeyV2', 'buildImageOwnershipCorrectionPlanV2', 'applyImageOwnershipCorrectionV2', 'reconcileV2Preview', 'buildPreMigrationBackupV2', 'downloadPreMigrationBackupV2', 'applyReconcileV2', 'buildRealStateDiagnosticV2', 'buildPostApplyValidationReportV2', 'buildCheckpointIntegrityReportV2', 'buildCheckpointV2', 'downloadCheckpointV2', 'exportCheckpointV2'];
+  const toolFns = {};
+  for (const name of toolNames) toolFns[name] = extractFunction(html, name);
+
+  const knownFieldsDecl = declarationsOf(html, 'V2_KNOWN_FIELDS');
+  const knownFieldsEquals = html.indexOf('=', knownFieldsDecl[0].index);
+  const knownFieldsSemicolon = html.indexOf(';', knownFieldsEquals);
+  const knownFieldsSource = html.slice(knownFieldsDecl[0].index, knownFieldsSemicolon + 1);
+
+  // MANUAL_IMAGE_OWNERSHIP_OVERRIDES_20260919 = new Map([ ... ]) — extrai o
+  // "new Map(" + conteudo balanceado via extractDelimited a partir do "(".
+  const overridesDecl = declarationsOf(html, 'MANUAL_IMAGE_OWNERSHIP_OVERRIDES_20260919');
+  assert.equal(overridesDecl.length, 1, 'MANUAL_IMAGE_OWNERSHIP_OVERRIDES_20260919 deve ter uma unica declaracao');
+  const overridesNewMapIndex = html.indexOf('new Map(', overridesDecl[0].index);
+  const overridesParenIndex = html.indexOf('(', overridesNewMapIndex);
+  const overridesMapCall = extractDelimited(html, overridesParenIndex);
+  const overridesSource = `const MANUAL_IMAGE_OWNERSHIP_OVERRIDES_20260919 = new Map${overridesMapCall};`;
+
+  const sourceParts = [
+    engineBuild.extractedFns.stableImageKeyV208.source,
+    engineBuild.extractedFns.normalizeLegacyIdentity.source,
+    engineBuild.extractedFns.mergeLegacyReview.source,
+    engineBuild.extractedFns.mergeLegacySrs.source,
+    engineBuild.extractedFns.mergeLegacyNotes.source,
+    engineBuild.extractedFns.mergeLegacyTags.source,
+    engineBuild.extractedFns.mergeLegacyLinks.source,
+    engineBuild.extractedFns.rewriteMigratedImageOwner.source,
+    engineBuild.extractedFns.mergeLegacyImages.source,
+    engineBuild.extractedFns.mergeLegacyBaseFields.source,
+    knownFieldsSource,
+    v2EngineBuild.extractedFns.identityKeyOfV2.source,
+    v2EngineBuild.extractedFns.buildSeedIdentityIndexV2.source,
+    v2EngineBuild.extractedFns.mergeUnknownFieldsV2.source,
+    v2EngineBuild.extractedFns.normalizeAltPlacementKeyV2.source,
+    v2EngineBuild.extractedFns.mergeAltPlacementsV2.source,
+    v2EngineBuild.extractedFns.foldDataEntriesByIdentityV2.source,
+    v2EngineBuild.extractedFns.rewriteDataImagesOnlyV2.source,
+    v2EngineBuild.extractedFns.mergeSeedIdentityWithDataV2.source,
+    v2EngineBuild.extractedFns.rewriteImageOwnershipV2.source,
+    v2EngineBuild.extractedFns.reconcileCatalogByIdentityV2.source,
+    overridesSource,
+    toolFns.classifyImageOwnershipDivergenceV2.source,
+    toolFns.dedupeEntryImagesByStableKeyV2.source,
+    toolFns.buildImageOwnershipCorrectionPlanV2.source,
+    toolFns.applyImageOwnershipCorrectionV2.source,
+    toolFns.reconcileV2Preview.source,
+    toolFns.buildPreMigrationBackupV2.source,
+    toolFns.downloadPreMigrationBackupV2.source,
+    toolFns.applyReconcileV2.source,
+    toolFns.buildRealStateDiagnosticV2.source,
+    toolFns.buildPostApplyValidationReportV2.source,
+    toolFns.buildCheckpointIntegrityReportV2.source,
+    toolFns.buildCheckpointV2.source,
+    toolFns.downloadCheckpointV2.source,
+    toolFns.exportCheckpointV2.source,
+    'globalThis.MANUAL_IMAGE_OWNERSHIP_OVERRIDES_20260919 = MANUAL_IMAGE_OWNERSHIP_OVERRIDES_20260919;',
+    'globalThis.buildPostApplyValidationReportV2 = buildPostApplyValidationReportV2;',
+    'globalThis.classifyImageOwnershipDivergenceV2 = classifyImageOwnershipDivergenceV2;',
+    'globalThis.dedupeEntryImagesByStableKeyV2 = dedupeEntryImagesByStableKeyV2;',
+    'globalThis.buildImageOwnershipCorrectionPlanV2 = buildImageOwnershipCorrectionPlanV2;',
+    'globalThis.applyImageOwnershipCorrectionV2 = applyImageOwnershipCorrectionV2;',
+    'globalThis.reconcileV2Preview = reconcileV2Preview;',
+    'globalThis.applyReconcileV2 = applyReconcileV2;',
+    'globalThis.buildRealStateDiagnosticV2 = buildRealStateDiagnosticV2;',
+    'globalThis.buildCheckpointIntegrityReportV2 = buildCheckpointIntegrityReportV2;',
+    'globalThis.buildCheckpointV2 = buildCheckpointV2;',
+    'globalThis.exportCheckpointV2 = exportCheckpointV2;'
+  ];
+  return { toolFns, sourceParts };
+}
+
+const toolEngine = buildToolEngine();
+
+// Nenhum stub de document/Blob/URL/window.confirm e' necessario: os testes
+// sempre passam confirmFn/downloadFn explicitos para applyReconcileV2 (a
+// mesma injecao de dependencia que o codigo real de producao aceita), entao
+// os defaults (que tocariam o DOM/confirm real) nunca sao avaliados.
+function makeToolContext({ data, review, srs, seed }) {
+  const storageSetLog = [];
+  const contextObj = {
+    console,
+    DATA: data,
+    REVIEW: review,
+    SRS: srs,
+    SEED: seed,
+    SESSIONLOG: {},
+    sectionOrder: [],
+    siteOrder: {},
+    STORAGE_KEY: 'atlas:pathologies',
+    REVIEW_KEY: 'atlas:review',
+    SRS_KEY: 'atlas:srs',
+    storage: { set: async (key, value) => { storageSetLog.push({ key, value }); } }
+  };
+  const context = vm.createContext(contextObj);
+  new vm.Script(toolEngine.sourceParts.join('\n\n'), { filename: 'index.html:legacy-engine-v2-tool' }).runInContext(context);
+  return { context, storageSetLog };
+}
+
+test('ALTERACAO 007: reconcileV2Preview NAO muta DATA/REVIEW/SRS (preview e puro em memoria)', () => {
+  const { raw, parsed } = loadFullCatalogSnapshot();
+  const { context } = makeToolContext({ data: parsed.entries, review: parsed.review, srs: parsed.srs, seed: REAL_SEED });
+  const dataSnapshot = plain(context.DATA);
+  const reviewSnapshot = plain(context.REVIEW);
+  const srsSnapshot = plain(context.SRS);
+
+  const preview = context.reconcileV2Preview();
+
+  assert.deepEqual(plain(context.DATA), dataSnapshot, 'DATA nao pode mudar so' + ' de rodar o preview');
+  assert.deepEqual(plain(context.REVIEW), reviewSnapshot, 'REVIEW nao pode mudar so' + ' de rodar o preview');
+  assert.deepEqual(plain(context.SRS), srsSnapshot, 'SRS nao pode mudar so' + ' de rodar o preview');
+  // safeToApply do catalogo real e' TRUE: os 6 casos categoria B (conflitantes)
+  // que existiam foram todos resolvidos por overrides manuais explicitos
+  // (MANUAL_IMAGE_OWNERSHIP_OVERRIDES_20260919, decisao humana de 2026-09-19,
+  // nao uma heuristica automatica) — ver a suite "CORRECAO DE OWNERSHIP DE
+  // IMAGENS" mais abaixo pros numeros completos.
+  assert.equal(preview.report.safeToApply, true);
+  assert.equal(preview.report.imageOwnershipCorrection.categoryB.length, 0);
+  assert.equal(preview.report.imageOwnershipCorrection.manualOverrides.length, 6);
+
+  const rawAfter = fs.readFileSync(path.resolve(__dirname, '..', 'snapshot-catalogo-completo-readonly.json'), 'utf8');
+  assert.equal(rawAfter, raw, 'o snapshot no disco nao pode ser alterado por este teste');
+});
+
+test('ALTERACAO 007: safeToApply=false BLOQUEIA applyReconcileV2 — nada e mutado, nada e persistido', async () => {
+  const ambiguousSeed = [
+    { id: 'seed_X1', name: 'Duplicata no Seed', s: 'X', site: 'Y' },
+    { id: 'seed_X2', name: 'Duplicata no Seed', s: 'X', site: 'Y' }
+  ];
+  const data = [{ id: 'seed_X1', name: 'Duplicata no Seed', s: 'X', site: 'Y', tags: [], links: [], images: [], notes: 'nota do usuario' }];
+  const { context, storageSetLog } = makeToolContext({ data, review: { seed_X1: 2 }, srs: {}, seed: ambiguousSeed });
+
+  const preview = context.reconcileV2Preview();
+  assert.equal(preview.report.safeToApply, false, 'fixture precisa ser inseguro pra este teste fazer sentido');
+
+  let confirmCalled = false;
+  let downloadCalled = false;
+  const result = await context.applyReconcileV2({
+    confirmFn: () => { confirmCalled = true; return true; },
+    downloadFn: () => { downloadCalled = true; }
+  });
+
+  assert.equal(result.applied, false);
+  assert.equal(result.reason, 'not_safe');
+  assert.equal(confirmCalled, false, 'nao pode nem chegar a pedir confirmacao quando safeToApply=false');
+  assert.equal(downloadCalled, false, 'nao pode gerar backup quando a aplicacao esta bloqueada');
+  assert.equal(storageSetLog.length, 0, 'nao pode persistir nada quando a aplicacao esta bloqueada');
+  assert.deepEqual(plain(context.DATA), data, 'DATA precisa permanecer intocado');
+});
+
+// Fixture dedicada, deliberadamente SEGURA (sem duplicatas, sem anomalias,
+// sem nenhuma divergencia de ownership de imagem) pros testes de
+// ORQUESTRACAO de applyReconcileV2 abaixo (confirmacao/backup/persistencia).
+// Nao usa mais o snapshot real: desde a correcao de ownership de imagens, o
+// catalogo real tem 6 divergencias categoria B genuinas (ver teste acima),
+// entao safeToApply=false la' e' o resultado CORRETO — usa-lo aqui faria
+// esses testes de orquestracao pararem antes mesmo de chegar no fluxo que
+// eles querem exercitar.
+function buildSafeApplyFixture(){
+  const seed = [
+    { id: 'safe_1', name: 'Lesão Segura Um', s: 'S', site: 'T' },
+    { id: 'safe_2', name: 'Lesão Segura Dois', s: 'S', site: 'T' }
+  ];
+  const data = {
+    data: [
+      { id: 'safe_1', name: 'Lesão Segura Um', s: 'S', site: 'T', images: [{ assetId: 'safe-asset-1', lesionId: 'safe_1', lesionName: 'Lesão Segura Um' }] },
+      { id: 'safe_2', name: 'Lesão Segura Dois', s: 'S', site: 'T', images: [] }
+    ],
+    review: { safe_1: 2 },
+    srs: {}
+  };
+  return { seed, data };
+}
+
+test('ALTERACAO 007: applyReconcileV2 exige confirmacao explicita — cancelar nao aplica nada', async () => {
+  const fixture = buildSafeApplyFixture();
+  const { context, storageSetLog } = makeToolContext({ data: fixture.data.data, review: fixture.data.review, srs: fixture.data.srs, seed: fixture.seed });
+  const dataCountBefore = context.DATA.length;
+
+  let downloadCalled = false;
+  const result = await context.applyReconcileV2({
+    confirmFn: () => false, // usuario cancela
+    downloadFn: () => { downloadCalled = true; }
+  });
+
+  assert.equal(result.applied, false);
+  assert.equal(result.reason, 'cancelled');
+  assert.equal(downloadCalled, false, 'nao pode gerar backup se o usuario cancelou antes');
+  assert.equal(storageSetLog.length, 0);
+  assert.equal(context.DATA.length, dataCountBefore, 'DATA precisa permanecer intocado apos cancelamento');
+});
+
+test('ALTERACAO 007: backup e gerado ANTES de qualquer mutacao de DATA/REVIEW/SRS', async () => {
+  const fixture = buildSafeApplyFixture();
+  const { context } = makeToolContext({ data: fixture.data.data, review: fixture.data.review, srs: fixture.data.srs, seed: fixture.seed });
+  const dataCountBefore = context.DATA.length;
+  const reviewCountBefore = Object.keys(context.REVIEW).length;
+
+  let dataCountAtBackupTime = null;
+  let reviewCountAtBackupTime = null;
+  let backupPayload = null;
+  const result = await context.applyReconcileV2({
+    confirmFn: () => true,
+    downloadFn: (backup) => {
+      // neste instante a mutacao AINDA nao pode ter acontecido
+      dataCountAtBackupTime = context.DATA.length;
+      reviewCountAtBackupTime = Object.keys(context.REVIEW).length;
+      backupPayload = backup;
+    }
+  });
+
+  assert.equal(result.applied, true);
+  assert.equal(dataCountAtBackupTime, dataCountBefore, 'o backup precisa capturar o estado ANTES da mutacao');
+  assert.equal(reviewCountAtBackupTime, reviewCountBefore, 'o backup precisa capturar o REVIEW ANTES da mutacao');
+  assert.equal(backupPayload.format, 'atlas-radiologico-backup');
+  assert.equal(backupPayload.reason, 'pre-reconciliacao-v2');
+  assert.equal(backupPayload.data.length, dataCountBefore, 'o backup precisa ser o payload PRE-migracao, nao o pos-migracao');
+});
+
+test('ALTERACAO 007: DATA/REVIEW/SRS aplicados correspondem exatamente ao resultado do V2, e sao persistidos localmente (sem Firebase/Cloudinary)', async () => {
+  const fixture = buildSafeApplyFixture();
+  const { context, storageSetLog } = makeToolContext({ data: fixture.data.data, review: fixture.data.review, srs: fixture.data.srs, seed: fixture.seed });
+
+  const expectedPreview = context.reconcileV2Preview(); // puro — nao muta nada, serve so' de expectativa
+  const result = await context.applyReconcileV2({ confirmFn: () => true, downloadFn: () => {} });
+
+  assert.equal(result.applied, true);
+  assert.deepEqual(plain(context.DATA), plain(expectedPreview.state.data));
+  assert.deepEqual(plain(context.REVIEW), plain(expectedPreview.state.review));
+  assert.deepEqual(plain(context.SRS), plain(expectedPreview.state.srs));
+
+  assert.equal(storageSetLog.length, 3, 'precisa persistir DATA, REVIEW e SRS — exatamente 3 chamadas de storage.set');
+  const keys = storageSetLog.map((c) => c.key).sort();
+  assert.deepEqual(keys, ['atlas:pathologies', 'atlas:review', 'atlas:srs'].sort());
+  const dataCall = storageSetLog.find((c) => c.key === 'atlas:pathologies');
+  assert.deepEqual(JSON.parse(dataCall.value), plain(expectedPreview.state.data));
+});
+
+test('ALTERACAO 007: skipConfirm permite orquestrar aplicacao programaticamente sem confirmFn', async () => {
+  const fixture = buildSafeApplyFixture();
+  const { context, storageSetLog } = makeToolContext({ data: fixture.data.data, review: fixture.data.review, srs: fixture.data.srs, seed: fixture.seed });
+  let downloadCalled = false;
+  const result = await context.applyReconcileV2({ skipConfirm: true, downloadFn: () => { downloadCalled = true; } });
+  assert.equal(result.applied, true);
+  assert.equal(downloadCalled, true, 'o backup continua obrigatorio mesmo com skipConfirm');
+  assert.equal(storageSetLog.length, 3);
+});
+
+// ===========================================================================
+// DIAGNOSTICO DO ESTADO REAL — buildRealStateDiagnosticV2 usa EXCLUSIVAMENTE
+// DATA/REVIEW/SRS (nunca SEED, nunca roda o motor de reconciliacao). Serve
+// pra investigar o catalogo como ele esta agora no navegador, sem depender
+// de nenhum preview/aplicacao do V2.
+// ===========================================================================
+
+test('DIAGNOSTICO: buildRealStateDiagnosticV2 e read-only — nao muta DATA/REVIEW/SRS, nunca referencia SEED', () => {
+  const fn = extractFunction(html, 'buildRealStateDiagnosticV2');
+  assert.ok(!/\bSEED\b/.test(fn.source), 'o diagnostico nao pode ler o SEED — so o estado real carregado');
+  assert.ok(!fn.source.includes('reconcileCatalogByIdentityV2'), 'o diagnostico nao pode rodar o motor de reconciliacao');
+
+  const { parsed } = loadFullCatalogSnapshot();
+  const { context } = makeToolContext({ data: parsed.entries, review: parsed.review, srs: parsed.srs, seed: REAL_SEED });
+  const dataSnapshot = plain(context.DATA);
+  context.buildRealStateDiagnosticV2();
+  assert.deepEqual(plain(context.DATA), dataSnapshot, 'DATA nao pode mudar so de rodar o diagnostico');
+});
+
+test('DIAGNOSTICO: detecta grupo duplicado e mismatch de ownership numa fixture pequena e controlada', () => {
+  const { context } = makeToolContext({
+    data: [
+      { id: 'x1', name: 'Lesão Dup', s: 'S', site: 'T', images: [] },
+      { id: 'x2', name: 'Lesão Dup', s: 'S', site: 'T', images: [{ assetId: 'a1', lesionId: 'x2', lesionName: 'Outra Lesão Qualquer' }] },
+      { id: 'x3', name: 'Lesão Única', s: 'S', site: 'T', images: [{ assetId: 'a2', lesionId: 'x3', lesionName: 'Lesão Única' }] }
+    ],
+    review: {}, srs: {}, seed: []
+  });
+  const report = context.buildRealStateDiagnosticV2();
+  assert.equal(report.dataLength, 3);
+  assert.equal(report.uniqueIdentityCount, 2);
+  assert.equal(report.duplicateGroupCount, 1);
+  assert.deepEqual(plain(report.duplicateGroups[0].ids).sort(), ['x1', 'x2']);
+  assert.equal(report.recordsWithImagesCount, 2);
+  assert.equal(report.totalImageCount, 2);
+  assert.equal(report.ownershipMismatches.length, 1, 'x2 tem lesionName divergente do nome atual do registro');
+  assert.equal(report.ownershipMismatches[0].currentHolderId, 'x2');
+  assert.equal(report.ownershipMismatches[0].nameMismatch, true);
+});
+
+test('DIAGNOSTICO: busca por "modic" encontra o registro e mostra exatamente a imagem e metadados de ownership anexados', () => {
+  const { context } = makeToolContext({
+    data: [{ id: 'seed_X', name: 'Alterações Modic dos platôs vertebrais', s: 'Coluna Vertebral', site: 'Disco intervertebral', images: [{ assetId: 'img-modic-test', lesionId: 'seed_X', lesionName: 'Outra Coisa Qualquer' }] }],
+    review: {}, srs: {}, seed: []
+  });
+  const report = context.buildRealStateDiagnosticV2();
+  assert.equal(report.modicSearch.matches.length, 1);
+  assert.equal(report.modicSearch.matches[0].id, 'seed_X');
+  assert.equal(report.modicSearch.matches[0].images[0].assetId, 'img-modic-test');
+  assert.equal(report.modicSearch.matches[0].images[0].lesionName, 'Outra Coisa Qualquer', 'o diagnostico expoe o lesionName tal como gravado, mesmo divergente');
+});
+
+test('DIAGNOSTICO no snapshot REAL (1213): trava os numeros encontrados — achado concreto que explica o que aparece no navegador', () => {
+  const { parsed } = loadFullCatalogSnapshot();
+  const { context } = makeToolContext({ data: parsed.entries, review: parsed.review, srs: parsed.srs, seed: REAL_SEED });
+  const report = context.buildRealStateDiagnosticV2();
+
+  assert.equal(report.dataLength, 1213);
+  assert.equal(report.recordsWithImagesCount, 87, 'bate com o filtro "imagens" (87 lesões) visto no navegador — ja preexistente no DATA real, nao e efeito do V2');
+  assert.equal(report.totalImageCount, 102);
+  assert.equal(report.duplicateGroupCount, 126, 'mesmo numero dos 126 grupos duplicados conhecidos de LEGACY_ID_MIGRATION_MAP_V1');
+  assert.equal(report.ownershipMismatches.length, 47, 'achado: quase metade das 102 imagens do catalogo real ja tem lesionId/lesionName divergente do registro que as contem HOJE, independente do V2');
+
+  const modic = report.modicSearch.matches.find((m) => m.id === 'seed_482');
+  assert.ok(modic, '"Alterações Modic dos platôs vertebrais" precisa ser encontrada em seed_482');
+  assert.equal(modic.imageCount, 1);
+  assert.equal(modic.images[0].lesionId, 'seed_482', 'lesionId bate com o registro atual...');
+  assert.equal(modic.images[0].lesionName, 'Cisto epidermoide intracraniano', '...mas lesionName NAO bate — a imagem e de outra lesao, mal atribuida no DATA real (achado da investigacao)');
+});
+
+// ===========================================================================
+// CORRECAO DE OWNERSHIP DE IMAGENS POR EVIDENCIA DE METADADOS — classifica
+// cada imagem cujo lesionId/lesionName (e cloudinaryContext.custom espelhado,
+// quando existir) diverge do registro que a contem hoje, em 4 categorias:
+//   A — destino inequivoco: todos os sinais presentes convergem pra UMA
+//       unica identidade existente no catalogo — movida automaticamente.
+//   B — metadados conflitantes: sinais apontam pra identidades DIFERENTES
+//       — NUNCA movida automaticamente, bloqueia safeToApply.
+//   C — destino inexistente: nenhum sinal presente resolve pra identidade
+//       existente — NUNCA movida, bloqueia safeToApply.
+//   D — insuficiente: nenhum metadado de ownership presente — NUNCA movida,
+//       bloqueia safeToApply.
+// Roda ANTES da reconciliacao por identidade (sobre o DATA cru), nunca
+// depois — reconcileCatalogByIdentityV2 reescreve incondicionalmente o
+// ownership de toda imagem no seu ultimo passo, o que apagaria a propria
+// evidencia de divergencia se a classificacao rodasse depois.
+// ===========================================================================
+
+test('OWNERSHIP A: sinais convergem pra uma unica identidade DIFERENTE da atual — imagem e MOVIDA (nao copiada), fisico preservado', () => {
+  const data = [
+    { id: 'own_src', name: 'Origem Errada', s: 'S', site: 'T', images: [{ assetId: 'phys-1', publicId: 'pub/phys-1', originalUrl: 'https://x/phys-1.jpg', lesionId: 'own_dst', lesionName: 'Destino Certo' }] },
+    { id: 'own_dst', name: 'Destino Certo', s: 'S', site: 'T', images: [] }
+  ];
+  const { context } = makeToolContext({ data, review: {}, srs: {}, seed: [] });
+  const plan = context.buildImageOwnershipCorrectionPlanV2(context.DATA);
+  assert.equal(plan.categoryA.length, 1);
+  assert.equal(plan.categoryB.length, 0);
+  assert.equal(plan.categoryC.length, 0);
+  assert.equal(plan.categoryD.length, 0);
+  assert.equal(plan.categoryA[0].destination.id, 'own_dst');
+
+  const corrected = context.applyImageOwnershipCorrectionV2({ data: context.DATA, review: {}, srs: {} });
+  const src = corrected.state.data.find((e) => e.id === 'own_src');
+  const dst = corrected.state.data.find((e) => e.id === 'own_dst');
+  assert.equal(src.images.length, 0, 'a imagem precisa sair da origem — MOVER, nao copiar');
+  assert.equal(dst.images.length, 1, 'a imagem precisa chegar no destino exatamente uma vez');
+  assert.equal(dst.images[0].assetId, 'phys-1', 'assetId fisico preservado');
+  assert.equal(dst.images[0].publicId, 'pub/phys-1', 'publicId fisico preservado');
+  assert.equal(dst.images[0].originalUrl, 'https://x/phys-1.jpg', 'originalUrl fisico preservado');
+  assert.equal(dst.images[0].lesionId, 'own_dst', 'ownership reescrito para o destino');
+  assert.equal(dst.images[0].lesionName, 'Destino Certo');
+  assert.equal(corrected.report.imageOwnershipCorrection.moved.filter((m) => m.action === 'moved').length, 1);
+  assert.equal(corrected.report.safeToApply, true, 'categoria A sozinha nao bloqueia safeToApply');
+});
+
+test('OWNERSHIP A (relabel in place): id aponta pro proprio registro mas name diverge e nao existe em lugar nenhum — so relabela, nao move', () => {
+  const data = [{ id: 'own_1', name: 'Nome Certo', s: 'S', site: 'T', images: [{ assetId: 'phys-2', lesionId: 'own_1', lesionName: 'Nome Antigo Que Nao Existe Mais' }] }];
+  const { context } = makeToolContext({ data, review: {}, srs: {}, seed: [] });
+  const corrected = context.applyImageOwnershipCorrectionV2({ data: context.DATA, review: {}, srs: {} });
+  const entry = corrected.state.data.find((e) => e.id === 'own_1');
+  assert.equal(entry.images.length, 1, 'a imagem nao pode sumir nem duplicar');
+  assert.equal(entry.images[0].assetId, 'phys-2');
+  assert.equal(entry.images[0].lesionName, 'Nome Certo', 'label stale e corrigido');
+  assert.equal(corrected.report.imageOwnershipCorrection.moved[0].action, 'relabeled_in_place');
+});
+
+test('OWNERSHIP B: lesionId e lesionName apontam pra identidades DIFERENTES — NUNCA move, bloqueia safeToApply', () => {
+  const data = [
+    { id: 'b_holder', name: 'Quem Segura', s: 'S', site: 'T', images: [{ assetId: 'phys-3', lesionId: 'b_dest_by_id', lesionName: 'Nome De Outra Lesao' }] },
+    { id: 'b_dest_by_id', name: 'Destino Pelo ID', s: 'S', site: 'T', images: [] },
+    { id: 'b_dest_by_name', name: 'Nome De Outra Lesao', s: 'S', site: 'T', images: [] }
+  ];
+  const { context } = makeToolContext({ data, review: {}, srs: {}, seed: [] });
+  const corrected = context.applyImageOwnershipCorrectionV2({ data: context.DATA, review: {}, srs: {} });
+  const holder = corrected.state.data.find((e) => e.id === 'b_holder');
+  assert.equal(holder.images.length, 1, 'imagem categoria B fica exatamente onde estava — nunca movida automaticamente');
+  assert.equal(holder.images[0].assetId, 'phys-3');
+  assert.equal(corrected.report.imageOwnershipCorrection.categoryB.length, 1);
+  assert.equal(corrected.report.safeToApply, false, 'categoria B bloqueia safeToApply');
+  assert.ok(corrected.report.safeToApplyReasons.some((r) => r.includes('CONFLITANTES')));
+});
+
+test('OWNERSHIP C: metadados apontam pra lesao INEXISTENTE no catalogo — NUNCA move, bloqueia safeToApply', () => {
+  const data = [{ id: 'c_holder', name: 'Quem Segura', s: 'S', site: 'T', images: [{ assetId: 'phys-4', lesionId: 'id_que_nao_existe', lesionName: 'Nome Que Tambem Nao Existe' }] }];
+  const { context } = makeToolContext({ data, review: {}, srs: {}, seed: [] });
+  const corrected = context.applyImageOwnershipCorrectionV2({ data: context.DATA, review: {}, srs: {} });
+  const holder = corrected.state.data.find((e) => e.id === 'c_holder');
+  assert.equal(holder.images.length, 1, 'imagem categoria C fica onde estava');
+  assert.equal(corrected.report.imageOwnershipCorrection.categoryC.length, 1);
+  assert.equal(corrected.report.safeToApply, false);
+});
+
+test('OWNERSHIP D: sem NENHUM metadado de ownership presente — insuficiente, bloqueia safeToApply', () => {
+  const { context } = makeToolContext({ data: [], review: {}, srs: {}, seed: [] });
+  const classification = context.classifyImageOwnershipDivergenceV2({}, new Map(), new Map());
+  assert.equal(classification.category, 'D');
+  assert.equal(classification.reason, 'sem_metadado_de_ownership_suficiente');
+});
+
+test('OWNERSHIP: nunca decide destino so pelo ID numerico — lesionId reaproveitado pra outra identidade resolve pra identidade ATUAL do ID, nunca pela historica', () => {
+  const data = [
+    { id: 'reused_id', name: 'Identidade Atual Do ID', s: 'S', site: 'T', images: [] },
+    { id: 'holder', name: 'Quem Segura A Imagem', s: 'S', site: 'T', images: [{ assetId: 'phys-6', lesionId: 'reused_id', lesionName: 'Identidade Antiga Que O ID Costumava Ter' }] }
+  ];
+  const { context } = makeToolContext({ data, review: {}, srs: {}, seed: [] });
+  const corrected = context.applyImageOwnershipCorrectionV2({ data: context.DATA, review: {}, srs: {} });
+  const holder = corrected.state.data.find((e) => e.id === 'holder');
+  const reused = corrected.state.data.find((e) => e.id === 'reused_id');
+  assert.equal(holder.images.length, 0);
+  assert.equal(reused.images.length, 1);
+  assert.equal(reused.images[0].lesionName, 'Identidade Atual Do ID');
+});
+
+test('OWNERSHIP no snapshot REAL (1213): trava os numeros do dry-run completo — divergencias, categorias, overrides, movidas, antes/depois', () => {
+  const { parsed } = loadFullCatalogSnapshot();
+  const { context } = makeToolContext({ data: parsed.entries, review: parsed.review, srs: parsed.srs, seed: REAL_SEED });
+
+  const recordsWithImagesBefore = context.DATA.filter((e) => Array.isArray(e.images) && e.images.length > 0).length;
+  const totalImagesBefore = context.DATA.reduce((n, e) => n + (Array.isArray(e.images) ? e.images.length : 0), 0);
+  assert.equal(recordsWithImagesBefore, 87);
+  assert.equal(totalImagesBefore, 102);
+
+  const preview = context.reconcileV2Preview();
+  const ic = preview.report.imageOwnershipCorrection;
+
+  // Os 6 casos categoria B originais foram todos cobertos pelos 4 overrides
+  // manuais explicitos (2026-09-19) — MANUAL_IMAGE_OWNERSHIP_OVERRIDES_20260919
+  // saem do balde B e viram manualOverrides, nunca A (nao sao "resolvidos
+  // automaticamente", sao decisao humana registrada e auditavel).
+  assert.equal(ic.totalDivergences, 47);
+  assert.equal(ic.categoryA.length, 41, 'resolvidas automaticamente por destino inequivoco');
+  assert.equal(ic.manualOverrides.length, 6, '2 copias do asset 6b8984... (Modic/epidermoide) + 2 assets distintos de Cavernoma + 2 copias do asset 03f470... (AVC/Gangrena)');
+  assert.equal(ic.categoryB.length, 0, 'todos os 6 B originais foram cobertos por override manual explicito');
+  assert.equal(ic.categoryC.length, 0);
+  assert.equal(ic.categoryD.length, 0);
+
+  assert.equal(ic.moved.filter((m) => m.source === 'category_A' && m.action === 'moved').length, 39);
+  assert.equal(ic.moved.filter((m) => m.source === 'category_A' && m.action === 'relabeled_in_place').length, 2);
+  assert.equal(ic.moved.filter((m) => m.source === 'manual_override' && m.action === 'moved').length, 2, 'a copia presa em Modic e a copia presa em Gangrena de Fournier precisam ser MOVIDAS pra fora');
+  assert.equal(ic.moved.filter((m) => m.source === 'manual_override' && m.action === 'relabeled_in_place').length, 4, 'as 2 imagens de Cavernoma + as copias ja corretas de Cisto epidermoide/AVC so precisam de relabel');
+
+  const recordsWithImagesAfter = preview.state.data.filter((e) => Array.isArray(e.images) && e.images.length > 0).length;
+  const totalImagesAfter = preview.state.data.reduce((n, e) => n + (Array.isArray(e.images) ? e.images.length : 0), 0);
+  const physicalAssetsAfter = new Set();
+  for (const e of preview.state.data) for (const img of (e.images || [])) physicalAssetsAfter.add(context.stableImageKeyV208(img));
+  assert.equal(recordsWithImagesAfter, 51, '53 antes dos overrides, -2 porque Modic e Gangrena de Fournier ficam sem imagem');
+  assert.equal(totalImagesAfter, 61, '63 antes dos overrides, -2 pela deduplicacao das 2 copias fisicas identicas (asset 6b8984... e asset 03f470...)');
+  assert.equal(physicalAssetsAfter.size, 61, 'nenhum asset fisico duplicado sobra no resultado final');
+
+  let ownershipMismatchesAfter = 0;
+  for (const e of preview.state.data) {
+    for (const img of (e.images || [])) {
+      if ((img.lesionId && img.lesionId !== e.id) || (img.lesionName && img.lesionName !== e.name)) ownershipMismatchesAfter += 1;
+    }
+  }
+  assert.equal(ownershipMismatchesAfter, 0, 'toda imagem que sobra no resultado tem ownership consistente com quem a contem');
+
+  assert.equal(preview.report.safeToApply, true, 'com os overrides manuais, nao sobra nenhum B/C/D bloqueante');
+  assert.deepEqual(plain(preview.report.safeToApplyReasons.filter((r) => r.includes('ownership'))), []);
+});
+
+test('OWNERSHIP no snapshot REAL: os 6 casos manuais (Modic, Cavernoma x2, AVC/Gangrena) sao aplicados EXATAMENTE como decidido, nunca pelo ID cru historico', () => {
+  const { parsed } = loadFullCatalogSnapshot();
+  const { context } = makeToolContext({ data: parsed.entries, review: parsed.review, srs: parsed.srs, seed: REAL_SEED });
+
+  const preview = context.reconcileV2Preview();
+  const ic = preview.report.imageOwnershipCorrection;
+
+  // os overrides preservam a classificacao natural (o que teria acontecido
+  // sem a decisao manual) so' pra auditoria/transparencia — todas as 6 devem
+  // ter sido naturalmente categoria B antes do override entrar em acao.
+  assert.equal(ic.manualOverrides.length, 6);
+  for (const item of ic.manualOverrides) {
+    assert.equal(item.naturalClassification.category, 'B', `${item.assetId} deveria ser naturalmente B antes do override`);
+  }
+
+  const modicOverride = ic.manualOverrides.find((item) => item.sourceId === 'seed_482');
+  assert.ok(modicOverride, 'a copia presa em Modic (seed_482) precisa aparecer nos overrides manuais');
+  assert.equal(modicOverride.assetId, '6b8984838a6f37f08dc34568793cb842');
+  assert.equal(modicOverride.destination.id, 'seed_467', 'destino do override e o ID cru seed_467 (identidade Cisto epidermoide intracraniano NA EPOCA)');
+
+  // Busca pelo NOME, nunca pelo ID cru usado no override — o SEED reatribui
+  // numeros (seed_14->seed_16, seed_417->seed_428, seed_428->seed_439,
+  // seed_467->seed_482, seed_482->seed_499 no snapshot atual), entao o ID
+  // final de cada identidade NAO e o mesmo ID cru citado na decisao manual.
+  const modicFinal = preview.state.data.find((e) => e.name === 'Alterações Modic dos platôs vertebrais');
+  const epidermoideFinal = preview.state.data.find((e) => e.name === 'Cisto epidermoide intracraniano');
+  const cavernomaFinal = preview.state.data.find((e) => e.name === 'Cavernoma (malformação cavernosa)');
+  const schwannomaFinal = preview.state.data.find((e) => e.name === 'Schwannoma vestibular');
+  const avcFinal = preview.state.data.find((e) => e.name === 'AVC isquêmico agudo');
+  const gangrenaFinal = preview.state.data.find((e) => e.name === 'Gangrena de Fournier');
+  assert.ok(modicFinal && epidermoideFinal && cavernomaFinal && schwannomaFinal && avcFinal && gangrenaFinal);
+
+  assert.equal(modicFinal.images.length, 0, 'Modic termina SEM a imagem — decisao explicita do usuario');
+  assert.deepEqual(plain(epidermoideFinal.images.map((i) => i.assetId)), ['6b8984838a6f37f08dc34568793cb842'], 'Cisto epidermoide intracraniano recebe a UNICA copia do asset (deduplicado)');
+  assert.deepEqual(plain(cavernomaFinal.images.map((i) => i.assetId)).sort(), ['2ccbe78da9718ebfe799a00345d305d0', '460eabe57a4af005ddd9e0b33bd871cd'], 'Cavernoma fica com os 2 assets distintos');
+  assert.equal(schwannomaFinal.images.some((i) => i.assetId === '460eabe57a4af005ddd9e0b33bd871cd' || i.assetId === '2ccbe78da9718ebfe799a00345d305d0'), false, 'Schwannoma vestibular nao pode ficar com nenhum dos 2 assets de Cavernoma');
+  assert.deepEqual(plain(avcFinal.images.map((i) => i.assetId)), ['03f470a828fbe7a4b5236219ae042596'], 'AVC isquemico agudo recebe a UNICA copia do asset (deduplicado)');
+  assert.equal(gangrenaFinal.images.length, 0, 'Gangrena de Fournier termina SEM a imagem de AVC — decisao explicita do usuario');
+
+  // confirma que a evidencia fisica (assetId/publicId) sobrevive intacta
+  assert.equal(epidermoideFinal.images[0].publicId, 'atlas-radiologico/rvdvnnzfb0njskyjfk4k');
+  assert.equal(avcFinal.images[0].publicId, 'atlas-radiologico/j6si2eycbufajb5nasvw');
+});
+
+test('OWNERSHIP no snapshot REAL: nenhuma imagem do SEED foi reincorporada artificialmente durante a correcao com overrides', () => {
+  const { parsed } = loadFullCatalogSnapshot();
+  const { context } = makeToolContext({ data: parsed.entries, review: parsed.review, srs: parsed.srs, seed: REAL_SEED });
+  const preview = context.reconcileV2Preview();
+
+  const dataOnly = new Set();
+  for (const e of parsed.entries) {
+    const key = context.identityKeyOfV2(e);
+    for (const img of (e.images || [])) { const ik = context.stableImageKeyV208(img); if (ik) dataOnly.add(`${key}|||${ik}`); }
+  }
+  const seedOnly = new Set();
+  for (const e of REAL_SEED) {
+    const key = context.identityKeyOfV2(e);
+    for (const img of (e.images || [])) { const ik = context.stableImageKeyV208(img); if (ik) seedOnly.add(`${key}|||${ik}`); }
+  }
+  const seedExclusive = [...seedOnly].filter((a) => !dataOnly.has(a));
+  assert.equal(seedExclusive.length, 10, 'o SEED continua tendo 10 associacoes de imagem que o DATA real nao tem');
+
+  const final = new Set();
+  for (const e of preview.state.data) {
+    const key = context.identityKeyOfV2(e);
+    for (const img of (e.images || [])) { const ik = context.stableImageKeyV208(img); if (ik) final.add(`${key}|||${ik}`); }
+  }
+  const leaked = seedExclusive.filter((a) => final.has(a));
+  assert.equal(leaked.length, 0, 'nenhuma das 10 associacoes exclusivas do SEED pode vazar pro resultado, nem com os overrides manuais ativos');
+});
+
+// ===========================================================================
+// VALIDACAO POS-APLICACAO — buildPostApplyValidationReportV2 roda READ-ONLY
+// depois que a mutacao real ja aconteceu (DATA/REVIEW/SRS ja substituidos).
+// Simula uma aplicacao real (applyReconcileV2 com skipConfirm) sobre o
+// snapshot real e confere que o relatorio pos-aplicacao reflete exatamente
+// o estado final, incluindo as 6 verificacoes nominais dos overrides
+// manuais de 2026-09-19.
+// ===========================================================================
+
+test('VALIDACAO POS-APLICACAO: buildPostApplyValidationReportV2 e read-only e nao referencia Firebase/Cloudinary/storage', () => {
+  const fn = extractFunction(html, 'buildPostApplyValidationReportV2');
+  assert.ok(!fn.source.includes('storage.'), 'validacao pos-aplicacao nao pode persistir nada');
+  assert.ok(!fn.source.includes('pushToFirebase'));
+  assert.ok(!fn.source.includes('DATA =') && !fn.source.includes('REVIEW =') && !fn.source.includes('SRS ='), 'nao pode reatribuir os globais');
+});
+
+test('VALIDACAO POS-APLICACAO no snapshot REAL: apos aplicar de verdade (simulado), o relatorio pos-aplicacao bate com os numeros do dry-run e as 6 verificacoes nominais passam', async () => {
+  const { parsed } = loadFullCatalogSnapshot();
+  const { context, storageSetLog } = makeToolContext({ data: parsed.entries, review: parsed.review, srs: parsed.srs, seed: REAL_SEED });
+
+  const result = await context.applyReconcileV2({ skipConfirm: true, downloadFn: () => {} });
+  assert.equal(result.applied, true);
+  assert.equal(storageSetLog.length, 3, 'aplicacao real precisa persistir DATA/REVIEW/SRS localmente');
+
+  const post = context.buildPostApplyValidationReportV2();
+  assert.equal(post.dataLength, 1213);
+  assert.equal(post.uniqueIdentityCount, 1213);
+  assert.equal(post.duplicateGroupCount, 0);
+  assert.equal(post.recordsWithImagesCount, 51);
+  assert.equal(post.totalImageCount, 61);
+  assert.equal(post.physicalAssetsCount, 61);
+  assert.equal(post.ownershipMismatchesCount, 0);
+  assert.equal(post.reviewCount, 89);
+  assert.equal(post.srsCount, 26);
+  assert.equal(post.seedCoverage, 1213);
+  assert.equal(post.seedTotal, 1213);
+  assert.equal(post.allNominalChecksPassed, true);
+  for (const check of plain(post.nominalChecks)) {
+    assert.equal(check.pass, true, `verificacao nominal falhou: ${check.label}`);
+  }
+});
+
+// ===========================================================================
+// CHECKPOINT POS-RECONCILIACAO V2 — export somente leitura de DATA/REVIEW/SRS
+// atuais + relatorio de integridade. NUNCA muta nada, NUNCA sincroniza
+// Firebase, NUNCA toca Cloudinary, NUNCA roda a reconciliacao de novo.
+// ===========================================================================
+
+test('CHECKPOINT V2: exportCheckpointV2 NAO modifica DATA/REVIEW/SRS', async () => {
+  const { parsed } = loadFullCatalogSnapshot();
+  const { context } = makeToolContext({ data: parsed.entries, review: parsed.review, srs: parsed.srs, seed: REAL_SEED });
+  await context.applyReconcileV2({ skipConfirm: true, downloadFn: () => {} });
+
+  const dataSnapshot = plain(context.DATA);
+  const reviewSnapshot = plain(context.REVIEW);
+  const srsSnapshot = plain(context.SRS);
+
+  const result = context.exportCheckpointV2({ confirmFn: () => true, downloadFn: () => {} });
+
+  assert.equal(result.exported, true);
+  assert.deepEqual(plain(context.DATA), dataSnapshot, 'DATA nao pode mudar por exportar o checkpoint');
+  assert.deepEqual(plain(context.REVIEW), reviewSnapshot, 'REVIEW nao pode mudar por exportar o checkpoint');
+  assert.deepEqual(plain(context.SRS), srsSnapshot, 'SRS nao pode mudar por exportar o checkpoint');
+});
+
+test('CHECKPOINT V2: JSON exportado pode ser parseado e contem DATA/REVIEW/SRS completos', async () => {
+  const { parsed } = loadFullCatalogSnapshot();
+  const { context } = makeToolContext({ data: parsed.entries, review: parsed.review, srs: parsed.srs, seed: REAL_SEED });
+  await context.applyReconcileV2({ skipConfirm: true, downloadFn: () => {} });
+
+  let downloadedCheckpoint = null;
+  const result = context.exportCheckpointV2({
+    confirmFn: () => true,
+    downloadFn: (checkpoint) => {
+      const serialized = JSON.stringify(checkpoint);
+      downloadedCheckpoint = JSON.parse(serialized);
+    }
+  });
+
+  assert.equal(result.exported, true);
+  assert.ok(downloadedCheckpoint, 'o JSON exportado precisa ser parseavel');
+  assert.equal(downloadedCheckpoint.format, 'atlas-radiologico-checkpoint-v2');
+  assert.equal(typeof downloadedCheckpoint.checkpointVersion, 'number');
+  assert.ok(downloadedCheckpoint.exportedAt);
+  assert.equal(downloadedCheckpoint.data.length, 1213, 'DATA exportado precisa ter os 1213 registros do estado atual');
+  assert.equal(Object.keys(downloadedCheckpoint.review).length, Object.keys(plain(context.REVIEW)).length);
+  assert.equal(Object.keys(downloadedCheckpoint.srs).length, Object.keys(plain(context.SRS)).length);
+  assert.ok(downloadedCheckpoint.integrity, 'precisa incluir o bloco de integridade');
+});
+
+test('CHECKPOINT V2 no estado pos-reconciliacao real: identidades unicas, assets nao duplicados, ownership consistente, cobertura SEED completa — zero problemas', async () => {
+  const { parsed } = loadFullCatalogSnapshot();
+  const { context } = makeToolContext({ data: parsed.entries, review: parsed.review, srs: parsed.srs, seed: REAL_SEED });
+  await context.applyReconcileV2({ skipConfirm: true, downloadFn: () => {} });
+
+  const integrity = context.buildCheckpointIntegrityReportV2();
+  assert.equal(integrity.dataLength, 1213);
+  assert.equal(integrity.uniqueIdentityCount, 1213, 'identidades continuam unicas — 1 por registro');
+  assert.equal(integrity.duplicateGroupCount, 0);
+  assert.equal(integrity.duplicatedAssetsCount, 0, 'nenhum asset fisico anexado a mais de um registro');
+  assert.equal(integrity.ownershipMismatchesCount, 0, 'ownership permanece consistente');
+  assert.equal(integrity.seedCoverage, integrity.seedTotal, 'cobertura do SEED permanece completa');
+  assert.equal(integrity.hasIssues, false);
+  assert.deepEqual(plain(integrity.issues), []);
+});
+
+test('CHECKPOINT V2: quando ha problema de integridade, NAO exporta sem confirmacao explicita — mas nao bloqueia silenciosamente', () => {
+  const data = [
+    { id: 'x1', name: 'Duplicada', s: 'S', site: 'T', images: [] },
+    { id: 'x2', name: 'Duplicada', s: 'S', site: 'T', images: [] }
+  ];
+  const { context } = makeToolContext({ data, review: {}, srs: {}, seed: [] });
+
+  const integrity = context.buildCheckpointIntegrityReportV2();
+  assert.equal(integrity.hasIssues, true);
+  assert.equal(integrity.duplicateGroupCount, 1);
+
+  let confirmCalled = false;
+  let confirmMessage = null;
+  let downloadCalled = false;
+  const cancelled = context.exportCheckpointV2({
+    confirmFn: (msg) => { confirmCalled = true; confirmMessage = msg; return false; },
+    downloadFn: () => { downloadCalled = true; }
+  });
+  assert.equal(confirmCalled, true, 'precisa pedir confirmacao explicita quando ha problema');
+  assert.ok(confirmMessage.includes('grupo(s) de identidade duplicada'), 'a mensagem precisa explicar exatamente o problema');
+  assert.equal(cancelled.exported, false);
+  assert.equal(cancelled.reason, 'cancelled');
+  assert.equal(downloadCalled, false, 'nao pode baixar nada se o usuario nao confirmou');
+
+  const confirmed = context.exportCheckpointV2({
+    confirmFn: () => true,
+    downloadFn: () => { downloadCalled = true; }
+  });
+  assert.equal(confirmed.exported, true);
+  assert.equal(downloadCalled, true);
+});
+
+test('CHECKPOINT V2: sem nenhum problema de integridade, exporta sem exigir confirmFn', () => {
+  const data = [{ id: 'x1', name: 'Unica', s: 'S', site: 'T', images: [] }];
+  const seed = [{ id: 'x1', name: 'Unica', s: 'S', site: 'T' }];
+  const { context } = makeToolContext({ data, review: {}, srs: {}, seed });
+
+  let confirmCalled = false;
+  let downloadCalled = false;
+  const result = context.exportCheckpointV2({
+    confirmFn: () => { confirmCalled = true; return true; },
+    downloadFn: () => { downloadCalled = true; }
+  });
+  assert.equal(result.exported, true);
+  assert.equal(confirmCalled, false, 'sem problemas, nao precisa nem chamar confirmFn');
+  assert.equal(downloadCalled, true);
+});
+
+test('CHECKPOINT V2: recalcula a integridade DO ZERO no momento da exportacao (nunca confia em um relatorio antigo)', () => {
+  const fn = extractFunction(html, 'exportCheckpointV2');
+  assert.ok(fn.source.includes('buildCheckpointV2()'), 'precisa chamar buildCheckpointV2() (que recalcula tudo) dentro da propria funcao, nao receber um relatorio pronto como parametro');
+});
+
+test('CHECKPOINT V2: nenhuma funcao da cadeia (integridade/export/modal) muta DATA/REVIEW/SRS ou reatribui os globais', () => {
+  for (const name of ['buildCheckpointIntegrityReportV2', 'buildCheckpointV2', 'downloadCheckpointV2', 'exportCheckpointV2', 'openExportCheckpointV2Modal']) {
+    const fn = extractFunction(html, name);
+    assert.ok(!/\bDATA\s*=[^=]/.test(fn.source), `${name} nao pode reatribuir DATA`);
+    assert.ok(!/\bREVIEW\s*=[^=]/.test(fn.source), `${name} nao pode reatribuir REVIEW`);
+    assert.ok(!/\bSRS\s*=[^=]/.test(fn.source), `${name} nao pode reatribuir SRS`);
+    assert.ok(!fn.source.includes('storage.set'), `${name} nao pode escrever em storage/localStorage`);
+    assert.ok(!fn.source.includes('reconcileCatalogByIdentityV2') && !fn.source.includes('reconcileV2Preview'), `${name} nao pode rodar a reconciliacao de novo`);
+  }
+});
+
+test('CHECKPOINT V2: nome do arquivo segue o padrao atlas-radiologico-checkpoint-pos-reconciliacao-v2_data_hora.json', () => {
+  const links = [];
+  const fakeDoc = {
+    createElement: () => {
+      const a = { click(){}, remove(){} };
+      links.push(a);
+      return a;
+    },
+    body: { appendChild(){} }
+  };
+  const { context } = makeToolContext({ data: [], review: {}, srs: {}, seed: [] });
+  context.document = fakeDoc;
+  context.Blob = function(parts, opts){ this.parts = parts; this.opts = opts; };
+  context.URL = { createObjectURL: () => 'blob:mock' };
+  context.downloadCheckpointV2(context.buildCheckpointV2());
+  assert.equal(links.length, 1);
+  assert.match(links[0].download, /^atlas-radiologico-checkpoint-pos-reconciliacao-v2_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.json$/);
 });

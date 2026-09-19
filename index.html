@@ -1544,6 +1544,8 @@ body{
         <div class="advanced-tools-list">
           <button class="foot-btn" id="btn-system-diagnostic" title="Gera um relatório de texto (armazenamento, duplicatas, imagens, sincronização) pra copiar e enviar se algo der errado">🩺 diagnóstico do sistema<br><span class="foot-btn-sub">gera um relatório pra copiar e enviar — não altera nada</span></button>
           <button class="foot-btn" id="btn-audit-images" title="Verifica se cada imagem está anexada à lesão certa, usando a etiqueta guardada na própria imagem">🔍 auditar vínculo de imagens<br><span class="foot-btn-sub">usa isso depois de qualquer atualização, pra conferir se as imagens ficaram no lugar certo</span></button>
+          <button class="foot-btn" id="btn-reconcile-v2" title="Preview seguro em memória do reconciliador V2 por identidade semântica (name+seção+sítio); nada é alterado até você revisar e confirmar explicitamente">🧬 reconciliar catálogo V2<br><span class="foot-btn-sub">preview seguro — só aplica com sua confirmação, e baixa um backup automático antes de qualquer mudança</span></button>
+          <button class="foot-btn" id="btn-export-checkpoint-v2" title="Exporta um JSON local com DATA/REVIEW/SRS atuais e estatísticas de integridade — somente leitura, não altera nada, não sincroniza a nuvem">💾 Exportar checkpoint V2<br><span class="foot-btn-sub">somente leitura — congela o estado local atual num arquivo, com relatório de integridade antes de exportar</span></button>
           <button class="foot-btn" id="btn-force-dedup" title="Funde agora mesmo qualquer lesão duplicada (mesmo nome/seção/sítio), preservando a melhor imagem e o melhor progresso de revisão entre as cópias">🔗 fundir duplicatas agora<br><span class="foot-btn-sub">usa se perceber a mesma lesão aparecendo duas vezes, ou progresso de revisão sumindo</span></button>
           <button class="foot-btn" id="btn-recover-data" title="Procurar imagens e progresso em dados locais, snapshots e Firebase">🛟 procurar dados antigos / recuperar<br><span class="foot-btn-sub">último recurso: vasculha tudo que existe neste navegador atrás de algo perdido</span></button>
           <button class="foot-btn" id="btn-restore-snapshot" title="Voltar ao último snapshot local criado automaticamente">↶ restaurar snapshot de segurança<br><span class="foot-btn-sub">volta pra um momento salvo automaticamente antes de uma ação arriscada</span></button>
@@ -5407,6 +5409,40 @@ function foldDataEntriesByIdentityV2(primary, secondary, conflicts, context){
    temporario ("shim") com o conteudo do DATA e a identidade do SEED
    antes de reaproveitar mergeLegacyBaseFields, que sempre da'
    prioridade de conteudo ao seu primeiro argumento. */
+/* POLITICA DE IMAGENS (corrigida) para o merge DATA vs SEED — DIFERENTE de
+   mergeLegacyImages (que continua intocada e correta para o fold DATA+DATA
+   em foldDataEntriesByIdentityV2, onde os dois lados sao DATA real do
+   usuario). Aqui um dos lados e' o SEED — uma fotografia CONGELADA de um
+   backup antigo (ver comentario no topo do literal SEED) — e o outro e' o
+   DATA real e atual. Para migracao do catalogo existente, DATA real e' a
+   UNICA fonte de verdade para associacoes de imagem do usuario: o SEED
+   nunca contribui, cria ou restaura uma imagem que o DATA atual nao tem,
+   mesmo quando o SEED possui uma imagem para aquela identidade. Isto evita
+   que uma imagem removida do DATA de proposito (por estar errada, por
+   exemplo) volte a aparecer so' porque ainda existia no backup congelado
+   que gerou o SEED.
+   O que ESTA funcao preserva integralmente: toda imagem que ja esta no
+   DATA real (dataImages) — IDs fisicos, publicId, assetId, originalUrl,
+   source/sourcePage/sourceSite, license, artist, attribution, dimensoes,
+   bytes, formato, label, createdAt, panels, etc. sobrevivem via spread em
+   rewriteMigratedImageOwner; so' lesionId/lesionName (e o espelho em
+   cloudinaryContext.custom, quando presente) sao reescritos para a
+   identidade final — nunca os identificadores do arquivo em si. Nenhuma
+   chamada a Cloudinary; nenhuma imagem do SEED e' materializada; nenhuma
+   imagem real do DATA e' apagada; nenhuma associacao nova e' inventada —
+   so' a posse (ownership) de imagens que JA existiam no DATA e' corrigida
+   para a identidade semantica correta (util quando a imagem estava presa
+   num ID antigo/reutilizado — ver rewriteImageOwnershipV2, que faz o mesmo
+   papel um passo depois, sobre o array final ja montado). */
+function rewriteDataImagesOnlyV2(dataImages, canonicalId){
+  const byKey = new Map();
+  for(const img of (dataImages || [])){
+    const key = stableImageKeyV208(img);
+    if(key) byKey.set(key, rewriteMigratedImageOwner(img, canonicalId));
+  }
+  return [...byKey.values()];
+}
+
 function mergeSeedIdentityWithDataV2(seedEntry, dataContent, conflicts, context){
   const shim = { ...dataContent, id: seedEntry.id, name: seedEntry.name, s: seedEntry.s, site: seedEntry.site };
   const { merged, conflicts: baseConflicts } = mergeLegacyBaseFields(shim, seedEntry);
@@ -5414,7 +5450,7 @@ function mergeSeedIdentityWithDataV2(seedEntry, dataContent, conflicts, context)
 
   merged.tags = mergeLegacyTags(seedEntry.tags, dataContent.tags);
   merged.links = mergeLegacyLinks(seedEntry.links, dataContent.links);
-  merged.images = mergeLegacyImages(seedEntry.images, dataContent.images, seedEntry.id);
+  merged.images = rewriteDataImagesOnlyV2(dataContent.images, seedEntry.id);
 
   const notesResult = mergeLegacyNotes(seedEntry.notes, dataContent.notes, seedEntry._userUpdatedAt, dataContent._userUpdatedAt);
   if(notesResult.conflict) conflicts.push({ ...context, finalId: seedEntry.id, kind:'notes', blocking:true, reason: notesResult.reason, dataValue: dataContent.notes, seedValue: seedEntry.notes });
@@ -5498,6 +5534,14 @@ function reconcileCatalogByIdentityV2(state, seed){
 
     if(group.length === 0){
       const clone = JSON.parse(JSON.stringify(seedEntry));
+      // POLITICA DE IMAGENS (corrigida): DATA real e' a UNICA fonte de verdade
+      // para associacoes de imagem do usuario. Quando nao ha NENHUM registro
+      // DATA pra esta identidade, nao ha nenhuma imagem real do usuario pra
+      // preservar — o SEED (fotografia congelada de um backup antigo) NUNCA
+      // materializa uma imagem que o DATA atual nao tem. imagesInputCount
+      // abaixo continua documentando quantas imagens o SEED tinha, so' pra
+      // transparencia do relatorio; nenhuma delas e' aplicada.
+      clone.images = [];
       const mergedAltPlacements = mergeAltPlacementsV2(clone.altPlacements, null, conflicts, { identityKey:key, finalId:seedId });
       if(mergedAltPlacements.length) clone.altPlacements = mergedAltPlacements; else delete clone.altPlacements;
       finalEntriesByKey.set(key, clone);
@@ -5704,6 +5748,819 @@ function reconcileCatalogByIdentityV2(state, seed){
       unresolvedSrs
     }
   };
+}
+
+
+/* ============================================================
+   ALTERAÇÃO 007 — ferramenta MANUAL de reconciliação V2
+   ============================================================
+   Único ponto de acionamento de reconcileCatalogByIdentityV2 sobre o
+   catálogo real deste dispositivo. NÃO é chamada por loadData,
+   syncFromFirebase, importação ou qualquer outro fluxo automático —
+   só pelo botão "reconciliar catálogo V2" nas ferramentas avançadas,
+   e só depois de o usuário revisar o preview e confirmar explicitamente
+   a aplicação.
+
+   Fluxo: preview em memória (reconcileV2Preview nunca muta DATA/REVIEW/
+   SRS, pois reconcileCatalogByIdentityV2 já clona os argumentos) →
+   se safeToApply!==true a aplicação fica bloqueada → confirmação
+   explícita → backup JSON baixado ANTES de qualquer mutação → só então
+   DATA/REVIEW/SRS são substituídos pelo resultado e persistidos com
+   storage.set (mecanismo local já existente do app) → relatório final.
+   Não sincroniza Firebase/Firestore automaticamente (não chama
+   pushToFirebase/pushToFirebaseNow nem saveData/saveReview/saveSRS,
+   que fariam isso) e não toca Cloudinary. */
+/* ============================================================
+   REDISTRIBUICAO DE IMAGENS POR EVIDENCIA DE OWNERSHIP (pos-reconciliacao)
+   ============================================================
+   Problema DIFERENTE do que reconcileCatalogByIdentityV2 resolve: aqui uma
+   imagem esta fisicamente no array .images de um registro, mas as proprias
+   etiquetas internas da imagem (lesionId/lesionName, e o espelho em
+   cloudinaryContext.custom.lesion_id/lesion_name quando existir) dizem que
+   ela pertence a OUTRO registro — ownership divergente dentro do proprio
+   DATA real, nao uma questao de identidade deslocada por ID reaproveitado.
+   Roda DEPOIS de reconcileCatalogByIdentityV2 (sobre o catalogo ja
+   deduplicado por identidade), nunca antes — assim byId/byName abaixo
+   comparam contra identidades UNICAS e atuais, nunca contra duplicatas
+   nem contra o SEED. Nunca decide destino so' pelo numero do ID: um
+   lesionId so' e' aceito como sinal depois de resolvido pra identidade que
+   ele representa HOJE (podendo ter sido reaproveitado), e so' vira decisao
+   automatica (categoria A) quando TODOS os sinais presentes convergem pra
+   essa MESMA identidade unica. */
+
+/* Classifica UMA imagem que ja foi identificada como divergente do
+   registro (holder) que a contem. byId/byName sao indices do catalogo
+   JA reconciliado (pos reconcileCatalogByIdentityV2). Retorna a categoria
+   (A/B/C/D — ver comentario de buildImageOwnershipCorrectionPlanV2) e,
+   quando A, a identidade de destino resolvida. */
+function classifyImageOwnershipDivergenceV2(img, byId, byName){
+  const custom = img.cloudinaryContext && img.cloudinaryContext.custom;
+  const idSignals = [img.lesionId, custom && custom.lesion_id].filter((v) => typeof v === 'string' && v.length > 0);
+  const nameSignals = [img.lesionName, custom && custom.lesion_name].filter((v) => typeof v === 'string' && v.length > 0);
+
+  if(idSignals.length === 0 && nameSignals.length === 0){
+    return { category:'D', reason:'sem_metadado_de_ownership_suficiente', candidates:[] };
+  }
+
+  const candidatesByIdentityKey = new Map();
+  let anyResolved = false;
+  for(const idSig of idSignals){
+    const entry = byId.get(idSig);
+    if(entry){ anyResolved = true; candidatesByIdentityKey.set(identityKeyOfV2(entry), entry); }
+  }
+  for(const nameSig of nameSignals){
+    for(const entry of (byName.get(nameSig) || [])){
+      anyResolved = true;
+      candidatesByIdentityKey.set(identityKeyOfV2(entry), entry);
+    }
+  }
+
+  if(!anyResolved){
+    return { category:'C', reason:'metadados_apontam_para_lesao_inexistente', candidates:[] };
+  }
+  if(candidatesByIdentityKey.size > 1){
+    return {
+      category:'B',
+      reason:'metadados_conflitantes',
+      candidates:[...candidatesByIdentityKey.values()].map((e) => ({ id:e.id, name:e.name, s:e.s, site:e.site }))
+    };
+  }
+  const [destination] = candidatesByIdentityKey.values();
+  return { category:'A', reason:'destino_inequivoco', destination:{ id:destination.id, name:destination.name, s:destination.s, site:destination.site } };
+}
+
+/* ============================================================
+   OVERRIDES MANUAIS EXPLICITOS DE OWNERSHIP DE IMAGEM (2026-09-19)
+   ============================================================
+   Decisoes tomadas por Leonardo, um por um, apos revisar o relatorio dos 6
+   casos categoria B do catalogo real (ver LOG_DESENVOLVIMENTO.md/AI.md pra
+   contexto completo). Cada entrada tem PRECEDENCIA EXPLICITA sobre o
+   lesionId/lesionName histórico conflitante daquele assetId especifico —
+   isto NAO e' uma heuristica geral ("lesionName sempre vence lesionId" ou
+   qualquer regra automatica nova): e' uma tabela literal, auditavel,
+   assetId por assetId, aplicada em buildImageOwnershipCorrectionPlanV2
+   ANTES da classificacao A/B/C/D normal (que so' roda pros assetIds fora
+   desta tabela). Adicionar/remover uma decisao aqui exige o mesmo tipo de
+   revisao humana que gerou estas 4 entradas — nunca inferido automaticamente
+   a partir de outro caso. */
+const MANUAL_IMAGE_OWNERSHIP_OVERRIDES_20260919 = new Map([
+  ['6b8984838a6f37f08dc34568793cb842', {
+    destinationId: 'seed_467',
+    reason: 'Decisao manual: as duas copias fisicas duplicadas deste asset (uma presa em seed_482/Modic, outra ja em seed_467) tem lesionName consistentemente "Cisto epidermoide intracraniano" nas DUAS copias — o lesionId (seed_482) fica tratado como o campo stale. Resultado: uma unica associacao em seed_467; seed_482 (Modic) fica sem esta imagem.'
+  }],
+  ['460eabe57a4af005ddd9e0b33bd871cd', {
+    destinationId: 'seed_14',
+    reason: 'Decisao manual: lesionName ("Cavernoma (malformacao cavernosa)") bate com o registro que ja contem a imagem hoje (seed_14); lesionId (seed_16/Schwannoma vestibular) tratado como o campo stale. Nao associar a Schwannoma vestibular.'
+  }],
+  ['2ccbe78da9718ebfe799a00345d305d0', {
+    destinationId: 'seed_14',
+    reason: 'Decisao manual: segunda imagem independente do mesmo par Cavernoma/Schwannoma vestibular, mesma justificativa do asset 460eabe...  — permanece em seed_14 como imagem distinta (assetId diferente, nao e duplicata da anterior).'
+  }],
+  ['03f470a828fbe7a4b5236219ae042596', {
+    destinationId: 'seed_417',
+    reason: 'Decisao manual: metadados de origem da propria imagem (sourcePage referenciando "cerebral infarction", label "RM Difusao (DWI)") confirmam AVC isquemico agudo (seed_417); a associacao com seed_428/Gangrena de Fournier e anatomicamente incompativel e tratada como espuria. Resultado: uma unica associacao em seed_417; seed_428 fica sem esta imagem.'
+  }]
+]);
+
+/* Deduplica .images de UM registro por chave fisica estavel (mesmo padrao
+   de mergeLegacyImages/mergeAltPlacementsV2: primeira ocorrencia vence,
+   nunca descarta silenciosamente — usado so' como rede de seguranca final
+   apos overrides/moves, pro caso raro de duas copias fisicas identicas do
+   mesmo asset convergirem pro mesmo registro (ver override do asset
+   6b8984... acima, que e' exatamente esse caso). */
+function dedupeEntryImagesByStableKeyV2(images){
+  const byKey = new Map();
+  for(const img of (images || [])){
+    const key = stableImageKeyV208(img);
+    if(!key || !byKey.has(key)) byKey.set(key || Symbol(), img);
+  }
+  return [...byKey.values()];
+}
+
+/* Varre TODO o catalogo (ja reconciliado) e classifica cada imagem cujo
+   ownership interno diverge do registro que a contem hoje. Overrides
+   manuais explicitos (tabela acima) tem precedencia e saem num balde
+   separado (manualOverrides), nunca entram em A/B/C/D. NAO muta
+   dataEntries nem nenhuma imagem — so' le e classifica. */
+function buildImageOwnershipCorrectionPlanV2(dataEntries){
+  const byId = new Map(dataEntries.map((e) => [e.id, e]));
+  const byName = new Map();
+  for(const e of dataEntries){
+    if(!byName.has(e.name)) byName.set(e.name, []);
+    byName.get(e.name).push(e);
+  }
+
+  const categoryA = [];
+  const categoryB = [];
+  const categoryC = [];
+  const categoryD = [];
+  const manualOverrides = [];
+
+  for(const holder of dataEntries){
+    for(const img of (holder.images || [])){
+      const idMismatch = !!img.lesionId && img.lesionId !== holder.id;
+      const nameMismatch = !!img.lesionName && img.lesionName !== holder.name;
+      if(!idMismatch && !nameMismatch) continue;
+
+      const baseRecord = {
+        sourceId: holder.id,
+        sourceName: holder.name,
+        sourceS: holder.s,
+        sourceSite: holder.site,
+        imageKey: stableImageKeyV208(img),
+        assetId: img.assetId || null,
+        publicId: img.publicId || null,
+        imageLesionId: img.lesionId || null,
+        imageLesionName: img.lesionName || null
+      };
+
+      const override = img.assetId ? MANUAL_IMAGE_OWNERSHIP_OVERRIDES_20260919.get(img.assetId) : null;
+      if(override){
+        const destination = byId.get(override.destinationId);
+        if(destination){
+          manualOverrides.push({
+            ...baseRecord,
+            category:'OVERRIDE',
+            reason:'override_manual_explicito',
+            overrideReason: override.reason,
+            naturalClassification: classifyImageOwnershipDivergenceV2(img, byId, byName),
+            destination:{ id:destination.id, name:destination.name, s:destination.s, site:destination.site }
+          });
+          continue;
+        }
+        // destino do override nao existe mais no catalogo — nunca inventa,
+        // cai pra classificacao normal (provavelmente vira C).
+      }
+
+      const classification = classifyImageOwnershipDivergenceV2(img, byId, byName);
+      const record = { ...classification, ...baseRecord };
+      if(classification.category === 'A') categoryA.push(record);
+      else if(classification.category === 'B') categoryB.push(record);
+      else if(classification.category === 'C') categoryC.push(record);
+      else categoryD.push(record);
+    }
+  }
+  return { categoryA, categoryB, categoryC, categoryD, manualOverrides };
+}
+
+/* Aplica SOMENTE a categoria A do plano acima sobre o resultado ja
+   reconciliado: MOVE (nunca copia) a imagem do array .images da origem
+   pro array .images do destino, reescrevendo ownership via
+   rewriteImageOwnershipV2 (preserva assetId/publicId/URL/demais
+   metadados fisicos — so' lesionId/lesionName/cloudinaryContext.custom
+   sao tocados). Quando destino===origem (a etiqueta so' estava com um
+   dado velho, mas a imagem ja esta no registro certo), so' relabela no
+   lugar, sem mover fisicamente. Categorias B/C/D NUNCA sao movidas
+   automaticamente — cada uma bloqueia safeToApply e fica visivel no
+   relatorio pra decisao humana. Funcao pura: recebe o resultado de
+   reconcileCatalogByIdentityV2 e devolve um NOVO objeto, nunca muta o
+   argumento. */
+/* IMPORTANTE sobre ORDEM: esta funcao roda sobre o DATA CRU (ANTES de
+   reconcileCatalogByIdentityV2), nunca depois. reconcileCatalogByIdentityV2
+   reescreve INCONDICIONALMENTE lesionId/lesionName de toda imagem pro
+   registro final que a contem, no ultimo passo da montagem do array final
+   ("reescrevendo posse de imagens por ultimo") — rodar a classificacao
+   DEPOIS disso apagaria a propria evidencia de divergencia que ela precisa
+   ler (toda imagem passaria a "concordar" trivialmente com quem a contem).
+   Por isso reconcileV2Preview chama esta funcao PRIMEIRO, sobre { data:
+   DATA, review: REVIEW, srs: SRS } bruto, e so' depois entrega o resultado
+   corrigido pra reconcileCatalogByIdentityV2 — que faz a consolidacao por
+   identidade normalmente (a imagem, ja no registro certo, e' carregada
+   junto e relabelada corretamente no passo final dele, sem contradicao).
+   Funcao pura: recebe {data,review,srs}, devolve um NOVO objeto — nunca
+   muta o argumento. */
+function applyImageOwnershipCorrectionV2(state){
+  const dataEntries = state.data;
+  const plan = buildImageOwnershipCorrectionPlanV2(dataEntries);
+
+  const nextData = dataEntries.map((e) => ({ ...e, images: Array.isArray(e.images) ? e.images.map((img) => ({ ...img })) : [] }));
+  const byId = new Map(nextData.map((e) => [e.id, e]));
+
+  const moved = [];
+  // Aplica categoria A (destino inequivoco, resolvido automaticamente) e os
+  // overrides manuais explicitos (tabela MANUAL_IMAGE_OWNERSHIP_OVERRIDES_20260919)
+  // com a MESMA logica de mover/relabelar — a unica diferenca e' a origem da
+  // decisao (auto vs. humana), registrada em moved[].source pra auditoria.
+  const toApply = [
+    ...plan.categoryA.map((item) => ({ item, source:'category_A' })),
+    ...plan.manualOverrides.map((item) => ({ item, source:'manual_override' }))
+  ];
+  for(const { item, source } of toApply){
+    const sourceEntry = byId.get(item.sourceId);
+    const destEntry = byId.get(item.destination.id);
+    if(!sourceEntry || !destEntry) continue;
+    const idx = sourceEntry.images.findIndex((img) => stableImageKeyV208(img) === item.imageKey);
+    if(idx === -1) continue;
+
+    const [rawImg] = sourceEntry.images.splice(idx, 1);
+    const rewritten = rewriteImageOwnershipV2(rawImg, destEntry.id, destEntry.name);
+
+    if(destEntry.id === sourceEntry.id){
+      sourceEntry.images.splice(idx, 0, rewritten);
+      moved.push({ ...item, source, action:'relabeled_in_place' });
+    }else{
+      destEntry.images.push(rewritten);
+      moved.push({ ...item, source, action:'moved' });
+    }
+  }
+
+  // Rede de seguranca final: duas copias fisicas identicas do mesmo asset
+  // (ex.: o override do asset 6b8984... acima, que tinha copia em Modic E em
+  // Cisto epidermoide) podem convergir pro MESMO registro apos os moves —
+  // aqui colapsam pra uma unica associacao, nunca duplicada.
+  for(const entry of nextData){
+    entry.images = dedupeEntryImagesByStableKeyV2(entry.images);
+  }
+
+  const blockingDivergences = plan.categoryB.length + plan.categoryC.length + plan.categoryD.length;
+  const safeToApplyReasons = [];
+  if(plan.categoryB.length) safeToApplyReasons.push(`${plan.categoryB.length} imagem(ns) com metadados de ownership CONFLITANTES (categoria B) — requer decisao manual, nunca movida automaticamente`);
+  if(plan.categoryC.length) safeToApplyReasons.push(`${plan.categoryC.length} imagem(ns) com metadados de ownership apontando pra lesao INEXISTENTE no catalogo (categoria C)`);
+  if(plan.categoryD.length) safeToApplyReasons.push(`${plan.categoryD.length} imagem(ns) com ownership divergente e SEM metadado suficiente pra decidir (categoria D)`);
+
+  return {
+    state: { ...state, data: nextData },
+    report: {
+      safeToApply: blockingDivergences === 0,
+      safeToApplyReasons,
+      imageOwnershipCorrection: {
+        totalDivergences: plan.categoryA.length + plan.categoryB.length + plan.categoryC.length + plan.categoryD.length + plan.manualOverrides.length,
+        categoryA: plan.categoryA,
+        categoryB: plan.categoryB,
+        categoryC: plan.categoryC,
+        categoryD: plan.categoryD,
+        manualOverrides: plan.manualOverrides,
+        moved
+      }
+    }
+  };
+}
+
+function reconcileV2Preview(){
+  const ownershipCorrection = applyImageOwnershipCorrectionV2({ data: DATA, review: REVIEW, srs: SRS });
+  const base = reconcileCatalogByIdentityV2(ownershipCorrection.state, SEED);
+  return {
+    state: base.state,
+    report: {
+      ...base.report,
+      safeToApply: base.report.safeToApply && ownershipCorrection.report.safeToApply,
+      safeToApplyReasons: [...base.report.safeToApplyReasons, ...ownershipCorrection.report.safeToApplyReasons],
+      imageOwnershipCorrection: ownershipCorrection.report.imageOwnershipCorrection
+    }
+  };
+}
+
+/* Mesmo formato do backup gerado pelo botão "Salvar backup" — sem
+   depender do DOM, pra ser testável isoladamente. */
+function buildPreMigrationBackupV2(){
+  return {
+    format: 'atlas-radiologico-backup',
+    backupVersion: 1,
+    reason: 'pre-reconciliacao-v2',
+    exportedAt: new Date().toISOString(),
+    data: DATA,
+    review: REVIEW,
+    srs: SRS,
+    sessionLog: SESSIONLOG,
+    sectionOrder: sectionOrder,
+    siteOrder: siteOrder
+  };
+}
+
+/* Único trecho desta ferramenta que toca o DOM/download do navegador. */
+function downloadPreMigrationBackupV2(backup){
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const stamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `atlas-radiologico-backup-pre-reconciliacao-v2_${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/* Orquestra a aplicação real: valida safeToApply, exige confirmação
+   explícita, gera o backup ANTES de qualquer mutação e só então
+   substitui DATA/REVIEW/SRS e persiste local. confirmFn/downloadFn são
+   injetáveis para permitir teste automatizado sem depender de
+   window.confirm/Blob/URL reais do navegador. */
+async function applyReconcileV2(options){
+  const opts = options || {};
+  const confirmFn = opts.confirmFn || (typeof confirm === 'function' ? confirm : () => false);
+  const downloadFn = opts.downloadFn || downloadPreMigrationBackupV2;
+  const skipConfirm = opts.skipConfirm === true;
+  const preview = reconcileV2Preview();
+  if(preview.report.safeToApply !== true){
+    return { applied:false, reason:'not_safe', report: preview.report };
+  }
+  if(!skipConfirm){
+    const before = { data: DATA.length, review: Object.keys(REVIEW).length, srs: Object.keys(SRS).length };
+    const after = { data: preview.state.data.length, review: Object.keys(preview.state.review).length, srs: Object.keys(preview.state.srs).length };
+    const msg = `Aplicar a reconciliação V2 agora?\n\nDATA: ${before.data} → ${after.data}\nREVIEW: ${before.review} → ${after.review}\nSRS: ${before.srs} → ${after.srs}\n\nUm backup JSON será baixado ANTES de qualquer alteração. Isto substitui DATA/REVIEW/SRS somente neste dispositivo (sem sincronizar a nuvem automaticamente). Continuar?`;
+    if(!confirmFn(msg)) return { applied:false, reason:'cancelled', report: preview.report };
+  }
+
+  const backup = buildPreMigrationBackupV2();
+  downloadFn(backup);
+
+  DATA = preview.state.data;
+  REVIEW = preview.state.review;
+  SRS = preview.state.srs;
+  await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
+  await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
+  await storage.set(SRS_KEY, JSON.stringify(SRS), false);
+
+  return { applied:true, report: preview.report, backup };
+}
+
+/* Diagnostico READ-ONLY do estado REAL atualmente carregado no navegador —
+   usa EXCLUSIVAMENTE DATA/REVIEW/SRS (as variaveis globais ja carregadas),
+   NUNCA o SEED, e nunca roda reconcileCatalogByIdentityV2. Serve pra
+   investigar o catalogo como ele esta agora, independente de qualquer
+   preview/aplicacao do V2 — inclusive pra provar (ou descartar) se um
+   problema visivel no app (imagem na lesao errada, duplicata, contagem de
+   imagens estranha) ja existia no DATA real antes de qualquer reconciliacao.
+   Nao le storage, nao escreve nada, nao chama Firebase/Cloudinary. */
+function buildRealStateDiagnosticV2(){
+  const groups = new Map();
+  for(const e of DATA){
+    const key = identityKeyOfV2(e);
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  }
+  const duplicateGroups = [...groups.entries()]
+    .filter(([, list]) => list.length > 1)
+    .map(([key, list]) => ({
+      identityKey: key,
+      name: list[0].name, s: list[0].s, site: list[0].site,
+      ids: list.map((e) => e.id),
+      totalImages: list.reduce((n, e) => n + (Array.isArray(e.images) ? e.images.length : 0), 0)
+    }));
+
+  const imageSummary = (img) => ({
+    assetId: img.assetId || null,
+    publicId: img.publicId || null,
+    originalUrl: img.originalUrl || null,
+    source: img.source || null,
+    sourcePage: img.sourcePage || null,
+    sourceSite: img.sourceSite || null,
+    lesionId: img.lesionId || null,
+    lesionName: img.lesionName || null,
+    cloudinaryContext: img.cloudinaryContext || null,
+    createdAt: img.createdAt || null,
+    label: img.label || null,
+    stableKey: stableImageKeyV208(img)
+  });
+
+  const recordsWithImages = [];
+  const ownershipMismatches = [];
+  let totalImageCount = 0;
+  for(const e of DATA){
+    const imgs = Array.isArray(e.images) ? e.images : [];
+    if(imgs.length === 0) continue;
+    totalImageCount += imgs.length;
+    recordsWithImages.push({
+      id: e.id, name: e.name, s: e.s, site: e.site,
+      imageCount: imgs.length,
+      images: imgs.map(imageSummary)
+    });
+    imgs.forEach((img) => {
+      const idMismatch = !!img.lesionId && img.lesionId !== e.id;
+      const nameMismatch = !!img.lesionName && img.lesionName !== e.name;
+      if(idMismatch || nameMismatch){
+        ownershipMismatches.push({
+          currentHolderId: e.id, currentHolderName: e.name, currentHolderS: e.s, currentHolderSite: e.site,
+          idMismatch, nameMismatch,
+          ...imageSummary(img)
+        });
+      }
+    });
+  }
+
+  const modicMatches = DATA.filter((e) => /modic/i.test(e.name || '')).map((e) => ({
+    id: e.id, name: e.name, s: e.s, site: e.site,
+    imageCount: Array.isArray(e.images) ? e.images.length : 0,
+    images: (e.images || []).map(imageSummary)
+  }));
+
+  return {
+    generatedAt: new Date().toISOString(),
+    readOnly: true,
+    dataLength: DATA.length,
+    reviewCount: Object.keys(REVIEW).length,
+    srsCount: Object.keys(SRS).length,
+    uniqueIdentityCount: groups.size,
+    duplicateGroupCount: duplicateGroups.length,
+    duplicateGroups,
+    recordsWithImagesCount: recordsWithImages.length,
+    totalImageCount,
+    recordsWithImages,
+    ownershipMismatches,
+    modicSearch: { query: 'modic', matches: modicMatches }
+  };
+}
+
+/* Validacao READ-ONLY pos-aplicacao — roda depois que o usuario ja
+   confirmou e a mutacao ja aconteceu, sobre DATA/REVIEW/SRS/SEED reais
+   ja atualizados. Reaproveita buildRealStateDiagnosticV2 (nao duplica a
+   logica de contagem) e adiciona cobertura do SEED, assets fisicos unicos
+   e as verificacoes nominais dos 4 overrides manuais de 2026-09-19 (ver
+   MANUAL_IMAGE_OWNERSHIP_OVERRIDES_20260919). NAO muta nada, NAO chama
+   Firebase/Cloudinary — so' le o estado que a aplicacao ja deixou. */
+function buildPostApplyValidationReportV2(){
+  const diag = buildRealStateDiagnosticV2();
+
+  const seedIdentityKeys = new Set((Array.isArray(SEED) ? SEED : []).map((e) => identityKeyOfV2(e)));
+  const dataIdentityKeys = new Set(DATA.map((e) => identityKeyOfV2(e)));
+  const seedCoverage = [...seedIdentityKeys].filter((k) => dataIdentityKeys.has(k)).length;
+
+  const physicalAssets = new Set();
+  for(const e of DATA) for(const img of (e.images || [])) physicalAssets.add(stableImageKeyV208(img));
+
+  const findByName = (name) => DATA.find((e) => e.name === name);
+  const hasAsset = (entry, assetId) => !!entry && (entry.images || []).some((i) => i.assetId === assetId);
+
+  const modic = findByName('Alterações Modic dos platôs vertebrais');
+  const epidermoide = findByName('Cisto epidermoide intracraniano');
+  const cavernoma = findByName('Cavernoma (malformação cavernosa)');
+  const schwannoma = findByName('Schwannoma vestibular');
+  const avc = findByName('AVC isquêmico agudo');
+  const gangrena = findByName('Gangrena de Fournier');
+
+  const nominalChecks = [
+    { label:'Modic NAO contem asset 6b8984... (Cisto epidermoide)', pass: !hasAsset(modic, '6b8984838a6f37f08dc34568793cb842') },
+    { label:'Cisto epidermoide intracraniano contem asset 6b8984...', pass: hasAsset(epidermoide, '6b8984838a6f37f08dc34568793cb842') },
+    { label:'Cavernoma contem assets 460eabe... e 2ccbe78...', pass: hasAsset(cavernoma, '460eabe57a4af005ddd9e0b33bd871cd') && hasAsset(cavernoma, '2ccbe78da9718ebfe799a00345d305d0') },
+    { label:'Schwannoma vestibular NAO contem nenhum dos 2 assets de Cavernoma', pass: !hasAsset(schwannoma, '460eabe57a4af005ddd9e0b33bd871cd') && !hasAsset(schwannoma, '2ccbe78da9718ebfe799a00345d305d0') },
+    { label:'AVC isquêmico agudo contem asset 03f470...', pass: hasAsset(avc, '03f470a828fbe7a4b5236219ae042596') },
+    { label:'Gangrena de Fournier NAO contem asset 03f470...', pass: !hasAsset(gangrena, '03f470a828fbe7a4b5236219ae042596') }
+  ];
+
+  return {
+    dataLength: DATA.length,
+    uniqueIdentityCount: diag.uniqueIdentityCount,
+    duplicateGroupCount: diag.duplicateGroupCount,
+    recordsWithImagesCount: diag.recordsWithImagesCount,
+    totalImageCount: diag.totalImageCount,
+    physicalAssetsCount: physicalAssets.size,
+    ownershipMismatchesCount: diag.ownershipMismatches.length,
+    reviewCount: Object.keys(REVIEW).length,
+    srsCount: Object.keys(SRS).length,
+    seedCoverage,
+    seedTotal: Array.isArray(SEED) ? SEED.length : 0,
+    nominalChecks,
+    allNominalChecksPassed: nominalChecks.every((c) => c.pass)
+  };
+}
+
+function openRealStateDiagnosticModal(){
+  const report = buildRealStateDiagnosticV2();
+  const cov = document.createElement('div');
+  cov.className = 'overlay';
+  cov.innerHTML = `<div class="modal audit-modal">
+    <h2>🔎 Diagnóstico do estado real (somente leitura)</h2>
+    <div class="modal-sub">Lê SOMENTE DATA/REVIEW/SRS já carregados neste navegador. Não roda o motor V2, não muta nada, não sincroniza Firebase/Cloudinary, não escreve em lugar nenhum.</div>
+    <div class="audit-list" style="font-size:13px;line-height:1.7;">
+      <p><b>DATA.length</b>: ${report.dataLength}</p>
+      <p><b>Identidades semânticas únicas</b>: ${report.uniqueIdentityCount}</p>
+      <p><b>Grupos duplicados</b>: ${report.duplicateGroupCount}</p>
+      <p><b>Registros com imagem</b>: ${report.recordsWithImagesCount}</p>
+      <p><b>Total de imagens</b>: ${report.totalImageCount}</p>
+      <p><b>Imagens com ownership divergente do registro atual</b>: ${report.ownershipMismatches.length}</p>
+      <p><b>"Modic" encontrado</b>: ${report.modicSearch.matches.length} registro(s)</p>
+    </div>
+    <textarea id="v2-diag-report" readonly style="width:100%;min-height:320px;font-family:monospace;font-size:11px;margin-top:10px;"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="v2-diag-copy">📋 copiar relatório JSON</button>
+      <button class="btn btn-ghost" id="v2-diag-download">⬇ baixar JSON</button>
+      <button class="btn btn-ghost" id="v2-diag-close">fechar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(cov);
+  cov.querySelector('#v2-diag-report').value = JSON.stringify(report, null, 2);
+  cov.addEventListener('click', ev => { if(ev.target===cov) cov.remove(); });
+  cov.querySelector('#v2-diag-close').onclick = () => cov.remove();
+  cov.querySelector('#v2-diag-copy').onclick = async () => {
+    const ta = cov.querySelector('#v2-diag-report');
+    try{
+      await navigator.clipboard.writeText(ta.value);
+      toast('Relatório copiado.');
+    }catch(_e){
+      ta.select();
+      document.execCommand('copy');
+      toast('Relatório copiado.');
+    }
+  };
+  cov.querySelector('#v2-diag-download').onclick = () => {
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type:'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `atlas-diagnostico-v2-estado-real_${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+}
+
+/* ============================================================
+   CHECKPOINT PÓS-RECONCILIAÇÃO V2 — somente leitura + exportação
+   ============================================================
+   Congela o estado LOCAL atual (DATA/REVIEW/SRS ja' carregados no
+   navegador) num arquivo JSON, junto com um relatorio de integridade.
+   NUNCA muta DATA/REVIEW/SRS/localStorage, NUNCA sincroniza Firebase,
+   NUNCA toca Cloudinary, NUNCA roda reconcileCatalogByIdentityV2/
+   reconcileV2Preview de novo — e' uma fotografia do que ja esta na
+   memoria, generica (nao amarrada aos overrides especificos de nenhuma
+   correcao pontual), util pra qualquer momento futuro em que se queira
+   preservar um estado local validado antes de sincronizar a nuvem. */
+
+/* Relatorio de integridade — reaproveita buildRealStateDiagnosticV2 (nao
+   duplica a logica de contagem de identidades/duplicatas/imagens) e
+   adiciona cobertura do SEED e deteccao de asset fisico anexado a mais
+   de um registro ao mesmo tempo. NAO diagnostica os 6 casos especificos
+   da correcao de 2026-09-19 (isso e' o papel de
+   buildPostApplyValidationReportV2, especifico daquela migracao) — aqui
+   e' so' integridade estrutural generica. */
+function buildCheckpointIntegrityReportV2(){
+  const diag = buildRealStateDiagnosticV2();
+
+  const seedIdentityKeys = new Set((Array.isArray(SEED) ? SEED : []).map((e) => identityKeyOfV2(e)));
+  const dataIdentityKeys = new Set(DATA.map((e) => identityKeyOfV2(e)));
+  const seedCoverage = [...seedIdentityKeys].filter((k) => dataIdentityKeys.has(k)).length;
+
+  const assetOwners = new Map();
+  for(const e of DATA){
+    for(const img of (e.images || [])){
+      const key = stableImageKeyV208(img);
+      if(!key) continue;
+      if(!assetOwners.has(key)) assetOwners.set(key, new Set());
+      assetOwners.get(key).add(e.id);
+    }
+  }
+  const duplicatedAssets = [...assetOwners.entries()].filter(([, owners]) => owners.size > 1);
+
+  const issues = [];
+  if(diag.duplicateGroupCount > 0) issues.push(`${diag.duplicateGroupCount} grupo(s) de identidade duplicada em DATA (mesma name+s+site em 2+ registros)`);
+  if(diag.ownershipMismatches.length > 0) issues.push(`${diag.ownershipMismatches.length} imagem(ns) com lesionId/lesionName divergente do registro que a contem hoje`);
+  if(seedCoverage !== seedIdentityKeys.size) issues.push(`Cobertura do SEED incompleta: ${seedCoverage} de ${seedIdentityKeys.size} identidades do SEED presentes em DATA`);
+  if(duplicatedAssets.length > 0) issues.push(`${duplicatedAssets.length} asset(s) fisico(s) anexado(s) a MAIS DE UM registro simultaneamente`);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    dataLength: DATA.length,
+    uniqueIdentityCount: diag.uniqueIdentityCount,
+    duplicateGroupCount: diag.duplicateGroupCount,
+    recordsWithImagesCount: diag.recordsWithImagesCount,
+    totalImageCount: diag.totalImageCount,
+    physicalAssetsCount: assetOwners.size,
+    duplicatedAssetsCount: duplicatedAssets.length,
+    ownershipMismatchesCount: diag.ownershipMismatches.length,
+    reviewCount: Object.keys(REVIEW).length,
+    srsCount: Object.keys(SRS).length,
+    seedCoverage,
+    seedTotal: seedIdentityKeys.size,
+    issues,
+    hasIssues: issues.length > 0
+  };
+}
+
+/* Monta o payload completo do checkpoint — chamada tanto pro preview
+   inicial do modal quanto de novo, do zero, no instante do clique em
+   exportar (ver exportCheckpointV2), nunca reaproveitando um calculo
+   antigo pra decidir se e' seguro escrever o arquivo. */
+function buildCheckpointV2(){
+  return {
+    format: 'atlas-radiologico-checkpoint-v2',
+    checkpointVersion: 1,
+    reason: 'pos-reconciliacao-v2',
+    exportedAt: new Date().toISOString(),
+    data: DATA,
+    review: REVIEW,
+    srs: SRS,
+    integrity: buildCheckpointIntegrityReportV2()
+  };
+}
+
+/* Unico trecho desta ferramenta que toca o DOM/download do navegador. */
+function downloadCheckpointV2(checkpoint){
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const stamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+  const blob = new Blob([JSON.stringify(checkpoint, null, 2)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `atlas-radiologico-checkpoint-pos-reconciliacao-v2_${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/* Orquestra a exportacao: recalcula a integridade DO ZERO (nunca confia
+   num relatorio calculado antes), e se houver qualquer problema
+   (duplicatas, ownership divergente, cobertura do SEED incompleta,
+   asset fisico duplicado), NAO bloqueia silenciosamente — exige
+   confirmacao explicita descrevendo exatamente o problema, e so' escreve
+   o arquivo se o usuario confirmar mesmo assim. confirmFn/downloadFn sao
+   injetaveis pra teste automatizado, mesmo padrao de applyReconcileV2.
+   NUNCA muta DATA/REVIEW/SRS/localStorage, NUNCA sincroniza Firebase,
+   NUNCA toca Cloudinary, NUNCA roda a reconciliacao. */
+function exportCheckpointV2(options){
+  const opts = options || {};
+  const confirmFn = opts.confirmFn || (typeof confirm === 'function' ? confirm : () => false);
+  const downloadFn = opts.downloadFn || downloadCheckpointV2;
+
+  const checkpoint = buildCheckpointV2();
+  if(checkpoint.integrity.hasIssues){
+    const msg = `Foram encontrados problemas de integridade no estado local atual:\n\n${checkpoint.integrity.issues.map((i) => '• ' + i).join('\n')}\n\nAinda e' tecnicamente possivel exportar o checkpoint — ele preserva o estado exatamente como esta agora, problemas inclusive, pra fins de auditoria/registro. Exportar mesmo assim?`;
+    if(!confirmFn(msg)) return { exported:false, reason:'cancelled', integrity: checkpoint.integrity };
+  }
+
+  downloadFn(checkpoint);
+  return { exported:true, integrity: checkpoint.integrity, checkpoint };
+}
+
+function openExportCheckpointV2Modal(){
+  const renderReportHtml = (integrity) => `
+    <p><b>Gerado em</b>: ${esc(integrity.generatedAt)}</p>
+    <p><b>DATA.length</b>: ${integrity.dataLength}</p>
+    <p><b>Identidades únicas</b>: ${integrity.uniqueIdentityCount}</p>
+    <p><b>Grupos duplicados</b>: ${integrity.duplicateGroupCount}</p>
+    <p><b>Registros com imagem</b>: ${integrity.recordsWithImagesCount}</p>
+    <p><b>Total de imagens</b>: ${integrity.totalImageCount}</p>
+    <p><b>Assets físicos únicos</b>: ${integrity.physicalAssetsCount}</p>
+    <p><b>Assets duplicados entre registros</b>: ${integrity.duplicatedAssetsCount}</p>
+    <p><b>Ownership divergences</b>: ${integrity.ownershipMismatchesCount}</p>
+    <p><b>REVIEW</b>: ${integrity.reviewCount} · <b>SRS</b>: ${integrity.srsCount}</p>
+    <p><b>Cobertura do SEED</b>: ${integrity.seedCoverage} / ${integrity.seedTotal}</p>
+    ${integrity.hasIssues
+      ? `<p style="color:var(--red);font-weight:700;margin-top:8px;">⚠ ${integrity.issues.length} problema(s) de integridade encontrado(s):</p><p style="color:var(--red);">${integrity.issues.map((i) => '• ' + esc(i)).join('<br>')}</p>`
+      : '<p style="color:var(--green,#4E9A6A);font-weight:700;margin-top:8px;">✓ nenhum problema de integridade encontrado</p>'}
+  `;
+
+  const preview = buildCheckpointIntegrityReportV2();
+  const cov = document.createElement('div');
+  cov.className = 'overlay';
+  cov.innerHTML = `<div class="modal audit-modal">
+    <h2>💾 Exportar checkpoint V2</h2>
+    <div class="modal-sub">Somente leitura — gera um arquivo JSON local com DATA/REVIEW/SRS atuais e estatísticas de integridade. Não altera nada, não sincroniza Firebase, não toca Cloudinary, não roda a reconciliação de novo.</div>
+    <div class="audit-list" id="checkpoint-v2-report" style="font-size:13px;line-height:1.7;">${renderReportHtml(preview)}</div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="checkpoint-v2-export">💾 exportar checkpoint agora</button>
+      <button class="btn btn-ghost" id="checkpoint-v2-close">fechar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(cov);
+  cov.addEventListener('click', ev => { if(ev.target===cov) cov.remove(); });
+  cov.querySelector('#checkpoint-v2-close').onclick = () => cov.remove();
+  cov.querySelector('#checkpoint-v2-export').onclick = () => {
+    const result = exportCheckpointV2();
+    if(!result.exported) return; // usuario cancelou a confirmacao de problemas
+    cov.querySelector('#checkpoint-v2-report').innerHTML = renderReportHtml(result.integrity);
+    toast('Checkpoint exportado.');
+  };
+}
+
+function openReconcileV2Modal(){
+  const preview = reconcileV2Preview();
+  const { report } = preview;
+  const before = { data: DATA.length, review: Object.keys(REVIEW).length, srs: Object.keys(SRS).length };
+  const after = { data: preview.state.data.length, review: Object.keys(preview.state.review).length, srs: Object.keys(preview.state.srs).length };
+  const safe = report.safeToApply === true;
+
+  const cov = document.createElement('div');
+  cov.className = 'overlay';
+  cov.innerHTML = `<div class="modal audit-modal">
+    <h2>🧬 Reconciliar catálogo V2</h2>
+    <div class="modal-sub">Preview em memória — nada foi alterado ainda. Motor por identidade semântica (nome+seção+sítio), coberto por 119 testes automatizados.</div>
+    <div class="audit-list" style="font-size:13px;line-height:1.7;">
+      <p><b>DATA</b>: ${before.data} → ${after.data}</p>
+      <p><b>REVIEW</b>: ${before.review} → ${after.review}</p>
+      <p><b>SRS</b>: ${before.srs} → ${after.srs}</p>
+      <p><b>Grupos consolidados</b>: ${report.consolidatedGroups.length}</p>
+      <p><b>Anomalias</b>: ${report.anomalies.length}</p>
+      <p><b>Conflitos bloqueantes</b>: ${report.conflicts.filter(c=>c.blocking).length} de ${report.conflicts.length} total</p>
+      <p><b>Entradas não reconciliadas</b>: ${report.unreconciledEntries.length}</p>
+      <p><b>REVIEW órfão (preservado, não aplicado)</b>: ${Object.keys(report.orphanReview).length}</p>
+      <p><b>SRS órfão (preservado, não aplicado)</b>: ${Object.keys(report.orphanSrs).length}</p>
+      <p><b>Imagens com ownership divergente</b>: ${report.imageOwnershipCorrection.totalDivergences} (A=${report.imageOwnershipCorrection.categoryA.length} destino inequívoco · overrides manuais=${report.imageOwnershipCorrection.manualOverrides.length} · B=${report.imageOwnershipCorrection.categoryB.length} conflitante · C=${report.imageOwnershipCorrection.categoryC.length} destino inexistente · D=${report.imageOwnershipCorrection.categoryD.length} insuficiente)</p>
+      <p><b>Imagens movidas/relabeladas</b>: ${report.imageOwnershipCorrection.moved.filter((m)=>m.action==='moved').length} movidas + ${report.imageOwnershipCorrection.moved.filter((m)=>m.action==='relabeled_in_place').length} só relabeladas no lugar (categoria A + overrides manuais)</p>
+      <p><b>safeToApply</b>: <span style="font-weight:700;color:${safe?'var(--green,#4E9A6A)':'var(--red)'};">${safe?'✓ true':'✗ false'}</span></p>
+      ${!safe ? `<p style="color:var(--red);">${report.safeToApplyReasons.map(r=>'• '+esc(r)).join('<br>')}</p>` : ''}
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="reconcile-v2-diagnostic">🔎 diagnóstico do estado real</button>
+      ${safe ? '<button class="btn btn-primary" id="reconcile-v2-apply">Aplicar reconciliação</button>' : ''}
+      <button class="btn btn-ghost" id="reconcile-v2-close">fechar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(cov);
+  const closeIt = () => cov.remove();
+  cov.addEventListener('click', ev => { if(ev.target===cov) closeIt(); });
+  cov.querySelector('#reconcile-v2-close').onclick = closeIt;
+  cov.querySelector('#reconcile-v2-diagnostic').onclick = openRealStateDiagnosticModal;
+
+  const applyBtn = cov.querySelector('#reconcile-v2-apply');
+  if(applyBtn){
+    applyBtn.onclick = async () => {
+      applyBtn.disabled = true;
+      const originalLabel = applyBtn.textContent;
+      applyBtn.textContent = '⏳ aguardando confirmação...';
+      const result = await applyReconcileV2();
+      if(!result.applied){
+        applyBtn.disabled = false;
+        applyBtn.textContent = originalLabel;
+        if(result.reason === 'cancelled') return;
+        toast('safeToApply passou a false — aplicação bloqueada.');
+        closeIt();
+        return;
+      }
+      renderAll();
+      closeIt();
+      openReconcileV2ResultModal(result);
+    };
+  }
+}
+
+function openReconcileV2ResultModal(result){
+  const { report } = result;
+  const post = buildPostApplyValidationReportV2();
+  const allOk = post.allNominalChecksPassed;
+  const cov = document.createElement('div');
+  cov.className = 'overlay';
+  cov.innerHTML = `<div class="modal audit-modal">
+    <h2>✅ Reconciliação V2 aplicada</h2>
+    <div class="modal-sub">Backup pré-migração baixado antes da mutação. DATA/REVIEW/SRS foram substituídos e salvos localmente neste dispositivo — a nuvem NÃO foi sincronizada automaticamente, Cloudinary não foi tocado.</div>
+    <div class="audit-list" style="font-size:13px;line-height:1.7;">
+      <p><b>DATA.length</b>: ${post.dataLength}</p>
+      <p><b>Identidades únicas</b>: ${post.uniqueIdentityCount}</p>
+      <p><b>Grupos duplicados</b>: ${post.duplicateGroupCount}</p>
+      <p><b>Registros com imagem</b>: ${post.recordsWithImagesCount}</p>
+      <p><b>Total de imagens</b>: ${post.totalImageCount}</p>
+      <p><b>Assets físicos únicos</b>: ${post.physicalAssetsCount}</p>
+      <p><b>Ownership divergences restantes</b>: ${post.ownershipMismatchesCount}</p>
+      <p><b>REVIEW</b>: ${post.reviewCount} · <b>SRS</b>: ${post.srsCount}</p>
+      <p><b>Conflitos (relatório da reconciliação)</b>: ${report.conflicts.filter((c)=>c.blocking).length} bloqueantes de ${report.conflicts.length} total</p>
+      <p><b>Cobertura do SEED</b>: ${post.seedCoverage} / ${post.seedTotal}</p>
+      <p><b>Grupos consolidados</b>: ${report.consolidatedGroups.length}</p>
+      <p><b>REVIEW órfão preservado no relatório</b>: ${Object.keys(report.orphanReview).length}</p>
+    </div>
+    <div class="audit-list" style="font-size:13px;line-height:1.7;margin-top:10px;">
+      <p><b>Verificações nominais</b> (${allOk ? '<span style="color:var(--green,#4E9A6A);font-weight:700;">✓ todas passaram</span>' : '<span style="color:var(--red);font-weight:700;">✗ alguma falhou</span>'}):</p>
+      ${post.nominalChecks.map((c) => `<p>${c.pass ? '✓' : '✗'} ${esc(c.label)}</p>`).join('')}
+    </div>
+    <div class="modal-actions"><button class="btn btn-primary" id="reconcile-v2-result-close">fechar</button></div>
+  </div>`;
+  document.body.appendChild(cov);
+  cov.onclick = e => { if(e.target===cov) cov.remove(); };
+  cov.querySelector('#reconcile-v2-result-close').onclick = () => cov.remove();
 }
 
 
@@ -7600,6 +8457,8 @@ function openImageAuditModal(){
 }
 document.getElementById('btn-system-diagnostic').onclick = openSystemDiagnosticModal;
 document.getElementById('btn-audit-images').onclick = openImageAuditModal;
+document.getElementById('btn-reconcile-v2').onclick = openReconcileV2Modal;
+document.getElementById('btn-export-checkpoint-v2').onclick = openExportCheckpointV2Modal;
 document.getElementById('btn-force-dedup').onclick = async ()=>{
   if(!confirm('Isso funde qualquer lesão duplicada (mesmo nome/seção/sítio) agora mesmo, mantendo a imagem e o progresso de revisão mais completos entre as cópias. Continuar?')) return;
   try{ createSafetySnapshot('antes de forçar fusão de duplicatas'); }catch(_e){}
