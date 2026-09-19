@@ -478,3 +478,15 @@ Resultados após a correção:
 - `tests/duplicate-detection.test.js`: **6 PASS e 1 FAIL** conhecido, referente às 28 entradas malformadas de `DUPLICATE_PAIRS_V171`.
 
 O defeito da importação e o defeito de `DUPLICATE_PAIRS_V171` **não foram corrigidos** nesta alteração.
+
+## Alteração 004 — validação segura da importação de backup
+
+A importação passou a validar completamente o array de registros antes de qualquer confirmação, atribuição ao estado global, persistência local ou sincronização remota. A mesma validação é usada tanto pelo backup legado em formato de array quanto pelo backup completo identificado por `format: "atlas-radiologico-backup"`.
+
+Cada registro importado deve ser um objeto não nulo e não array, com `id`, `name`, `s` e `site` como strings não vazias nem compostas apenas por espaços. IDs duplicados dentro do próprio backup são rejeitados. IDs personalizados continuam permitidos; não foi imposto o padrão `seed_<N>`.
+
+Campos historicamente opcionais continuam opcionais, incluindo metadados do backup, progresso, ordenações e campos clínicos complementares. A política de tipos e fallbacks de `review`, `srs`, `sessionLog`, `sectionOrder` e `siteOrder` não foi alterada.
+
+`createSafetySnapshot()` permanece inerte. Sua chamada foi apenas reposicionada para ocorrer depois da validação e da confirmação do usuário, imediatamente antes da primeira mutação, sem implementar snapshots.
+
+Após a correção, `tests/critical-flows.test.js` totaliza **14 PASS e 0 FAIL**. `tests/duplicate-detection.test.js` permanece com **6 PASS e 1 FAIL** conhecido e não relacionado nas 28 entradas malformadas de `DUPLICATE_PAIRS_V171`. Esse defeito não foi corrigido. O `SEED` permanece com exatamente 1.213 registros.

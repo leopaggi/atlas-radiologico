@@ -126,6 +126,25 @@ integridade permanece com **6 PASS e 1 FAIL** conhecido em
 `DUPLICATE_PAIRS_V171`. Nenhum desses dois defeitos remanescentes foi corrigido
 na Alteração 003.
 
+### Alteração 004 — importação segura de backups
+
+Antes de alterar dados, persistir localmente ou sincronizar, a importação agora
+valida todos os registros tanto de backups legados em formato de array quanto de
+backups completos. Cada registro precisa ser um objeto com `id`, `name`, `s` e
+`site` como strings não vazias. IDs repetidos no próprio backup são rejeitados.
+
+IDs personalizados continuam aceitos e não precisam seguir `seed_<N>`. Campos
+historicamente opcionais continuam opcionais, incluindo metadados do backup,
+progresso, ordenações, tags, notas, frequência, imagens, links e classificação.
+A política atual de tipos e fallbacks desses campos não foi modificada.
+
+`createSafetySnapshot()` continua inerte; sua chamada foi somente movida para
+depois da validação e confirmação e antes da primeira mutação. Os testes de
+fluxos críticos agora passam em **14 de 14** cenários. A integridade permanece
+com **6 PASS e 1 FAIL** conhecido nas 28 entradas malformadas de
+`DUPLICATE_PAIRS_V171`, não corrigidas nesta alteração. O `SEED` continua com
+1.213 registros.
+
 ## Histórico relevante
 
 Ver `AI.md` para o histórico de bugs já resolvidos e decisões de design —

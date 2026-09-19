@@ -397,3 +397,69 @@ Ainda não criado.
 ### Instruções de recuperação, se necessárias
 
 Antes de qualquer recuperação, executar `git status` e confirmar que nenhum trabalho recente será perdido. A reversão funcional desta alteração reintroduziria a chamada automática removida e, portanto, não deve ser feita sem nova revisão do risco de reposição de dados a partir do `SEED`.
+
+## ALTERAÇÃO 004 — Validação segura da importação de backup
+
+**Número da alteração:** 004
+**Data:** 19/09/2026
+**Commit-base:** `3e044ea` — `Impede recuperacao automatica do SEED`
+
+### Objetivo
+
+Garantir que backups estruturalmente inválidos sejam rejeitados antes de qualquer alteração do estado da aplicação, persistência local ou sincronização remota, preservando a compatibilidade dos formatos legítimos já aceitos.
+
+### Estado antes
+
+O importador verificava somente o envelope do backup completo ou se o backup legado era um array. Registros sem estrutura mínima e IDs duplicados chegavam às atribuições globais e operações de persistência. Os testes ampliados reproduziram três casos: backup completo malformado, backup legado inválido e IDs duplicados.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/critical-flows.test.js`
+- `AI.md`
+- `README.md`
+- `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+Foi adicionada uma validação pequena e reutilizável dentro do handler de importação. Ela é aplicada ao array legado e ao campo `data` do backup completo antes de confirmação, mutação ou persistência.
+
+Cada registro deve:
+
+- ser objeto não nulo e não array;
+- possuir `id`, `name`, `s` e `site` como strings não vazias nem formadas apenas por espaços;
+- possuir um `id` que não se repita dentro do mesmo backup.
+
+IDs personalizados continuam permitidos; não foi exigido o padrão `seed_<N>`. Permanecem opcionais `backupVersion`, `appVersion`, `exportedAt`, `review`, `srs`, `sessionLog`, `sectionOrder`, `siteOrder`, `tags`, `notes`, `inc`, `images`, `links` e `classification`. A política de tipos e fallbacks desses campos não foi alterada.
+
+`createSafetySnapshot()` permanece inerte. Sua chamada foi apenas deslocada para depois da validação e da confirmação, imediatamente antes da primeira mutação. Nenhum mecanismo de snapshot foi implementado.
+
+Os testes isolados passaram a cobrir também backup legado inválido, backup completo mínimo válido, backup legado válido com ID personalizado, IDs duplicados, cancelamento e envelopes inválidos.
+
+### Testes realizados
+
+```text
+node --check tests/critical-flows.test.js
+node tests/critical-flows.test.js
+node tests/duplicate-detection.test.js
+```
+
+Resultados validados antes da documentação:
+
+- `tests/critical-flows.test.js`: **14 PASS e 0 FAIL**;
+- `tests/duplicate-detection.test.js`: **6 PASS e 1 FAIL** conhecido e não relacionado;
+- `SEED`: exatamente 1.213 registros.
+
+### Resultado
+
+Backups inválidos passam a ser rejeitados sem mutação ou persistência, enquanto backups completos mínimos, backups legados válidos e IDs personalizados permanecem compatíveis.
+
+Não foram corrigidos nesta alteração: as 28 entradas malformadas de `DUPLICATE_PAIRS_V171`, a implementação inerte de snapshots, a política de tipos de `review`/`srs`/`sessionLog`/`sectionOrder`/`siteOrder` ou qualquer outro defeito fora do fluxo de validação estrutural da importação.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+### Instruções de recuperação, se necessárias
+
+Antes de qualquer recuperação, executar `git status` e confirmar que nenhum trabalho recente será perdido. Reverter esta alteração retiraria as validações anteriores à mutação e voltaria a permitir que backups estruturalmente inválidos alcançassem persistência e sincronização.

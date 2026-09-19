@@ -184,21 +184,31 @@ test('ordem estatica do fluxo de importacao e documentada', () => {
   assert.ok(confirmation < firstFullMutation, 'A confirmacao deve ocorrer antes da primeira mutacao completa');
 });
 
-test('SEGURANCA: backup malformado nao deve causar mutacao nem persistencia', async () => {
-  const originalData = [{ id: 'original' }];
-  const writes = [];
-  const malformedBackup = JSON.stringify({
-    format: 'atlas-radiologico-backup',
-    backupVersion: 1,
-    data: [{ name: 'registro sem id' }],
-    review: [],
-    srs: 'invalido',
-    sessionLog: 42,
-    sectionOrder: [null],
-    siteOrder: []
+function plain(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function snapshotImportState(context) {
+  return JSON.stringify({
+    data: context.DATA,
+    review: context.REVIEW,
+    srs: context.SRS,
+    sessionLog: context.SESSIONLOG,
+    sectionOrder: context.sectionOrder,
+    siteOrder: context.siteOrder,
+    scope: context.scope,
+    activeTags: [...context.activeTags],
+    searchTerm: context.searchTerm,
+    searchValue: context.searchInput.value
   });
+}
+
+async function runImportScenario(raw, { confirmResult = true } = {}) {
+  const writes = [];
+  let confirmations = 0;
+  const searchInput = { value: 'original' };
   const context = vm.createContext({
-    DATA: originalData,
+    DATA: [{ id: 'original', name: 'Original', s: 'Original', site: 'Original' }],
     REVIEW: { original: true },
     SRS: { original: true },
     SESSIONLOG: { original: true },
@@ -211,38 +221,162 @@ test('SEGURANCA: backup malformado nao deve causar mutacao nem persistencia', as
     STORAGE_KEY: 'data',
     REVIEW_KEY: 'review',
     createSafetySnapshot: () => null,
-    confirm: () => true,
+    confirm: () => {
+      confirmations += 1;
+      return confirmResult;
+    },
     deduplicateV171: async () => 0,
+    saveData: async () => writes.push('saveData'),
     storage: { set: async (key) => writes.push(`storage.set:${key}`) },
     saveSRS: async () => writes.push('saveSRS'),
     saveSessionLog: async () => writes.push('saveSessionLog'),
     saveOrder: async () => writes.push('saveOrder'),
     saveSiteOrder: async () => writes.push('saveSiteOrder'),
     scope: { section: 'Original', site: 'Original' },
-    activeTags: { clear: () => {} },
+    activeTags: new Set(['original']),
     searchTerm: 'original',
-    document: { getElementById: () => ({ value: 'original' }) },
+    searchInput,
+    document: { getElementById: () => searchInput },
     renderAll: () => {},
     pushToFirebaseNow: async () => writes.push('pushToFirebaseNow-stub'),
     toast: () => {},
-    console
+    console: { error: () => {}, info: () => {}, log: () => {} }
   });
   new vm.Script(`globalThis.runImport = async function(ev) ${importHandler.body};`)
     .runInContext(context);
+  const before = snapshotImportState(context);
 
   await context.runImport({
     target: {
-      files: [{ text: async () => malformedBackup }],
+      files: [{ text: async () => raw }],
       value: 'backup.json'
     }
   });
 
+  return {
+    context,
+    writes,
+    before,
+    after: snapshotImportState(context),
+    confirmations
+  };
+}
+
+test('SEGURANCA: backup malformado nao deve causar mutacao nem persistencia', async () => {
+  const malformedBackup = JSON.stringify({
+    format: 'atlas-radiologico-backup',
+    backupVersion: 1,
+    data: [{ name: 'registro sem id' }],
+    review: [],
+    srs: 'invalido',
+    sessionLog: 42,
+    sectionOrder: [null],
+    siteOrder: []
+  });
+  const result = await runImportScenario(malformedBackup);
+
   assert.equal(
-    writes.length,
+    result.writes.length,
     0,
-    `Defeito conhecido: backup estruturalmente invalido iniciou mutacoes: ${writes.join(', ')}`
+    `Defeito conhecido: backup estruturalmente invalido iniciou mutacoes: ${result.writes.join(', ')}`
   );
-  assert.deepEqual(context.DATA, originalData);
+  assert.equal(result.after, result.before);
+});
+
+test('SEGURANCA: backup legado invalido nao deve causar mutacao nem persistencia', async () => {
+  const result = await runImportScenario(JSON.stringify([
+    { name: 'registro legado sem estrutura minima' }
+  ]));
+
+  assert.equal(
+    result.writes.length,
+    0,
+    `Defeito conhecido: backup legado invalido iniciou mutacoes: ${result.writes.join(', ')}`
+  );
+  assert.equal(result.after, result.before);
+});
+
+test('backup completo minimo valido usa defaults sem exigir campos opcionais', async () => {
+  const entry = {
+    id: 'custom_minimo',
+    name: 'Registro minimo',
+    s: 'Secao minima',
+    site: 'Sitio minimo'
+  };
+  const result = await runImportScenario(JSON.stringify({
+    format: 'atlas-radiologico-backup',
+    data: [entry]
+  }));
+
+  assert.deepEqual(plain(result.context.DATA), [entry]);
+  assert.deepEqual(plain(result.context.REVIEW), {});
+  assert.deepEqual(plain(result.context.SRS), {});
+  assert.deepEqual(plain(result.context.SESSIONLOG), {});
+  assert.deepEqual(plain(result.context.sectionOrder), ['Padrao']);
+  assert.deepEqual(plain(result.context.siteOrder), {});
+  assert.equal(result.confirmations, 1);
+  assert.ok(result.writes.length > 0, 'Backup completo valido deve chegar a persistencia');
+});
+
+test('backup legado valido aceita ID personalizado e preserva progresso', async () => {
+  const entry = {
+    id: 'lesao_personalizada_abc',
+    name: 'Registro legado valido',
+    s: 'Secao legada',
+    site: 'Sitio legado'
+  };
+  const result = await runImportScenario(JSON.stringify([entry]));
+
+  assert.deepEqual(plain(result.context.DATA), [entry]);
+  assert.deepEqual(plain(result.context.REVIEW), { original: true });
+  assert.deepEqual(plain(result.context.SRS), { original: true });
+  assert.deepEqual(plain(result.context.SESSIONLOG), { original: true });
+  assert.equal(result.confirmations, 1);
+  assert.ok(result.writes.length > 0, 'Backup legado valido deve chegar a persistencia');
+});
+
+test('SEGURANCA: IDs duplicados devem ser rejeitados antes de qualquer mutacao', async () => {
+  const duplicated = [
+    { id: 'custom_repetido', name: 'Primeiro', s: 'Secao', site: 'Sitio A' },
+    { id: 'custom_repetido', name: 'Segundo', s: 'Secao', site: 'Sitio B' }
+  ];
+  const result = await runImportScenario(JSON.stringify({
+    format: 'atlas-radiologico-backup',
+    data: duplicated
+  }));
+
+  assert.equal(
+    result.writes.length,
+    0,
+    `Defeito conhecido: IDs duplicados iniciaram mutacoes: ${result.writes.join(', ')}`
+  );
+  assert.equal(result.after, result.before);
+});
+
+test('cancelar importacao nao altera estado nem inicia persistencia', async () => {
+  const result = await runImportScenario(JSON.stringify({
+    format: 'atlas-radiologico-backup',
+    data: [{ id: 'custom_cancelado', name: 'Cancelado', s: 'Secao', site: 'Sitio' }]
+  }), { confirmResult: false });
+
+  assert.equal(result.confirmations, 1);
+  assert.deepEqual(result.writes, []);
+  assert.equal(result.after, result.before);
+});
+
+test('envelopes invalidos nao alteram estado nem iniciam persistencia', async () => {
+  const invalidBackups = [
+    '{json invalido',
+    JSON.stringify({ format: 'outro-formato', data: [] }),
+    JSON.stringify({ format: 'atlas-radiologico-backup', data: {} })
+  ];
+
+  for (const raw of invalidBackups) {
+    const result = await runImportScenario(raw);
+    assert.equal(result.confirmations, 0);
+    assert.deepEqual(result.writes, []);
+    assert.equal(result.after, result.before);
+  }
 });
 
 test('operacoes potencialmente destrutivas da importacao sao inventariadas', () => {

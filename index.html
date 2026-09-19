@@ -6641,18 +6641,30 @@ document.getElementById('btn-cloudinary').onclick = openCloudinarySettings;
 
 document.getElementById('import-file').addEventListener('change', async (ev)=>{
   const file = ev.target.files[0];
-  try{ createSafetySnapshot('antes de importar backup'); }catch(_e){};
   if(!file) return;
   try{
     const raw = await file.text();
     const parsed = JSON.parse(raw);
+    const hasValidEntries = entries=>{
+      if(!Array.isArray(entries)) return false;
+      const ids = new Set();
+      return entries.every(entry=>{
+        if(!entry || typeof entry!=='object' || Array.isArray(entry)) return false;
+        if(!['id','name','s','site'].every(key=>typeof entry[key]==='string' && entry[key].trim())) return false;
+        if(ids.has(entry.id)) return false;
+        ids.add(entry.id);
+        return true;
+      });
+    };
 
     // Compatibilidade com backups antigos, que eram apenas um array de lesões.
     if(Array.isArray(parsed)){
+      if(!hasValidEntries(parsed)) throw new Error('dados inválidos');
       if(!confirm('Este é um backup antigo contendo apenas as lesões. Importar mesmo assim? O progresso atual será preservado.')){
         ev.target.value='';
         return;
       }
+      try{ createSafetySnapshot('antes de importar backup'); }catch(_e){}
       DATA = parsed;
       await saveData();
       await deduplicateV171();
@@ -6665,7 +6677,7 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
       return;
     }
 
-    if(!parsed || parsed.format !== 'atlas-radiologico-backup' || !Array.isArray(parsed.data)){
+    if(!parsed || parsed.format !== 'atlas-radiologico-backup' || !hasValidEntries(parsed.data)){
       throw new Error('formato inválido');
     }
 
@@ -6674,6 +6686,7 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
       return;
     }
 
+    try{ createSafetySnapshot('antes de importar backup'); }catch(_e){}
     DATA = parsed.data;
     REVIEW = (parsed.review && typeof parsed.review==='object') ? parsed.review : {};
     SRS = (parsed.srs && typeof parsed.srs==='object') ? parsed.srs : {};
