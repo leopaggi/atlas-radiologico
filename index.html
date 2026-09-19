@@ -4732,7 +4732,6 @@ async function loadData(){
   try{
     const r = await storage.get(STORAGE_KEY, false);
     DATA = JSON.parse(r.value);
-    await recoverCanonicalBaseV154();
 
     // Correção de cache obsoleto entre dispositivos: uma lesão canônica (id seed_N)
     // que o usuário NUNCA editou manualmente (sem _userUpdatedAt) sempre absorve

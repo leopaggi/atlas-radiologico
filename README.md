@@ -105,6 +105,27 @@ Algumas verificações usam números de linha exatos como âncoras do
 precisar ser atualizadas; uma mudança de linha isolada não representa
 automaticamente uma regressão funcional.
 
+### Alteração 003 — recuperação do SEED
+
+`loadData()` não chama mais `recoverCanonicalBaseV154()` automaticamente após
+carregar `DATA` do estado persistido. A correção removeu exclusivamente a
+linha `await recoverCanonicalBaseV154();`; nenhuma nova política automática
+de recuperação foi criada e `hasBrokenMigrationArtifacts()` continua sem ser
+conectada ao carregamento normal.
+
+A função de recuperação continua no código e seu comportamento explícito
+permanece coberto pelo cenário isolado. O `SEED` continua com 1.213 registros,
+sem mudanças de conteúdo, e `DUPLICATE_PAIRS_V171` permanece com as mesmas 28
+entradas malformadas conhecidas.
+
+O teste de fluxos críticos foi ajustado apenas para o novo estado: âncora da
+importação de 6643 para 6642, chamadas esperadas da recuperação de `[4735]`
+para `[]` e verificação estática exigindo ausência da chamada automática. O
+resultado atual é **7 PASS e 1 FAIL** conhecido na importação. O teste de
+integridade permanece com **6 PASS e 1 FAIL** conhecido em
+`DUPLICATE_PAIRS_V171`. Nenhum desses dois defeitos remanescentes foi corrigido
+na Alteração 003.
+
 ## Histórico relevante
 
 Ver `AI.md` para o histórico de bugs já resolvidos e decisões de design —

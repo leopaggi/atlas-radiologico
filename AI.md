@@ -457,3 +457,24 @@ node tests/duplicate-detection.test.js
 ```
 
 Observação técnica: alguns testes de localização usam números de linha exatos do `index.html` atual. Esses números são âncoras do estado analisado e podem precisar ser atualizados quando o arquivo for legitimamente modificado. Uma mudança isolada de linha não deve ser interpretada automaticamente como regressão funcional.
+
+## Alteração 003 — fim da recuperação automática incondicional do SEED
+
+O problema corrigido era a chamada automática de `recoverCanonicalBaseV154()` por `loadData()` imediatamente após carregar `DATA` do estado persistido. A única mudança funcional no `index.html` foi remover:
+
+```javascript
+await recoverCanonicalBaseV154();
+```
+
+Nenhuma nova política automática de recuperação foi criada. `hasBrokenMigrationArtifacts()` continua sem ser conectada ao fluxo normal de carregamento. `recoverCanonicalBaseV154()` continua existindo, e o teste dinâmico isolado continua demonstrando que, quando chamada explicitamente, ela é capaz de reinserir um registro canônico ausente do `SEED`.
+
+O `SEED` permaneceu com exatamente 1.213 registros e não teve seu conteúdo alterado. `DUPLICATE_PAIRS_V171` também permaneceu inalterado, incluindo as mesmas 28 entradas malformadas conhecidas.
+
+`tests/critical-flows.test.js` foi ajustado somente para refletir o novo estado legítimo: a âncora do handler de importação mudou de 6643 para 6642, as chamadas esperadas de `recoverCanonicalBaseV154()` mudaram de `[4735]` para `[]`, e a verificação estática passou a exigir a ausência da chamada automática. O teste de segurança continua protegendo contra sua reintrodução.
+
+Resultados após a correção:
+
+- `tests/critical-flows.test.js`: **7 PASS e 1 FAIL** conhecido, referente ao backup estruturalmente inválido que ainda consegue iniciar mutação/persistência;
+- `tests/duplicate-detection.test.js`: **6 PASS e 1 FAIL** conhecido, referente às 28 entradas malformadas de `DUPLICATE_PAIRS_V171`.
+
+O defeito da importação e o defeito de `DUPLICATE_PAIRS_V171` **não foram corrigidos** nesta alteração.

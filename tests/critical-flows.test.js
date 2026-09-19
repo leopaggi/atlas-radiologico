@@ -108,17 +108,17 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   assert.equal(recovery.line, 4312);
   assert.equal(brokenArtifacts.line, 4302);
   assert.equal(loadData.line, 4731);
-  assert.equal(importHandler.line, 6643);
+  assert.equal(importHandler.line, 6642);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
   const recoveryCalls = invocationLocations(html, 'recoverCanonicalBaseV154');
   const detectorCalls = invocationLocations(html, 'hasBrokenMigrationArtifacts');
 
-  assert.deepEqual(recoveryCalls.map((call) => call.line), [4735]);
+  assert.deepEqual(recoveryCalls, []);
   assert.deepEqual(detectorCalls, []);
-  assert.match(loadData.body, /DATA\s*=\s*JSON\.parse\(r\.value\);[\s\S]*await\s+recoverCanonicalBaseV154\(\);/);
-  console.log('recoverCanonicalBaseV154: 1 chamada automatica em loadData (linha 4735)');
+  assert.doesNotMatch(loadData.body, /await\s+recoverCanonicalBaseV154\(\);/);
+  console.log('recoverCanonicalBaseV154: 0 chamadas automaticas');
   console.log('hasBrokenMigrationArtifacts: 0 chamadas');
 });
 

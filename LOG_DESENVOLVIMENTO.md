@@ -323,3 +323,77 @@ Ainda não criado.
 ### Instruções de recuperação, se necessárias
 
 Antes de qualquer recuperação, executar `git status` e confirmar que nenhum trabalho recente será perdido. Para retirar somente a Alteração 002, avaliar em conjunto `tests/critical-flows.test.js` e os registros correspondentes nos três documentos; não modificar `index.html` nem o teste da Alteração 001.
+
+## ALTERAÇÃO 003 — Impedir recuperação automática incondicional do SEED
+
+**Número da alteração:** 003
+**Data:** 18/09/2026
+**Commit-base:** `88decec` — `Adiciona testes dos fluxos criticos`
+
+### Objetivo
+
+Impedir que o carregamento normal reponha automaticamente registros canônicos do `SEED` ausentes no estado persistido.
+
+### Estado antes
+
+Depois de carregar e interpretar `DATA` do armazenamento persistido, `loadData()` executava sempre `recoverCanonicalBaseV154()`. A Alteração 002 demonstrou em ambiente isolado que essa função é capaz de reinserir registros canônicos ausentes.
+
+Antes da correção, os resultados eram:
+
+- `tests/critical-flows.test.js`: **6 PASS e 2 FAIL** conhecidos;
+- `tests/duplicate-detection.test.js`: **6 PASS e 1 FAIL** conhecido.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/critical-flows.test.js`
+- `AI.md`
+- `README.md`
+- `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+Esta foi a primeira alteração funcional realizada em `index.html` nesta sequência de trabalho. A mudança funcional consistiu exclusivamente na remoção de uma única chamada automática dentro de `loadData()`:
+
+```javascript
+await recoverCanonicalBaseV154();
+```
+
+Nenhuma nova política automática de recuperação foi criada. `hasBrokenMigrationArtifacts()` continua sem conexão automática com o fluxo de carregamento. `recoverCanonicalBaseV154()` continua existindo e seu comportamento, quando acionada explicitamente, permanece coberto pelo teste dinâmico isolado.
+
+`tests/critical-flows.test.js` foi atualizado somente para representar o estado legítimo após essa remoção:
+
+- âncora do handler de importação: 6643 para 6642;
+- chamadas esperadas de `recoverCanonicalBaseV154()`: `[4735]` para `[]`;
+- verificação estática alterada para exigir ausência da chamada automática;
+- teste funcional de segurança preservado para detectar qualquer reintrodução futura.
+
+O `SEED` permaneceu com exatamente 1.213 registros e seu conteúdo não foi alterado. `DUPLICATE_PAIRS_V171` permaneceu inalterado, incluindo as mesmas 28 entradas malformadas conhecidas.
+
+### Testes realizados
+
+```text
+node --check tests/critical-flows.test.js
+node tests/critical-flows.test.js
+node tests/duplicate-detection.test.js
+```
+
+Depois da correção:
+
+- a verificação sintática de `tests/critical-flows.test.js` passou;
+- `tests/critical-flows.test.js`: **7 PASS e 1 FAIL** conhecido;
+- `tests/duplicate-detection.test.js`: **6 PASS e 1 FAIL** conhecido.
+
+O teste de segurança que proíbe a chamada automática em `loadData()` mudou de FAIL para PASS. O FAIL remanescente dos fluxos críticos continua demonstrando que um backup estruturalmente inválido consegue iniciar mutação/persistência. O FAIL de integridade continua demonstrando as mesmas 28 entradas malformadas em `DUPLICATE_PAIRS_V171`.
+
+### Resultado
+
+A recuperação canônica deixou de ser acionada automaticamente em todo carregamento normal. O defeito da importação **não foi corrigido** nesta alteração. `DUPLICATE_PAIRS_V171` também **não foi corrigido** nesta alteração.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+### Instruções de recuperação, se necessárias
+
+Antes de qualquer recuperação, executar `git status` e confirmar que nenhum trabalho recente será perdido. A reversão funcional desta alteração reintroduziria a chamada automática removida e, portanto, não deve ser feita sem nova revisão do risco de reposição de dados a partir do `SEED`.
