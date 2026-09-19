@@ -75,6 +75,36 @@ preexistente nas 28 entradas de `DUPLICATE_PAIRS_V171`, que estão
 estruturalmente incorretas e permanecem propositalmente sem correção. Assim,
 o resultado atual esperado é **6 PASS e 1 FAIL**.
 
+### Fluxos críticos
+
+```text
+node --check tests/critical-flows.test.js
+node tests/critical-flows.test.js
+node tests/duplicate-detection.test.js
+```
+
+`tests/critical-flows.test.js` usa somente recursos nativos do Node.js. Ele
+combina análise estática do `index.html` com a execução exclusiva de trechos
+extraídos em `vm` isolado, usando mocks e stubs locais. Não acessa IndexedDB
+real, Firebase, Firestore, Cloudinary ou a rede.
+
+A Alteração 002 confirmou que `loadData()` chama automaticamente
+`recoverCanonicalBaseV154()`, enquanto `hasBrokenMigrationArtifacts()` não
+possui chamadas. O cenário isolado demonstrou que a recuperação pode reinserir
+um registro canônico ausente do `SEED`. Também confirmou que um backup com
+estrutura interna inválida pode iniciar mutações e persistência antes da
+validação completa.
+
+O inventário atual do handler de importação contém 10 atribuições de estado,
+4 chamadas diretas a `storage.set`, 2 chamadas a `pushToFirebaseNow` e outras
+rotinas auxiliares de persistência verificadas pelo teste. O resultado esperado
+é **6 PASS e 2 FAIL** conhecidos; nenhum defeito foi corrigido nesta alteração.
+
+Algumas verificações usam números de linha exatos como âncoras do
+`index.html` atual. Após uma alteração legítima no HTML, essas âncoras podem
+precisar ser atualizadas; uma mudança de linha isolada não representa
+automaticamente uma regressão funcional.
+
 ## Histórico relevante
 
 Ver `AI.md` para o histórico de bugs já resolvidos e decisões de design —

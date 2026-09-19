@@ -439,3 +439,21 @@ Comandos de verificação:
 node tests/duplicate-detection.test.js
 node --check tests/duplicate-detection.test.js
 ```
+
+## Alteração 002 — testes isolados dos fluxos críticos
+
+Foi criado `tests/critical-flows.test.js` usando somente recursos nativos do Node.js. O teste analisa o `index.html` estaticamente e executa apenas trechos específicos extraídos em um contexto `vm` isolado, com mocks e stubs locais. Nenhum cenário acessa IndexedDB real, Firebase, Firestore, Cloudinary ou a rede.
+
+Os testes confirmaram que `loadData()` chama `recoverCanonicalBaseV154()` automaticamente e que `hasBrokenMigrationArtifacts()` não possui chamadas atualmente. Em isolamento, `recoverCanonicalBaseV154()` demonstrou capacidade de reinserir no estado persistido um registro canônico do `SEED` que estivesse ausente.
+
+Também foi confirmado que o fluxo atual de importação pode iniciar mutações e persistência com um backup cuja estrutura interna é inválida, antes de existir validação completa. O inventário estático do handler encontrou 10 atribuições de estado, 4 chamadas diretas a `storage.set`, 2 chamadas a `pushToFirebaseNow` e as rotinas auxiliares de persistência identificadas pelo próprio teste.
+
+O resultado esperado de `tests/critical-flows.test.js` é **6 PASS e 2 FAIL** conhecidos: recuperação automática do `SEED` durante `loadData()` e mutação/persistência iniciada por backup estruturalmente inválido. Nenhum desses defeitos foi corrigido. O teste da Alteração 001 permanece com **6 PASS e 1 FAIL** conhecido em `DUPLICATE_PAIRS_V171`.
+
+```text
+node --check tests/critical-flows.test.js
+node tests/critical-flows.test.js
+node tests/duplicate-detection.test.js
+```
+
+Observação técnica: alguns testes de localização usam números de linha exatos do `index.html` atual. Esses números são âncoras do estado analisado e podem precisar ser atualizados quando o arquivo for legitimamente modificado. Uma mudança isolada de linha não deve ser interpretada automaticamente como regressão funcional.

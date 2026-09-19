@@ -253,3 +253,73 @@ Ainda não criado.
 ### Instruções de recuperação, se necessárias
 
 Antes de qualquer recuperação, executar `git status` e confirmar que nenhum trabalho recente será perdido. Para retirar somente esta alteração, devem ser avaliados em conjunto o arquivo de teste criado e os três registros documentais associados; não alterar `index.html` para essa recuperação.
+
+## ALTERAÇÃO 002 — Testes isolados dos fluxos críticos
+
+**Número da alteração:** 002
+**Data:** 18/09/2026
+
+### Objetivo
+
+Ampliar a rede de segurança com testes isolados dos fluxos de recuperação do `SEED` e importação de backup, documentando comportamentos perigosos já existentes sem executar a aplicação completa e sem corrigir os defeitos encontrados.
+
+### Estado antes
+
+A Alteração 001 verificava a integridade estática do `SEED` e do JavaScript, mas ainda não havia testes isolados para a recuperação automática nem para a ordem de validação e mutação durante a importação de backups.
+
+### Arquivo criado
+
+- `tests/critical-flows.test.js`
+
+### Arquivos de documentação modificados
+
+- `AI.md`
+- `README.md`
+- `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+O novo teste usa somente recursos nativos do Node.js. Ele analisa o `index.html` estaticamente e executa apenas os trechos necessários em um contexto `vm` isolado, com mocks e stubs locais. Não acessa IndexedDB real, Firebase, Firestore, Cloudinary ou a rede.
+
+Foram confirmados os seguintes comportamentos:
+
+- `loadData()` chama `recoverCanonicalBaseV154()` automaticamente;
+- `hasBrokenMigrationArtifacts()` não possui chamadas atualmente;
+- em isolamento, `recoverCanonicalBaseV154()` pode reinserir um registro canônico do `SEED` ausente no estado persistido;
+- um backup cuja estrutura interna é inválida pode iniciar mutações e persistência antes de existir validação completa.
+
+O inventário estático atual do handler de importação encontrou:
+
+- 10 atribuições de estado;
+- 4 chamadas diretas a `storage.set`;
+- 2 chamadas a `pushToFirebaseNow`;
+- rotinas auxiliares de persistência, incluindo `saveData`, `saveSRS`, `saveSessionLog`, `saveOrder` e `saveSiteOrder`.
+
+### Testes realizados
+
+```text
+node --check tests/critical-flows.test.js
+node tests/critical-flows.test.js
+node tests/duplicate-detection.test.js
+```
+
+Resultados atuais esperados:
+
+- `tests/critical-flows.test.js`: **6 PASS e 2 FAIL** conhecidos;
+- `tests/duplicate-detection.test.js`: **6 PASS e 1 FAIL** conhecido em `DUPLICATE_PAIRS_V171`.
+
+Os dois FAILs do novo teste representam defeitos preexistentes: recuperação automática do `SEED` durante `loadData()` e início de mutação/persistência por backup estruturalmente inválido.
+
+### Resultado
+
+Os fluxos críticos passaram a ter testes reproduzíveis e isolados. **Nenhum dos defeitos detectados foi corrigido.** O arquivo `index.html` permaneceu intocado, assim como o `SEED`, `DUPLICATE_PAIRS_V171` e os arquivos de teste após sua aprovação.
+
+Observação técnica: alguns testes de localização usam números de linha exatos do `index.html` atual. Esses números funcionam como âncoras do estado analisado e poderão precisar ser atualizados quando `index.html` for legitimamente modificado. Uma mudança isolada de linha não deve ser interpretada automaticamente como regressão funcional.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+### Instruções de recuperação, se necessárias
+
+Antes de qualquer recuperação, executar `git status` e confirmar que nenhum trabalho recente será perdido. Para retirar somente a Alteração 002, avaliar em conjunto `tests/critical-flows.test.js` e os registros correspondentes nos três documentos; não modificar `index.html` nem o teste da Alteração 001.
