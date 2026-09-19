@@ -54,12 +54,26 @@ manter e atualizar sem depender de build step. Por dentro, três camadas:
 
 ## Testes
 
-```
+```text
 node tests/duplicate-detection.test.js
 ```
 
-Roda antes de qualquer mudança na lógica de dados ou de deduplicação, pra
-garantir que nenhuma duplicata escapa.
+O teste usa apenas recursos nativos do Node.js e analisa o `index.html`
+estaticamente. Ele não executa a aplicação e não acessa IndexedDB, Firebase,
+Firestore, Cloudinary ou a rede.
+
+Verificação sintática do próprio arquivo de teste:
+
+```text
+node --check tests/duplicate-detection.test.js
+```
+
+Na Alteração 001, o teste analisou 1.213 registros do `SEED`: os IDs são
+válidos e únicos, não existem duplicatas exatas atuais por `s + site + name`
+e o JavaScript embutido possui sintaxe válida. Foi detectado um defeito
+preexistente nas 28 entradas de `DUPLICATE_PAIRS_V171`, que estão
+estruturalmente incorretas e permanecem propositalmente sem correção. Assim,
+o resultado atual esperado é **6 PASS e 1 FAIL**.
 
 ## Histórico relevante
 
@@ -180,4 +194,3 @@ O cabeçalho divide a faixa superior com os KPIs; os cards de Evolução e Estad
 ### Grade panorâmica determinística
 
 O desktop usa uma grade explícita de 12 colunas: Sessões 4/12, Evolução 5/12 e Estado 3/12; Ciclo 12/12; Domínio 4/12 e Resumo 8/12. As linhas usam altura pelo conteúdo, eliminando reservas verticais vazias.
-

@@ -191,3 +191,65 @@ Ainda nao criado.
 ### Instrucoes de recuperacao, se necessarias
 
 Antes de qualquer recuperacao, executar `git status` e confirmar que nenhum trabalho recente sera perdido. As renomeacoes e as atualizacoes de conteudo devem ser avaliadas em conjunto antes de qualquer reversao.
+
+## ALTERAÇÃO 001 — Testes estáticos de integridade
+
+**Número da alteração:** 001
+**Data:** 18/09/2026
+
+### Objetivo
+
+Criar uma verificação automatizada e estática da integridade básica dos dados e do JavaScript contidos em `index.html`, sem abrir nem executar a aplicação.
+
+### Estado antes
+
+Não havia arquivo de teste disponível em `tests/`, embora a documentação já mencionasse o comando obrigatório para a detecção de duplicatas.
+
+### Arquivo criado
+
+- `tests/duplicate-detection.test.js`
+
+### Arquivos de documentação modificados
+
+- `AI.md`
+- `README.md`
+- `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+O novo teste usa exclusivamente recursos nativos do Node.js. Ele lê o `index.html` como texto e não executa a aplicação. Também não acessa IndexedDB, Firebase, Firestore, Cloudinary ou a rede.
+
+A análise estática verificou:
+
+- existência e leitura de `index.html`;
+- localização segura do `SEED`;
+- 1.213 registros no `SEED` atual;
+- presença, padrão `seed_<N>` e unicidade dos IDs;
+- ausência de duplicatas exatas por `s + site + name`;
+- estrutura de `DUPLICATE_PAIRS_V171`;
+- sintaxe do JavaScript embutido, sem executá-lo.
+
+### Testes realizados
+
+```text
+node tests/duplicate-detection.test.js
+node --check tests/duplicate-detection.test.js
+```
+
+O teste principal terminou com **6 PASS e 1 FAIL**. A verificação sintática do próprio arquivo de teste terminou sem erros.
+
+### Resultado
+
+Foram confirmados 1.213 registros, IDs válidos e únicos, nenhuma duplicata exata atual por `s + site + name` e sintaxe válida no JavaScript embutido.
+
+O único FAIL aponta que as 28 entradas de `DUPLICATE_PAIRS_V171` estão estruturalmente incorretas. Esse é um defeito preexistente conhecido e o FAIL é esperado. O defeito permanece propositalmente **NÃO CORRIGIDO** nesta alteração, para ser tratado apenas em uma etapa específica futura.
+
+Nenhuma alteração foi feita em `index.html`, no `SEED`, em conteúdo clínico ou em integrações externas.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+### Instruções de recuperação, se necessárias
+
+Antes de qualquer recuperação, executar `git status` e confirmar que nenhum trabalho recente será perdido. Para retirar somente esta alteração, devem ser avaliados em conjunto o arquivo de teste criado e os três registros documentais associados; não alterar `index.html` para essa recuperação.

@@ -425,3 +425,17 @@ A tentativa anterior ainda sofria interferência de regras CSS antigas. A compos
 
 A Evolução tem altura fixa compacta de 145 px. Ciclo ocupa efetivamente `1 / -1`. Não houve alteração de lógica ou dados.
 
+## Alteração 001 — testes estáticos de integridade
+
+Foi criado `tests/duplicate-detection.test.js`, usando exclusivamente recursos nativos do Node.js. O teste lê e analisa estaticamente o `index.html`: não executa a aplicação e não acessa IndexedDB, Firebase, Firestore, Cloudinary ou a rede.
+
+O `SEED` atual analisado contém 1.213 registros. Todos os IDs foram verificados como únicos, presentes e compatíveis com o padrão `seed_<N>`. Não há duplicatas exatas atuais pela chave `s + site + name`, e o JavaScript embutido passou na verificação sintática sem ser executado.
+
+O teste também confirmou um defeito preexistente: as 28 entradas de `DUPLICATE_PAIRS_V171` estão estruturalmente incorretas. Esse defeito foi deliberadamente mantido sem correção nesta alteração, para continuar detectável até sua etapa específica. Por isso, o resultado atual esperado é **6 PASS e 1 FAIL**.
+
+Comandos de verificação:
+
+```text
+node tests/duplicate-detection.test.js
+node --check tests/duplicate-detection.test.js
+```
