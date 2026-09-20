@@ -502,3 +502,317 @@ Metadados complementares são fundidos sem perda. Divergências escalares usam a
 A auditoria em memória do snapshot completo confirmou 18 associações em DATA, 18 no SEED e 29 associações semânticas únicas no resultado, sem perda, conflitos de `altPlacements` ou bloqueios. O arquivo de snapshot não foi modificado e nenhum armazenamento local/remoto foi acessado.
 
 Resultados: `tests/legacy-id-migration.test.js` com **119 PASS, 0 FAIL e 5 TODO**; `tests/critical-flows.test.js` com **14 PASS e 0 FAIL**; `tests/duplicate-detection.test.js` permanece com **6 PASS e 1 FAIL** histórico e não relacionado em `DUPLICATE_PAIRS_V171`.
+
+## Alteração 010 — Central de Revisões + Soluções (`LESION_REVISIONS`)
+
+Novo recurso funcional, não uma correção de dados. Adiciona uma fila própria
+para o usuário marcar uma lesão para revisão com um pedido de texto livre
+(ex: "corrigir classificação", "possível lesão duplicada"), com um fluxo de
+proposta de solução e aprovação/recusa manual. **É deliberadamente separada**
+de `REVIEW` (Não revisado/Revisando/Dominado, fluxo de estudo) e de `SRS`
+(repetição espaçada do quiz) — nenhuma linha desses dois sistemas foi tocada.
+
+### O que foi adicionado
+
+- Variável global `LESION_REVISIONS` (dicionário por `reviewId`), persistida
+  via `storage.get/set` sob a chave `atlas:lesionRevisions` — mesma camada
+  IndexedDB usada por `REVIEW`/`SRS`/`SESSIONLOG`, carregada em `loadData()`
+  via `loadLesionRevisions()`.
+- Funções públicas: `createLesionReview(lesionId, requestText)`,
+  `getPendingReviews()`, `getReadySolutions()`, `setReviewSolution(reviewId,
+  solutionText, proposedChanges)`, `acceptReviewSolution(reviewId)`,
+  `rejectReviewSolution(reviewId, reasonText)`, `getReviewHistory(reviewId)`.
+  Pensadas para, no futuro, uma IA chamar `getPendingReviews()` diariamente e
+  registrar propostas via `setReviewSolution()` — **essa IA/agendamento não
+  foi implementada nesta entrega**, só a arquitetura de suporte.
+- Dois ícones no cabeçalho (🔔 Revisões pendentes, 💡 Soluções disponíveis),
+  à esquerda do botão `Quiz & Progresso`, com badge numérico só quando há
+  itens. Cada um abre um painel próprio (`openPendingReviewsModal()` /
+  `openReadySolutionsModal()`) — overlays independentes no mesmo padrão de
+  `openDetail()`/`openForm()` (não usam `getStudyOverlay()`, que é exclusiva
+  do fluxo Quiz & Progresso).
+- Checkbox "marcar para revisão" no modal já existente de "Editar lesão"
+  (só em edição, não ao criar uma lesão nova), que abre uma textarea de
+  pedido livre e cria a revisão ao salvar.
+
+### Regras de status e segurança
+
+`status` vale `pending`, `solution_ready`, `accepted` ou `rejected`.
+`getPendingReviews()` conta `pending` **e** `rejected` (uma solução recusada
+volta sozinha para a fila de pendentes). `createLesionReview()` recusa criar
+uma segunda revisão `pending` para a mesma lesão com o mesmo `requestText`
+(comparação exata, após `trim()`), evitando duplicação acidental — mas
+permite pedidos diferentes para a mesma lesão.
+
+**Aceitar não aplica nada em `DATA` automaticamente.** `acceptReviewSolution()`
+só muda o `status` da revisão para `accepted` e registra no histórico —
+aplicação estruturada dos dados propostos é uma etapa futura, fora do escopo
+desta entrega. `rejectReviewSolution()` pede um motivo opcional, nunca apaga
+a solução recusada nem o histórico, e devolve a revisão para pendentes.
+
+Cada revisão guarda um histórico cronológico (`history: [{timestamp, action,
+details}]`) com ações `created`, `solution_created`, `accepted`, `rejected`,
+`reopened` — nada é apagado silenciosamente. `reopened` é registrado quando
+`setReviewSolution()` é chamada sobre uma revisão que estava `rejected`
+(nova proposta depois de uma recusa).
+
+### Por que NÃO sincroniza com Firebase
+
+De propósito, nesta primeira versão. `saveLesionRevisions()` só grava local
+(IndexedDB) e nunca chama `pushToFirebase()`/`pushToFirebaseNow()`. Isso
+evita tocar na camada de reconciliação/sincronização remota (fora do escopo
+autorizado desta tarefa). Se um dia isso precisar sincronizar entre
+dispositivos, será uma mudança deliberada e separada, avaliando concorrência
+e merge — não implícita nesta entrega.
+
+### Persistência e backup
+
+Incluída no backup/export (`btn-export`, campo `lesionRevisions`) e restaurada
+na importação de um backup completo (`format: 'atlas-radiologico-backup'`).
+Um backup legado (array simples de lesões) não contém `lesionRevisions` e
+por isso não mexe no estado atual dessa fila ao ser importado — mesmo
+comportamento já aplicado a `REVIEW`/`SRS`/`SESSIONLOG` nesse caminho legado.
+O gerador de backup pré-reconciliação V2 (`buildPreMigrationBackupV2`, área
+sensível/inerte) **não foi tocado** e continua sem `lesionRevisions` — não é
+usado por nenhum fluxo de produção.
+
+### Testes
+
+`tests/lesion-review.test.js` (novo, 18 cenários) extrai o trecho real do
+módulo do `index.html` e executa num `vm` isolado com `storage` falso em
+memória — mesmo padrão de `tests/critical-flows.test.js`, sem IndexedDB,
+Firebase, Firestore, Cloudinary ou rede reais. Resultado: **18 PASS, 0 FAIL**.
+
+A inserção do módulo antes de `recoverCanonicalBaseV154()`,
+`hasBrokenMigrationArtifacts()`, `loadData()` e o handler de importação
+deslocou as âncoras de linha estáticas de `tests/critical-flows.test.js`
+(atualizadas: 4312→4502, 4302→4492, 6612→6802, 8542→8947) e exigiu um stub
+`loadLesionRevisions` no contexto isolado de `loadData()` usado por esse
+teste — nenhuma lógica preexistente foi alterada. Resultados após a
+atualização: `tests/critical-flows.test.js` com **20 PASS e 0 FAIL**;
+`tests/duplicate-detection.test.js` permanece com **6 PASS e 1 FAIL**
+histórico em `DUPLICATE_PAIRS_V171`; `tests/legacy-id-migration.test.js` (não
+tocado por esta alteração) permanece com **156 PASS, 0 FAIL e 5 TODO** —
+mais testes que o número histórico da Alteração 006 (119), porque o arquivo
+cresceu com alterações não relacionadas a esta tarefa desde então.
+
+`SEED`, `DATA`, `REVIEW`, `SRS`, `SESSIONLOG` e a reconciliação V2 não foram
+alterados nesta entrega.
+
+### Hotfix (mesmo dia) — badges do header não atualizavam sem F5
+
+Bug encontrado em teste manual: `createLesionReview()` e `setReviewSolution()`
+funcionavam e persistiam corretamente, mas os ícones 🔔/💡 do header só
+refletiam a mudança depois de recarregar a página (F5) — porque
+`updateReviewCenterBadges()` só era chamada pelos caminhos de UI (salvar o
+formulário de edição, aceitar/recusar no painel), nunca pelas 4 funções
+centrais em si. Chamar `setReviewSolution()` direto pelo console (simulando
+como a futura IA vai operar) deixava os badges visivelmente desatualizados.
+
+Correção: `createLesionReview()`, `setReviewSolution()`,
+`acceptReviewSolution()` e `rejectReviewSolution()` agora chamam
+`updateReviewCenterBadges()` diretamente, de forma síncrona, logo após
+persistir a mudança — então o header reage imediatamente, mesmo quando essas
+funções são chamadas fora da UI. `updateReviewCenterBadges()` ganhou uma
+guarda `if(typeof document==='undefined') return;` no topo, pra continuar
+segura em qualquer contexto sem DOM (testes em `vm`, ou um script headless
+futuro rodando a IA sem browser) — sem essa guarda, chamar as 4 funções fora
+de um browser lançaria `ReferenceError: document is not defined`.
+
+Os três call sites de UI que já chamavam `updateReviewCenterBadges()`
+manualmente depois de `await saveLesionRevisions()` (salvar o formulário de
+edição; aceitar/recusar no painel de soluções) tiveram essa chamada removida
+por ficar redundante — a chamada central já cobre o caso; o `await
+saveLesionRevisions()` continua ali só para garantir que a gravação termine
+antes de fechar o modal/re-renderizar a lista.
+
+Dois testes de regressão novos em `tests/lesion-review.test.js` cobrem
+exatamente esse cenário: um confirma que `updateReviewCenterBadges()` nunca
+lança erro sem `document`; o outro usa uma DOM falsa mínima
+(`getElementById`/`textContent`/`classList.toggle`) para confirmar que os
+badges mudam corretamente após cada uma das 4 transições de status,
+inclusive chamando as funções "fora da UI". Resultado:
+`tests/lesion-review.test.js` com **20 PASS, 0 FAIL** (18→20). A inserção do
+comentário/guarda deslocou as âncoras de linha de
+`tests/critical-flows.test.js` mais uma vez (+12: 4502→4514, 4492→4504,
+6802→6814, 8947→8962); nenhuma lógica preexistente foi alterada —
+`tests/critical-flows.test.js` continua com **20 PASS, 0 FAIL**.
+
+## Alteração 012 — máquina de estados de dois aceites (proposta → autorizar → aplicar → aprovar/desfazer)
+
+Evolução funcional do workflow da Central de Revisões, pedida pelo usuário
+depois de usar a v1 (Alteração 010) em teste manual real. A v1 tinha só uma
+decisão humana (aceitar/recusar uma proposta) e nunca tocava `DATA` —
+"aceitar" só aprovava a proposta *dentro do workflow*, sem aplicar nada de
+verdade na lesão. Essa segunda versão introduz a aplicação estruturada real,
+mas com **dois controles humanos obrigatórios** antes de qualquer mudança
+definitiva:
+
+1. **1º aceite — "autorizo executar esta correção proposta?"**
+   (`authorizeAndApplyReviewSolution`): só depois desse aceite os campos
+   autorizados são escritos em `DATA` de verdade.
+2. **2º aceite — "vi a correção aplicada e quero mantê-la?"**
+   (`approveAppliedReviewSolution` / `rollbackAppliedReviewSolution`): a
+   mudança já está em `DATA`, mas ainda pode ser desfeita com um clique.
+
+**A IA nunca tem os dois aceites.** Ela só pode ir até `setReviewSolution()`
+(propor) — nunca autoriza a própria proposta, nunca aprova a própria
+alteração, nunca decide um rollback sozinha. Ver comentário no topo do
+módulo em `index.html` e a seção "REGRA FUNDAMENTAL DA IA" abaixo.
+
+### Nova máquina de estados
+
+```
+pending
+  -> proposed                        (setReviewSolution — SÓ propõe, DATA intocado)
+       -> rejected                   (rejectProposedReviewSolution — 1º aceite negado, DATA intocado)
+       -> applied_pending_validation (authorizeAndApplyReviewSolution — 1º aceite dado:
+                                       snapshot COMPLETO da lesão é criado ANTES,
+                                       só então os campos autorizados são escritos em DATA)
+            -> accepted              (approveAppliedReviewSolution — 2º aceite dado, fica valendo)
+            -> rejected              (rollbackAppliedReviewSolution — 2º aceite negado:
+                                       DATA é restaurado EXATAMENTE do snapshot daquela tentativa)
+rejected -> proposed                 (nova proposta reabre a revisão — ação "reopened")
+```
+
+`status === "rejected"` continua contando pra 🔔 Revisões pendentes (agora
+cobre duas origens: proposta recusada, ou correção aplicada e desfeita via
+rollback — ambas voltam pra fila pendente igual). O badge 💡 Soluções
+disponíveis agora conta a UNIÃO de `proposed` + `applied_pending_validation`
+— tudo que aguarda alguma decisão humana.
+
+### Snapshot por tentativa (não por revisão)
+
+Cada `authorizeAndApplyReviewSolution()` bem-sucedida cria uma nova entrada
+em `review.attempts[]`: `{id, beforeSnapshot, proposedChanges, appliedAt,
+approvedAt, rolledBackAt}`. `beforeSnapshot` é um clone completo
+(`JSON.parse(JSON.stringify(lesion))`) tirado imediatamente antes de
+escrever qualquer campo — nunca reaproveitado entre tentativas diferentes da
+mesma revisão. Se uma correção é desfeita e uma nova proposta é autorizada
+depois, `rollbackAppliedReviewSolution()` restaura a lesão a partir do
+`beforeSnapshot` daquela tentativa específica
+(`DATA[idx] = JSON.parse(JSON.stringify(attempt.beforeSnapshot))`, uma
+substituição completa do registro, não um patch campo a campo) e a
+tentativa seguinte cria seu próprio snapshot novo, a partir do estado já
+restaurado.
+
+### `proposedChanges` — validação estruturada, não execução de código
+
+`validateProposedChanges()` só aceita um objeto simples `{campo: valor}`
+restrito a uma allowlist fixa,
+`LESION_REVIEW_EDITABLE_FIELDS = ['name', 'notes', 'classification', 'tags', 'enTerm']`
+— deliberadamente SEM `id`, `img`/`images`/`localImg`, `links`, `s`, `site`,
+`altPlacements` ou qualquer campo de posse/identidade. Isso é o que impede,
+por construção, que uma proposta acione: excluir lesão, fundir lesões,
+mover/apagar imagem, mudar ownership de imagem, ou qualquer operação
+Cloudinary/Firebase — nenhum desses campos passa pela allowlist, então a
+validação recusa a proposta antes de tocar `DATA`. A validação roda TANTO ao
+propor (`setReviewSolution`) QUANTO de novo ao autorizar
+(`authorizeAndApplyReviewSolution`, defesa em profundidade — mesmo que o
+objeto da revisão fosse corrompido manualmente entre os dois passos).
+
+Para esta primeira versão, alterações destrutivas ou de ownership (excluir
+lesão, fundir lesões, mover/deletar imagens, ownership de imagens, operações
+Cloudinary/Firebase) continuam exigindo edição manual pelo formulário — a
+IA pode até escrever essa sugestão em `solution.text` como texto livre, mas
+nenhum campo desse tipo é aceito estruturalmente em `proposedChanges`.
+
+### Interface
+
+💡 Soluções disponíveis agora tem duas abas: **Propostas** (`proposed` —
+mostra pedido original, solução proposta, resumo "de → para" dos campos que
+serão alterados, com botões `✓ autorizar correção` / `✕ recusar proposta`)
+e **Validar correções** (`applied_pending_validation` — mostra pedido
+original, "de → para" real (snapshot vs. estado atual em `DATA`), botão
+`👁 ver lesão corrigida` que abre o detalhe da lesão de verdade, e botões
+`✓ funcionou — manter` / `↩ não funcionou — desfazer`). O modal genérico de
+motivo opcional (antes `openRejectReasonModal`) virou
+`openReasonPromptModal(reviewId, onConfirm, {title, subtitle, confirmLabel})`
+— reaproveitado tanto pra recusar uma proposta quanto pra desfazer uma
+correção aplicada, só o texto muda.
+
+`REVIEW_HISTORY_ACTION_LABELS` e o histórico ganharam os novos eventos:
+`solution_proposed`, `proposal_rejected`, `application_authorized`,
+`before_snapshot_created`, `changes_applied`, `application_approved`,
+`application_rejected`, `rollback_completed` — além de `created`/`reopened`
+que já existiam. Nada é apagado do histórico em nenhuma transição.
+
+### API (nomes exigidos pela evolução, ver seção 6 do pedido)
+
+`createLesionReview` e `getPendingReviews` continuam com o mesmo nome/
+comportamento. Novas: `getProposedSolutions()`,
+`getAppliedSolutionsAwaitingValidation()`, `authorizeAndApplyReviewSolution()`,
+`rejectProposedReviewSolution()`, `approveAppliedReviewSolution()`,
+`rollbackAppliedReviewSolution()`. `getReadySolutions()` foi mantida (mesmo
+nome, compatibilidade pedida explicitamente) mas agora é a união de
+propostas + aplicadas aguardando validação — o que já mantém
+`countReadyLesionSolutions()`/o badge 💡 corretos sem precisar mudar esses
+call sites. `acceptReviewSolution()`/`rejectReviewSolution()` (da v1) foram
+REMOVIDAS — o modelo de um aceite só não existe mais; usar
+`rejectProposedReviewSolution()` (1º aceite negado) ou
+`approveAppliedReviewSolution()`/`rollbackAppliedReviewSolution()` (2º
+aceite) conforme o estado.
+
+### `DATA` agora é tocado — mas só em dois lugares, com o caminho de persistência já existente
+
+Diferente da Alteração 010 (que era 100% local, sem tocar `DATA`),
+`authorizeAndApplyReviewSolution()` e `rollbackAppliedReviewSolution()`
+agora leem e escrevem `DATA` de verdade — são as ÚNICAS duas funções do
+módulo que fazem isso (`tests/lesion-review.test.js` tem um teste estático
+que verifica isso extraindo o corpo de cada função). As duas chamam
+`saveData()`, a mesma função já existente no app (usada pelo formulário de
+edição) que persiste em `storage`/IndexedDB e sincroniza com o Firebase —
+**não foi criado nenhum caminho de persistência novo, nem mexido no
+Firebase/Cloudinary/reconciliação V2**; só reaproveitado o que já existe,
+porque qualquer mudança real em `DATA` precisa desse caminho pra não
+divergir do Firestore (ver AGENTS.md, "Não silencie falhas que possam deixar
+o estado local e remoto divergentes"). A fila em si (pedidos, propostas,
+histórico, snapshots) continua só local (`saveLesionRevisions()`, sem
+Firebase), exatamente como na Alteração 010.
+
+### REGRA FUNDAMENTAL DA IA
+
+`createLesionReview()` é **exclusivamente** uma ação iniciada manualmente
+pela pessoa usando o Atlas — a futura IA nunca deve chamá-la. O fluxo
+permitido pra uma IA é `getPendingReviews()` → analisar →
+`setReviewSolution()`, e parar exatamente aí. Ela nunca chama
+`authorizeAndApplyReviewSolution()` (autorizar a própria proposta), nunca
+chama `approveAppliedReviewSolution()`/`rollbackAppliedReviewSolution()`
+(decidir sozinha se a própria alteração funcionou) — os dois aceites são
+sempre de uma pessoa, pelos botões da Central de Revisões. Isso está
+documentado em comentário no topo do módulo `index.html`, e
+`tests/lesion-review.test.js` tem um teste estático que confirma que nenhuma
+das funções de processamento (`setReviewSolution`,
+`rejectProposedReviewSolution`, `authorizeAndApplyReviewSolution`,
+`approveAppliedReviewSolution`, `rollbackAppliedReviewSolution`) chama
+`createLesionReview()` internamente. Não existe (nem foi implementada) uma
+IA de verdade ou agendamento nesta entrega — só a infraestrutura pra
+conectar uma futura.
+
+### Testes
+
+`tests/lesion-review.test.js` foi reescrito para a nova máquina de estados:
+**29 PASS, 0 FAIL** — cobre os 7 cenários numerados do pedido (manual,
+proposta, recusar proposta, autorizar, aprovar, desfazer/rollback, nova
+tentativa com snapshot independente), validação de `proposedChanges`
+inválido/campo proibido sem alterar `DATA`, falha de aplicação (lesão não
+encontrada) sem mutação parcial, histórico completo preservado numa cadeia
+longa (criada→proposta→autorizada→aplicada→desfeita→reaberta→nova
+proposta→autorizada→aprovada), persistência de `attempts`/snapshots após um
+reload simulado, os badges reagindo imediatamente em cada transição, e as
+duas checagens estáticas de segurança (só as 2 funções certas tocam `DATA`;
+nenhuma função de processamento cria revisão nova).
+
+A inserção do módulo maior deslocou as âncoras de linha de
+`tests/critical-flows.test.js` mais uma vez (+186: 4514→4700, 4504→4690,
+6814→7000, 8962→9287) — nenhuma lógica preexistente foi alterada, só a
+posição no arquivo. Resultado: `tests/critical-flows.test.js` **20 PASS, 0
+FAIL**; `tests/duplicate-detection.test.js` permanece **6 PASS, 1 FAIL**
+histórico (não relacionado, `DUPLICATE_PAIRS_V171`, não corrigido de
+propósito); `tests/legacy-id-migration.test.js` (não tocado) permanece
+**156 PASS, 0 FAIL, 5 TODO**.
+
+`SEED`, `REVIEW`, `SRS`, `SESSIONLOG`, a reconciliação V2 e o Firebase/
+Cloudinary não foram alterados nesta entrega — só o caminho já existente
+`saveData()` foi reutilizado, exatamente como o formulário de edição já
+fazia.

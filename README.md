@@ -131,6 +131,37 @@ integridade permanece com **6 PASS e 1 FAIL** conhecido em
 `DUPLICATE_PAIRS_V171`. Nenhum desses dois defeitos remanescentes foi corrigido
 na Alteração 003.
 
+### Central de Revisões + Soluções — testes (2026-09-20)
+
+```text
+node tests/lesion-review.test.js
+```
+
+20 cenários, usando o mesmo padrão dos testes acima: o trecho real do
+módulo `LESION_REVISIONS` é extraído do `index.html` e executado num `vm`
+isolado com um `storage` falso em memória (sem IndexedDB, Firebase,
+Firestore, Cloudinary ou rede real). Cobre criação de revisão, prevenção de
+duplicidade, persistência após um "reload" simulado, contadores de
+pendências/soluções, as transições `pending → solution_ready → accepted` e
+`solution_ready → rejected → pending`, preservação completa do histórico,
+checagens estáticas de que o export/import e `loadData()` incluem
+`lesionRevisions`, e (hotfix) a atualização imediata dos badges do header a
+cada transição usando uma DOM falsa mínima. Resultado esperado nesta etapa:
+**20 PASS e 0 FAIL** (números e status como `solution_ready` descritos aqui
+foram depois substituídos pela máquina de dois aceites da seção "Central de
+Revisões v2" mais abaixo — ver lá o estado atual: **29 PASS, 0 FAIL**).
+
+Como a Central de Revisões foi inserida antes de `recoverCanonicalBaseV154`,
+`hasBrokenMigrationArtifacts`, `loadData` e o handler de importação, as
+âncoras de linha de `tests/critical-flows.test.js` foram atualizadas em duas
+rodadas (a segunda, do hotfix, +12 linhas): 4312→4502→4514, 4302→4492→4504,
+6612→6802→6814, 8542→8947→8962. O contexto isolado de `loadData()` ganhou um
+stub de `loadLesionRevisions`. Nenhuma lógica existente foi alterada —
+apenas as âncoras de linha, que a própria documentação do teste já previa
+como sujeitas a deslocamento após uma mudança legítima no HTML. Resultado
+atual de `tests/critical-flows.test.js` (já refletindo a correção da
+Alteração 004): **20 PASS e 0 FAIL**.
+
 ### Alteração 004 — importação segura de backups
 
 Antes de alterar dados, persistir localmente ou sincronizar, a importação agora
@@ -275,5 +306,100 @@ O desktop usa uma grade explícita de 12 colunas: Sessões 4/12, Evolução 5/12
 O reconciliador experimental por identidade semântica continua inerte e não participa de carregamento, sincronização, importação ou qualquer outro fluxo da aplicação. O merge de `altPlacements` agora faz união sem perda, deduplicação por `s + site` normalizados somente para comparação e preservação de campos extras.
 
 Metadados complementares são mesclados; valores incompatíveis são reportados explicitamente. Casos estruturalmente irresolvíveis são bloqueantes e deixam `safeToApply` como `false`. No snapshot completo lido somente em memória, as 18 associações do DATA e as 18 do SEED resultaram em 29 associações semânticas únicas, sem perda nem conflitos de `altPlacements`.
+
+### Central de Revisões + Soluções — 2026-09-20
+
+Novo recurso funcional: uma fila própria, chamada `LESION_REVISIONS`, para o
+usuário marcar qualquer lesão para revisão futura (ex: "otimizar
+diagnósticos diferenciais", "possível lesão duplicada", "corrigir
+classificação") escrevendo um pedido livre. **Não deve ser confundida** com
+o `REVIEW` do fluxo de estudo (Não revisado/Revisando/Dominado) nem com o
+`SRS` do quiz — são três sistemas independentes.
+
+No modal já existente de "Editar lesão" (apenas em edição, não ao criar
+uma lesão nova), há uma opção "marcar para revisão" que abre um campo de
+texto livre. Ao salvar, cria-se uma revisão vinculada à lesão com
+`status: "pending"`, sem duplicar acidentalmente a mesma revisão pendente
+para a mesma lesão com o mesmo texto.
+
+Dois ícones compactos no cabeçalho, à esquerda de `Quiz & Progresso`:
+
+- 🔔 **Revisões pendentes** — conta `status === "pending"` ou
+  `status === "rejected"` (uma solução recusada volta automaticamente para
+  cá). Aparência apagada e sem contador quando não há nada pendente; abre
+  um painel com lesão, seção/sítio, data, pedido e status, mais recentes
+  primeiro, com atalho para abrir a lesão correspondente.
+- 💡 **Soluções disponíveis** — conta `status === "solution_ready"`. Abre um
+  painel com o pedido original, a solução proposta e os botões
+  `✓ aceitar` / `✕ recusar`.
+
+Aceitar aprova a solução **dentro do workflow de revisão**; esta primeira
+versão **não aplica nenhuma alteração em `DATA` automaticamente** — isso
+fica para uma etapa futura. Recusar pede um motivo opcional, mantém a
+solução e o histórico (nada é apagado) e devolve a revisão para
+"pendentes". Cada revisão guarda um histórico cronológico completo
+(`created`, `solution_created`, `accepted`, `rejected`, `reopened`).
+
+A API interna já está pronta para uma futura IA processar
+`getPendingReviews()` diariamente e registrar propostas via
+`setReviewSolution()` — sem que essa IA/agendamento tenha sido implementada
+nesta entrega.
+
+Persistência via a mesma camada `storage.get/set` (IndexedDB) usada por
+`REVIEW`/`SRS`/`SESSIONLOG`, sobrevivendo a F5, e incluída no backup/export
+e na importação de backup completo (`lesionRevisions`). Não sincroniza com
+o Firebase nesta primeira versão — é local por dispositivo, para não tocar
+na camada de reconciliação/sincronização remota. `DATA`, `REVIEW` e `SRS`
+não são lidos nem escritos por este recurso.
+
+Testado em `tests/lesion-review.test.js` (20 cenários: criação, duplicidade,
+persistência após reload simulado, contadores, transições de status,
+aceitar/recusar, histórico completo preservado, presença de
+`lesionRevisions` no export/import, e atualização imediata dos badges do
+header em cada transição) e por checagens estáticas atualizadas em
+`tests/critical-flows.test.js` (ver seção de Testes abaixo).
+
+**Hotfix (mesmo dia):** os ícones 🔔/💡 do header só atualizavam depois de
+F5, porque as funções de mutação não chamavam a atualização do header
+sozinhas (só os caminhos de tela chamavam). Passaram a atualizar o header
+diretamente ao terminar, então o badge reage imediatamente mesmo quando são
+chamadas fora da UI (ex: console, ou a futura IA processando revisões sem
+browser).
+
+### Central de Revisões v2 — dois aceites humanos (2026-09-20)
+
+Depois de testar a v1 manualmente, o workflow evoluiu pra separar duas
+decisões: **autorizar** uma correção proposta (1º aceite — só então algo é
+escrito na lesão de verdade) e **validar** o resultado depois de aplicado
+(2º aceite — manter ou desfazer). A IA nunca tem os dois aceites: seu limite
+é `getPendingReviews()` → analisar → `setReviewSolution()`, e parar aí.
+
+Nova máquina de estados: `pending → proposed → applied_pending_validation →
+accepted` (manteve) ou `→ rejected` em dois pontos possíveis (proposta
+recusada antes de tocar a lesão, ou correção aplicada e desfeita via
+rollback) — os dois casos voltam pra fila 🔔 automaticamente, prontos pra
+uma nova tentativa. Cada autorização cria uma tentativa própria
+(`attempts[]`) com um snapshot completo da lesão tirado imediatamente antes
+da escrita; um "não funcionou — desfazer" restaura a lesão exatamente
+daquele snapshot (nunca de uma tentativa antiga). `proposedChanges` só
+aceita uma allowlist fixa de campos de conteúdo (`name`, `notes`,
+`classification`, `tags`, `enTerm`) — nada de identidade, imagem, ownership,
+Cloudinary ou Firebase passa pela validação estruturada.
+
+💡 Soluções disponíveis ganhou duas abas: **Propostas** (ainda não tocaram a
+lesão) e **Validar correções** (já aplicadas, aguardando o 2º aceite, com
+antes/depois e um atalho pra ver a lesão corrigida). Quando uma correção é
+autorizada e aplicada, ou desfeita, isso usa o mesmo `saveData()` que o
+formulário de edição já usa — a única forma de mudar `DATA` sem divergir do
+Firebase; a fila de revisões em si continua só local, sem sincronizar.
+
+`tests/lesion-review.test.js` foi reescrito para a nova máquina: **29 PASS,
+0 FAIL**, cobrindo os 7 cenários (manual → proposta → recusar/autorizar →
+aprovar/desfazer → nova tentativa), validação de `proposedChanges` inválido
+ou de campo fora da allowlist sem tocar `DATA`, falha de aplicação sem
+mutação parcial, histórico completo numa cadeia longa, persistência de
+snapshots após reload, badges reagindo em cada transição, e duas checagens
+estáticas (só autorizar/rollback tocam `DATA`; nenhuma função de
+processamento cria revisão nova). Ver `AI.md` para os detalhes completos.
 
 Validação: motor V1+V2 com **119 PASS, 0 FAIL e 5 TODO**; fluxos críticos com **14 PASS e 0 FAIL**. O teste de duplicatas mantém exclusivamente o FAIL histórico das 28 entradas malformadas de `DUPLICATE_PAIRS_V171`, fora do escopo desta alteração.

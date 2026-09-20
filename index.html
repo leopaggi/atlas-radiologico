@@ -178,8 +178,23 @@ body{
 #search-wrap::before{
   content:"⌕";position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted-2);font-size:15px;
 }
+.review-center-actions{margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.review-center-btn{
+  position:relative;background:none;border:1px solid var(--line);color:var(--muted-2);
+  width:34px;height:34px;border-radius:var(--radius);font-size:15px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;opacity:.5;flex-shrink:0;
+  transition:opacity .15s ease,border-color .15s ease,color .15s ease,background .15s ease;
+}
+.review-center-btn:hover{opacity:.8;border-color:var(--muted-2);}
+.review-center-btn:not(.is-empty){opacity:1;border-color:var(--teal-dim);color:var(--teal);}
+.review-center-btn:not(.is-empty):hover{border-color:var(--teal);background:var(--tag-bg-active);}
+.review-center-badge{
+  position:absolute;top:-6px;right:-6px;background:var(--amber);color:#1a1108;font-size:10px;font-weight:700;
+  border-radius:9px;padding:1px 6px;line-height:1.4;min-width:8px;text-align:center;
+}
+.review-center-btn.is-empty .review-center-badge{display:none;}
 #progress-btn{
-  margin-left:auto;background:none;color:var(--muted);border:1px solid var(--line);padding:9px 14px;
+  background:none;color:var(--muted);border:1px solid var(--line);padding:9px 14px;
   border-radius:var(--radius);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0;
 }
 #progress-btn:hover{color:var(--text);border-color:var(--muted-2);}
@@ -419,6 +434,41 @@ body{
 .snapshot-row-latest{font-size:10px;font-weight:600;color:var(--teal);background:var(--tag-bg-active);padding:2px 6px;border-radius:8px;margin-left:6px;}
 .snapshot-row-detail{font-size:11.5px;color:var(--muted-2);margin-top:3px;}
 .snapshot-row-restore{flex-shrink:0;}
+
+/* ---------- Central de Revisões + Soluções ---------- */
+.review-center-modal{max-width:640px;max-height:85vh;overflow-y:auto;}
+.review-history-modal{max-width:560px;max-height:85vh;overflow-y:auto;}
+.review-reject-modal{max-width:460px;}
+.review-center-list{display:flex;flex-direction:column;gap:10px;margin-top:14px;}
+.review-center-empty{color:var(--muted-2);font-size:12.5px;padding:10px 0;}
+.review-center-row{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;
+}
+.review-center-row-main{flex:1;min-width:220px;}
+.review-center-row-title{font-size:13.5px;font-weight:600;color:var(--text);}
+.review-center-row-meta{font-size:11px;color:var(--muted-2);margin-top:2px;font-family:'IBM Plex Mono',monospace;}
+.review-center-row-request{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.4;}
+.review-center-row-solution{font-size:12.5px;color:var(--teal);margin-top:6px;line-height:1.4;}
+.review-status-tag{font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;}
+.review-status-tag.pending{color:var(--muted);background:var(--panel);}
+.review-status-tag.rejected{color:var(--red);background:var(--amber-dim);}
+.review-center-row-actions{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;align-items:flex-start;}
+.review-history-request{font-size:12.5px;color:var(--muted);margin:4px 0 14px;line-height:1.4;}
+.review-history-list{display:flex;flex-direction:column;gap:8px;}
+.review-history-item{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius);padding:9px 12px;}
+.review-history-item-top{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--text);}
+.review-history-item-top span{color:var(--muted-2);font-size:11px;font-family:'IBM Plex Mono',monospace;}
+.review-history-item-detail{font-size:12px;color:var(--muted);margin-top:4px;}
+.review-tabs{display:flex;gap:6px;margin:14px 0 4px;}
+.review-tab-btn{background:none;border:1px solid var(--line);color:var(--muted);padding:7px 12px;border-radius:var(--radius);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;}
+.review-tab-btn.active{color:var(--teal);border-color:var(--teal-dim);background:var(--tag-bg-active);}
+.review-center-list[hidden]{display:none;}
+.review-fields-diff{margin-top:8px;display:flex;flex-direction:column;gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px;}
+.review-fields-diff-row{font-size:12px;color:var(--muted);}
+.review-fields-diff-row b{color:var(--text);}
+.review-fields-diff-from{color:var(--muted-2);text-decoration:line-through;}
+.review-fields-diff-to{color:var(--teal);font-weight:600;}
 .audit-modal{max-width:760px;}
 .audit-list{display:flex;flex-direction:column;gap:8px;margin-top:14px;max-height:420px;overflow-y:auto;}
 .audit-row{
@@ -1559,6 +1609,10 @@ body{
     <div id="header">
       <div id="scope-title"><span class="path" id="scope-path"></span><div id="scope-name">Todas as seções</div></div>
       <div id="search-wrap"><input id="search" placeholder="Buscar lesão…"></div>
+      <div class="review-center-actions">
+        <button id="pending-reviews-btn" class="review-center-btn is-empty" title="Revisões pendentes" aria-label="Revisões pendentes">🔔<span id="pending-reviews-badge" class="review-center-badge"></span></button>
+        <button id="ready-solutions-btn" class="review-center-btn is-empty" title="Soluções disponíveis" aria-label="Soluções disponíveis">💡<span id="ready-solutions-badge" class="review-center-badge"></span></button>
+      </div>
       <button id="progress-btn">🧠 Quiz &amp; Progresso</button>
       <button id="quiz-btn" style="display:none">🧠 Quiz<span id="quiz-due-badge" class="quiz-due-badge" style="display:none;"></span></button>
       <button id="add-btn">+ Nova lesão</button>
@@ -2593,6 +2647,340 @@ async function saveReview(){
   try{ await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false); }
   catch(e){ console.error('storage error', e); }
   pushToFirebase();
+}
+
+/* ============================================================
+   CENTRAL DE REVISÕES + SOLUÇÕES — LESION_REVISIONS
+   Fila própria para pedidos de revisão de conteúdo escritos livremente
+   pelo usuário numa lesão específica (ex: "otimizar diagnósticos
+   diferenciais", "possível lesão duplicada", "corrigir classificação").
+   NÃO é o mesmo sistema que REVIEW (Não revisado/Revisando/Dominado,
+   usado no fluxo de estudo) nem SRS (repetição espaçada do quiz) — os
+   três são independentes e não devem ser confundidos.
+   Persistida via a camada storage.get/set existente (IndexedDB), do
+   mesmo jeito que REVIEW/SRS/SESSIONLOG. A fila em si (pedidos, propostas,
+   histórico) não sincroniza com Firebase nesta primeira versão — é local
+   por dispositivo, para não tocar na camada de reconciliação/sincronização
+   remota. A ÚNICA exceção é quando uma correção é efetivamente autorizada
+   e aplicada: nesse caso ela muta DATA (a lesão de verdade) e usa o mesmo
+   `saveData()` já existente no app pra persistir — o mesmo caminho que o
+   formulário de edição usa — porque toda mudança real em DATA precisa
+   necessariamente passar por ali pra não divergir do Firestore.
+
+   MÁQUINA DE ESTADOS (dois aceites humanos obrigatórios antes de qualquer
+   mudança definitiva na lesão):
+
+     pending                        (usuário marcou a lesão para revisão)
+       -> proposed                  (setReviewSolution: só uma PROPOSTA, DATA intocado)
+            -> rejected             (rejectProposedReviewSolution: 1º aceite negado, DATA intocado)
+            -> applied_pending_validation
+                 (authorizeAndApplyReviewSolution: 1º aceite dado — snapshot
+                  da lesão é criado ANTES, e só então os campos autorizados
+                  são escritos em DATA)
+                 -> accepted        (approveAppliedReviewSolution: 2º aceite dado, fica valendo)
+                 -> rejected        (rollbackAppliedReviewSolution: 2º aceite negado,
+                                     DATA é restaurado EXATAMENTE do snapshot daquela tentativa)
+     rejected -> proposed           (nova proposta reabre a revisão; ver "reopened")
+
+   REGRA FUNDAMENTAL: só o usuário decide. createLesionReview() é
+   EXCLUSIVAMENTE uma ação iniciada manualmente pela pessoa usando o Atlas —
+   a futura IA NUNCA deve chamar createLesionReview(). O fluxo permitido pra
+   uma IA é getPendingReviews() -> analisar -> setReviewSolution() e parar
+   por aí: ela nunca autoriza a própria proposta
+   (authorizeAndApplyReviewSolution), nunca aprova a própria alteração
+   (approveAppliedReviewSolution) e nunca decide um rollback sozinha — os
+   dois aceites (autorizar a correção, e depois confirmar que ela funcionou)
+   pertencem sempre a uma pessoa, pelos botões da Central de Revisões.
+   ============================================================ */
+const LESION_REVISIONS_KEY = 'atlas:lesionRevisions';
+let LESION_REVISIONS = {}; // { [reviewId]: {id,lesionId,createdAt,updatedAt,status,requestText,solution,attempts:[],history:[]} }
+
+async function loadLesionRevisions(){
+  try{
+    const r = await storage.get(LESION_REVISIONS_KEY, false);
+    const parsed = JSON.parse(r.value);
+    LESION_REVISIONS = (parsed && typeof parsed==='object' && !Array.isArray(parsed)) ? parsed : {};
+  }catch(e){ LESION_REVISIONS = {}; }
+}
+async function saveLesionRevisions(){
+  try{ await storage.set(LESION_REVISIONS_KEY, JSON.stringify(LESION_REVISIONS), false); }
+  catch(e){ console.error('storage error', e); }
+}
+function genLesionReviewId(){
+  return 'lrev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
+}
+function genLesionReviewAttemptId(){
+  return 'att_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
+}
+function pushLesionReviewHistory(review, action, details){
+  review.history = Array.isArray(review.history) ? review.history : [];
+  review.history.push({ timestamp: Date.now(), action, details: details || null });
+}
+
+/* Cria uma revisão vinculada a uma lesão a partir de um pedido escrito
+   livremente pelo usuário. Evita duplicar acidentalmente a mesma revisão
+   "pending" para a mesma lesão com o mesmo texto de pedido.
+   IMPORTANTE: chamada EXCLUSIVAMENTE pela UI (marcar lesão para revisão),
+   ou seja, sempre uma decisão manual da pessoa usando o Atlas. A futura IA
+   nunca deve chamar esta função — ela só processa revisões já existentes
+   (ver getPendingReviews()/setReviewSolution() mais abaixo). */
+function createLesionReview(lesionId, requestText){
+  const text = (requestText||'').trim();
+  if(!lesionId || !text) return { created:false, reason:'invalid_input', review:null };
+  const dup = Object.values(LESION_REVISIONS).find(r=>r.lesionId===lesionId && r.status==='pending' && r.requestText===text);
+  if(dup) return { created:false, reason:'duplicate', review:dup };
+  const now = Date.now();
+  const review = {
+    id: genLesionReviewId(),
+    lesionId,
+    createdAt: now,
+    updatedAt: now,
+    status: 'pending',
+    requestText: text,
+    solution: null,
+    attempts: [],
+    history: []
+  };
+  pushLesionReviewHistory(review, 'created', { requestText: text });
+  LESION_REVISIONS[review.id] = review;
+  saveLesionRevisions();
+  updateReviewCenterBadges();
+  return { created:true, reason:null, review };
+}
+
+/* status "rejected" também conta como pendente: uma proposta recusada, ou
+   uma correção aplicada e desfeita (rollback), volta automaticamente para
+   a fila de revisões pendentes — pronta pra uma nova tentativa. */
+function getPendingReviews(){
+  return Object.values(LESION_REVISIONS)
+    .filter(r=>r.status==='pending' || r.status==='rejected')
+    .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+}
+/* Propostas que a IA/alguém já preparou, mas que AINDA NÃO tocaram DATA —
+   aguardam o 1º aceite (autorizar) ou a recusa. */
+function getProposedSolutions(){
+  return Object.values(LESION_REVISIONS)
+    .filter(r=>r.status==='proposed')
+    .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+}
+/* Correções JÁ aplicadas em DATA após autorização, aguardando o 2º aceite
+   (manter ou desfazer). */
+function getAppliedSolutionsAwaitingValidation(){
+  return Object.values(LESION_REVISIONS)
+    .filter(r=>r.status==='applied_pending_validation')
+    .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+}
+/* Compatibilidade: mantido com o mesmo nome/uso de antes (badge 💡 e painel
+   "Soluções disponíveis") — agora representa TUDO que aguarda alguma
+   decisão humana no 💡, ou seja, a união de propostas + correções aplicadas
+   aguardando validação. */
+function getReadySolutions(){
+  return [...getProposedSolutions(), ...getAppliedSolutionsAwaitingValidation()]
+    .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+}
+function getReviewHistory(reviewId){
+  const r = LESION_REVISIONS[reviewId];
+  return r ? (r.history||[]).slice().sort((a,b)=>(a.timestamp||0)-(b.timestamp||0)) : [];
+}
+
+/* Campos da lesão que uma proposta pode alterar nesta primeira versão.
+   Deliberadamente NÃO inclui id/img/images/localImg/links/s/site/
+   altPlacements/_userUpdatedAt — nada que mexa em identidade, posse de
+   imagem, localização anatômica principal ou operações destrutivas
+   (excluir lesão, fundir lesões, mover/apagar imagem, Cloudinary,
+   Firebase). Essas continuam exigindo edição manual pelo formulário. */
+const LESION_REVIEW_EDITABLE_FIELDS = ['name', 'notes', 'classification', 'tags', 'enTerm'];
+
+/* Validação estrutural de proposedChanges — NUNCA executa código arbitrário,
+   só aceita um objeto simples {campo: novoValor} restrito à allowlist acima,
+   com o tipo esperado por campo. Roda tanto ao propor quanto (de novo, por
+   segurança) ao autorizar a aplicação — nenhuma mudança em DATA acontece
+   sem passar por aqui. */
+function validateProposedChanges(proposedChanges){
+  if(!proposedChanges || typeof proposedChanges!=='object' || Array.isArray(proposedChanges)){
+    return { valid:false, reason:'changes_not_object' };
+  }
+  const keys = Object.keys(proposedChanges);
+  if(keys.length===0) return { valid:false, reason:'empty_changes' };
+  const changes = {};
+  for(const key of keys){
+    if(!LESION_REVIEW_EDITABLE_FIELDS.includes(key)) return { valid:false, reason:'forbidden_field:'+key };
+    const value = proposedChanges[key];
+    if(key==='tags'){
+      if(!Array.isArray(value) || !value.every(t=>typeof t==='string' && t.trim())) return { valid:false, reason:'invalid_tags' };
+      changes.tags = value.map(t=>t.trim());
+    } else if(key==='classification'){
+      if(value!==null && typeof value!=='string') return { valid:false, reason:'invalid_classification' };
+      changes.classification = value;
+    } else {
+      if(typeof value!=='string') return { valid:false, reason:'invalid_'+key };
+      if(key==='name' && !value.trim()) return { valid:false, reason:'invalid_name' };
+      changes[key] = value;
+    }
+  }
+  return { valid:true, reason:null, changes };
+}
+
+/* Registra/atualiza a PROPOSTA de solução de uma revisão. NÃO aplica
+   nenhuma mudança em DATA — só prepara a proposta para o 1º aceite humano
+   (✓ autorizar correção / ✕ recusar proposta). Pensada para também ser
+   chamada futuramente por uma IA que processe getPendingReviews()
+   diariamente — e SÓ ISSO: a IA para por aqui, nunca autoriza/aprova a
+   própria proposta (ver comentário no topo do módulo). */
+function setReviewSolution(reviewId, solutionText, proposedChanges){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return { ok:false, reason:'not_found', review:null };
+  if(review.status==='applied_pending_validation'){
+    return { ok:false, reason:'awaiting_validation', review };
+  }
+  const check = validateProposedChanges(proposedChanges);
+  if(!check.valid) return { ok:false, reason:check.reason, review:null };
+  const wasRejected = review.status === 'rejected';
+  if(wasRejected) pushLesionReviewHistory(review, 'reopened', null);
+  const solution = {
+    text: (solutionText||'').trim(),
+    proposedChanges: check.changes,
+    createdAt: Date.now()
+  };
+  review.solution = solution;
+  review.status = 'proposed';
+  review.updatedAt = Date.now();
+  pushLesionReviewHistory(review, 'solution_proposed', { solution });
+  saveLesionRevisions();
+  updateReviewCenterBadges();
+  return { ok:true, reason:null, review };
+}
+
+/* PRIMEIRO ACEITE — negado: recusa a proposta antes de qualquer mudança em
+   DATA. Mantém a proposta e o histórico (nada é apagado) e devolve a
+   revisão para a fila de pendentes automaticamente. */
+function rejectProposedReviewSolution(reviewId, reasonText){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review || review.status!=='proposed') return { ok:false, reason:'not_proposed', review:review||null };
+  review.status = 'rejected';
+  review.updatedAt = Date.now();
+  pushLesionReviewHistory(review, 'proposal_rejected', { reason:(reasonText||'').trim()||null, solution: review.solution });
+  saveLesionRevisions();
+  updateReviewCenterBadges();
+  return { ok:true, reason:null, review };
+}
+
+/* PRIMEIRO ACEITE — concedido: "autorizo executar esta correção proposta?".
+   Cria um snapshot COMPLETO da lesão ANTES de qualquer escrita, valida de
+   novo (defesa em profundidade) e só então aplica exclusivamente os campos
+   explicitamente autorizados em proposedChanges — nunca a lesão inteira,
+   nunca outro registro. Cada autorização gera uma nova tentativa com seu
+   próprio snapshot (nunca reaproveita o snapshot de uma tentativa anterior
+   da mesma revisão). Ainda NÃO é definitivo: fica "applied_pending_validation"
+   até o 2º aceite (approveAppliedReviewSolution/rollbackAppliedReviewSolution). */
+function authorizeAndApplyReviewSolution(reviewId){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review || review.status!=='proposed') return { ok:false, reason:'not_proposed', review:review||null };
+  if(!review.solution || !review.solution.proposedChanges) return { ok:false, reason:'no_changes', review };
+  const check = validateProposedChanges(review.solution.proposedChanges);
+  if(!check.valid) return { ok:false, reason:check.reason, review };
+  const lesion = DATA.find(e=>e && e.id===review.lesionId);
+  if(!lesion) return { ok:false, reason:'lesion_not_found', review };
+
+  pushLesionReviewHistory(review, 'application_authorized', null);
+
+  const beforeSnapshot = JSON.parse(JSON.stringify(lesion));
+  const attempt = {
+    id: genLesionReviewAttemptId(),
+    beforeSnapshot,
+    proposedChanges: check.changes,
+    appliedAt: Date.now(),
+    approvedAt: null,
+    rolledBackAt: null
+  };
+  pushLesionReviewHistory(review, 'before_snapshot_created', { attemptId: attempt.id });
+
+  Object.keys(check.changes).forEach(field=>{ lesion[field] = check.changes[field]; });
+  lesion._userUpdatedAt = Date.now();
+
+  review.attempts = Array.isArray(review.attempts) ? review.attempts : [];
+  review.attempts.push(attempt);
+  review.status = 'applied_pending_validation';
+  review.updatedAt = Date.now();
+  pushLesionReviewHistory(review, 'changes_applied', { attemptId: attempt.id, changes: check.changes });
+
+  saveLesionRevisions();
+  saveData();
+  updateReviewCenterBadges();
+  return { ok:true, reason:null, review, attempt };
+}
+
+/* SEGUNDO ACEITE — concedido: "vi a correção aplicada e quero mantê-la".
+   Não toca DATA de novo — a alteração já está lá desde a autorização; só
+   encerra o workflow como definitivo. */
+function approveAppliedReviewSolution(reviewId){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review || review.status!=='applied_pending_validation') return { ok:false, reason:'not_awaiting_validation', review:review||null };
+  const attempt = review.attempts && review.attempts[review.attempts.length-1];
+  if(attempt) attempt.approvedAt = Date.now();
+  review.status = 'accepted';
+  review.updatedAt = Date.now();
+  pushLesionReviewHistory(review, 'application_approved', { attemptId: attempt ? attempt.id : null });
+  saveLesionRevisions();
+  updateReviewCenterBadges();
+  return { ok:true, reason:null, review };
+}
+
+/* SEGUNDO ACEITE — negado: "não funcionou, desfazer". Restaura a lesão
+   EXATAMENTE a partir do beforeSnapshot daquela tentativa específica (nunca
+   um snapshot de outra tentativa) e reabre a revisão em "rejected", pronta
+   pra uma nova proposta/tentativa com seu próprio snapshot novo. */
+function rollbackAppliedReviewSolution(reviewId, reasonText){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review || review.status!=='applied_pending_validation') return { ok:false, reason:'not_awaiting_validation', review:review||null };
+  const attempt = review.attempts && review.attempts[review.attempts.length-1];
+  if(!attempt || !attempt.beforeSnapshot) return { ok:false, reason:'no_snapshot', review };
+  const idx = DATA.findIndex(e=>e && e.id===review.lesionId);
+  if(idx===-1) return { ok:false, reason:'lesion_not_found', review };
+
+  pushLesionReviewHistory(review, 'application_rejected', { attemptId: attempt.id, reason:(reasonText||'').trim()||null });
+
+  DATA[idx] = JSON.parse(JSON.stringify(attempt.beforeSnapshot));
+  attempt.rolledBackAt = Date.now();
+
+  review.status = 'rejected';
+  review.updatedAt = Date.now();
+  pushLesionReviewHistory(review, 'rollback_completed', { attemptId: attempt.id });
+
+  saveLesionRevisions();
+  saveData();
+  updateReviewCenterBadges();
+  return { ok:true, reason:null, review };
+}
+
+function countPendingLesionReviews(){ return getPendingReviews().length; }
+function countReadyLesionSolutions(){ return getReadySolutions().length; }
+
+function updateReviewCenterBadges(){
+  // Chamada diretamente por createLesionReview/setReviewSolution/
+  // rejectProposedReviewSolution/authorizeAndApplyReviewSolution/
+  // approveAppliedReviewSolution/rollbackAppliedReviewSolution para refletir
+  // o header sem depender de F5 ou de o caminho da UI já ter atualizado o
+  // badge — inclusive
+  // quando essas funções são chamadas fora da UI (ex: console, ou a futura
+  // IA rodando em um contexto sem DOM). Por isso o guard abaixo: em qualquer
+  // contexto sem `document` (testes em vm, script headless futuro), a função
+  // não deve lançar erro — só não há header pra atualizar.
+  if(typeof document==='undefined') return;
+  const pendingBtn = document.getElementById('pending-reviews-btn');
+  const pendingBadge = document.getElementById('pending-reviews-badge');
+  if(pendingBtn && pendingBadge){
+    const n = countPendingLesionReviews();
+    pendingBadge.textContent = n>0 ? String(n) : '';
+    pendingBtn.classList.toggle('is-empty', n===0);
+  }
+  const solutionsBtn = document.getElementById('ready-solutions-btn');
+  const solutionsBadge = document.getElementById('ready-solutions-badge');
+  if(solutionsBtn && solutionsBadge){
+    const n = countReadyLesionSolutions();
+    solutionsBadge.textContent = n>0 ? String(n) : '';
+    solutionsBtn.classList.toggle('is-empty', n===0);
+  }
 }
 
 /* termos de busca em inglês para as lesões da base padrão — o Radiopaedia é um site em inglês,
@@ -6697,6 +7085,7 @@ async function loadData(){
   }catch(e){ REVIEW = {}; }
   await loadSRS();
   await loadSessionLog();
+  await loadLesionRevisions();
 
   // Funde duplicatas exatas (mesma seção+sítio+nome) — pode acontecer quando uma
   // lesão foi criada manualmente num dispositivo que ainda não tinha essa lesão
@@ -7221,6 +7610,7 @@ function renderAll(){
   renderReviewBar();
   renderResults();
   updateQuizDueBadge();
+  updateReviewCenterBadges();
 }
 
 /* ============================================================
@@ -7437,6 +7827,12 @@ function openForm(id){
         <input id="f-en-term" value="${existing?(existing.enTerm||'').replace(/"/g,'&quot;'):''}" placeholder="ex: hepatic hemangioma — o Radiopaedia é em inglês">
       </div>
 
+      ${existing?`
+      <div class="field">
+        <label class="quiz-check" for="f-mark-review" style="display:flex;align-items:center;gap:8px;margin-bottom:0;font-size:13.5px;color:var(--text);"><input type="checkbox" id="f-mark-review"> marcar para revisão</label>
+        <textarea id="f-review-request" style="display:none;margin-top:8px;" placeholder="O que precisa ser revisado? (ex: otimizar diagnósticos diferenciais, melhorar descrição radiológica, bug de imagem, possível lesão duplicada, corrigir classificação, revisar referências…)"></textarea>
+      </div>`:''}
+
       <div class="modal-actions">
         <button class="btn btn-ghost" id="f-cancel">cancelar</button>
         <button class="btn btn-primary" id="f-save">${existing?'salvar alterações':'adicionar ao banco'}</button>
@@ -7455,6 +7851,12 @@ function openForm(id){
     }
   };
   document.addEventListener('keydown', closeFormOnEsc);
+
+  if(existing){
+    const markReviewCk = document.getElementById('f-mark-review');
+    const reviewRequestTa = document.getElementById('f-review-request');
+    markReviewCk.onchange = ()=>{ reviewRequestTa.style.display = markReviewCk.checked ? 'block' : 'none'; };
+  }
 
   let tags = existing ? [...existing.tags] : [];
   let links = existing ? [...ensureLinks(existing)] : [];
@@ -7968,6 +8370,13 @@ function openForm(id){
     const classification = document.getElementById('f-classification').value || null;
     const notes = document.getElementById('f-notes').value.trim();
     if(!name || !sec || !site){ toast('Preencha nome, seção e sítio.'); return; }
+    if(existing){
+      const markReviewCk = document.getElementById('f-mark-review');
+      if(markReviewCk && markReviewCk.checked && !document.getElementById('f-review-request').value.trim()){
+        toast('Descreva o que precisa ser revisado antes de salvar.');
+        return;
+      }
+    }
     const entryId = formEntryId;
     let localImgFlag = existing ? !!existing.localImg : false;
     let remoteImgs = existing && Array.isArray(existing.images) ? existing.images : [];
@@ -7996,6 +8405,22 @@ function openForm(id){
       existing.name=name; existing.s=sec; existing.site=site; existing.tags=tags; existing.img=img; existing.notes=notes; existing.links=links; existing.enTerm=enTerm; existing.inc=inc; existing.localImg=localImgFlag; existing.images=remoteImgs; existing.classification=classification; existing._userUpdatedAt=Date.now();
     } else {
       DATA.push({id:entryId, name, s:sec, site, tags, img, notes, links, enTerm, inc, localImg:localImgFlag, images:remoteImgs, classification, _userUpdatedAt:Date.now()});
+    }
+
+    // Central de revisões: marcar para revisão é independente do salvamento
+    // da lesão em si (fila própria, sem tocar em DATA/REVIEW/SRS).
+    if(existing){
+      const markReviewCk = document.getElementById('f-mark-review');
+      if(markReviewCk && markReviewCk.checked){
+        const reviewRequestText = document.getElementById('f-review-request').value.trim();
+        const reviewResult = createLesionReview(entryId, reviewRequestText);
+        // createLesionReview() já persiste e atualiza os badges (fire-and-forget);
+        // este await extra só garante que a gravação termine antes de fechar o modal.
+        await saveLesionRevisions();
+        if(reviewResult.reason==='duplicate'){
+          toast('Já existe uma revisão pendente idêntica para esta lesão — não foi duplicada.');
+        }
+      }
     }
 
     // A partir daqui, a tela SEMPRE fecha ao final (sucesso ou falha na nuvem) —
@@ -8034,6 +8459,325 @@ function openForm(id){
         : '⚠ Salvo neste dispositivo, mas a sincronização com a nuvem falhou — veja o aviso na barra lateral.');
     }
   };
+}
+
+/* ============================================================
+   PAINÉIS DA CENTRAL DE REVISÕES + SOLUÇÕES
+   Overlays independentes (mesmo padrão de openDetail/openForm/snapshot
+   picker: document.createElement + appendChild). Não usam
+   getStudyOverlay() de propósito — essa overlay única é exclusiva do
+   fluxo Quiz & Progresso, e esta é uma fila totalmente separada.
+   ============================================================ */
+const REVIEW_HISTORY_ACTION_LABELS = {
+  created:'revisão criada',
+  solution_proposed:'solução proposta',
+  proposal_rejected:'proposta recusada',
+  application_authorized:'correção autorizada (1º aceite)',
+  before_snapshot_created:'snapshot da lesão criado',
+  changes_applied:'alteração aplicada em DATA',
+  application_approved:'correção mantida (2º aceite)',
+  application_rejected:'correção não aprovada (2º aceite negado)',
+  rollback_completed:'lesão restaurada ao estado anterior (rollback)',
+  reopened:'reaberta'
+};
+
+const LESION_REVIEW_FIELD_LABELS = { name:'nome', notes:'descrição', classification:'classificação', tags:'tags', enTerm:'termo em inglês' };
+function formatLesionReviewFieldValue(v){
+  if(v===null || v===undefined) return '—';
+  if(Array.isArray(v)) return v.length ? v.join(', ') : '—';
+  const s = String(v).trim();
+  return s ? s : '—';
+}
+/* Monta a lista "de → para" usada tanto no resumo de uma PROPOSTA (antes de
+   qualquer aplicação: "de" vem da lesão atual em DATA) quanto no
+   antes/depois de uma correção já aplicada (VALIDAR CORREÇÕES: "de" vem do
+   beforeSnapshot da tentativa, "para" vem da lesão atual em DATA). */
+function describeLesionReviewFieldChanges(fromObj, toObj, fields){
+  return (fields||[]).map(f=>({
+    field: f,
+    label: LESION_REVIEW_FIELD_LABELS[f] || f,
+    from: formatLesionReviewFieldValue(fromObj ? fromObj[f] : undefined),
+    to: formatLesionReviewFieldValue(toObj ? toObj[f] : undefined)
+  }));
+}
+function renderFieldChangesHtml(rows){
+  if(!rows.length) return '';
+  return `<div class="review-fields-diff">${rows.map(r=>`
+    <div class="review-fields-diff-row"><b>${r.label}:</b> <span class="review-fields-diff-from">${String(r.from).replace(/</g,'&lt;')}</span> → <span class="review-fields-diff-to">${String(r.to).replace(/</g,'&lt;')}</span></div>
+  `).join('')}</div>`;
+}
+
+function reviewCenterLesionMeta(lesionId){
+  const lesion = DATA.find(e=>e.id===lesionId);
+  return lesion
+    ? { name: lesion.name, sub: `${lesion.s} · ${lesion.site}`, found:true, lesion }
+    : { name: '(lesão não encontrada — id: '+lesionId+')', sub: '', found:false, lesion:null };
+}
+
+function openReviewHistoryModal(reviewId){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return;
+  const meta = reviewCenterLesionMeta(review.lesionId);
+  const history = getReviewHistory(reviewId);
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape'){ ov.remove(); document.removeEventListener('keydown', closeOnEsc); } };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = `
+    <div class="modal review-history-modal">
+      <h2>Histórico da revisão</h2>
+      <div class="modal-sub">${meta.name}${meta.sub?' · '+meta.sub:''}</div>
+      <div class="review-history-request"><b>Pedido original:</b> ${(review.requestText||'').replace(/</g,'&lt;')}</div>
+      <div class="review-history-list">
+        ${history.map(h=>{
+          const rows = [];
+          if(h.details && h.details.reason) rows.push(`motivo: ${String(h.details.reason).replace(/</g,'&lt;')}`);
+          if(h.details && h.details.solution && h.details.solution.text) rows.push(`solução: ${String(h.details.solution.text).replace(/</g,'&lt;')}`);
+          if(h.details && h.details.changes) rows.push(`campos alterados: ${Object.keys(h.details.changes).map(f=>LESION_REVIEW_FIELD_LABELS[f]||f).join(', ')}`);
+          if(h.details && h.details.attemptId) rows.push(`tentativa: ${h.details.attemptId}`);
+          return `<div class="review-history-item">
+            <div class="review-history-item-top"><b>${REVIEW_HISTORY_ACTION_LABELS[h.action]||h.action}</b><span>${new Date(h.timestamp).toLocaleString('pt-BR')}</span></div>
+            ${rows.map(r=>`<div class="review-history-item-detail">${r}</div>`).join('')}
+          </div>`;
+        }).join('') || '<div class="review-center-empty">Sem histórico.</div>'}
+      </div>
+      <div class="modal-actions"><button class="btn btn-ghost" id="review-history-close">fechar</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#review-history-close').onclick = ()=>{ ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+}
+
+/* Modal genérico de "motivo opcional", reaproveitado tanto pra recusar uma
+   PROPOSTA (1º aceite negado) quanto pra desfazer uma correção já aplicada
+   (2º aceite negado / rollback) — só o texto muda conforme `opts`. */
+function openReasonPromptModal(reviewId, onConfirm, opts){
+  const cfg = Object.assign({
+    title: '✕ Recusar solução',
+    subtitle: 'Por que esta solução foi recusada? (opcional)',
+    confirmLabel: '✕ recusar'
+  }, opts||{});
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
+  ov.innerHTML = `
+    <div class="modal review-reject-modal">
+      <h2>${cfg.title}</h2>
+      <div class="modal-sub">${cfg.subtitle}</div>
+      <div class="field"><textarea id="reject-reason-input" placeholder="motivo (opcional)…"></textarea></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="reject-reason-cancel">cancelar</button>
+        <button class="btn btn-primary" id="reject-reason-confirm">${cfg.confirmLabel}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#reject-reason-cancel').onclick = ()=>ov.remove();
+  ov.querySelector('#reject-reason-confirm').onclick = async ()=>{
+    const reason = ov.querySelector('#reject-reason-input').value.trim();
+    ov.remove();
+    await onConfirm(reason);
+  };
+}
+
+function openPendingReviewsModal(){
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) closeOverlay(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected){ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); } };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = `
+    <div class="modal review-center-modal">
+      <h2>🔔 Revisões pendentes</h2>
+      <div class="modal-sub">pedidos de revisão aguardando uma solução — mais recentes primeiro</div>
+      <div class="review-center-list" id="pending-reviews-list"></div>
+      <div class="modal-actions"><button class="btn btn-ghost" id="pending-reviews-close">fechar</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const list = ov.querySelector('#pending-reviews-list');
+  const reviews = getPendingReviews();
+  if(reviews.length===0){
+    list.innerHTML = '<div class="review-center-empty">Nenhuma revisão pendente no momento.</div>';
+  } else {
+    reviews.forEach(r=>{
+      const meta = reviewCenterLesionMeta(r.lesionId);
+      const when = r.updatedAt ? new Date(r.updatedAt).toLocaleString('pt-BR') : '';
+      const statusTag = r.status==='rejected'
+        ? '<span class="review-status-tag rejected">recusada — reaberta pra nova proposta</span>'
+        : '<span class="review-status-tag pending">pendente</span>';
+      const row = document.createElement('div');
+      row.className = 'review-center-row';
+      row.innerHTML = `
+        <div class="review-center-row-main">
+          <div class="review-center-row-title">${meta.name}</div>
+          <div class="review-center-row-meta">${meta.sub?meta.sub+' · ':''}${when} · ${statusTag}</div>
+          <div class="review-center-row-request">${(r.requestText||'').replace(/</g,'&lt;')}</div>
+        </div>
+        <div class="review-center-row-actions">
+          ${meta.found?'<button type="button" class="btn btn-ghost review-open-lesion">ver lesão</button>':''}
+          <button type="button" class="btn btn-ghost review-open-history">histórico</button>
+        </div>`;
+      if(meta.found) row.querySelector('.review-open-lesion').onclick = ()=>{ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); openDetail(meta.lesion.id); };
+      row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
+      list.appendChild(row);
+    });
+  }
+  ov.querySelector('#pending-reviews-close').onclick = ()=>{ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); };
+}
+
+/* 💡 Soluções disponíveis tem DUAS abas, uma por aceite humano pendente:
+   PROPOSTAS (status "proposed" — ainda NADA foi alterado em DATA; decisão:
+   autorizar correção ou recusar a proposta) e VALIDAR CORREÇÕES (status
+   "applied_pending_validation" — a correção JÁ foi escrita em DATA depois
+   de autorizada; decisão: manter ou desfazer/rollback). */
+function openReadySolutionsModal(){
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) closeOverlay(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected){ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); } };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = `
+    <div class="modal review-center-modal">
+      <h2>💡 Soluções disponíveis</h2>
+      <div class="modal-sub">duas decisões humanas antes de qualquer mudança definitiva na lesão</div>
+      <div class="review-tabs">
+        <button type="button" class="review-tab-btn active" id="tab-btn-proposed">Propostas (<span id="tab-count-proposed">0</span>)</button>
+        <button type="button" class="review-tab-btn" id="tab-btn-applied">Validar correções (<span id="tab-count-applied">0</span>)</button>
+      </div>
+      <div class="review-center-list" id="proposed-list"></div>
+      <div class="review-center-list" id="applied-list" hidden></div>
+      <div class="modal-actions"><button class="btn btn-ghost" id="ready-solutions-close">fechar</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const proposedList = ov.querySelector('#proposed-list');
+  const appliedList = ov.querySelector('#applied-list');
+  const tabBtnProposed = ov.querySelector('#tab-btn-proposed');
+  const tabBtnApplied = ov.querySelector('#tab-btn-applied');
+
+  const showTab = (which)=>{
+    proposedList.hidden = which!=='proposed';
+    appliedList.hidden = which!=='applied';
+    tabBtnProposed.classList.toggle('active', which==='proposed');
+    tabBtnApplied.classList.toggle('active', which==='applied');
+  };
+  tabBtnProposed.onclick = ()=> showTab('proposed');
+  tabBtnApplied.onclick = ()=> showTab('applied');
+
+  const closeAllAndCleanup = ()=>{ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); };
+
+  const renderProposedList = ()=>{
+    const reviews = getProposedSolutions();
+    ov.querySelector('#tab-count-proposed').textContent = String(reviews.length);
+    proposedList.innerHTML = '';
+    if(reviews.length===0){
+      proposedList.innerHTML = '<div class="review-center-empty">Nenhuma proposta aguardando decisão.</div>';
+      return;
+    }
+    reviews.forEach(r=>{
+      const meta = reviewCenterLesionMeta(r.lesionId);
+      const when = r.solution && r.solution.createdAt ? new Date(r.solution.createdAt).toLocaleString('pt-BR') : '';
+      const changes = (r.solution && r.solution.proposedChanges) || {};
+      const diffRows = describeLesionReviewFieldChanges(meta.lesion, changes, Object.keys(changes));
+      const row = document.createElement('div');
+      row.className = 'review-center-row';
+      row.innerHTML = `
+        <div class="review-center-row-main">
+          <div class="review-center-row-title">${meta.name}</div>
+          <div class="review-center-row-meta">${meta.sub?meta.sub+' · ':''}proposta em ${when}</div>
+          <div class="review-center-row-request"><b>Pedido:</b> ${(r.requestText||'').replace(/</g,'&lt;')}</div>
+          <div class="review-center-row-solution"><b>Solução proposta:</b> ${((r.solution&&r.solution.text)||'').replace(/</g,'&lt;')}</div>
+          ${renderFieldChangesHtml(diffRows)}
+        </div>
+        <div class="review-center-row-actions">
+          ${meta.found?'<button type="button" class="btn btn-ghost review-open-lesion">ver lesão</button>':''}
+          <button type="button" class="btn btn-ghost review-open-history">histórico</button>
+          <button type="button" class="btn btn-primary review-authorize">✓ autorizar correção</button>
+          <button type="button" class="btn btn-ghost review-reject-proposal">✕ recusar proposta</button>
+        </div>`;
+      if(meta.found) row.querySelector('.review-open-lesion').onclick = ()=>{ closeAllAndCleanup(); openDetail(meta.lesion.id); };
+      row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
+      row.querySelector('.review-authorize').onclick = async ()=>{
+        const res = authorizeAndApplyReviewSolution(r.id);
+        if(res.ok){
+          await saveLesionRevisions();
+          renderAll(); // DATA mudou de verdade — mantém a grade/lista principal em dia
+          toast('Correção autorizada e aplicada. Aguardando validação.');
+          renderBothLists();
+          showTab('applied');
+        } else {
+          toast('Não foi possível aplicar a correção (' + (res.reason||'erro') + ').');
+        }
+      };
+      row.querySelector('.review-reject-proposal').onclick = ()=>{
+        openReasonPromptModal(r.id, async (reason)=>{
+          const res = rejectProposedReviewSolution(r.id, reason);
+          if(res.ok){ await saveLesionRevisions(); toast('Proposta recusada — a revisão voltou para pendentes.'); renderBothLists(); }
+        }, {
+          title: '✕ Recusar proposta',
+          subtitle: 'Por que esta proposta foi recusada? (opcional) — nada em DATA será alterado.',
+          confirmLabel: '✕ recusar proposta'
+        });
+      };
+      proposedList.appendChild(row);
+    });
+  };
+
+  const renderAppliedList = ()=>{
+    const reviews = getAppliedSolutionsAwaitingValidation();
+    ov.querySelector('#tab-count-applied').textContent = String(reviews.length);
+    appliedList.innerHTML = '';
+    if(reviews.length===0){
+      appliedList.innerHTML = '<div class="review-center-empty">Nenhuma correção aplicada aguardando validação.</div>';
+      return;
+    }
+    reviews.forEach(r=>{
+      const meta = reviewCenterLesionMeta(r.lesionId);
+      const attempt = r.attempts && r.attempts[r.attempts.length-1];
+      const when = attempt ? new Date(attempt.appliedAt).toLocaleString('pt-BR') : '';
+      const diffRows = attempt ? describeLesionReviewFieldChanges(attempt.beforeSnapshot, meta.lesion, Object.keys(attempt.proposedChanges||{})) : [];
+      const row = document.createElement('div');
+      row.className = 'review-center-row';
+      row.innerHTML = `
+        <div class="review-center-row-main">
+          <div class="review-center-row-title">${meta.name}</div>
+          <div class="review-center-row-meta">${meta.sub?meta.sub+' · ':''}aplicada em ${when}</div>
+          <div class="review-center-row-request"><b>Pedido original:</b> ${(r.requestText||'').replace(/</g,'&lt;')}</div>
+          ${renderFieldChangesHtml(diffRows)}
+        </div>
+        <div class="review-center-row-actions">
+          ${meta.found?'<button type="button" class="btn btn-ghost review-open-lesion">👁 ver lesão corrigida</button>':''}
+          <button type="button" class="btn btn-ghost review-open-history">histórico</button>
+          <button type="button" class="btn btn-primary review-approve">✓ funcionou — manter</button>
+          <button type="button" class="btn btn-ghost review-rollback">↩ não funcionou — desfazer</button>
+        </div>`;
+      if(meta.found) row.querySelector('.review-open-lesion').onclick = ()=>{ closeAllAndCleanup(); openDetail(meta.lesion.id); };
+      row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
+      row.querySelector('.review-approve').onclick = async ()=>{
+        const res = approveAppliedReviewSolution(r.id);
+        if(res.ok){ await saveLesionRevisions(); toast('Correção mantida.'); renderBothLists(); }
+      };
+      row.querySelector('.review-rollback').onclick = ()=>{
+        openReasonPromptModal(r.id, async (reason)=>{
+          const res = rollbackAppliedReviewSolution(r.id, reason);
+          if(res.ok){
+            await saveLesionRevisions();
+            renderAll(); // rollback restaurou DATA — mantém a grade/lista principal em dia
+            toast('Alteração desfeita — a lesão voltou ao estado anterior. Revisão reaberta.');
+            renderBothLists();
+            showTab('proposed');
+          }
+        }, {
+          title: '↩ Desfazer correção aplicada',
+          subtitle: 'Por que esta correção não funcionou? (opcional) — a lesão será restaurada exatamente ao estado anterior.',
+          confirmLabel: '↩ desfazer'
+        });
+      };
+      appliedList.appendChild(row);
+    });
+  };
+
+  function renderBothLists(){ renderProposedList(); renderAppliedList(); }
+  renderBothLists();
+  ov.querySelector('#ready-solutions-close').onclick = closeAllAndCleanup;
 }
 
 
@@ -8522,7 +9266,8 @@ document.getElementById('btn-export').onclick = async ()=>{
     srs: SRS,
     sessionLog: SESSIONLOG,
     sectionOrder: sectionOrder,
-    siteOrder: siteOrder
+    siteOrder: siteOrder,
+    lesionRevisions: LESION_REVISIONS
   };
   const blob = new Blob([JSON.stringify(backup,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
@@ -8595,6 +9340,7 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
       ? parsed.sectionOrder
       : [...DEFAULT_SECTION_ORDER];
     siteOrder = (parsed.siteOrder && typeof parsed.siteOrder==='object') ? parsed.siteOrder : {};
+    LESION_REVISIONS = (parsed.lesionRevisions && typeof parsed.lesionRevisions==='object' && !Array.isArray(parsed.lesionRevisions)) ? parsed.lesionRevisions : {};
 
     await deduplicateV171();
     DATA = DATA.filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
@@ -8605,6 +9351,7 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
     await saveSessionLog();
     await saveOrder();
     await saveSiteOrder();
+    await saveLesionRevisions();
     try{ await storage.set(RECOVERY_KEY,RECOVERY_VERSION,false); }catch(_e){}
 
     scope={section:null,site:null};
@@ -9270,6 +10017,8 @@ function openProgressDashboard(){
 
 document.getElementById('progress-btn').onclick = openProgressDashboard;
 document.getElementById('quiz-btn').onclick = openProgressDashboard;
+document.getElementById('pending-reviews-btn').onclick = openPendingReviewsModal;
+document.getElementById('ready-solutions-btn').onclick = openReadySolutionsModal;
 
 /* Portão de acesso: o app só carrega (loadData) depois de confirmar login
    Google com a conta autorizada. Isso é uma barreira de UI — a proteção de

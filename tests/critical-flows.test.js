@@ -136,30 +136,25 @@ const loadData = extractFunction(html, 'loadData');
 const importHandler = extractImportHandler(html);
 
 test('fluxos criticos sao localizados estaticamente no index.html', () => {
-  // recovery/brokenArtifacts sobem +1 desta vez (novo botao "Exportar
-  // checkpoint V2" no HTML das ferramentas avancadas, antes deles no
-  // arquivo). loadData/importHandler sobem +160 cada (mesmo botao +1, e o
-  // bloco de funcoes do checkpoint pos-reconciliacao — buildCheckpointIntegrityReportV2/
-  // buildCheckpointV2/downloadCheckpointV2/exportCheckpointV2/
-  // openExportCheckpointV2Modal — inserido entre reconcileCatalogByIdentityV2
-  // e o bloco de auditoria de altPlacements, antes de loadData). Historico
-  // anterior: ja haviam sido deslocadas pela adicao dos motores de migracao
-  // de legacy IDs (V1, inerte), do reconciliador por identidade semantica
-  // (V2, inerte), da ferramenta manual original (ALTERACAO 007), da
-  // correcao da politica de imagens (rewriteDataImagesOnlyV2), do
-  // diagnostico read-only (buildRealStateDiagnosticV2), da correcao
-  // automatica de ownership por evidencia de metadados com overrides
-  // manuais explicitos e da validacao pos-aplicacao
-  // (buildPostApplyValidationReportV2) — ver LEGACY_ID_MIGRATION_MAP_V1 e
-  // reconcileCatalogByIdentityV2.
-  // importHandler sobe +17 pelo comentario que documenta a desativacao da
-  // sincronizacao automatica NUVEM->LOCAL dentro de loadData (ver ALTERACAO
-  // 008 mais abaixo) — recovery/brokenArtifacts e loadData nao se movem,
-  // porque a mudanca fica dentro do CORPO de loadData, apos sua declaracao.
-  assert.equal(recovery.line, 4312);
-  assert.equal(brokenArtifacts.line, 4302);
-  assert.equal(loadData.line, 6612);
-  assert.equal(importHandler.line, 8542);
+  // Todas as 4 ancoras sobem depois da Central de Revisoes + Solucoes
+  // (LESION_REVISIONS): o modulo de dados/funcoes foi inserido logo apos
+  // saveReview() (antes de recovery/brokenArtifacts), e o handler de
+  // importacao ganhou uma linha a mais (restaura LESION_REVISIONS do
+  // backup completo). loadData() tambem ganhou uma chamada nova no corpo
+  // (await loadLesionRevisions()), mas isso nao move a linha da propria
+  // declaracao de loadData, so o que vem depois dela.
+  // +12 na revisao anterior: hotfix do badge do header nao atualizar sem F5
+  // (updateReviewCenterBadges() passou a ser chamada direto de dentro das
+  // funcoes de mutacao, com um comentario explicando o motivo).
+  // +186 nesta revisao: evolucao pra maquina de estados de dois aceites
+  // (pending -> proposed -> applied_pending_validation -> accepted/rejected),
+  // com snapshot/rollback por tentativa, validacao estruturada de
+  // proposedChanges e as duas abas do painel de solucoes — tudo inserido
+  // antes de recovery/brokenArtifacts, no mesmo modulo LESION_REVISIONS.
+  assert.equal(recovery.line, 4700);
+  assert.equal(brokenArtifacts.line, 4690);
+  assert.equal(loadData.line, 7000);
+  assert.equal(importHandler.line, 9287);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -320,6 +315,7 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
     saveSiteOrder: async () => {},
     loadSRS: async () => {},
     loadSessionLog: async () => {},
+    loadLesionRevisions: async () => {},
     saveReview: async () => {},
     saveSRS: async () => {},
     createSafetySnapshot: () => null,

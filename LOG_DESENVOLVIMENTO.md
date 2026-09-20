@@ -584,3 +584,280 @@ correção, a mesma execução de `loadData()` terminou e persistiu `1213 -> 121
 ### Commit após aprovação
 
 Ainda não criado.
+
+## ALTERAÇÃO 010 — Central de Revisões + Soluções
+
+**Número da alteração:** 010
+**Data:** 20/09/2026
+
+### Objetivo
+
+Adicionar um recurso funcional novo, pedido pelo usuário: uma central onde
+qualquer lesão pode ser marcada para revisão com um pedido escrito livre
+(por exemplo "corrigir classificação" ou "possível lesão duplicada"), com
+um fluxo simples de proposta de solução e aprovação/recusa manual — como
+primeiro passo para, no futuro, uma inteligência artificial processar essas
+revisões automaticamente (isso ainda **não** foi implementado nesta
+entrega, só a estrutura que vai permitir).
+
+### O que muda para quem usa o Atlas
+
+No cabeçalho, ao lado esquerdo do botão "Quiz & Progresso", aparecem dois
+ícones novos:
+
+- 🔔 **Revisões pendentes** — fica apagado e sem número quando não há nada
+  pendente. Quando existe pelo menos uma lesão marcada para revisão (ou uma
+  solução recusada, que volta automaticamente para cá), o ícone acende e
+  mostra a quantidade. Clicar nele abre a lista, com o nome da lesão,
+  seção/sítio, data e o pedido escrito, da mais recente para a mais antiga.
+- 💡 **Soluções disponíveis** — mesma lógica, mas para revisões que já
+  receberam uma proposta de solução. Clicar abre a lista com o pedido
+  original, a solução proposta e dois botões: ✓ aceitar ou ✕ recusar.
+
+No formulário de "Editar lesão" (não aparece ao criar uma lesão nova), há
+uma nova opção "marcar para revisão" que abre uma caixa de texto livre para
+descrever o que precisa ser revisado.
+
+**Importante:** aceitar uma solução, nesta primeira versão, não altera a
+lesão automaticamente — só aprova a proposta dentro dessa central. Aplicar
+de fato as mudanças na lesão fica para uma etapa futura, separada.
+
+### Estado antes
+
+Esse recurso não existia. Havia, no `index.html`, apenas dois botões vazios
+já inseridos no cabeçalho (sem estilo, sem função, sem dado por trás) de uma
+tentativa anterior interrompida de começar esta mesma tarefa — foram
+aproveitados e completados nesta entrega, em vez de descartados.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas + stub novo)
+- `tests/lesion-review.test.js` (novo)
+- `AI.md`
+- `README.md`
+- `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+Foi criada uma fila de dados própria, `LESION_REVISIONS`, guardada no mesmo
+armazenamento local (IndexedDB) já usado pelo restante do Atlas, separada
+do sistema de revisão do fluxo de estudo (`REVIEW`) e da repetição espaçada
+do quiz (`SRS`) — os três continuam independentes. Ela sobrevive a F5 e foi
+incluída no backup/exportação e na importação de backup completo, para não
+se perder.
+
+Nenhum dado clínico, imagem, classificação, ID, `SEED`, `REVIEW`, `SRS` ou
+a reconciliação V2 foi alterado. Este recurso também não envia nada para o
+Firebase nesta primeira versão — fica salvo só neste dispositivo, de
+propósito, para não mexer na sincronização remota existente.
+
+### Testes realizados
+
+- `node --check tests/lesion-review.test.js`: sem erros;
+- `node tests/lesion-review.test.js`: 18 PASS, 0 FAIL;
+- `node --check tests/critical-flows.test.js`: sem erros;
+- `node tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node tests/duplicate-detection.test.js`: 6 PASS e 1 FAIL histórico
+  (conhecido, não relacionado, nas 28 entradas malformadas de
+  `DUPLICATE_PAIRS_V171`);
+- `node tests/legacy-id-migration.test.js`: 156 PASS, 0 FAIL e 5 TODO (não
+  tocado por esta alteração);
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Os 18 cenários novos cobrem: criar uma revisão; ela sobreviver a um reload
+simulado; o contador de pendências; a transição de pendente para "solução
+pronta"; o contador de soluções; aceitar uma solução; recusar uma solução;
+uma solução recusada voltar sozinha para pendentes; o histórico completo
+ficar preservado (nada apagado); e o backup/importação preservarem
+`LESION_REVISIONS`. Nenhum teste pré-existente relacionado a dados, quiz ou
+sincronização mudou de comportamento — só três âncoras de número de linha
+em `tests/critical-flows.test.js` precisaram ser atualizadas, porque o
+código novo foi inserido antes das funções que esse teste localiza pela
+posição no arquivo (comportamento já documentado como esperado nesse
+próprio teste).
+
+### Teste manual recomendado (não executado nesta sessão — precisa de login)
+
+1. Abrir o Atlas, entrar com a conta autorizada.
+2. Editar qualquer lesão, marcar "marcar para revisão", escrever um pedido
+   e salvar. Confirmar que o ícone 🔔 acende com "1".
+3. Abrir 🔔, conferir nome da lesão, seção/sítio, data e pedido. Clicar em
+   "histórico" e ver a entrada "revisão criada".
+4. Recarregar a página (F5) e conferir que o 🔔 continua mostrando "1"
+   (persistência).
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 011 — Hotfix: badges do header não atualizavam sem F5
+
+**Número da alteração:** 011
+**Data:** 20/09/2026
+
+### Objetivo
+
+Corrigir um bug encontrado em teste manual da Central de Revisões (Alteração
+010): depois de propor uma solução para uma revisão pelo console do
+navegador, a lâmpada 💡 continuava apagada e o sino 🔔 continuava mostrando
+"1" — mesmo a solução tendo sido registrada corretamente. Só sumia/aparecia
+depois de recarregar a página.
+
+### Causa
+
+As quatro funções que mudam o estado de uma revisão (`createLesionReview`,
+`setReviewSolution`, `acceptReviewSolution`, `rejectReviewSolution`) nunca
+atualizavam os ícones do header sozinhas — isso só acontecia pelos caminhos
+de tela (salvar o formulário, clicar em aceitar/recusar no painel). Usar
+essas funções de outro jeito (como pelo console, do jeito que uma futura IA
+vai usar) deixava a tela desatualizada até um F5.
+
+### O que foi alterado
+
+As quatro funções agora atualizam os ícones do header sozinhas, assim que
+terminam de salvar a mudança — sem precisar de F5, sem timer, sem recarregar
+nada. Nenhum dado clínico, imagem, `SEED`, `REVIEW`, `SRS` ou sincronização
+com a nuvem foi tocado.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/lesion-review.test.js` (2 testes novos)
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`
+- `README.md`
+- `LOG_DESENVOLVIMENTO.md`
+
+### Testes realizados
+
+- `node tests/lesion-review.test.js`: 20 PASS, 0 FAIL (incluindo os 2 testes
+  novos que reproduzem exatamente o cenário relatado);
+- `node tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Reproduzi o cenário relatado num teste automatizado antes de corrigir (o
+badge ficava com o número antigo depois de `setReviewSolution()`), confirmei
+a falha, apliquei a correção e o mesmo teste passou a confirmar a atualização
+imediata nas quatro transições (criar → propor solução → aceitar, e
+separadamente criar → propor solução → recusar → volta pra pendentes).
+
+### Teste manual recomendado (não executado nesta sessão — precisa de login)
+
+1. Repetir o cenário relatado: editar uma lesão, marcar para revisão,
+   salvar. Confirmar 🔔 = 1 imediatamente.
+2. Pelo console do navegador, chamar `setReviewSolution('<id da revisão>',
+   'texto da proposta')`. Confirmar que 🔔 zera e 💡 vira 1 **sem** dar F5.
+3. Abrir 💡, clicar em "✓ aceitar". Confirmar que 💡 zera imediatamente.
+4. Repetir criando outra revisão e recusando a solução pelo painel — 🔔 deve
+   voltar a mostrar 1 imediatamente.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 012 — Central de Revisões: dois aceites antes de qualquer mudança de verdade na lesão
+
+**Número da alteração:** 012
+**Data:** 20/09/2026
+
+### Objetivo
+
+Depois de usar a Central de Revisões (Alteração 010/011) num teste manual
+real, o usuário pediu para o fluxo evoluir: antes, "aceitar" uma solução só
+aprovava a ideia — nada era realmente escrito na lesão. Agora existem duas
+decisões separadas, e as duas são sempre da pessoa, nunca de uma IA:
+
+1. **Autorizar** a correção proposta — só a partir daqui algo é realmente
+   escrito na lesão.
+2. **Validar o resultado** depois de aplicado — manter, ou desfazer e voltar
+   exatamente como estava.
+
+### O que muda para quem usa o Atlas
+
+A lâmpada 💡 "Soluções disponíveis" agora abre com duas abas:
+
+- **Propostas** — sugestões que ainda NÃO mudaram nada na lesão. Mostra o
+  pedido original, a sugestão e um resumo "de → para" dos campos que
+  seriam alterados. Botões: `✓ autorizar correção` ou `✕ recusar proposta`.
+- **Validar correções** — sugestões que JÁ foram aplicadas na lesão depois
+  de autorizadas, mas ainda não confirmadas como definitivas. Mostra o
+  "antes" e o "depois" de verdade, um atalho para ver a lesão já corrigida,
+  e os botões `✓ funcionou — manter` ou `↩ não funcionou — desfazer`.
+
+Ao clicar em "desfazer", a lesão volta exatamente como estava antes da
+correção ter sido aplicada — nenhum dado é perdido, e a revisão volta
+automaticamente para 🔔 Revisões pendentes, pronta para uma nova tentativa.
+
+**Segurança:** só um conjunto limitado de campos "de conteúdo" (nome,
+descrição, classificação, tags, termo em inglês) pode ser alterado por essa
+via. Nada relacionado a excluir/fundir lesões, mover ou apagar imagens,
+mudar a "dona" de uma imagem, ou qualquer operação no Cloudinary/Firebase
+passa por esse caminho — isso continua exigindo edição manual, como sempre.
+
+### Estado antes
+
+A versão anterior (Alteração 010/011) tinha só uma decisão ("aceitar" ou
+"recusar" uma proposta) e nunca alterava a lesão de verdade — "aceitar" era
+só um registro simbólico de aprovação dentro da própria central.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/lesion-review.test.js` (reescrito para a nova máquina de estados)
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`
+- `README.md`
+- `LOG_DESENVOLVIMENTO.md`
+
+### Testes realizados
+
+- `node tests/lesion-review.test.js`: 29 PASS, 0 FAIL;
+- `node tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node tests/legacy-id-migration.test.js`: 156 PASS, 0 FAIL e 5 TODO (não
+  tocado por esta alteração);
+- `node tests/duplicate-detection.test.js`: 6 PASS e 1 FAIL histórico
+  (conhecido, não relacionado, nas 28 entradas malformadas de
+  `DUPLICATE_PAIRS_V171` — não corrigido de propósito);
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Os testes cobrem, entre outros: criar uma revisão manualmente; propor uma
+solução sem tocar a lesão; recusar uma proposta sem tocar a lesão; autorizar
+e aplicar de verdade (com o "retrato" da lesão sendo tirado imediatamente
+antes da mudança); aprovar e a mudança continuar valendo; desfazer e a
+lesão voltar exatamente como estava; uma nova tentativa depois de desfazer
+usar um retrato novo e independente do anterior; uma proposta com dados
+inválidos ou com um campo fora dos permitidos nunca alterar a lesão; uma
+tentativa de aplicar numa lesão que não existe mais não deixar nada
+alterado pela metade; o histórico completo (o que foi pedido, proposto,
+autorizado, aplicado, aprovado ou desfeito) nunca sendo apagado; tudo
+sobrevivendo a um F5; e os ícones do cabeçalho reagindo imediatamente em
+cada uma dessas transições.
+
+Nenhum dado clínico, imagem, `SEED`, `REVIEW`, `SRS`, Firebase ou
+Cloudinary foi alterado. A única mudança real em dados de lesão que este
+recurso pode fazer é a estruturada e limitada descrita acima, sempre depois
+de autorização explícita da pessoa.
+
+### Teste manual recomendado (não executado nesta sessão — precisa de login)
+
+1. Editar uma lesão, marcar para revisão, escrever um pedido e salvar.
+2. Pelo console do navegador, chamar `setReviewSolution('<id da revisão>',
+   'texto da proposta', {notes: 'novo texto de teste'})`. Abrir 💡, aba
+   "Propostas" — conferir que o "de → para" aparece corretamente.
+3. Clicar em "✓ autorizar correção". Conferir que a lesão já mudou
+   (`notes` novo) e que o item foi para a aba "Validar correções".
+4. Clicar em "↩ não funcionou — desfazer". Conferir que a lesão voltou ao
+   texto original e que 🔔 voltou a mostrar a revisão como pendente.
+5. Repetir autorizando de novo e, desta vez, clicar em "✓ funcionou —
+   manter" — conferir que a mudança permanece e os dois ícones zeram.
+
+### Commit após aprovação
+
+Ainda não criado.
