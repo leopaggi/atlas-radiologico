@@ -88,6 +88,11 @@ combina análise estática do `index.html` com a execução exclusiva de trechos
 extraídos em `vm` isolado, usando mocks e stubs locais. Não acessa IndexedDB
 real, Firebase, Firestore, Cloudinary ou a rede.
 
+O teste também executa a função `loadData()` real com 1.213 registros
+persistidos e o mesmo renumeramento de IDs feito no boot. Ele exige que o
+carregamento termine com os mesmos 1.213 registros, protegendo contra a antiga
+supressão de 70 IDs históricos após F5.
+
 A Alteração 002 confirmou que `loadData()` chama automaticamente
 `recoverCanonicalBaseV154()`, enquanto `hasBrokenMigrationArtifacts()` não
 possui chamadas. O cenário isolado demonstrou que a recuperação pode reinserir

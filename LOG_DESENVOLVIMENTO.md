@@ -531,3 +531,56 @@ Ainda não criado.
 ### Instruções de recuperação, se necessárias
 
 Antes de qualquer recuperação, executar `git status` e preservar as alterações anteriores já existentes no mesmo `index.html`. Uma eventual reversão deve remover somente o hardening do bloco V2 e seus testes/documentação correspondentes, sem tocar no V1, dashboard ou dados do acervo.
+
+## ALTERAÇÃO 009 — Preservação das 1.213 identidades após F5
+
+**Número da alteração:** 009
+**Data:** 19/09/2026
+
+### Objetivo
+
+Impedir que o carregamento normal reduza 1.213 registros persistidos para 1.143.
+
+### Estado antes
+
+O boot renumerava o `SEED` por posição e recriava 70 IDs que também constavam
+na lista histórica de duplicatas. O filtro final de `loadData()` removia esses
+70 registros legítimos. A retirada anterior da detecção dinâmica não resolveu
+o problema porque manteve justamente a lista histórica ativa.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/critical-flows.test.js`
+- `AI.md`
+- `README.md`
+- `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+`SUPPRESSED_DUPLICATE_IDS_V172` passou a conter somente duplicatas encontradas
+pela regra atual `s + site + name`. A lista antiga de 70 IDs permanece no
+arquivo apenas como registro histórico e não participa mais da filtragem.
+
+Foi adicionado um teste comportamental que executa a função `loadData()` real,
+reproduz o renumeramento de boot e fornece 1.213 registros pelo armazenamento
+simulado. Firebase, Cloudinary, IndexedDB real, imagens, REVIEW e SRS não são
+acessados nem alterados.
+
+### Testes realizados
+
+- `node --check tests/critical-flows.test.js`: sem erros;
+- `node tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node tests/legacy-id-migration.test.js`: 156 PASS, 0 FAIL e 5 TODO;
+- `node tests/duplicate-detection.test.js`: 6 PASS e 1 FAIL histórico nas 28
+  entradas malformadas de `DUPLICATE_PAIRS_V171`;
+- `git diff --check`: sem erros de whitespace.
+
+### Resultado
+
+O cenário automatizado reproduziu primeiro a falha `1213 -> 1143`. Depois da
+correção, a mesma execução de `loadData()` terminou e persistiu `1213 -> 1213`.
+
+### Commit após aprovação
+
+Ainda não criado.

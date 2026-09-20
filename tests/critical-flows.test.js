@@ -79,6 +79,37 @@ function extractFunction(source, name) {
   };
 }
 
+function extractAssignedArray(source, name) {
+  const declaration = new RegExp(`\\b(?:const|let|var)\\s+${name}\\s*=`).exec(source);
+  assert.ok(declaration, `Declaracao ${name} nao encontrada`);
+  const start = source.indexOf('[', declaration.index + declaration[0].length);
+  assert.notEqual(start, -1, `Array de ${name} nao encontrado`);
+
+  const closing = { '[': ']', '{': '}', '(': ')' };
+  const stack = [']'];
+  let quote = null;
+  let escaped = false;
+  for (let index = start + 1; index < source.length; index += 1) {
+    const char = source[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+    if (closing[char]) stack.push(closing[char]);
+    else if (char === stack[stack.length - 1]) {
+      stack.pop();
+      if (stack.length === 0) return source.slice(start, index + 1);
+    }
+  }
+  throw new Error(`Array ${name} sem fechamento`);
+}
+
 function extractImportHandler(source) {
   const marker = "document.getElementById('import-file').addEventListener('change', async (ev)=>";
   const start = source.indexOf(marker);
@@ -121,10 +152,14 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // manuais explicitos e da validacao pos-aplicacao
   // (buildPostApplyValidationReportV2) — ver LEGACY_ID_MIGRATION_MAP_V1 e
   // reconcileCatalogByIdentityV2.
-  assert.equal(recovery.line, 4314);
-  assert.equal(brokenArtifacts.line, 4304);
-  assert.equal(loadData.line, 6614);
-  assert.equal(importHandler.line, 8527);
+  // importHandler sobe +17 pelo comentario que documenta a desativacao da
+  // sincronizacao automatica NUVEM->LOCAL dentro de loadData (ver ALTERACAO
+  // 008 mais abaixo) — recovery/brokenArtifacts e loadData nao se movem,
+  // porque a mudanca fica dentro do CORPO de loadData, apos sua declaracao.
+  assert.equal(recovery.line, 4312);
+  assert.equal(brokenArtifacts.line, 4302);
+  assert.equal(loadData.line, 6612);
+  assert.equal(importHandler.line, 8542);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -145,6 +180,217 @@ test('SEGURANCA: loadData nao deve chamar recuperacao do SEED automaticamente', 
     0,
     'Defeito conhecido: loadData chama recoverCanonicalBaseV154 automaticamente apos ler o estado persistido'
   );
+});
+
+// ===========================================================================
+// ALTERACAO 008 (2026-09-19) — sincronizacao automatica NUVEM->LOCAL foi
+// desativada dentro de loadData() (a auditoria read-only desta mesma sessao
+// encontrou que syncFromFirebase(), chamada sem condicao a cada F5/login,
+// fazia merge POR ID contra DATA local e reintroduzia duplicatas/ownership
+// antigo que a reconciliacao V2 ja tinha eliminado). syncFromFirebase()
+// continua definida e INTACTA — so' este call site automatico foi removido.
+// Os testes abaixo sao comment-aware (usam isInsideComment, nao apenas um
+// regex cru) porque o comentario que documenta a desativacao MENCIONA
+// "syncFromFirebase()" varias vezes de proposito, inclusive numa linha
+// comentada (`// await syncFromFirebase();`) — um teste ingenuo baseado em
+// regex simples acusaria falso positivo nessas mencoes.
+// ===========================================================================
+
+function isInsideComment(source, index) {
+  const before = source.slice(Math.max(0, index - 4000), index);
+  const lastBlockOpen = before.lastIndexOf('/*');
+  const lastBlockClose = before.lastIndexOf('*/');
+  const insideBlockComment = lastBlockOpen > lastBlockClose;
+  const lastLineStart = before.lastIndexOf('\n') + 1;
+  const lineSoFar = before.slice(lastLineStart);
+  const insideLineComment = /\/\//.test(lineSoFar);
+  return insideBlockComment || insideLineComment;
+}
+
+function activeCallLocations(source, name) {
+  return invocationLocations(source, name).filter((match) => !isInsideComment(source, match.index));
+}
+
+const showApp = extractFunction(html, 'showApp');
+
+function extractOnAuthStateChanged(source) {
+  const marker = 'fbAuth.onAuthStateChanged(async (user)=>{';
+  const start = source.indexOf(marker);
+  assert.notEqual(start, -1, 'onAuthStateChanged nao encontrado');
+  const openingBrace = source.indexOf('{', start + marker.length - 1);
+  const block = extractBlock(source, openingBrace);
+  return { source: source.slice(start, start + marker.length - 1) + block, index: start, line: lineNumberAt(source, start) };
+}
+const onAuthStateChangedBlock = extractOnAuthStateChanged(html);
+
+test('ALTERACAO 008: loadData() NAO chama syncFromFirebase() (nem mesmo em comentario/mencao ativa)', () => {
+  const active = activeCallLocations(loadData.source, 'syncFromFirebase');
+  assert.deepEqual(active, [], 'loadData() nao pode ter nenhuma chamada ATIVA a syncFromFirebase()');
+  // Confirma que o comentario de desativacao realmente esta ali (prova que a
+  // remocao foi deliberada e documentada, nao um apagamento silencioso).
+  assert.match(loadData.source, /\/\/ await syncFromFirebase\(\);/, 'a chamada precisa continuar visivel, so comentada — nunca apagada silenciosamente');
+});
+
+test('ALTERACAO 008: showApp() nao chama syncFromFirebase() diretamente — so chama loadData()', () => {
+  const activeInShowApp = activeCallLocations(showApp.source, 'syncFromFirebase');
+  assert.deepEqual(activeInShowApp, []);
+  assert.match(showApp.source, /\bloadData\(\)/, 'showApp() precisa continuar chamando loadData() normalmente');
+});
+
+test('ALTERACAO 008: onAuthStateChanged (login) nao chama syncFromFirebase() diretamente', () => {
+  const activeInAuth = activeCallLocations(onAuthStateChangedBlock.source, 'syncFromFirebase');
+  assert.deepEqual(activeInAuth, []);
+  assert.match(onAuthStateChangedBlock.source, /\bshowApp\(\)/, 'onAuthStateChanged precisa continuar chamando showApp() pro usuario autorizado');
+});
+
+test('ALTERACAO 008: cadeia completa onAuthStateChanged -> showApp -> loadData nao tem NENHUM caminho ativo ate syncFromFirebase (F5/login seguros)', () => {
+  const combined = onAuthStateChangedBlock.source + '\n' + showApp.source + '\n' + loadData.source;
+  const active = activeCallLocations(combined, 'syncFromFirebase');
+  assert.deepEqual(active, [], 'nenhum ponto do fluxo de abertura/F5/login pode chamar syncFromFirebase automaticamente');
+});
+
+test('ALTERACAO 008: syncFromFirebase() continua definida, intacta, e disponivel para uso manual/controlado', () => {
+  const fn = extractFunction(html, 'syncFromFirebase');
+  assert.ok(fn.source.length > 500, 'a funcao precisa continuar com sua logica completa, nao virar um stub vazio');
+  assert.match(fn.source, /readShardedState/, 'precisa continuar lendo o estado remoto de verdade');
+  assert.match(fn.source, /mergeEntryNonDestructive/, 'precisa continuar com a logica de merge original, intocada');
+
+  // Continua alcancavel: os 2 call sites manuais pre-existentes (botao de
+  // exportar backup e botao de restaurar padrao de fabrica) nao foram
+  // tocados por esta alteracao — syncFromFirebase() nao ficou orfa.
+  // Exclui mencoes DENTRO do proprio corpo da funcao (o rotulo de string
+  // "syncFromFirebase (leitura)" usado em withFirebaseTimeout, linha 2013,
+  // bate no regex ingenuo de invocationLocations mas nao e uma chamada).
+  const allCalls = activeCallLocations(html, 'syncFromFirebase')
+    .filter((m) => m.index < fn.index || m.index >= fn.index + fn.source.length);
+  assert.equal(allCalls.length, 2, 'syncFromFirebase() precisa continuar chamada exatamente pelos 2 botoes manuais pre-existentes (exportar backup, restaurar padrao de fabrica) — nenhum a mais, nenhum a menos');
+});
+
+test('F5 preserva as 1213 identidades ao executar o loadData real', async () => {
+  const seedSource = extractAssignedArray(html, 'SEED');
+  const legacySuppressedSource = extractAssignedArray(html, 'LEGACY_SUPPRESSED_DUPLICATE_IDS');
+  const duplicatePairsSource = extractAssignedArray(html, 'DUPLICATE_PAIRS_V171');
+  const seed = JSON.parse(seedSource);
+  // Reproduz o boot real anterior a loadData(): index.html renumera todo o
+  // SEED por posicao com seed_<indice> antes de ler o estado persistido.
+  seed.forEach((entry, index) => { entry.id = `seed_${index}`; });
+  const stages = [];
+  const writes = [];
+  const context = vm.createContext({
+    DATA: [],
+    REVIEW: {},
+    SRS: {},
+    SESSIONLOG: {},
+    sectionOrder: [],
+    siteOrder: {},
+    appStateReady: false,
+    SEED: seed,
+    STORAGE_KEY: 'data',
+    ORDER_KEY: 'order',
+    SITEORDER_KEY: 'site-order',
+    REVIEW_KEY: 'review',
+    RECOVERY_KEY: 'recovery',
+    RECOVERY_VERSION: 'test',
+    DEFAULT_SECTION_ORDER: [],
+    EN_TERMS: {},
+    stages,
+    storage: {
+      get: async (key) => {
+        if (key === 'data') {
+          stages.push({ stage: 'storage.get', count: seed.length });
+          return { value: JSON.stringify(seed) };
+        }
+        throw new Error(`Sem estado simulado para ${key}`);
+      },
+      set: async (key, value) => {
+        if (key === 'data') {
+          const count = JSON.parse(value).length;
+          stages.push({ stage: 'storage.set', count });
+          writes.push(count);
+        }
+      }
+    },
+    ensureLinks: (entry) => { entry.links = []; },
+    isAutoRadiopaediaLink: () => false,
+    radiopaediaSearchUrl: () => '',
+    runTagCleanup: () => false,
+    ensureInc: (entry) => { entry.inc = 1; },
+    saveData: async () => {},
+    saveOrder: async () => {},
+    saveSiteOrder: async () => {},
+    loadSRS: async () => {},
+    loadSessionLog: async () => {},
+    saveReview: async () => {},
+    saveSRS: async () => {},
+    createSafetySnapshot: () => null,
+    applyAltPlacementsAudit20260918: async () => false,
+    applyClassificationAudit20260918: async () => false,
+    upgradeDescriptionsV169: async () => {},
+    upgradeDescriptionsV170: async () => {},
+    upgradeDescriptionsV173: async () => {},
+    upgradeDescriptionsV175: async () => {},
+    upgradeDescriptionsV176: async () => {},
+    upgradeDescriptionsV177: async () => {},
+    upgradeDescriptionsV179: async () => {},
+    upgradeDescriptionsV180: async () => {},
+    upgradeDescriptionsV181: async () => {},
+    upgradeDescriptionsV182: async () => {},
+    pushToFirebaseNow: async () => {},
+    migrateLegacyLocalImagesToCloudinary: async () => ({ migrated: 0 }),
+    renderAll: () => {},
+    console: { error: () => {}, info: () => {}, log: () => {} }
+  });
+
+  const runDuplicateCleanup = extractFunction(html, 'runDuplicateCleanup').source
+    .replace('function runDuplicateCleanup', 'function runDuplicateCleanupReal');
+  const deduplicateV171 = extractFunction(html, 'deduplicateV171').source
+    .replace('function deduplicateV171', 'function deduplicateV171Real');
+  const engine = `
+    const LEGACY_SUPPRESSED_DUPLICATE_IDS = new Set(${legacySuppressedSource});
+    ${extractFunction(html, 'computeDuplicateSeedIds').source}
+    ${html.slice(html.indexOf('const SUPPRESSED_DUPLICATE_IDS_V172'), html.indexOf('function getActiveCanonicalSeed'))}
+    globalThis.legacySuppressedCount = LEGACY_SUPPRESSED_DUPLICATE_IDS.size;
+    globalThis.activeSuppressedCount = SUPPRESSED_DUPLICATE_IDS_V172.size;
+    ${extractFunction(html, 'getActiveCanonicalSeed').source}
+    ${extractFunction(html, 'activeCanonicalSeedV172').source}
+    const DUPLICATE_PAIRS_V171 = ${duplicatePairsSource};
+    ${extractFunction(html, 'mergeDuplicateEntryV171').source}
+    ${runDuplicateCleanup}
+    function runDuplicateCleanup(){
+      stages.push({stage:'runDuplicateCleanup:before', count:DATA.length});
+      const result = runDuplicateCleanupReal();
+      stages.push({stage:'runDuplicateCleanup:after', count:DATA.length});
+      return result;
+    }
+    ${deduplicateV171}
+    async function deduplicateV171(){
+      stages.push({stage:'deduplicateV171:before', count:DATA.length});
+      const result = await deduplicateV171Real();
+      stages.push({stage:'deduplicateV171:after', count:DATA.length});
+      return result;
+    }
+    ${loadData.source}
+  `;
+  new vm.Script(engine).runInContext(context);
+  await context.loadData();
+
+  assert.equal(context.legacySuppressedCount, 70);
+  assert.equal(context.activeSuppressedCount, 0);
+  assert.deepEqual(plain(stages.filter((item) => item.stage !== 'storage.set')), [
+    { stage: 'storage.get', count: 1213 },
+    { stage: 'runDuplicateCleanup:before', count: 1213 },
+    { stage: 'runDuplicateCleanup:after', count: 1213 },
+    { stage: 'runDuplicateCleanup:before', count: 1213 },
+    { stage: 'runDuplicateCleanup:after', count: 1213 },
+    { stage: 'deduplicateV171:before', count: 1213 },
+    { stage: 'deduplicateV171:after', count: 1213 }
+  ]);
+  assert.equal(
+    context.DATA.length,
+    1213,
+    `loadData reduziu 1213 para ${context.DATA.length}; gravacoes DATA: ${writes.join(' -> ')}`
+  );
+  assert.deepEqual(writes, [1213], 'loadData deve persistir exatamente as mesmas 1213 identidades');
 });
 
 test('recuperacao isolada demonstra reinsercao de registro SEED ausente', async () => {

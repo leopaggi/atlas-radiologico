@@ -49,11 +49,13 @@ por engano. Corrigido, mas fique atento ao replicar o padrão.
 ## Detecção de duplicatas: por regra, não por lista fixa
 
 `SUPPRESSED_DUPLICATE_IDS_V172` não é mais uma lista estática editada à
-mão. É a união de:
-1. `LEGACY_SUPPRESSED_DUPLICATE_IDS` — histórico auditado (piso de
-   segurança, nunca suprime menos que isso)
-2. `computeDuplicateSeedIds(SEED)` — detecção automática por regra (agrupa
-   por `s + site + name`; mantém o de **maior id** como "keeper")
+mão. Ele usa somente `computeDuplicateSeedIds(SEED)`, que agrupa por
+`s + site + name` e mantém o registro de maior ID como "keeper".
+
+`LEGACY_SUPPRESSED_DUPLICATE_IDS` permanece apenas como histórico auditado,
+sem alimentar o filtro ativo. O boot renumera o `SEED` por posição; por isso,
+os 70 números antigos passaram a colidir com IDs legítimos e causavam
+`loadData()` a reduzir 1.213 registros persistidos para 1.143 após F5.
 
 **Nunca volte a resolver duplicata só editando essa lista à mão.** Se
 aparecer uma duplicata nova, o problema está em como os dados foram
