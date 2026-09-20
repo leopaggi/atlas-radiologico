@@ -816,3 +816,251 @@ propósito); `tests/legacy-id-migration.test.js` (não tocado) permanece
 Cloudinary não foram alterados nesta entrega — só o caminho já existente
 `saveData()` foi reutilizado, exatamente como o formulário de edição já
 fazia.
+
+## Alteração 013 — legibilidade do Quiz clínico
+
+Mudança puramente visual (CSS), sem tocar lógica de geração de questões,
+correção, `SESSIONLOG`, `SRS`, `DATA`, imagens ou Central de Revisões.
+
+O painel "CASO TEÓRICO" (`.quiz-noimage`, usado quando a lesão não tem
+imagem) deixou de ficar centralizado numa ilha pequena dentro de uma área
+vazia: `.quiz-study-media` virou `display:flex;flex-direction:column` e
+`.quiz-noimage` recebeu `flex:1`, então ele preenche a mesma altura que o
+grid (`.quiz-study-shell`) já reservava pro painel — sem isso, o painel
+esticava pelo `align-items:stretch` padrão do grid, mas o conteúdo pequeno
+ficava perdido no meio de um espaço grande. Título, descrição e os chips de
+características (`.quiz-theory-clues span`) ganharam `font-size` bem maior,
+com `clamp()` pra continuar responsivo. Pelo mesmo motivo, `.quiz-study-media
+img` (caso COM imagem) trocou o `max-height:390px` fixo por
+`max-height:min(58vh,560px)` com `flex:1`, aproveitando melhor um painel
+que agora pode ficar mais alto.
+
+A pergunta (`<h3>`) trocou um `style` inline sem tamanho definido (ficava no
+padrão do navegador, ~16px) por uma classe dedicada `.quiz-question-title`
+com `clamp(18px,1vw + 15px,22px)`. As alternativas (`.quiz-mcq-option`/
+`.quiz-mcq-letter`) tiveram padding, gap e fonte aumentados — nos DOIS
+lugares onde essas classes são estilizadas: a regra base (linha ~713) e a
+regra com maior especificidade `.study-dashboard .quiz-mcq-option` (linha
+~823), que é a que **realmente** está ativa dentro do Modo Estudo embutido
+(o host do quiz sempre carrega dentro de um container com a classe
+`study-dashboard` — ver Atualização 2026-09-18 "paleta viva"). Editar só a
+regra base não teria efeito visual nenhum ali.
+
+Foi deixado um comentário em `renderQuizCardIntegrated()`, sem nenhuma
+mudança funcional, marcando `.quiz-answer-detail` como o lugar reservado
+pro futuro atalho "🖼 Adicionar imagem a esta lesão" pós-resposta — recurso
+ainda não implementado, só o espaço/estrutura preservados de propósito.
+
+Como o `<style>` fica no topo do arquivo, essas mudanças deslocaram (+10
+linhas) as âncoras estáticas de `tests/critical-flows.test.js` mais uma vez
+(4700→4710, 4690→4700, 7000→7010, 9287→9297) — nenhuma lógica preexistente
+foi alterada. Resultado: `tests/critical-flows.test.js` **20 PASS, 0 FAIL**;
+`tests/lesion-review.test.js` (não relacionado, confirmado que continua
+intacto) **29 PASS, 0 FAIL**. Não existe suíte automatizada de verificação
+visual/layout no projeto — a confirmação de que o resultado visual bate com
+o pedido (pergunta/alternativas maiores, caso sem imagem preenchendo bem o
+painel, responsividade) depende de teste manual no navegador, não executado
+nesta sessão.
+
+## Alteração 014 — imagens dentro do Quiz clínico (carrossel + "adicionar sem sair do Quiz")
+
+Evolução do visualizador de imagens do Quiz. Antes, mesmo quando uma lesão
+tinha 2+ imagens em `e.images[]`, o Quiz só usava `all[0]` — a primeira —
+descartando o resto. Não havia nenhuma forma de alimentar uma lesão com
+imagem a partir do Quiz; era preciso sair, abrir "Editar lesão" e voltar.
+
+### O que foi adicionado
+
+- **Carrossel** dentro de `renderQuizCardIntegrated()`: 0 imagens continua
+  no CASO TEÓRICO; 1 imagem continua no visual simples de antes, sem
+  controles; 2+ imagens ganham setas `‹`/`›`, contador "Imagem X de Y" e
+  navegação circular (da última volta pra primeira e vice-versa). O índice
+  (`quizImgIdx`) e o array (`quizImgs`) são variáveis locais declaradas
+  DENTRO de `renderQuizCardIntegrated()` — reiniciam sozinhas a cada
+  questão nova, sem precisar de nenhuma lógica extra de reset (é assim que
+  a função já funcionava pra tudo mais). Trocar de imagem só reescreve
+  `#quiz-media`; nunca recria a questão, nunca toca resposta/pontuação.
+- Navegação por teclado ←/→, com um único listener por questão
+  (`quizCarouselKeyHandler`, removido e recriado a cada
+  `renderQuizCardIntegrated()`, e limpo ao sair do Quiz ou chegar no
+  resumo — sem isso ficaria um listener de `document` vazando a cada
+  questão). Ignora ←/→ quando o foco está num `INPUT`/`TEXTAREA`/
+  contenteditable, ou quando o modal de adicionar imagem/o lightbox estão
+  abertos — não interfere com outros controles.
+- **`🖼 Adicionar imagem a esta lesão`**: aparece SOMENTE dentro de
+  `#quiz-feedback`, ou seja, só depois de responder (nunca antes) — dentro
+  de um novo `.quiz-post-answer-actions`, já preparado pra também receber
+  futuramente "🔔 Marcar problema para revisão" (não implementado ainda, só
+  o espaço reservado, como já estava documentado na Alteração 013).
+- **`openQuizAddImageModal(lesionId, onImagesAdded)`** (nova): painel
+  focado "Adicionar imagem a: <nome da lesão>", com upload de arquivo, URL
+  direta e busca no Commons — a lesão-alvo é sempre a da questão atual
+  (`lesionId` vem de `e.id`, nunca de um estado de UI "selecionado"
+  adivinhado). Cada imagem é persistida IMEDIATAMENTE (sem lote/Salvar,
+  que não existe fora do formulário de edição completo). Usa uma classe
+  própria (`.quiz-img-modal-overlay`, não `.overlay`) e **nunca chama
+  `closeOverlay()`** — `closeOverlay()` remove TODAS as `.overlay` de uma
+  vez, o que destruiria a overlay do Quiz (`#study-overlay`) por baixo;
+  este painel só remove a si mesmo, exatamente como `openCommonsImageSearch`
+  já fazia. Fechar o modal (✕/clique fora/Esc/"concluído") não afeta a
+  questão, resposta, feedback, pontuação ou posição da sessão por baixo —
+  nada disso é tocado por este painel.
+- **`addImageToLesionData(lesion, imgObj)`** (nova, em
+  `getEntryImgs`/`hasEntryImgs`): função pura que só grava em
+  `images`/`_userUpdatedAt` da lesão recebida por parâmetro — nunca em
+  `DATA` inteiro, nunca em outra lesão, nunca remove imagens existentes.
+
+### Reuso, não um segundo sistema de imagens
+
+Nenhuma integração nova foi criada. `uploadToCloudinary()` é chamada
+diretamente (já era uma função standalone). `openCommonsImageSearch()`
+(busca no Wikimedia Commons) foi **movida de dentro de `openForm()` pra
+escopo top-level e parametrizada** — antes era uma closure presa a
+`pendingImgs`/`imgsChanged`/`renderImgGallery`/`getElementById('f-en-term'/
+'f-name')`, só utilizável de dentro do formulário de edição. Agora recebe
+`(lesionMeta, initialTerm, onImagesAdded)` e devolve as imagens escolhidas
+via callback, em vez de empurrar direto em `pendingImgs`. O call site
+original (`img-web-btn` dentro de `openForm()`) foi ajustado só o
+suficiente pra continuar com exatamente o mesmo comportamento de antes
+(`pendingImgs.push(...imgs); imgsChanged=true; renderImgGallery();` dentro
+do callback) — a busca, o upload, a UI de resultados e a lógica de seleção
+em si não mudaram uma linha. `stripHtmlText()` (usada só ali) foi movida
+junto, pelo mesmo motivo.
+
+### Persistência e segurança
+
+`saveData()` é o mesmo caminho já usado pelo formulário de edição —
+`createSafetySnapshot()` + `storage.set(STORAGE_KEY,...)` +
+`pushToFirebaseNow()` — nenhum caminho de persistência novo foi criado.
+Nenhuma imagem de outra lesão é tocada (`addImageToLesionData()` só recebe
+e grava na lesão passada por parâmetro, que é sempre a `e.id` da questão
+atual). Nenhuma imagem é removida. Nenhum ID físico de asset é alterado.
+Nenhuma deduplicação global nova foi implementada, nenhuma reconciliação
+foi executada, `SEED` não foi tocado. `REVIEW`, `SRS`, `SESSIONLOG` e a
+Central de Revisões continuam fora do escopo — não referenciados em
+nenhuma das funções novas (confirmado estaticamente em
+`tests/quiz-images.test.js`).
+
+### Testes
+
+`tests/quiz-images.test.js` (novo, 18 cenários): `addImageToLesionData()`
+é testada dinamicamente (função real extraída do `index.html`, executada
+num `vm` isolado) — anexa corretamente, cria o array quando ainda não
+existe, preserva imagens já existentes, nunca grava numa lesão diferente
+da passada. O restante (`openQuizAddImageModal`, `openCommonsImageSearch`
+parametrizada, o carrossel dentro de `renderQuizCardIntegrated`, a limpeza
+do listener de teclado) é verificado estaticamente no texto-fonte real:
+nunca chama `closeOverlay()`, usa classe própria, reaproveita
+`uploadToCloudinary()`/`openCommonsImageSearch()` sem reimplementar,
+persiste via `saveData()`, o atalho de imagem só existe dentro do fluxo
+pós-resposta, e nenhuma das funções novas referencia
+`REVIEW`/`SRS`/`SESSIONLOG`/`SEED`. Resultado: **18 PASS, 0 FAIL**.
+
+Como o carrossel/modal foram inseridos antes de `recoverCanonicalBaseV154`
+etc. (a busca do Commons e `stripHtmlText` viraram funções top-level logo
+depois de `openForm()`), as âncoras de `tests/critical-flows.test.js`
+deslocaram mais uma vez (+30: 4710→4740, 4700→4730, 7010→7040, 9297→9341)
+— nenhuma lógica preexistente foi alterada. Resultado:
+`tests/critical-flows.test.js` **20 PASS, 0 FAIL**;
+`tests/lesion-review.test.js` (não relacionado) **29 PASS, 0 FAIL**.
+
+Não existe suíte automatizada de UI/browser no projeto (sem jsdom, sem
+dependências) — a confirmação visual/interativa (carrossel aparecendo com
+2+ imagens, contador, setas, navegação por teclado, modal abrindo sobre o
+Quiz sem fechá-lo, imagem nova aparecendo sem F5) depende de teste manual
+no navegador, não executado nesta sessão.
+
+## Alteração 015 — complementos do modal de imagens e revisão manual no Quiz
+
+O painel pós-resposta de imagens agora aceita imagem do clipboard por
+`Ctrl+V`, com listener preso ao próprio modal e foco inicial na área de
+upload. Fora do modal ele não captura `paste`. O construtor existente de
+Quadro de Imagem foi movido de uma closure de `openForm()` para a função
+parametrizada `openCollageBuilder(lesionMeta, onCollageReady,
+existingPanels)`. Editor e Quiz chamam essa mesma função; não foi criado um
+segundo compositor. O resultado volta pelo mesmo callback que persiste a
+imagem na lesão da questão e chama `refreshQuizImgs(true)`, cobrindo as
+transições 0→1, 1→2 e 2→3+ sem reconstruir a questão.
+
+Depois de responder, ao lado de adicionar imagem, existe também
+`🔔 Marcar para revisão`. `openQuizReviewModal(lesionId)` mostra o nome da
+lesão e uma textarea livre, e o botão salvar chama exatamente
+`createLesionReview(lesion.id, requestText)`. Cancelar ou fechar remove só
+esse modal. Duplicatas idênticas continuam sob a proteção da função central,
+que também atualiza o badge do header imediatamente. O fluxo não corrige nem
+remove imagens e não toca `quizIndex`, `quizStats`, `SRS` ou `SESSIONLOG`.
+
+Cada miniatura no modal de imagens do Quiz também possui controles sempre
+visíveis `✏ Editar` e `🗑 Remover`. Editar altera somente `label`, preservando
+`lesionId`, ownership e demais metadados. Remover usa `splice` exclusivamente
+no array `images` da lesão recebida, sem excluir o asset remoto. As duas ações
+persistem por `saveData()` e passam pelo mesmo callback de atualização usado
+na adição, permitindo inclusive 1→0 (retorno imediato ao CASO TEÓRICO).
+
+Testes ampliados: `tests/quiz-images.test.js` passou de 18 para 30 cenários;
+`tests/lesion-review.test.js`, de 29 para 35. As âncoras legítimas de
+`tests/critical-flows.test.js` foram atualizadas sem alterar seus fluxos.
+
+## Alteração 016 — upload diferido no editor (sem backend)
+
+**Mudança de estratégia:** a tentativa anterior (Alteração 016 original) usava
+uma Firebase Cloud Function para excluir assets do Cloudinary. Isso exigiria o
+plano Blaze/pagamento de backend só para limpar imagens de teste, então foi
+**descartada por completo**: a Function, `functions/`, `firebase.json`,
+`.firebaserc`, o `.gitignore` do `firebase init` e `tests/cloudinary-deletion.test.js`
+foram removidos; `requestCloudinaryAssetDeletion()` / `hasSecureCloudinaryIdentifier()`
+e os ganchos de delete no Editor/Quiz foram apagados. NÃO há dependência de
+Firebase Functions nem de segredo administrativo.
+
+### Nova regra
+
+Imagens NOVAS adicionadas no formulário **Editar lesão** (Ctrl+V, selecionar
+arquivo ou Wikimedia Commons) ficam **somente locais/temporárias** enquanto o
+formulário está aberto — representadas por uma blob URL (para exibir) + o
+`File` em memória (`{source:'pending', _file, _objectUrl}`). Nada é enviado ao
+Cloudinary antes de **Salvar**.
+
+- **Ctrl+V / selecionar arquivo**: `addLocalFile(file)` só cria a blob URL e
+  guarda o `File`. Não chama `uploadToCloudinary`.
+- **Commons**: `openCommonsImageSearch(..., deferUpload=true)` baixa o arquivo
+  e devolve objeto temporário (preservando `sourcePage`, `sourceSite`,
+  `license`, `artist`, `attribution`, `originalUrl`). O Quiz chama sem esse
+  parâmetro e mantém o upload imediato (comportamento preservado).
+- **URL externa**: continua salva como URL (`source:'url'`), sem upload.
+- **Remover durante a edição**: imagem temporária apenas sai de `pendingImgs`
+  (blob URL revogada); imagem já persistida apenas sai do conjunto final. Em
+  nenhum caso há delete remoto.
+- **Cancelar / Esc / clique fora**: libera todas as blob URLs
+  (`releasePendingObjectUrls()`), sem enviar nada. `DATA` fica como estava.
+- **Salvar**: percorre `pendingImgs` e envia ao Cloudinary **somente** as
+  temporárias que sobraram (`source==='pending' && _file`), substituindo cada
+  objeto temporário pelo retorno de `uploadToCloudinary()`; só então persiste
+  (`storage.set` + push). Se algum upload necessário falhar, a lesão NÃO é
+  gravada (nada parcial) e um toast explica. Imagens temporárias removidas antes
+  do Salvar nunca são enviadas.
+
+### Testes
+
+`tests/quiz-images.test.js` ganhou 10 cenários de upload diferido (Ctrl+V/
+arquivo não chamam `uploadToCloudinary`; remover antes de Salvar não envia;
+Cancelar não envia; Salvar envia só as presentes e substitui pelo retorno;
+persistência depois dos uploads; Commons com `deferUpload`; URL externa
+inalterada; ausência de `requestCloudinaryAssetDeletion`/`firebase.functions`/
+`deleteCloudinaryAsset`/`firebase-functions-compat`; ausência de
+`CLOUDINARY_API_SECRET`; ausência de `functions/`). Resultado: **40 PASS, 0 FAIL**.
+
+As âncoras de `tests/critical-flows.test.js` recuaram para 4762/4752/7062/9407
+(remoção do script e dos helpers de delete, antes das âncoras). `SEED`,
+`REVIEW`, `SRS`, `SESSIONLOG`, a reconciliação V2 e os dados atuais não foram
+alterados.
+
+### Quadro de Imagem — também diferido
+
+O construtor de **Quadro de Imagem** (`openCollageBuilder`, compartilhado com o
+Quiz) agora é parametrizável: o formulário Editar chama com
+`deferUpload=true`, então os painéis ficam temporários (blob URL) e o quadro
+final vira uma imagem pendente (`{source:'pending', _file, _objectUrl}`) —
+NENHUM upload acontece antes de Salvar. O Quiz chama sem esse parâmetro e
+mantém o upload imediato. Remover o quadro antes de Salvar ou cancelar a edição
+não gera nenhum upload; no Salvar o quadro sobe uma única vez, pelo mesmo
+pipeline de `pendingImgs`.

@@ -30,6 +30,8 @@ function extractLesionReviewModule(source) {
 }
 
 const moduleSource = extractLesionReviewModule(html);
+const quizReviewModalSource = extractFn(html, 'openQuizReviewModal');
+const renderQuizCardSource = extractFn(html, 'renderQuizCardIntegrated');
 
 /* Este módulo NUNCA deve tocar REVIEW/SRS nem chamar pushToFirebase
  * diretamente — é uma fila própria, local. DATA agora É legitimamente lido
@@ -526,6 +528,51 @@ test('REGRESSÃO: os badges do header reagem IMEDIATAMENTE em cada transição d
   ctx.rollbackAppliedReviewSolution(second.id, 'não funcionou');
   assert.equal(els['pending-reviews-badge'].textContent, '1', 'desfazer devolve pra pendentes imediatamente');
   assert.equal(els['ready-solutions-badge'].textContent, '', 'desfazer some do badge de soluções imediatamente');
+});
+
+test('Quiz: botão de marcar revisão aparece somente dentro do fluxo pós-resposta', () => {
+  const answerHandlerIdx = renderQuizCardSource.indexOf(".querySelectorAll('.quiz-mcq-option').forEach(btn=>btn.onclick=()=>{");
+  const reviewButtonIdx = renderQuizCardSource.indexOf('id="quiz-review-btn"');
+  const reviewHandlerIdx = renderQuizCardSource.indexOf('openQuizReviewModal(e.id)');
+  assert.notEqual(answerHandlerIdx, -1);
+  assert.ok(reviewButtonIdx > answerHandlerIdx);
+  assert.ok(reviewHandlerIdx > reviewButtonIdx);
+});
+
+test('Quiz: modal mostra a lesão atual e salva pelo createLesionReview() existente com lesionId correto', () => {
+  assert.match(quizReviewModalSource, /DATA\.find\(x=>x\.id===lesionId\)/);
+  assert.match(quizReviewModalSource, /\$\{esc\(lesion\.name\)\}/);
+  assert.match(quizReviewModalSource, /createLesionReview\(lesion\.id,\s*requestText\)/);
+});
+
+test('Quiz: texto livre é passado sem reescrita e o placeholder orienta problemas de imagem/classificação', () => {
+  assert.match(quizReviewModalSource, /const requestText = requestEl\.value;/);
+  assert.match(quizReviewModalSource, /Imagem incompatível com a lesão; classificação incorreta;/);
+  assert.doesNotMatch(quizReviewModalSource, /createLesionReview\([^,]+,\s*requestText\.trim\(\)\)/);
+});
+
+test('Quiz: cancelar fecha somente o pequeno modal e não cria revisão', () => {
+  assert.match(quizReviewModalSource, /querySelector\(['"]#quiz-review-cancel['"]\)\.onclick\s*=\s*close/);
+  assert.doesNotMatch(quizReviewModalSource, /closeOverlay\(/);
+  const cancelIdx = quizReviewModalSource.indexOf("querySelector('#quiz-review-cancel')");
+  const saveIdx = quizReviewModalSource.indexOf("querySelector('#quiz-review-save')");
+  assert.ok(cancelIdx !== -1 && saveIdx > cancelIdx, 'createLesionReview só pode estar no handler de salvar, depois do cancelar');
+});
+
+test('Quiz: criação/duplicata atualiza badge pela API central e mantém o feedback aberto', () => {
+  assert.match(quizReviewModalSource, /result\.reason!==['"]duplicate['"]/);
+  assert.match(extractFn(moduleSource, 'createLesionReview'), /updateReviewCenterBadges\(\)/);
+  assert.doesNotMatch(quizReviewModalSource, /renderQuizCardIntegrated|openProgressDashboard|getStudyOverlay/);
+});
+
+test('Quiz: marcar revisão não altera SESSIONLOG, pontuação, progresso ou SRS', () => {
+  for (const source of [quizReviewModalSource]) {
+    assert.doesNotMatch(source, /\bSESSIONLOG\b/);
+    assert.doesNotMatch(source, /\bquizStats\b/);
+    assert.doesNotMatch(source, /\bquizIndex\b/);
+    assert.doesNotMatch(source, /\bSRS\b/);
+    assert.doesNotMatch(source, /recordQuizAnswerToday|srsGradeLevel|logSessionResult/);
+  }
 });
 
 test('backup/export inclui LESION_REVISIONS (estaticamente, no botão de exportar backup)', () => {

@@ -146,15 +146,40 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // +12 na revisao anterior: hotfix do badge do header nao atualizar sem F5
   // (updateReviewCenterBadges() passou a ser chamada direto de dentro das
   // funcoes de mutacao, com um comentario explicando o motivo).
-  // +186 nesta revisao: evolucao pra maquina de estados de dois aceites
-  // (pending -> proposed -> applied_pending_validation -> accepted/rejected),
-  // com snapshot/rollback por tentativa, validacao estruturada de
-  // proposedChanges e as duas abas do painel de solucoes — tudo inserido
-  // antes de recovery/brokenArtifacts, no mesmo modulo LESION_REVISIONS.
-  assert.equal(recovery.line, 4700);
-  assert.equal(brokenArtifacts.line, 4690);
-  assert.equal(loadData.line, 7000);
-  assert.equal(importHandler.line, 9287);
+  // +186 na revisao anterior: evolucao pra maquina de estados de dois
+  // aceites (pending -> proposed -> applied_pending_validation ->
+  // accepted/rejected), com snapshot/rollback por tentativa, validacao
+  // estruturada de proposedChanges e as duas abas do painel de solucoes —
+  // tudo inserido antes de recovery/brokenArtifacts, no modulo LESION_REVISIONS.
+  // +10 na revisao anterior: melhoria de legibilidade do Quiz clinico (CSS
+  // do painel "CASO TEORICO"/alternativas/pergunta, dentro do <style> no
+  // topo do arquivo, bem antes de recovery/brokenArtifacts/loadData/
+  // importHandler — por isso os 4 deslocam igualmente).
+  // +30 nesta revisao: carrossel de imagens do Quiz + atalho "adicionar
+  // imagem sem sair do Quiz". openCommonsImageSearch()/stripHtmlText()
+  // foram movidas de dentro de openForm() pra escopo top-level e
+  // parametrizadas (reaproveitadas pelo novo openQuizAddImageModal()), mais
+  // CSS do carrossel/modal — tudo antes de recovery/brokenArtifacts.
+  // +2 nesta continuação: estilos dos controles/modais pós-resposta do Quiz.
+  // O construtor de quadro foi movido/parametrizado com saldo neutro antes
+  // das três primeiras âncoras; seu foco inicial soma uma linha à importação.
+  // +19 na correção pontual seguinte: controles visíveis de editar/remover
+  // imagem no modal do Quiz e helpers seguros, inseridos antes das âncoras.
+  // +33 nesta continuação: exclusão segura de assets do Cloudinary — script
+  // firebase-functions-compat (+1) e helpers hasSecureCloudinaryIdentifier/
+  // requestCloudinaryAssetDeletion logo após uploadToCloudinary, antes das
+  // âncoras. Os ganchos de exclusão ficam DENTRO de openForm/openQuizAddImageModal
+  // (depois de loadData), e o handler de importação não foi alterado em tamanho
+  // por isso — apenas deslocado pelas inserções anteriores.
+  // Mudança de estratégia (upload diferido, sem backend): removidos o script
+  // firebase-functions-compat e os helpers de delete remoto (antes das
+  // âncoras). O upload diferido do editor (blob URL + File em memória) fica
+  // DENTRO de openForm (depois de recovery/brokenArtifacts/loadData), então
+  // essas três voltam a cair; a importação recua pelo mesmo bloco removido.
+  assert.equal(recovery.line, 4762);
+  assert.equal(brokenArtifacts.line, 4752);
+  assert.equal(loadData.line, 7062);
+  assert.equal(importHandler.line, 9428);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

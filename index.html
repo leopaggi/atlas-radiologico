@@ -710,24 +710,54 @@ body{
 .study-domain-fill{box-shadow:0 0 13px currentColor}
 .study-domain-row:nth-child(8n+1) .study-domain-fill{background:#2fdf7f}.study-domain-row:nth-child(8n+2) .study-domain-fill{background:#2d8cff}.study-domain-row:nth-child(8n+3) .study-domain-fill{background:#ff9b3f}.study-domain-row:nth-child(8n+4) .study-domain-fill{background:#ff5964}.study-domain-row:nth-child(8n+5) .study-domain-fill{background:#8b63f6}.study-domain-row:nth-child(8n+6) .study-domain-fill{background:#d94fc5}.study-domain-row:nth-child(8n+7) .study-domain-fill{background:#23cde3}.study-domain-row:nth-child(8n) .study-domain-fill{background:#ffd057}
 .study-line{stroke:#20a4ff!important;filter:drop-shadow(0 0 5px #20a4ff)}.study-dot{fill:#51baff!important}
-.quiz-mcq-grid{display:grid;gap:8px;margin:12px 0}
-.quiz-mcq-option{display:flex;align-items:center;gap:10px;text-align:left;width:100%;padding:11px 12px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer;transition:.15s}
+.quiz-mcq-grid{display:grid;gap:12px;margin:14px 0}
+.quiz-mcq-option{display:flex;align-items:center;gap:14px;text-align:left;width:100%;padding:16px 18px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer;transition:.15s;font-size:clamp(15px,.6vw + 13px,18px);line-height:1.35}
 .quiz-mcq-option:hover:not(:disabled){border-color:#2ca7ff;background:#0c80b51a;transform:translateX(2px)}
-.quiz-mcq-letter{width:27px;height:27px;border:1px solid #36b8d9;border-radius:50%;display:grid;place-items:center;color:#66d9ef;font-weight:800;flex:none}
+.quiz-mcq-letter{width:34px;height:34px;border:1.5px solid #36b8d9;border-radius:50%;display:grid;place-items:center;color:#66d9ef;font-weight:800;font-size:15px;flex:none}
 .quiz-mcq-option.is-correct{border-color:#2fdf7f;background:#2fdf7f18;box-shadow:0 0 20px #2fdf7f16}.quiz-mcq-option.is-correct .quiz-mcq-letter{background:#2fdf7f;color:#06140c;border-color:#2fdf7f}
 .quiz-mcq-option.is-wrong{border-color:#ff5964;background:#ff596414}.quiz-mcq-option.is-wrong .quiz-mcq-letter{background:#ff5964;color:white;border-color:#ff5964}
 .quiz-feedback-good{border:1px solid #2fdf7f66;background:#2fdf7f12;color:#58ef99;border-radius:8px;padding:10px 12px;font-weight:800;margin:10px 0}
 .quiz-feedback-bad{border:1px solid #ff596466;background:#ff596412;color:#ff7b84;border-radius:8px;padding:10px 12px;font-weight:800;margin:10px 0}
+.quiz-question-title{margin:10px 0 12px;font-size:clamp(18px,1vw + 15px,22px);font-weight:700;line-height:1.35;color:var(--text)}
 .quiz-study-shell{display:grid;grid-template-columns:minmax(260px,.85fr) minmax(360px,1.15fr);gap:14px;margin-top:12px}
 .quiz-study-media,.quiz-study-question{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px}
-.quiz-study-media img{width:100%;max-height:390px;object-fit:contain;border-radius:7px;background:#07111b}
-.quiz-noimage{min-height:220px;display:grid;place-content:center;text-align:center;border:1px dashed var(--line);border-radius:8px;color:var(--muted);padding:18px}
-.quiz-noimage b{color:#60d7ef;font-size:14px;margin-bottom:7px}
-.quiz-theory-clues{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:10px}
-.quiz-theory-clues span{background:var(--tag-bg);border:1px solid var(--line);border-radius:13px;padding:4px 7px;font-size:10px}
+.quiz-study-media{display:flex;flex-direction:column}
+.quiz-study-media img{width:100%;flex:1;min-height:0;max-height:min(58vh,560px);object-fit:contain;border-radius:7px;background:#07111b}
+/* CASO TEÓRICO (lesão sem imagem): o painel esquerdo estica pra acompanhar
+   a altura do painel de pergunta/alternativas (grid stretch), e as pistas
+   registradas na lesão SÃO a principal informação da questão — por isso
+   ocupam esse espaço todo, com letra grande, em vez de ficarem encolhidas
+   e centralizadas numa área minúscula dentro de um painel vazio. */
+.quiz-noimage{flex:1;width:100%;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;border:1px dashed var(--line);border-radius:10px;color:var(--muted);padding:clamp(18px,3vw,32px) clamp(16px,2.5vw,28px)}
+.quiz-noimage b{color:#60d7ef;font-size:clamp(17px,1vw + 13px,20px);letter-spacing:.02em}
+.quiz-noimage>span{font-size:clamp(13px,.4vw + 12px,15px);max-width:440px;line-height:1.5;color:var(--muted)}
+.quiz-theory-clues{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px;max-width:540px}
+.quiz-theory-clues span{background:var(--tag-bg);border:1px solid var(--line);border-radius:16px;padding:10px 18px;font-size:clamp(16px,.7vw + 13px,19px);font-weight:600;color:var(--text)}
+/* Carrossel de imagens da questão — 2+ imagens ganham setas + contador;
+   1 imagem mantém o visual simples de antes, sem controles desnecessários. */
+.quiz-study-media .quiz-carousel{flex:1;min-height:0;display:flex;flex-direction:column;position:relative}
+.quiz-carousel-arrow{position:absolute;top:50%;transform:translateY(-50%);width:38px;height:38px;border-radius:50%;border:none;background:rgba(6,10,14,.6);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;z-index:2}
+.quiz-carousel-arrow:hover{background:rgba(6,10,14,.85)}
+.quiz-carousel-prev{left:8px}
+.quiz-carousel-next{right:8px}
+.quiz-carousel-counter{text-align:center;font-size:12px;color:var(--muted);margin-top:6px;font-family:'IBM Plex Mono',monospace;letter-spacing:.03em}
 .quiz-answer-detail{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}
+.quiz-post-answer-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.quiz-add-img-action,.quiz-review-action{font-size:12.5px}
+/* Modal focado "Adicionar imagem a esta lesão" — classe própria (NÃO
+   ".overlay") de propósito, pra nunca ser removido por closeOverlay()
+   (que remove todas as .overlay de uma vez, o que destruiria a overlay do
+   Quiz por baixo). z-index abaixo do modal de busca do Commons (10030),
+   que pode abrir por cima deste quando reaproveitado aqui. */
+.quiz-img-modal-overlay{position:fixed;inset:0;background:rgba(6,10,14,.7);display:flex;align-items:flex-start;justify-content:center;padding:5vh 20px;overflow-y:auto;z-index:10020}
+.quiz-img-modal{max-width:620px}
+.quiz-img-current-label{font-size:11px;color:var(--muted);min-height:16px;margin:0 2px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.quiz-img-edit-box{display:flex;gap:5px;align-items:center;margin-top:6px}.quiz-img-edit-box[hidden]{display:none}.quiz-img-edit-box .img-gallery-label{flex:1;margin:0;min-width:0}.quiz-img-edit-box .btn{padding:5px 7px;font-size:10.5px}
+.quiz-review-modal-overlay{position:fixed;inset:0;background:rgba(6,10,14,.7);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10020}
+.quiz-review-modal{max-width:540px}
 .quiz-integrated-title{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px}.quiz-integrated-title b{font-size:13px}.quiz-integrated-title span{font:600 10px 'IBM Plex Mono',monospace;color:#55c7ef}
-@media(max-width:780px){.quiz-study-shell{grid-template-columns:1fr}}
+@media(max-width:780px){.quiz-study-shell{grid-template-columns:1fr}.quiz-study-media img{max-height:320px}}
+@media(max-width:480px){.quiz-mcq-option{padding:13px 14px;gap:11px}.quiz-mcq-letter{width:29px;height:29px;font-size:13px}}
 /* ============================================================
    QUIZ & PROGRESSO — paleta viva (espelha o mockup aprovado)
    Camada aditiva: sobrescreve só os componentes do dashboard/estudo,
@@ -812,15 +842,16 @@ body{
 
 /* Modo Estudo — alternativas e feedback vivos */
 .study-dashboard .quiz-mcq-option{
-  display:flex;align-items:center;gap:10px;width:100%;text-align:left;cursor:pointer;
-  background:var(--v-card-2);border:1.5px solid #2A3846;border-radius:10px;
-  padding:12px 14px;color:var(--text);font-size:13px;margin-bottom:8px;transition:all .12s ease;
+  display:flex;align-items:center;gap:14px;width:100%;text-align:left;cursor:pointer;
+  background:var(--v-card-2);border:1.5px solid #2A3846;border-radius:12px;
+  padding:16px 18px;color:var(--text);font-size:clamp(15px,.6vw + 13px,18px);line-height:1.35;margin-bottom:10px;transition:all .12s ease;
 }
 .study-dashboard .quiz-mcq-option:hover:not(:disabled){border-color:var(--v-blue);background:rgba(59,130,246,.10);}
 .study-dashboard .quiz-mcq-letter{
-  width:24px;height:24px;border-radius:50%;flex:none;display:grid;place-items:center;
-  background:#25333F;color:#9FB3C0;font-size:11px;font-weight:700;
+  width:34px;height:34px;border-radius:50%;flex:none;display:grid;place-items:center;
+  background:#25333F;color:#9FB3C0;font-size:15px;font-weight:700;
 }
+@media(max-width:480px){.study-dashboard .quiz-mcq-option{padding:13px 14px;gap:11px}.study-dashboard .quiz-mcq-letter{width:29px;height:29px;font-size:13px}}
 .study-dashboard .quiz-mcq-option.is-correct{border-color:var(--v-green);background:rgba(34,197,94,.14);}
 .study-dashboard .quiz-mcq-option.is-correct .quiz-mcq-letter{background:var(--v-green);color:#08210F;}
 .study-dashboard .quiz-mcq-option.is-wrong{border-color:var(--v-red);background:rgba(239,68,68,.14);}
@@ -2329,6 +2360,7 @@ async function uploadToCloudinary(file, lesionMeta={}){
     cloudinaryContext:out.context||null
   };
 }
+
 function openCloudinarySettings(){
   const cfg=getCloudinaryConfig();
   const ov=document.createElement('div'); ov.className='overlay';
@@ -4484,6 +4516,36 @@ async function getEntryImgs(e){
 }
 async function getEntryFirstImg(e){ const imgs=await getEntryImgs(e); return imgs.length?imgs[0].data:(e.img||null); }
 function hasEntryImgs(e){ return (Array.isArray(e.images)&&e.images.length>0) || !!e.localImg || !!e.img; }
+/* Anexa uma imagem já normalizada (Cloudinary, URL direta ou vinda do
+   Commons) diretamente a UMA lesão específica em DATA — usado pelo atalho
+   "adicionar imagem" do Quiz, que precisa persistir imediatamente (sem o
+   lote "pendingImgs"/Salvar do formulário de edição, que não existe fora
+   dele). Só escreve em `images`/`_userUpdatedAt` da própria lesão passada;
+   não mexe em ownership de outras lesões nem em qualquer outro campo. */
+function addImageToLesionData(lesion, imgObj){
+  const normalized = { ...imgObj, source: imgObj.source||'url', lesionId: lesion.id, lesionName: lesion.name };
+  lesion.images = Array.isArray(lesion.images) ? lesion.images : [];
+  lesion.images.push(normalized);
+  lesion._userUpdatedAt = Date.now();
+  return normalized;
+}
+/* Mesma operação de remoção usada pela galeria normal (splice por índice),
+   limitada ao array `images` da lesão explicitamente recebida. Não remove o
+   asset remoto nem toca ownership ou qualquer outra lesão. */
+function removeImageFromLesionData(lesion, imageIndex){
+  if(!lesion || !Array.isArray(lesion.images) || !Number.isInteger(imageIndex) || imageIndex<0 || imageIndex>=lesion.images.length) return null;
+  const removed = lesion.images.splice(imageIndex, 1)[0] || null;
+  if(removed) lesion._userUpdatedAt = Date.now();
+  return removed;
+}
+/* O formulário normal já edita `label`; esta versão direta faz exatamente a
+   mesma alteração na lesão do Quiz e preserva todos os demais metadados. */
+function updateLesionImageLabel(lesion, imageIndex, label){
+  if(!lesion || !Array.isArray(lesion.images) || !lesion.images[imageIndex]) return null;
+  lesion.images[imageIndex].label = String(label||'');
+  lesion._userUpdatedAt = Date.now();
+  return lesion.images[imageIndex];
+}
 /* redimensiona/comprime antes de salvar, para manter cada imagem leve */
 function resizeImageToDataUrl(file, maxDim, quality){
   return new Promise((resolve, reject)=>{
@@ -7840,12 +7902,22 @@ function openForm(id){
     </div>`;
   document.body.appendChild(ov);
 
+  // Imagens novas adicionadas no formulário ficam SOMENTE locais/temporárias
+  // enquanto a edição está aberta (blob URL para exibir + File em memória).
+  // Nada vai ao Cloudinary antes de "Salvar". As blob URLs são revogadas em
+  // QUALQUER fechamento (cancelar, Esc, clique fora ou após salvar).
+  const pendingObjectUrls = new Set();
+  function trackObjectUrl(file){ const url=URL.createObjectURL(file); pendingObjectUrls.add(url); return url; }
+  function revokeObjectUrl(url){ if(url&&pendingObjectUrls.has(url)){ try{ URL.revokeObjectURL(url); }catch(_e){} pendingObjectUrls.delete(url); } }
+  function releasePendingObjectUrls(){ pendingObjectUrls.forEach(u=>{ try{ URL.revokeObjectURL(u); }catch(_e){} }); pendingObjectUrls.clear(); }
+
   // Fechar edição clicando fora da janela ou pressionando Esc.
   ov.addEventListener('click', (ev)=>{
-    if(ev.target===ov) closeOverlay();
+    if(ev.target===ov){ releasePendingObjectUrls(); closeOverlay(); }
   });
   const closeFormOnEsc = (ev)=>{
     if(ev.key==='Escape' && ov.isConnected){
+      releasePendingObjectUrls();
       closeOverlay();
       document.removeEventListener('keydown', closeFormOnEsc);
     }
@@ -7972,253 +8044,10 @@ function openForm(id){
     { title: 'RX / MMG / US', items: ["RX","MMG","US","Doppler"] },
   ];
 
-  function openCollageBuilder(existingPanels, editTargetIdx){
-    const isEditMode = Array.isArray(existingPanels);
-    const cov=document.createElement('div'); cov.className='overlay';
-    cov.innerHTML=`<div class="modal collage-modal">
-      <h2>▦ ${isEditMode?'Editar':'Criar'} quadro de imagens</h2>
-      <div class="modal-sub">${isEditMode?'ajuste, adicione ou remova painéis, corrija as legendas, e gere de novo':'cole ou selecione de 2 a 8 imagens · organize · identifique as sequências · gere uma única imagem'}</div>
-      <div class="collage-drop" id="collage-drop" tabindex="0">
-        <button type="button" class="btn btn-ghost" id="collage-pick">📎 selecionar imagens</button>
-        <span style="color:var(--muted-2);font-size:12px;margin-left:8px;">ou Ctrl+V / arraste aqui</span>
-        <input type="file" id="collage-files" accept="image/*" multiple style="display:none">
-      </div>
-      <div class="collage-drag-hint">↕ arraste as imagens para reorganizar a ordem</div><div class="collage-list" id="collage-list"></div>
-      <div class="collage-options">
-        <div class="field"><label>Layout</label><select id="collage-layout"><option value="auto">Automático</option><option value="2">2 colunas</option><option value="3">3 colunas</option><option value="4">4 colunas</option></select></div>
-        <div class="field"><label>Rótulos</label><select id="collage-label-pos"><option value="top">faixa superior</option><option value="inside">dentro da imagem</option></select></div>
-        <div class="field"><label>Resolução</label><select id="collage-size"><option value="1600">1600 px</option><option value="1920" selected>1920 px</option><option value="2400">2400 px</option></select></div>
-        <button type="button" class="btn btn-primary" id="collage-generate">gerar quadro</button>
-      </div>
-      <canvas id="collage-canvas" style="display:none"></canvas><img id="collage-preview" class="collage-preview">
-      <div class="modal-actions"><button class="btn btn-ghost" id="collage-cancel">cancelar</button><button class="btn btn-primary" id="collage-insert" disabled>${isEditMode?'salvar quadro atualizado':'inserir quadro no caso'}</button></div>
-    </div>`;
-    document.body.appendChild(cov);
-    let items = isEditMode
-      ? existingPanels.map(p=>({file:null, url:p.url, durableUrl:p.url, seq:p.seq||''}))
-      : [];
-    let finalBlob=null; let finalUrl='';
-    const seqs=['RX','MMG','U.S','TC C-','TC C+','RM T1','RM T2','RM T1 +','RM FLAIR','RM DIFUSAO','RM ADC','RM SWI','ANGIORM'];
-    const list=cov.querySelector('#collage-list'), drop=cov.querySelector('#collage-drop'), input=cov.querySelector('#collage-files');
-    const cleanup=()=>{ if(finalUrl) URL.revokeObjectURL(finalUrl); cov.remove(); };
-    cov.onclick=e=>{ if(e.target===cov) cleanup(); };
-    cov.querySelector('#collage-cancel').onclick=cleanup;
-    cov.querySelector('#collage-pick').onclick=(e)=>{e.stopPropagation();input.click();};
-    drop.onclick=(e)=>{ if(e.target!==input) input.click(); };
-    drop.onkeydown=(e)=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();input.click();} };
-    function addFiles(files){
-      [...files].filter(f=>f&&f.type&&f.type.startsWith('image/')).slice(0,8-items.length).forEach(async f=>{
-        const item = {file:f, url:URL.createObjectURL(f), seq:'', durableUrl:null};
-        items.push(item);
-        render();
-        // Sobe também uma cópia individual e permanente deste painel (Cloudinary se
-        // configurado, senão um dataURL compacto), pra o quadro poder ser reaberto e
-        // editado depois — sem isso, só a imagem final achatada sobreviveria.
-        try{
-          if(hasCloudinaryConfig()){
-            const remote = await uploadToCloudinary(f, getCurrentLesionMeta());
-            item.durableUrl = remote.data;
-          } else {
-            item.durableUrl = await new Promise(res=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(f); });
-          }
-        }catch(e){
-          console.error('Falha ao persistir painel individual do quadro', e);
-          item.durableUrl = item.url; // fallback: pelo menos tenta, mesmo sabendo que é efêmero
-        }
-      });
-    }
-    input.onchange=e=>{addFiles(e.target.files); input.value='';};
-    const handlePaste=e=>{const fs=[...(e.clipboardData?.items||[])].filter(x=>x.type?.startsWith('image/')).map(x=>x.getAsFile()); if(fs.length){e.preventDefault();addFiles(fs);}};
-    drop.onpaste=handlePaste;
-    cov.addEventListener('paste',handlePaste);
-    drop.ondragover=e=>{e.preventDefault();drop.classList.add('drag');}; drop.ondragleave=()=>drop.classList.remove('drag');
-    drop.ondrop=e=>{e.preventDefault();drop.classList.remove('drag');addFiles(e.dataTransfer.files);};
-    function render(){
-      list.innerHTML=''; items.forEach((it,i)=>{
-        const d=document.createElement('div');d.className='collage-item'; d.draggable=true; d.dataset.index=i;
-        d.innerHTML=`<img src="${it.url}" draggable="false"><select><option value="">identificar sequência…</option>${seqs.map(q=>`<option value="${q}" ${it.seq===q?'selected':''}>${q}</option>`).join('')}</select><div class="collage-item-actions"><button class="collage-mini" data-a="left">←</button><button class="collage-mini" data-a="right">→</button><button class="collage-mini" data-a="del">✕</button></div>`;
-        d.ondragstart=e=>{ d.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',String(i)); };
-        d.ondragend=()=>{ d.classList.remove('dragging'); list.querySelectorAll('.drag-over').forEach(x=>x.classList.remove('drag-over')); };
-        d.ondragover=e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; d.classList.add('drag-over'); };
-        d.ondragleave=()=>d.classList.remove('drag-over');
-        d.ondrop=e=>{ e.preventDefault(); d.classList.remove('drag-over'); const from=Number(e.dataTransfer.getData('text/plain')); const to=i; if(Number.isInteger(from)&&from>=0&&from<items.length&&from!==to){ const moved=items.splice(from,1)[0]; items.splice(to,0,moved); render(); if(finalBlob)generateCollage(); } };
-        d.querySelector('select').onchange=e=>{items[i].seq=e.target.value;if(finalBlob)generateCollage();};
-        d.querySelector('[data-a="left"]').onclick=()=>{if(i){[items[i-1],items[i]]=[items[i],items[i-1]];render();if(finalBlob)generateCollage();}};
-        d.querySelector('[data-a="right"]').onclick=()=>{if(i<items.length-1){[items[i+1],items[i]]=[items[i],items[i+1]];render();if(finalBlob)generateCollage();}};
-        d.querySelector('[data-a="del"]').onclick=()=>{URL.revokeObjectURL(items[i].url);items.splice(i,1);render();if(finalBlob&&items.length>=2)generateCollage();}; list.appendChild(d);
-      });
-    }
-    async function loadImg(url){return await new Promise((res,rej)=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>res(im);im.onerror=()=>rej(new Error('Não foi possível carregar uma das imagens do quadro (link quebrado ou bloqueio de origem).'));im.src=url;});}
-    if(isEditMode && items.length){ render(); generateCollage(); }
-    async function generateCollage(){
-      if(items.length<2){toast('Adicione pelo menos 2 imagens.');return;} if(items.length>8){toast('Máximo de 8 imagens.');return;}
-      try{
-        const width=+cov.querySelector('#collage-size').value; const lv=cov.querySelector('#collage-layout').value;
-        const cols=lv==='auto'?(items.length<=4?2:(items.length<=6?3:4)):+lv; const rows=Math.ceil(items.length/cols);
-        const gap=4, labelH=54, cellW=Math.floor((width-gap*(cols-1))/cols), cellH=Math.round(cellW*.78);
-        const canvas=cov.querySelector('#collage-canvas'); canvas.width=width; canvas.height=rows*(cellH+labelH)+gap*(rows-1);
-        const ctx=canvas.getContext('2d'); ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height); ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='600 28px Arial';
-        const pos=cov.querySelector('#collage-label-pos').value;
-        for(let i=0;i<items.length;i++){
-          const im=await loadImg(items[i].url), c=i%cols,r=Math.floor(i/cols),x=c*(cellW+gap),y=r*(cellH+labelH+gap);
-          const iy=pos==='top'?y+labelH:y, ih=pos==='top'?cellH:cellH+labelH;
-          const scale=Math.min(cellW/im.width,ih/im.height),dw=im.width*scale,dh=im.height*scale;
-          ctx.drawImage(im,x+(cellW-dw)/2,iy+(ih-dh)/2,dw,dh);
-          const lab=items[i].seq||('Imagem '+(i+1));
-          if(pos==='top'){ctx.fillStyle='#050505';ctx.fillRect(x,y,cellW,labelH);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,y+labelH/2);}
-          else{const bh=46;ctx.fillStyle='rgba(0,0,0,.72)';ctx.fillRect(x,iy+ih-bh,cellW,bh);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,iy+ih-bh/2);}
-        }
-        finalBlob=await new Promise((res,rej)=>{
-          try{ canvas.toBlob(b=>res(b), 'image/jpeg', .92); }
-          catch(err){ rej(err); } // navegadores como Firefox lançam erro de segurança aqui num canvas "contaminado"
-        });
-        if(!finalBlob){
-          // Chrome não lança erro, só devolve null quando o canvas fica "contaminado" por imagem
-          // de origem cruzada sem CORS liberado — sem essa checagem, o botão de salvar fica
-          // desabilitado pra sempre, sem nenhuma explicação visível.
-          toast('⚠ Não foi possível gerar o quadro: uma das imagens veio de um site que bloqueia esse uso (CORS). Tente subir a imagem como arquivo em vez de link direto.');
-          return;
-        }
-        if(finalUrl) URL.revokeObjectURL(finalUrl);
-        finalUrl=URL.createObjectURL(finalBlob);
-        const prev=cov.querySelector('#collage-preview');prev.src=finalUrl;prev.style.display='block';cov.querySelector('#collage-insert').disabled=false;
-      }catch(err){
-        console.error('Falha ao gerar o quadro de imagens', err);
-        toast('⚠ Falha ao gerar o quadro: ' + (err.message||err));
-        finalBlob=null;
-      }
-    }
-    cov.querySelector('#collage-generate').onclick=generateCollage;
-    cov.querySelector('#collage-insert').onclick=async()=>{
-      if(!finalBlob)return;
-      const label=items.map(x=>x.seq).filter(Boolean).join(' · ')||'Quadro multimodal';
-      const panels=items.map(x=>({url:x.durableUrl||x.url, seq:x.seq||''}));
-      const applyResult=(imgObj)=>{
-        imgObj.label=label;
-        imgObj.panels=panels;
-        if(isEditMode && editTargetIdx!=null && pendingImgs[editTargetIdx]){
-          pendingImgs[editTargetIdx]=imgObj;
-        }else{
-          pendingImgs.push(imgObj);
-        }
-        imgsChanged=true; renderImgGallery(); cleanup();
-      };
-      if(hasCloudinaryConfig()){
-        try{
-          const file=new File([finalBlob],'quadro-imagens-'+Date.now()+'.jpg',{type:'image/jpeg'});
-          const remote=await uploadToCloudinary(file,getCurrentLesionMeta());
-          applyResult(remote);
-          toast(isEditMode?'Quadro atualizado com sucesso.':'Quadro gerado e enviado ao Cloudinary.');
-        }catch(e){toast('Falha ao enviar o quadro ao Cloudinary: '+e.message);}
-      }else{
-        const data=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(finalBlob);});
-        applyResult({data,source:'local'});
-        toast(isEditMode?'Quadro atualizado localmente.':'Quadro inserido localmente.');
-      }
-    };
-  }
-
-  function stripHtmlText(v){
-    const d=document.createElement('div'); d.innerHTML=String(v||''); return (d.textContent||'').replace(/\s+/g,' ').trim();
-  }
-
-  function openCommonsImageSearch(){
-    const cov=document.createElement('div'); cov.className='overlay';
-    cov.style.zIndex='10030';
-    const initialTerm=(document.getElementById('f-en-term').value.trim() || document.getElementById('f-name').value.trim());
-    cov.innerHTML=`<div class="modal" style="max-width:1040px;max-height:90vh;overflow:auto;">
-      <h2>🔎 Buscar imagens livres</h2>
-      <div class="modal-sub">teste com Wikimedia Commons · revise a imagem e a licença antes de inserir</div>
-      <div class="field-row" style="align-items:flex-end;gap:8px;">
-        <div class="field" style="flex:1;margin-bottom:0;"><label>Termo de busca</label><input id="commons-q" value="${escAttr(initialTerm)}" placeholder="ex: Wilms tumor CT"></div>
-        <button type="button" class="btn btn-primary" id="commons-search" style="height:38px;">buscar</button>
-      </div>
-      <div style="font-size:11px;color:var(--muted-2);margin:8px 0 12px;">Fonte: Wikimedia Commons. O Atlas salvará também página de origem, autor e licença quando disponíveis.</div>
-      <div id="commons-status" style="font-size:12px;color:var(--muted-2);margin-bottom:10px;"></div>
-      <div id="commons-results" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;"></div>
-      <div class="modal-actions" style="position:sticky;bottom:-1px;background:var(--panel);padding-top:12px;">
-        <button type="button" class="btn btn-ghost" id="commons-cancel">fechar</button>
-        <button type="button" class="btn btn-primary" id="commons-add" disabled>adicionar selecionadas ao caso</button>
-      </div>
-    </div>`;
-    document.body.appendChild(cov);
-    let results=[];
-    let selected=new Set();
-    let busy=false;
-    const close=()=>{ if(cov.isConnected) cov.remove(); };
-    cov.addEventListener('click',e=>{ if(e.target===cov) close(); });
-    cov.querySelector('#commons-cancel').onclick=close;
-    const esc=e=>{ if(e.key==='Escape'&&cov.isConnected){e.stopPropagation();close();document.removeEventListener('keydown',esc,true);} };
-    document.addEventListener('keydown',esc,true);
-    function updateAdd(){ cov.querySelector('#commons-add').disabled=!selected.size||busy; }
-    function renderResults(){
-      const box=cov.querySelector('#commons-results'); box.innerHTML='';
-      results.forEach((r,i)=>{
-        const card=document.createElement('div');
-        card.style.cssText='border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg);cursor:pointer;position:relative;';
-        const lic=[r.license,r.artist].filter(Boolean).join(' · ');
-        card.innerHTML=`<div style="height:145px;background:#000;display:flex;align-items:center;justify-content:center;"><img src="${escAttr(r.thumb)}" loading="lazy" style="max-width:100%;max-height:145px;object-fit:contain;"></div>
-          <div style="padding:7px 8px 8px;font-size:11px;line-height:1.3;"><div style="font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escAttr(r.title)}">${r.title.replace(/^File:/,'')}</div><div style="color:var(--muted-2);margin-top:3px;min-height:28px;">${lic||'licença/autor não informados pela API'}</div></div>
-          <div data-check="1" style="position:absolute;top:7px;right:7px;width:24px;height:24px;border-radius:50%;border:2px solid #fff;background:${selected.has(i)?'var(--teal)':'rgba(0,0,0,.55)'};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;">${selected.has(i)?'✓':''}</div>`;
-        card.onclick=()=>{ selected.has(i)?selected.delete(i):selected.add(i); renderResults(); updateAdd(); };
-        box.appendChild(card);
-      });
-      updateAdd();
-    }
-    async function doSearch(){
-      const q=cov.querySelector('#commons-q').value.trim(); if(!q)return;
-      const st=cov.querySelector('#commons-status'); const box=cov.querySelector('#commons-results');
-      st.textContent='Buscando no Wikimedia Commons…'; box.innerHTML=''; selected.clear(); updateAdd();
-      try{
-        const params=new URLSearchParams({action:'query',format:'json',origin:'*',generator:'search',gsrsearch:q,gsrnamespace:'6',gsrlimit:'16',prop:'imageinfo',iiprop:'url|mime|extmetadata',iiurlwidth:'700'});
-        const res=await fetch('https://commons.wikimedia.org/w/api.php?'+params.toString());
-        if(!res.ok) throw new Error('HTTP '+res.status);
-        const data=await res.json();
-        const pages=Object.values((data.query&&data.query.pages)||{}).sort((a,b)=>(a.index||999)-(b.index||999));
-        results=pages.map(p=>{
-          const ii=(p.imageinfo&&p.imageinfo[0])||{}; const em=ii.extmetadata||{};
-          const mime=ii.mime||'';
-          if(mime && !mime.startsWith('image/')) return null;
-          return {title:p.title||'', thumb:ii.thumburl||ii.url||'', url:ii.url||ii.thumburl||'',
-            page:'https://commons.wikimedia.org/wiki/'+encodeURIComponent((p.title||'').replace(/ /g,'_')),
-            license:stripHtmlText((em.LicenseShortName&&em.LicenseShortName.value)||(em.UsageTerms&&em.UsageTerms.value)||''),
-            artist:stripHtmlText((em.Artist&&em.Artist.value)||(em.Credit&&em.Credit.value)||''),
-            attribution:stripHtmlText((em.Attribution&&em.Attribution.value)||'')};
-        }).filter(x=>x&&x.thumb&&x.url);
-        st.textContent=results.length?`${results.length} resultado(s). Clique nas imagens que deseja adicionar.`:'Nenhuma imagem encontrada. Tente o termo em inglês ou acrescente CT, MRI, ultrasound, x-ray etc.';
-        renderResults();
-      }catch(err){ console.error('Commons search',err); st.textContent='Falha na busca: '+err.message; results=[]; renderResults(); }
-    }
-    cov.querySelector('#commons-search').onclick=doSearch;
-    cov.querySelector('#commons-q').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();doSearch();} });
-    cov.querySelector('#commons-add').onclick=async()=>{
-      if(!selected.size||busy)return;
-      if(!hasCloudinaryConfig()){ toast('Cloudinary precisa estar ativo para adicionar imagens da busca.'); return; }
-      busy=true; updateAdd(); const st=cov.querySelector('#commons-status');
-      const chosen=[...selected].sort((a,b)=>a-b).map(i=>results[i]).filter(Boolean); let ok=0,fail=0;
-      for(let n=0;n<chosen.length;n++){
-        const r=chosen[n]; st.textContent=`Enviando ${n+1}/${chosen.length} ao Cloudinary…`;
-        try{
-          const fr=await fetch(r.url,{mode:'cors'}); if(!fr.ok) throw new Error('imagem HTTP '+fr.status);
-          const blob=await fr.blob(); if(!blob.type.startsWith('image/')) throw new Error('arquivo não é imagem');
-          const ext=(blob.type.split('/')[1]||'jpg').replace('jpeg','jpg').replace('svg+xml','svg');
-          const f=new File([blob],`commons-${Date.now()}-${n}.${ext}`,{type:blob.type});
-          const remote=await uploadToCloudinary(f,getCurrentLesionMeta());
-          remote.label=''; remote.sourcePage=r.page; remote.sourceSite='Wikimedia Commons'; remote.license=r.license||''; remote.artist=r.artist||''; remote.attribution=r.attribution||''; remote.originalUrl=r.url;
-          pendingImgs.push(remote); ok++;
-        }catch(err){ console.error('Commons import',r,err); fail++; }
-      }
-      if(ok){imgsChanged=true;renderImgGallery();}
-      busy=false; updateAdd(); st.textContent=`Concluído: ${ok} adicionada(s)${fail?` · ${fail} falhou/falharam`:''}.`;
-      if(ok&&!fail){ setTimeout(close,500); toast(ok+' imagem(ns) adicionada(s) ao caso.'); }
-    };
-    doSearch();
-  }
-
   function renderCloudStatus(msg, kind){
     if(msg){ cloudStatus.textContent=msg; cloudStatus.className='img-cloud-status '+(kind||''); return; }
     if(hasCloudinaryConfig()){
-      cloudStatus.textContent='☁ Cloudinary ativo — novos uploads também recebem ID + nome da lesão para recuperação futura.';
+      cloudStatus.textContent='☁ Cloudinary ativo — imagens novas só são enviadas ao clicar em "Salvar".';
       cloudStatus.className='img-cloud-status ok';
     }else{
       cloudStatus.innerHTML='⚠ Cloudinary indisponível. Por segurança, o Atlas não salvará imagens apenas neste computador. <span id="cloudinary-inline" style="text-decoration:underline;cursor:pointer;">configurar</span>';
@@ -8231,7 +8060,7 @@ function openForm(id){
     pendingImgs.forEach((img, idx)=>{
       const item = document.createElement('div');
       item.className = 'img-gallery-item';
-      const sourceLabel=img.source==='cloudinary'?'☁ Cloudinary':(img.source==='imgbb'?'☁ ImgBB':(img.source==='url'?'🔗 URL':'💾 local'));
+      const sourceLabel=img.source==='cloudinary'?'☁ Cloudinary':(img.source==='pending'?'⏳ não enviada':(img.source==='imgbb'?'☁ ImgBB':(img.source==='url'?'🔗 URL':'💾 local')));
       item.innerHTML = `
         <span class="img-source-badge">${sourceLabel}</span>
         <img src="${img.data}" class="img-gallery-thumb" title="clique pra ampliar">
@@ -8251,7 +8080,9 @@ function openForm(id){
       item.querySelector('.img-gallery-thumb').addEventListener('click', ()=> openImageLightbox(img.data));
       if(Array.isArray(img.panels) && img.panels.length){
         item.querySelector('.img-gallery-edit-collage').addEventListener('click', ()=>{
-          openCollageBuilder(img.panels, idx);
+          openCollageBuilder(getCurrentLesionMeta(), collage=>{
+            pendingImgs[idx]=collage; imgsChanged=true; renderImgGallery();
+          }, img.panels);
         });
       }
       item.querySelector('.img-gallery-swap').addEventListener('click', ()=>{
@@ -8267,6 +8098,7 @@ function openForm(id){
         const url = urlInput.value.trim();
         if(!/^https?:\/\//i.test(url)){ toast('Cole uma URL http/https válida.'); return; }
         const oldLabel = pendingImgs[idx].label;
+        revokeObjectUrl(pendingImgs[idx]._objectUrl);
         pendingImgs[idx] = { label: oldLabel || '', data: url, source: 'url' };
         imgsChanged = true;
         renderImgGallery();
@@ -8300,7 +8132,9 @@ function openForm(id){
         groupsWrap.appendChild(groupDiv);
       });
       item.querySelector('.img-gallery-remove').addEventListener('click', ()=>{
-        pendingImgs.splice(idx,1); imgsChanged=true; renderImgGallery();
+        const removed = pendingImgs.splice(idx,1)[0];
+        if(removed && removed.source==='pending') revokeObjectUrl(removed._objectUrl);
+        imgsChanged=true; renderImgGallery();
       });
       imgGallery.appendChild(item);
     });
@@ -8313,44 +8147,55 @@ function openForm(id){
   }
   renderCloudStatus();
   document.getElementById('img-pick-btn').onclick = ()=> imgFileInput.click();
-  document.getElementById('img-collage-btn').onclick = ()=> openCollageBuilder();
-  document.getElementById('img-web-btn').onclick = openCommonsImageSearch;
+  document.getElementById('img-collage-btn').onclick = ()=> openCollageBuilder(getCurrentLesionMeta(), collage=>{
+    // deferUpload=true: o quadro chega como imagem temporária (source:'pending').
+    // Registra a blob URL do quadro para ser revogada no fechar/salvar.
+    if(collage && collage.source==='pending' && collage._objectUrl) pendingObjectUrls.add(collage._objectUrl);
+    pendingImgs.push(collage); imgsChanged=true; renderImgGallery();
+  }, null, true);
+  document.getElementById('img-web-btn').onclick = ()=>{
+    const initialTerm = document.getElementById('f-en-term').value.trim() || document.getElementById('f-name').value.trim();
+    // deferUpload=true: no editor, a imagem baixada do Commons fica temporária
+    // (blob) e só sobe ao Cloudinary no "Salvar".
+    openCommonsImageSearch(getCurrentLesionMeta(), initialTerm, (imgs)=>{
+      imgs.forEach(im=>{
+        const objectUrl = trackObjectUrl(im._file);
+        im.data = objectUrl; im._objectUrl = objectUrl;
+        pendingImgs.push(im);
+      });
+      imgsChanged=true; renderImgGallery();
+    }, true);
+  };
 
-  async function handleImgFile(file){
-    if(!file || !file.type.startsWith('image/')) return;
+  /* Adiciona uma imagem NOVA como temporária/local: cria uma blob URL para
+     exibir e guarda o File para o upload acontecer só no "Salvar". NÃO chama
+     uploadToCloudinary() aqui — nada é enviado enquanto o formulário está aberto. */
+  function addLocalFile(file){
+    if(!file || !file.type || !file.type.startsWith('image/')) return;
     const targetIdx = replaceTargetIdx;
     replaceTargetIdx = null;
-    if(hasCloudinaryConfig()){
-      try{
-        renderCloudStatus('☁ Enviando '+(file.name||'imagem')+' para o Cloudinary…','ok');
-        const remote=await uploadToCloudinary(file,getCurrentLesionMeta());
-        if(targetIdx!==null && pendingImgs[targetIdx]){
-          remote.label = pendingImgs[targetIdx].label || ''; // mantém o rótulo já escolhido pro quadro
-          pendingImgs[targetIdx] = remote;
-        } else {
-          pendingImgs.push(remote);
-        }
-        imgsChanged=true; renderImgGallery(); renderCloudStatus();
-      }catch(err){
-        console.error('Cloudinary upload',err);
-        renderCloudStatus('Falha no Cloudinary: '+err.message+' — nada foi salvo localmente automaticamente.','warn');
-        toast('Falha no upload Cloudinary. Verifique cloud name, preset unsigned e conexão.');
-      }
-    }else{
-      toast('Cloudinary precisa estar ativo para salvar imagens sincronizadas.');
-      renderCloudStatus('Cloudinary indisponível — imagem não foi salva localmente.','warn');
+    const objectUrl = trackObjectUrl(file);
+    const temp = { label:'', data:objectUrl, source:'pending', _file:file, _objectUrl:objectUrl };
+    if(targetIdx!==null && pendingImgs[targetIdx]){
+      const old = pendingImgs[targetIdx];
+      if(old && old.source==='pending') revokeObjectUrl(old._objectUrl);
+      temp.label = old.label || '';
+      pendingImgs[targetIdx] = temp;
+    } else {
+      pendingImgs.push(temp);
     }
+    imgsChanged=true; renderImgGallery();
   }
-  imgFileInput.addEventListener('change', async (e)=>{
+  imgFileInput.addEventListener('change', (e)=>{
     const files=[...e.target.files];
-    for(const file of files) await handleImgFile(file);
+    for(const file of files) addLocalFile(file);
     e.target.value='';
   });
-  imgBox.addEventListener('paste', async (e)=>{
+  imgBox.addEventListener('paste', (e)=>{
     const items=e.clipboardData&&e.clipboardData.items; if(!items) return;
     const files=[];
     for(const it of items) if(it.type&&it.type.startsWith('image/')) files.push(it.getAsFile());
-    if(files.length){ e.preventDefault(); for(const f of files) await handleImgFile(f); }
+    if(files.length){ e.preventDefault(); for(const f of files) addLocalFile(f); }
   });
   imgBox.tabIndex=0;
   document.getElementById('img-add-url').onclick=()=>{
@@ -8359,7 +8204,7 @@ function openForm(id){
     pendingImgs.push({label:'',data:url,source:'url'}); imgsChanged=true; el.value=''; renderImgGallery();
   };
 
-  document.getElementById('f-cancel').onclick = ()=>{ document.removeEventListener('keydown', closeFormOnEsc); closeOverlay(); };
+  document.getElementById('f-cancel').onclick = ()=>{ releasePendingObjectUrls(); document.removeEventListener('keydown', closeFormOnEsc); closeOverlay(); };
   document.getElementById('f-save').onclick = async ()=>{
     const name = document.getElementById('f-name').value.trim();
     const sec = document.getElementById('f-section').value.trim();
@@ -8381,10 +8226,29 @@ function openForm(id){
     let localImgFlag = existing ? !!existing.localImg : false;
     let remoteImgs = existing && Array.isArray(existing.images) ? existing.images : [];
     if(imgsChanged){
-      // v166: nenhuma imagem nova fica presa ao computador. Legadas locais são convertidas para Cloudinary antes de salvar.
+      // Só AGORA (no Salvar) as imagens NOVAS temporárias vão ao Cloudinary.
+      // Imagens já existentes (cloudinary/url) são mantidas como estão; as
+      // temporárias removidas antes do Salvar simplesmente não estão em
+      // pendingImgs e nunca são enviadas. Se qualquer upload necessário falhar,
+      // NADA é persistido (a lesão não é gravada com um conjunto incompleto).
       const normalized=[];
       for(const x of pendingImgs){
-        if(x.source==='local' && x.data && /^data:image\//i.test(x.data)){
+        if(x.source==='pending' && x._file){
+          if(!hasCloudinaryConfig()){ toast('Cloudinary indisponível: não foi possível enviar as imagens novas. Nada foi salvo.'); return; }
+          try{
+            const remote=await uploadToCloudinary(x._file,{id:entryId,name});
+            remote.label=x.label||'';
+            for(const k of ['sourcePage','sourceSite','license','artist','attribution','originalUrl']){
+              if(x[k]!==undefined) remote[k]=x[k];
+            }
+            normalized.push(remote);
+          }catch(err){
+            console.error('Cloudinary upload (salvar)',err);
+            toast('Falha ao enviar uma imagem nova ao Cloudinary. Nada foi salvo — tente novamente.');
+            return;
+          }
+        }else if(x.source==='local' && x.data && /^data:image\//i.test(x.data)){
+          // legado: data URL local antiga — mesma regra (upload só no Salvar)
           if(!hasCloudinaryConfig()){ toast('Cloudinary indisponível: não foi possível sincronizar uma imagem local antiga.'); return; }
           try{
             const blob=await (await fetch(x.data)).blob();
@@ -8444,6 +8308,7 @@ function openForm(id){
     }finally{
       saveBtn.textContent = originalBtnText;
       saveBtn.disabled = false;
+      releasePendingObjectUrls();
       document.removeEventListener('keydown', closeFormOnEsc);
       closeOverlay();
       // Restaura o filtro/escopo de navegação de antes de abrir o formulário
@@ -8459,6 +8324,282 @@ function openForm(id){
         : '⚠ Salvo neste dispositivo, mas a sincronização com a nuvem falhou — veja o aviso na barra lateral.');
     }
   };
+}
+
+/* Construtor único de quadro de imagens. Antes era uma closure exclusiva de
+   openForm(); agora recebe a lesão-alvo e devolve o quadro pronto por callback,
+   permitindo que o Quiz use exatamente o mesmo editor sem sair da sessão.
+   deferUpload: quando true (formulário Editar), NENHUM upload acontece aqui —
+   os painéis ficam temporários (blob) e o quadro final vira uma imagem
+   pendente ({source:'pending', _file}) para subir só no Salvar. O Quiz chama
+   sem esse parâmetro e mantém o upload imediato. */
+function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpload){
+  const isEditMode = Array.isArray(existingPanels);
+  const cov=document.createElement('div'); cov.className='overlay';
+  cov.style.zIndex='10030';
+  cov.innerHTML=`<div class="modal collage-modal">
+    <h2>▦ ${isEditMode?'Editar':'Criar'} quadro de imagens</h2>
+    <div class="modal-sub">${isEditMode?'ajuste, adicione ou remova painéis, corrija as legendas, e gere de novo':'cole ou selecione de 2 a 8 imagens · organize · identifique as sequências · gere uma única imagem'}</div>
+    <div class="collage-drop" id="collage-drop" tabindex="0">
+      <button type="button" class="btn btn-ghost" id="collage-pick">📎 selecionar imagens</button>
+      <span style="color:var(--muted-2);font-size:12px;margin-left:8px;">ou Ctrl+V / arraste aqui</span>
+      <input type="file" id="collage-files" accept="image/*" multiple style="display:none">
+    </div>
+    <div class="collage-drag-hint">↕ arraste as imagens para reorganizar a ordem</div><div class="collage-list" id="collage-list"></div>
+    <div class="collage-options">
+      <div class="field"><label>Layout</label><select id="collage-layout"><option value="auto">Automático</option><option value="2">2 colunas</option><option value="3">3 colunas</option><option value="4">4 colunas</option></select></div>
+      <div class="field"><label>Rótulos</label><select id="collage-label-pos"><option value="top">faixa superior</option><option value="inside">dentro da imagem</option></select></div>
+      <div class="field"><label>Resolução</label><select id="collage-size"><option value="1600">1600 px</option><option value="1920" selected>1920 px</option><option value="2400">2400 px</option></select></div>
+      <button type="button" class="btn btn-primary" id="collage-generate">gerar quadro</button>
+    </div>
+    <canvas id="collage-canvas" style="display:none"></canvas><img id="collage-preview" class="collage-preview">
+    <div class="modal-actions"><button class="btn btn-ghost" id="collage-cancel">cancelar</button><button class="btn btn-primary" id="collage-insert" disabled>${isEditMode?'salvar quadro atualizado':'inserir quadro no caso'}</button></div>
+  </div>`;
+  document.body.appendChild(cov);
+  let items = isEditMode
+    ? existingPanels.map(p=>({file:null, url:p.url, durableUrl:p.url, seq:p.seq||''}))
+    : [];
+  let finalBlob=null; let finalUrl='';
+  const seqs=['RX','MMG','U.S','TC C-','TC C+','RM T1','RM T2','RM T1 +','RM FLAIR','RM DIFUSAO','RM ADC','RM SWI','ANGIORM'];
+  const list=cov.querySelector('#collage-list'), drop=cov.querySelector('#collage-drop'), input=cov.querySelector('#collage-files');
+  drop.focus();
+  const cleanup=()=>{ if(finalUrl) URL.revokeObjectURL(finalUrl); cov.remove(); };
+  cov.onclick=e=>{ if(e.target===cov) cleanup(); };
+  cov.querySelector('#collage-cancel').onclick=cleanup;
+  cov.querySelector('#collage-pick').onclick=(e)=>{e.stopPropagation();input.click();};
+  drop.onclick=(e)=>{ if(e.target!==input) input.click(); };
+  drop.onkeydown=(e)=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();input.click();} };
+  function addFiles(files){
+    [...files].filter(f=>f&&f.type&&f.type.startsWith('image/')).slice(0,8-items.length).forEach(async f=>{
+      const item = {file:f, url:URL.createObjectURL(f), seq:'', durableUrl:null};
+      items.push(item);
+      render();
+      // Upload diferido (formulário Editar): NÃO envia o painel ao Cloudinary.
+      // O painel fica só temporário (blob URL) até o Salvar.
+      if(deferUpload){ item.durableUrl = item.url; return; }
+      // Persiste cada painel separadamente para o quadro continuar editável.
+      try{
+        if(hasCloudinaryConfig()){
+          const remote = await uploadToCloudinary(f, lesionMeta);
+          item.durableUrl = remote.data;
+        } else {
+          item.durableUrl = await new Promise(res=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(f); });
+        }
+      }catch(e){
+        console.error('Falha ao persistir painel individual do quadro', e);
+        item.durableUrl = item.url;
+      }
+    });
+  }
+  input.onchange=e=>{addFiles(e.target.files); input.value='';};
+  const handlePaste=e=>{const fs=[...(e.clipboardData?.items||[])].filter(x=>x.type?.startsWith('image/')).map(x=>x.getAsFile()); if(fs.length){e.preventDefault();addFiles(fs);}};
+  cov.addEventListener('paste',handlePaste);
+  drop.ondragover=e=>{e.preventDefault();drop.classList.add('drag');}; drop.ondragleave=()=>drop.classList.remove('drag');
+  drop.ondrop=e=>{e.preventDefault();drop.classList.remove('drag');addFiles(e.dataTransfer.files);};
+  function render(){
+    list.innerHTML=''; items.forEach((it,i)=>{
+      const d=document.createElement('div');d.className='collage-item'; d.draggable=true; d.dataset.index=i;
+      d.innerHTML=`<img src="${it.url}" draggable="false"><select><option value="">identificar sequência…</option>${seqs.map(q=>`<option value="${q}" ${it.seq===q?'selected':''}>${q}</option>`).join('')}</select><div class="collage-item-actions"><button class="collage-mini" data-a="left">←</button><button class="collage-mini" data-a="right">→</button><button class="collage-mini" data-a="del">✕</button></div>`;
+      d.ondragstart=e=>{ d.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',String(i)); };
+      d.ondragend=()=>{ d.classList.remove('dragging'); list.querySelectorAll('.drag-over').forEach(x=>x.classList.remove('drag-over')); };
+      d.ondragover=e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; d.classList.add('drag-over'); };
+      d.ondragleave=()=>d.classList.remove('drag-over');
+      d.ondrop=e=>{ e.preventDefault(); d.classList.remove('drag-over'); const from=Number(e.dataTransfer.getData('text/plain')); const to=i; if(Number.isInteger(from)&&from>=0&&from<items.length&&from!==to){ const moved=items.splice(from,1)[0]; items.splice(to,0,moved); render(); if(finalBlob)generateCollage(); } };
+      d.querySelector('select').onchange=e=>{items[i].seq=e.target.value;if(finalBlob)generateCollage();};
+      d.querySelector('[data-a="left"]').onclick=()=>{if(i){[items[i-1],items[i]]=[items[i],items[i-1]];render();if(finalBlob)generateCollage();}};
+      d.querySelector('[data-a="right"]').onclick=()=>{if(i<items.length-1){[items[i+1],items[i]]=[items[i],items[i+1]];render();if(finalBlob)generateCollage();}};
+      d.querySelector('[data-a="del"]').onclick=()=>{URL.revokeObjectURL(items[i].url);items.splice(i,1);render();if(finalBlob&&items.length>=2)generateCollage();}; list.appendChild(d);
+    });
+  }
+  async function loadImg(url){return await new Promise((res,rej)=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>res(im);im.onerror=()=>rej(new Error('Não foi possível carregar uma das imagens do quadro (link quebrado ou bloqueio de origem).'));im.src=url;});}
+  if(isEditMode && items.length){ render(); generateCollage(); }
+  async function generateCollage(){
+    if(items.length<2){toast('Adicione pelo menos 2 imagens.');return;} if(items.length>8){toast('Máximo de 8 imagens.');return;}
+    try{
+      const width=+cov.querySelector('#collage-size').value; const lv=cov.querySelector('#collage-layout').value;
+      const cols=lv==='auto'?(items.length<=4?2:(items.length<=6?3:4)):+lv; const rows=Math.ceil(items.length/cols);
+      const gap=4, labelH=54, cellW=Math.floor((width-gap*(cols-1))/cols), cellH=Math.round(cellW*.78);
+      const canvas=cov.querySelector('#collage-canvas'); canvas.width=width; canvas.height=rows*(cellH+labelH)+gap*(rows-1);
+      const ctx=canvas.getContext('2d'); ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height); ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='600 28px Arial';
+      const pos=cov.querySelector('#collage-label-pos').value;
+      for(let i=0;i<items.length;i++){
+        const im=await loadImg(items[i].url), c=i%cols,r=Math.floor(i/cols),x=c*(cellW+gap),y=r*(cellH+labelH+gap);
+        const iy=pos==='top'?y+labelH:y, ih=pos==='top'?cellH:cellH+labelH;
+        const scale=Math.min(cellW/im.width,ih/im.height),dw=im.width*scale,dh=im.height*scale;
+        ctx.drawImage(im,x+(cellW-dw)/2,iy+(ih-dh)/2,dw,dh);
+        const lab=items[i].seq||('Imagem '+(i+1));
+        if(pos==='top'){ctx.fillStyle='#050505';ctx.fillRect(x,y,cellW,labelH);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,y+labelH/2);}
+        else{const bh=46;ctx.fillStyle='rgba(0,0,0,.72)';ctx.fillRect(x,iy+ih-bh,cellW,bh);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,iy+ih-bh/2);}
+      }
+      finalBlob=await new Promise((res,rej)=>{
+        try{ canvas.toBlob(b=>res(b), 'image/jpeg', .92); }
+        catch(err){ rej(err); }
+      });
+      if(!finalBlob){
+        toast('⚠ Não foi possível gerar o quadro: uma das imagens veio de um site que bloqueia esse uso (CORS). Tente subir a imagem como arquivo em vez de link direto.');
+        return;
+      }
+      if(finalUrl) URL.revokeObjectURL(finalUrl);
+      finalUrl=URL.createObjectURL(finalBlob);
+      const prev=cov.querySelector('#collage-preview');prev.src=finalUrl;prev.style.display='block';cov.querySelector('#collage-insert').disabled=false;
+    }catch(err){
+      console.error('Falha ao gerar o quadro de imagens', err);
+      toast('⚠ Falha ao gerar o quadro: ' + (err.message||err));
+      finalBlob=null;
+    }
+  }
+  cov.querySelector('#collage-generate').onclick=generateCollage;
+  cov.querySelector('#collage-insert').onclick=async()=>{
+    if(!finalBlob)return;
+    const label=items.map(x=>x.seq).filter(Boolean).join(' · ')||'Quadro multimodal';
+    const panels=items.map(x=>({url:x.durableUrl||x.url, seq:x.seq||''}));
+    if(deferUpload){
+      // Upload diferido (formulário Editar): NÃO envia o quadro agora. Cria um
+      // File temporário + blob URL própria (separada do preview, que é revogada
+      // no cleanup) e devolve como imagem pendente para subir só no Salvar.
+      const file=new File([finalBlob],'quadro-imagens-'+Date.now()+'.jpg',{type:'image/jpeg'});
+      const objectUrl=URL.createObjectURL(file);
+      onCollageReady({label, panels, source:'pending', _file:file, _objectUrl:objectUrl});
+      cleanup();
+      toast(isEditMode?'Quadro atualizado (será enviado ao salvar).':'Quadro adicionado (será enviado ao salvar).');
+      return;
+    }
+    const applyResult=(imgObj)=>{
+      imgObj.label=label;
+      imgObj.panels=panels;
+      onCollageReady(imgObj);
+      cleanup();
+    };
+    if(hasCloudinaryConfig()){
+      try{
+        const file=new File([finalBlob],'quadro-imagens-'+Date.now()+'.jpg',{type:'image/jpeg'});
+        const remote=await uploadToCloudinary(file,lesionMeta);
+        applyResult(remote);
+        toast(isEditMode?'Quadro atualizado com sucesso.':'Quadro gerado e enviado ao Cloudinary.');
+      }catch(e){toast('Falha ao enviar o quadro ao Cloudinary: '+e.message);}
+    }else{
+      const data=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(finalBlob);});
+      applyResult({data,source:'local'});
+      toast(isEditMode?'Quadro atualizado localmente.':'Quadro inserido localmente.');
+    }
+  };
+}
+
+function stripHtmlText(v){
+  const d=document.createElement('div'); d.innerHTML=String(v||''); return (d.textContent||'').replace(/\s+/g,' ').trim();
+}
+
+/* Busca de imagens livres (Wikimedia Commons). Movida pra fora de openForm()
+   e parametrizada (era uma closure presa a pendingImgs/f-en-term/f-name do
+   formulário de edição) pra poder ser reaproveitada também pelo Quiz
+   (adicionar imagem a uma lesão sem sair da sessão) — mesma busca, mesmo
+   upload ao Cloudinary, mesmo comportamento; só o destino de onde as
+   imagens escolhidas vão parar virou um callback.
+   lesionMeta: {id,name} da lesão alvo. initialTerm: termo pré-preenchido na
+   busca. onImagesAdded(imgs): chamado com os objetos de imagem já
+   normalizados (mesmo formato de sempre) quando o usuário confirma.
+   deferUpload: quando true, NÃO envia ao Cloudinary — baixa o arquivo e
+   devolve objetos temporários ({source:'pending', _file}) para o editor
+   enviar somente no "Salvar". O Quiz chama sem esse parâmetro (upload
+   imediato, comportamento preservado). */
+function openCommonsImageSearch(lesionMeta, initialTerm, onImagesAdded, deferUpload){
+  const cov=document.createElement('div'); cov.className='overlay';
+  cov.style.zIndex='10030';
+  cov.innerHTML=`<div class="modal" style="max-width:1040px;max-height:90vh;overflow:auto;">
+    <h2>🔎 Buscar imagens livres</h2>
+    <div class="modal-sub">teste com Wikimedia Commons · revise a imagem e a licença antes de inserir</div>
+    <div class="field-row" style="align-items:flex-end;gap:8px;">
+      <div class="field" style="flex:1;margin-bottom:0;"><label>Termo de busca</label><input id="commons-q" value="${escAttr(initialTerm||'')}" placeholder="ex: Wilms tumor CT"></div>
+      <button type="button" class="btn btn-primary" id="commons-search" style="height:38px;">buscar</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted-2);margin:8px 0 12px;">Fonte: Wikimedia Commons. O Atlas salvará também página de origem, autor e licença quando disponíveis.</div>
+    <div id="commons-status" style="font-size:12px;color:var(--muted-2);margin-bottom:10px;"></div>
+    <div id="commons-results" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;"></div>
+    <div class="modal-actions" style="position:sticky;bottom:-1px;background:var(--panel);padding-top:12px;">
+      <button type="button" class="btn btn-ghost" id="commons-cancel">fechar</button>
+      <button type="button" class="btn btn-primary" id="commons-add" disabled>adicionar selecionadas ao caso</button>
+    </div>
+  </div>`;
+  document.body.appendChild(cov);
+  let results=[];
+  let selected=new Set();
+  let busy=false;
+  const close=()=>{ if(cov.isConnected) cov.remove(); };
+  cov.addEventListener('click',e=>{ if(e.target===cov) close(); });
+  cov.querySelector('#commons-cancel').onclick=close;
+  const esc=e=>{ if(e.key==='Escape'&&cov.isConnected){e.stopPropagation();close();document.removeEventListener('keydown',esc,true);} };
+  document.addEventListener('keydown',esc,true);
+  function updateAdd(){ cov.querySelector('#commons-add').disabled=!selected.size||busy; }
+  function renderResults(){
+    const box=cov.querySelector('#commons-results'); box.innerHTML='';
+    results.forEach((r,i)=>{
+      const card=document.createElement('div');
+      card.style.cssText='border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg);cursor:pointer;position:relative;';
+      const lic=[r.license,r.artist].filter(Boolean).join(' · ');
+      card.innerHTML=`<div style="height:145px;background:#000;display:flex;align-items:center;justify-content:center;"><img src="${escAttr(r.thumb)}" loading="lazy" style="max-width:100%;max-height:145px;object-fit:contain;"></div>
+        <div style="padding:7px 8px 8px;font-size:11px;line-height:1.3;"><div style="font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escAttr(r.title)}">${r.title.replace(/^File:/,'')}</div><div style="color:var(--muted-2);margin-top:3px;min-height:28px;">${lic||'licença/autor não informados pela API'}</div></div>
+        <div data-check="1" style="position:absolute;top:7px;right:7px;width:24px;height:24px;border-radius:50%;border:2px solid #fff;background:${selected.has(i)?'var(--teal)':'rgba(0,0,0,.55)'};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;">${selected.has(i)?'✓':''}</div>`;
+      card.onclick=()=>{ selected.has(i)?selected.delete(i):selected.add(i); renderResults(); updateAdd(); };
+      box.appendChild(card);
+    });
+    updateAdd();
+  }
+  async function doSearch(){
+    const q=cov.querySelector('#commons-q').value.trim(); if(!q)return;
+    const st=cov.querySelector('#commons-status'); const box=cov.querySelector('#commons-results');
+    st.textContent='Buscando no Wikimedia Commons…'; box.innerHTML=''; selected.clear(); updateAdd();
+    try{
+      const params=new URLSearchParams({action:'query',format:'json',origin:'*',generator:'search',gsrsearch:q,gsrnamespace:'6',gsrlimit:'16',prop:'imageinfo',iiprop:'url|mime|extmetadata',iiurlwidth:'700'});
+      const res=await fetch('https://commons.wikimedia.org/w/api.php?'+params.toString());
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const data=await res.json();
+      const pages=Object.values((data.query&&data.query.pages)||{}).sort((a,b)=>(a.index||999)-(b.index||999));
+      results=pages.map(p=>{
+        const ii=(p.imageinfo&&p.imageinfo[0])||{}; const em=ii.extmetadata||{};
+        const mime=ii.mime||'';
+        if(mime && !mime.startsWith('image/')) return null;
+        return {title:p.title||'', thumb:ii.thumburl||ii.url||'', url:ii.url||ii.thumburl||'',
+          page:'https://commons.wikimedia.org/wiki/'+encodeURIComponent((p.title||'').replace(/ /g,'_')),
+          license:stripHtmlText((em.LicenseShortName&&em.LicenseShortName.value)||(em.UsageTerms&&em.UsageTerms.value)||''),
+          artist:stripHtmlText((em.Artist&&em.Artist.value)||(em.Credit&&em.Credit.value)||''),
+          attribution:stripHtmlText((em.Attribution&&em.Attribution.value)||'')};
+      }).filter(x=>x&&x.thumb&&x.url);
+      st.textContent=results.length?`${results.length} resultado(s). Clique nas imagens que deseja adicionar.`:'Nenhuma imagem encontrada. Tente o termo em inglês ou acrescente CT, MRI, ultrasound, x-ray etc.';
+      renderResults();
+    }catch(err){ console.error('Commons search',err); st.textContent='Falha na busca: '+err.message; results=[]; renderResults(); }
+  }
+  cov.querySelector('#commons-search').onclick=doSearch;
+  cov.querySelector('#commons-q').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();doSearch();} });
+  cov.querySelector('#commons-add').onclick=async()=>{
+    if(!selected.size||busy)return;
+    if(!deferUpload && !hasCloudinaryConfig()){ toast('Cloudinary precisa estar ativo para adicionar imagens da busca.'); return; }
+    busy=true; updateAdd(); const st=cov.querySelector('#commons-status');
+    const chosen=[...selected].sort((a,b)=>a-b).map(i=>results[i]).filter(Boolean); let ok=0,fail=0;
+    const added=[];
+    for(let n=0;n<chosen.length;n++){
+      const r=chosen[n]; st.textContent=(deferUpload?`Baixando ${n+1}/${chosen.length}…`:`Enviando ${n+1}/${chosen.length} ao Cloudinary…`);
+      try{
+        const fr=await fetch(r.url,{mode:'cors'}); if(!fr.ok) throw new Error('imagem HTTP '+fr.status);
+        const blob=await fr.blob(); if(!blob.type.startsWith('image/')) throw new Error('arquivo não é imagem');
+        const ext=(blob.type.split('/')[1]||'jpg').replace('jpeg','jpg').replace('svg+xml','svg');
+        const f=new File([blob],`commons-${Date.now()}-${n}.${ext}`,{type:blob.type});
+        const meta={sourcePage:r.page, sourceSite:'Wikimedia Commons', license:r.license||'', artist:r.artist||'', attribution:r.attribution||'', originalUrl:r.url};
+        if(deferUpload){
+          // Upload diferido: só baixa e mantém temporário; sobe ao Cloudinary no Salvar.
+          added.push(Object.assign({label:'', source:'pending', _file:f}, meta));
+        }else{
+          const remote=await uploadToCloudinary(f,lesionMeta);
+          remote.label=''; Object.assign(remote, meta);
+          added.push(remote);
+        }
+        ok++;
+      }catch(err){ console.error('Commons import',r,err); fail++; }
+    }
+    if(ok){ onImagesAdded(added); }
+    busy=false; updateAdd(); st.textContent=`Concluído: ${ok} adicionada(s)${fail?` · ${fail} falhou/falharam`:''}.`;
+    if(ok&&!fail){ setTimeout(close,500); toast(ok+' imagem(ns) adicionada(s) ao caso.'); }
+  };
+  doSearch();
 }
 
 /* ============================================================
@@ -9484,6 +9625,7 @@ let quizQueue = [];
 let quizIndex = 0;
 let quizStats = {right:0, wrong:0, easy:0, medium:0, hard:0, again:0};
 let quizSessionWrongIds = []; // ids errados nesta sessão de quiz, usado no resumo pra "refazer erros"
+let quizCarouselKeyHandler = null; // handler de ←/→ do carrossel de imagens da questão atual; trocado a cada renderQuizCardIntegrated()
 
 
 function getStudyStreak(){
@@ -9735,6 +9877,194 @@ function refreshStudyDashboardLive(){
   });
 }
 
+/* Painel focado "Adicionar imagem a esta lesão", usado pelo Quiz depois de
+   responder — pra alimentar uma lesão sem abandonar a sessão. Reutiliza os
+   mesmos mecanismos seguros já existentes (uploadToCloudinary(),
+   openCommonsImageSearch(), addImageToLesionData()) — NÃO é um segundo
+   sistema de imagens. Diferente do formulário de edição (que acumula em
+   pendingImgs e só persiste no botão Salvar), aqui cada imagem é
+   persistida IMEDIATAMENTE — não há outros campos de formulário pra
+   acumular junto, então não faz sentido um "salvar" em lote.
+   Usa uma classe própria (`.quiz-img-modal-overlay`, não `.overlay`) e
+   NUNCA chama closeOverlay(): closeOverlay() remove TODAS as `.overlay` de
+   uma vez, o que destruiria a overlay do Quiz (#study-overlay) por baixo.
+   Este painel só remove a si mesmo — exatamente como openCommonsImageSearch
+   já faz há muito tempo. */
+function openQuizAddImageModal(lesionId, onImagesAdded){
+  const lesion = DATA.find(x=>x.id===lesionId);
+  if(!lesion){ toast('Lesão não encontrada.'); return; }
+  const cov = document.createElement('div');
+  cov.className = 'quiz-img-modal-overlay';
+  cov.innerHTML = `<div class="modal quiz-img-modal">
+    <h2>🖼 Adicionar imagem a: ${esc(lesion.name)}</h2>
+    <div class="modal-sub">salva direto na lesão, sem sair do Quiz</div>
+    <div class="img-upload-box" id="quiz-add-img-upload-box" tabindex="0">
+      <button type="button" class="btn btn-ghost" id="quiz-add-img-pick-btn">📎 adicionar imagem</button>
+      <button type="button" class="btn btn-ghost" id="quiz-add-img-collage-btn" style="margin-left:6px;color:var(--teal);border-color:var(--teal-dim);">▦ criar quadro de imagens</button>
+      <button type="button" class="btn btn-ghost" id="quiz-add-img-web-btn" style="margin-left:6px;color:var(--teal);border-color:var(--teal-dim);">🔎 buscar imagens livres</button>
+      <span style="color:var(--muted-2);font-size:12px;margin-left:8px;">ou cole (Ctrl+V) aqui</span>
+      <input type="file" id="quiz-add-img-file-input" accept="image/*" multiple style="display:none;">
+      <div id="quiz-add-img-cloud-status" class="img-cloud-status"></div>
+    </div>
+    <div class="field-row" style="margin-top:8px;margin-bottom:0;">
+      <div class="field" style="margin-bottom:0;"><input id="quiz-add-img-url" placeholder="…ou cole uma URL direta de imagem"></div>
+      <button type="button" class="btn btn-ghost" id="quiz-add-img-url-btn" style="height:38px;align-self:flex-start;">+ URL</button>
+    </div>
+    <div class="img-gallery" id="quiz-add-img-gallery"></div>
+    <div class="modal-actions"><button class="btn btn-primary" id="quiz-add-img-done">concluído</button></div>
+  </div>`;
+  document.body.appendChild(cov);
+  const escHandler = ev=>{ if(ev.key==='Escape' && cov.isConnected){ ev.stopPropagation(); close(); } };
+  const close = ()=>{ if(cov.isConnected) cov.remove(); document.removeEventListener('keydown', escHandler, true); };
+  cov.addEventListener('click', ev=>{ if(ev.target===cov) close(); });
+  document.addEventListener('keydown', escHandler, true);
+  cov.querySelector('#quiz-add-img-done').onclick = close;
+
+  const statusEl = cov.querySelector('#quiz-add-img-cloud-status');
+  const galleryEl = cov.querySelector('#quiz-add-img-gallery');
+  function setStatus(msg, kind){
+    if(msg){ statusEl.textContent=msg; statusEl.className='img-cloud-status '+(kind||''); return; }
+    statusEl.textContent = hasCloudinaryConfig() ? '☁ Cloudinary ativo.' : '⚠ Cloudinary indisponível — não é possível adicionar imagens agora.';
+    statusEl.className = 'img-cloud-status '+(hasCloudinaryConfig()?'ok':'warn');
+  }
+  function renderGallery(){
+    galleryEl.innerHTML = '';
+    (lesion.images||[]).forEach((img, idx)=>{
+      const item = document.createElement('div');
+      item.className = 'img-gallery-item';
+      item.innerHTML = `<img src="${img.data}" class="img-gallery-thumb" title="clique pra ampliar">
+        <div class="quiz-img-current-label" title="${escAttr(img.label||'')}">${esc(img.label||'Sem legenda')}</div>
+        <div class="img-gallery-actions">
+          <button type="button" class="img-gallery-swap quiz-img-edit">✏ Editar</button>
+          <button type="button" class="img-gallery-remove quiz-img-remove">🗑 Remover</button>
+        </div>
+        <div class="quiz-img-edit-box" hidden>
+          <input class="img-gallery-label" value="${escAttr(img.label||'')}" placeholder="legenda da imagem">
+          <button type="button" class="btn btn-primary quiz-img-edit-save">salvar</button>
+          <button type="button" class="btn btn-ghost quiz-img-edit-cancel">cancelar</button>
+        </div>`;
+      item.querySelector('.img-gallery-thumb').onclick = ()=> openImageLightbox(img.data);
+      const editBox = item.querySelector('.quiz-img-edit-box');
+      const labelInput = item.querySelector('.img-gallery-label');
+      item.querySelector('.quiz-img-edit').onclick = ()=>{ editBox.hidden=false; labelInput.focus(); labelInput.select(); };
+      item.querySelector('.quiz-img-edit-cancel').onclick = ()=>{ editBox.hidden=true; };
+      item.querySelector('.quiz-img-edit-save').onclick = ()=>{
+        if(!updateLesionImageLabel(lesion, idx, labelInput.value)) return;
+        persistAndRefresh('Legenda atualizada.');
+      };
+      item.querySelector('.quiz-img-remove').onclick = ()=>{
+        if(!confirm('Remover esta imagem desta lesão?')) return;
+        const removed = removeImageFromLesionData(lesion, idx);
+        if(!removed) return;
+        // Remove apenas a referência da lesão e persiste. Sem exclusão remota
+        // automática nesta versão (sem backend/Function).
+        persistAndRefresh('Imagem removida desta lesão.');
+      };
+      galleryEl.appendChild(item);
+    });
+  }
+  function persistAndRefresh(message){
+    saveData();
+    renderGallery();
+    onImagesAdded();
+    if(message) toast(message);
+  }
+  function afterAdd(added){
+    added.forEach(img=> addImageToLesionData(lesion, img));
+    persistAndRefresh(added.length>1?`${added.length} imagens adicionadas.`:'Imagem adicionada.');
+  }
+
+  setStatus();
+  renderGallery();
+
+  const fileInput = cov.querySelector('#quiz-add-img-file-input');
+  cov.querySelector('#quiz-add-img-pick-btn').onclick = ()=> fileInput.click();
+  async function addFiles(files){
+    for(const file of files){
+      if(!file || !file.type.startsWith('image/')) continue;
+      if(!hasCloudinaryConfig()){ toast('Cloudinary precisa estar ativo para adicionar imagens.'); break; }
+      try{
+        setStatus('☁ Enviando '+(file.name||'imagem')+' para o Cloudinary…', 'ok');
+        const remote = await uploadToCloudinary(file, {id: lesion.id, name: lesion.name});
+        afterAdd([remote]);
+        setStatus();
+      }catch(err){
+        console.error('Cloudinary upload (quiz)', err);
+        setStatus('Falha no Cloudinary: '+err.message, 'warn');
+        toast('Falha no upload da imagem.');
+      }
+    }
+  }
+  fileInput.addEventListener('change', async (ev)=>{
+    await addFiles([...ev.target.files]);
+    ev.target.value='';
+  });
+  const handlePaste = async (ev)=>{
+    const files=[...(ev.clipboardData?.items||[])]
+      .filter(item=>item.type&&item.type.startsWith('image/'))
+      .map(item=>item.getAsFile())
+      .filter(Boolean);
+    if(!files.length) return;
+    ev.preventDefault();
+    await addFiles(files);
+  };
+  // O listener pertence ao próprio modal: fora dele, Ctrl+V não é capturado.
+  cov.addEventListener('paste', handlePaste);
+
+  cov.querySelector('#quiz-add-img-url-btn').onclick = ()=>{
+    const el = cov.querySelector('#quiz-add-img-url');
+    const url = el.value.trim();
+    if(!url){ toast('Cole a URL da imagem.'); return; }
+    if(!/^https?:\/\//i.test(url)){ toast('Cole uma URL http/https válida.'); return; }
+    afterAdd([{label:'', data:url, source:'url'}]);
+    el.value='';
+  };
+
+  cov.querySelector('#quiz-add-img-web-btn').onclick = ()=>{
+    const initialTerm = lesion.enTerm || lesion.name;
+    openCommonsImageSearch({id: lesion.id, name: lesion.name}, initialTerm, (imgs)=>{ afterAdd(imgs); });
+  };
+  cov.querySelector('#quiz-add-img-collage-btn').onclick = ()=>{
+    openCollageBuilder({id: lesion.id, name: lesion.name}, collage=>{ afterAdd([collage]); });
+  };
+  cov.querySelector('#quiz-add-img-upload-box').focus();
+}
+
+function openQuizReviewModal(lesionId){
+  const lesion = DATA.find(x=>x.id===lesionId);
+  if(!lesion){ toast('Lesão não encontrada.'); return; }
+  const cov = document.createElement('div');
+  cov.className = 'quiz-review-modal-overlay';
+  cov.innerHTML = `<div class="modal quiz-review-modal">
+    <h2>🔔 Marcar para revisão</h2>
+    <div class="modal-sub">${esc(lesion.name)}</div>
+    <div class="field">
+      <label for="quiz-review-request">O que precisa ser revisado?</label>
+      <textarea id="quiz-review-request" placeholder="Imagem incompatível com a lesão; classificação incorreta; melhorar descrição radiológica; revisar diagnósticos diferenciais; possível duplicata..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="quiz-review-cancel">cancelar</button>
+      <button type="button" class="btn btn-primary" id="quiz-review-save">salvar revisão</button>
+    </div>
+  </div>`;
+  document.body.appendChild(cov);
+  const escHandler = ev=>{ if(ev.key==='Escape' && cov.isConnected){ ev.stopPropagation(); close(); } };
+  const close = ()=>{ if(cov.isConnected) cov.remove(); document.removeEventListener('keydown', escHandler, true); };
+  cov.addEventListener('click', ev=>{ if(ev.target===cov) close(); });
+  document.addEventListener('keydown', escHandler, true);
+  cov.querySelector('#quiz-review-cancel').onclick = close;
+  const requestEl = cov.querySelector('#quiz-review-request');
+  cov.querySelector('#quiz-review-save').onclick = ()=>{
+    const requestText = requestEl.value;
+    if(!requestText.trim()){ toast('Descreva o que precisa ser revisado.'); requestEl.focus(); return; }
+    const result = createLesionReview(lesion.id, requestText);
+    if(!result.created && result.reason!=='duplicate'){ toast('Não foi possível criar a revisão.'); return; }
+    toast(result.created?'Lesão marcada para revisão.':'Esta revisão já estava marcada.');
+    close();
+  };
+  requestEl.focus();
+}
+
 function renderQuizCardIntegrated(host){
   if(quizIndex>=quizQueue.length){ renderQuizSummaryIntegrated(host); return; }
   const e=quizQueue[quizIndex],choices=buildQuizChoices(e),pct=Math.round(quizIndex/Math.max(quizQueue.length,1)*100),letters=['A','B','C','D'];
@@ -9744,24 +10074,73 @@ function renderQuizCardIntegrated(host){
       <button class="btn btn-ghost quiz-finish-btn" id="quiz-finish-session">◉ Finalizar sessão</button>
     </div>
     <div class="quiz-study-shell"><div class="quiz-study-media" id="quiz-media"></div><div class="quiz-study-question">
-      <div class="quiz-meta-hint">${esc(e.s)} · ${esc(e.site)}</div><h3 style="margin:10px 0 5px">Qual é o diagnóstico mais provável?</h3>
+      <div class="quiz-meta-hint">${esc(e.s)} · ${esc(e.site)}</div><h3 class="quiz-question-title">Qual é o diagnóstico mais provável?</h3>
       <div class="quiz-mcq-grid">${choices.map((x,i)=>`<button class="quiz-mcq-option" data-id="${escAttr(x.id)}"><span class="quiz-mcq-letter">${letters[i]}</span><span>${esc(x.name)}</span></button>`).join('')}</div><div id="quiz-feedback"></div>
     </div></div>
     <div class="modal-actions"><button class="btn btn-ghost" id="quiz-back-dashboard">← voltar ao progresso</button></div>`;
+
   const media=host.querySelector('#quiz-media');
-  if(hasEntryImgs(e)){
+  // Imagens da questão ATUAL — recomeça do zero a cada renderQuizCardIntegrated()
+  // (nunca herda o índice/array da questão anterior).
+  let quizImgs=[];
+  let quizImgIdx=0;
+
+  function renderMedia(){
+    if(!quizImgs.length){
+      const q=quizTheoryPrompt(e);
+      media.innerHTML=`<div class="quiz-noimage"><b>CASO TEÓRICO</b><span>Reconheça a lesão pelas características registradas no seu Atlas.</span><div class="quiz-theory-clues">${q.clues.map(t=>`<span>${esc(t)}</span>`).join('')}</div></div>`;
+      return;
+    }
+    if(quizImgIdx<0) quizImgIdx=quizImgs.length-1;
+    if(quizImgIdx>=quizImgs.length) quizImgIdx=0;
+    const cur=quizImgs[quizImgIdx], hasMultiple=quizImgs.length>1;
+    media.innerHTML=`<div class="quiz-carousel${hasMultiple?' has-multi':''}">
+        ${hasMultiple?'<button type="button" class="quiz-carousel-arrow quiz-carousel-prev" aria-label="imagem anterior">‹</button>':''}
+        <img src="${cur.data}">
+        ${hasMultiple?'<button type="button" class="quiz-carousel-arrow quiz-carousel-next" aria-label="imagem seguinte">›</button>':''}
+      </div>
+      ${hasMultiple?`<div class="quiz-carousel-counter">Imagem ${quizImgIdx+1} de ${quizImgs.length}</div>`:''}
+      ${cur.label?`<div class="quiz-img-label">${esc(cur.label)}</div>`:''}`;
+    const im=media.querySelector('img'); if(im) im.onclick=()=>openImageLightbox(cur.data);
+    if(hasMultiple){
+      media.querySelector('.quiz-carousel-prev').onclick=()=>{ quizImgIdx--; renderMedia(); };
+      media.querySelector('.quiz-carousel-next').onclick=()=>{ quizImgIdx++; renderMedia(); };
+    }
+  }
+  function refreshQuizImgs(jumpToLast){
     getEntryImgs(e).then(imgs=>{
       const all=imgs.length?imgs:(e.img?[{data:e.img,label:''}]:[]);
-      if(!all.length){media.innerHTML=`<div class="quiz-noimage"><b>CASO TEÓRICO</b><span>Use as características registradas no Atlas.</span></div>`;return;}
-      media.innerHTML=`<img src="${all[0].data}">${all[0].label?`<div class="quiz-img-label">${esc(all[0].label)}</div>`:''}`;
-      const im=media.querySelector('img');if(im)im.onclick=()=>openImageLightbox(all[0].data);
+      if(!hasEntryImgs(e) && !all.length){ /* nunca teve imagem: mantém CASO TEÓRICO */ quizImgs=[]; quizImgIdx=0; renderMedia(); return; }
+      if(hasEntryImgs(e) && !all.length){ media.innerHTML=`<div class="quiz-noimage"><b>CASO TEÓRICO</b><span>Use as características registradas no Atlas.</span></div>`; return; }
+      quizImgs=all;
+      quizImgIdx = jumpToLast ? all.length-1 : 0;
+      renderMedia();
     });
-  }else{
-    const q=quizTheoryPrompt(e);
-    media.innerHTML=`<div class="quiz-noimage"><b>CASO TEÓRICO</b><span>Reconheça a lesão pelas características registradas no seu Atlas.</span><div class="quiz-theory-clues">${q.clues.map(t=>`<span>${esc(t)}</span>`).join('')}</div></div>`;
   }
-  host.querySelector('#quiz-back-dashboard').onclick=()=>{openProgressDashboard();};
-  host.querySelector('#quiz-finish-session').onclick=()=>{openProgressDashboard();};
+  refreshQuizImgs(false);
+
+  // Navegação por teclado ←/→ do carrossel — troca o handler a cada questão
+  // renderizada (nunca acumula listeners) e ignora quando o foco está num
+  // campo de texto ou quando o modal de adicionar imagem/lightbox está
+  // aberto, pra não interferir com outros controles.
+  if(quizCarouselKeyHandler) document.removeEventListener('keydown', quizCarouselKeyHandler);
+  quizCarouselKeyHandler = (ev)=>{
+    if(ev.key!=='ArrowLeft' && ev.key!=='ArrowRight') return;
+    if(quizImgs.length<2) return;
+    const tag=(document.activeElement&&document.activeElement.tagName)||'';
+    if(tag==='INPUT'||tag==='TEXTAREA'||(document.activeElement&&document.activeElement.isContentEditable)) return;
+    if(document.querySelector('.quiz-img-modal-overlay, .quiz-review-modal-overlay, .lightbox-overlay')) return;
+    if(ev.key==='ArrowLeft') quizImgIdx--; else quizImgIdx++;
+    renderMedia();
+  };
+  document.addEventListener('keydown', quizCarouselKeyHandler);
+
+  const leaveQuiz=()=>{
+    if(quizCarouselKeyHandler){ document.removeEventListener('keydown', quizCarouselKeyHandler); quizCarouselKeyHandler=null; }
+    openProgressDashboard();
+  };
+  host.querySelector('#quiz-back-dashboard').onclick=leaveQuiz;
+  host.querySelector('#quiz-finish-session').onclick=leaveQuiz;
   host.querySelectorAll('.quiz-mcq-option').forEach(btn=>btn.onclick=()=>{
     if(host.dataset.answered==='1')return;host.dataset.answered='1';
     const objectiveCorrect=btn.dataset.id===e.id;
@@ -9769,8 +10148,13 @@ function renderQuizCardIntegrated(host){
     const fb=host.querySelector('#quiz-feedback'),links=ensureLinks(e);
     fb.innerHTML=`<div class="${objectiveCorrect?'quiz-feedback-good':'quiz-feedback-bad'}">${objectiveCorrect?'✓ Resposta correta!':'✕ Resposta incorreta — a correta está destacada.'}</div>
       <div class="quiz-answer-detail"><b>${esc(e.name)}</b><div class="quiz-points">${(e.tags||[]).slice(0,8).map(t=>`<span class="quiz-point">${esc(t)}</span>`).join('')}</div>${e.notes?`<div class="detail-notes">${esc(e.notes)}</div>`:''}${links.length?`<a class="detail-link" href="${links[0].url}" target="_blank" rel="noopener">↗ referência / imagens</a>`:''}</div>
+      <div class="quiz-post-answer-actions"><button type="button" class="btn btn-ghost quiz-add-img-action" id="quiz-add-img-btn">🖼 Adicionar imagem a esta lesão</button><button type="button" class="btn btn-ghost quiz-review-action" id="quiz-review-btn">🔔 Marcar para revisão</button></div>
       <div class="quiz-learning-label">Como foi reconhecer este caso?</div><div class="quiz-grade-4">
       <button class="g-easy" data-grade="easy">🟢 Fácil<small>segurança alta</small></button><button class="g-medium" data-grade="medium">🔵 Média<small>precisei pensar</small></button><button class="g-hard" data-grade="hard">🟠 Difícil<small>baixa segurança</small></button><button class="g-again" data-grade="again">⚪ Não sei<small>revisar cedo</small></button></div>`;
+    fb.querySelector('#quiz-add-img-btn').onclick=()=>{
+      openQuizAddImageModal(e.id, ()=> refreshQuizImgs(true));
+    };
+    fb.querySelector('#quiz-review-btn').onclick=()=>{ openQuizReviewModal(e.id); };
     fb.querySelectorAll('[data-grade]').forEach(gb=>gb.onclick=()=>{
       const g=gb.dataset.grade;srsGradeLevel(e.id,g);quizStats[g]++;recordQuizAnswerToday(objectiveCorrect,g);refreshStudyDashboardLive();
       if(objectiveCorrect)quizStats.right++;else{quizStats.wrong++;if(!quizSessionWrongIds.includes(e.id))quizSessionWrongIds.push(e.id);}
@@ -9782,6 +10166,7 @@ function renderQuizCardIntegrated(host){
    uma overlay nova. É o que faltava: sem isso, o fim da sessão pulava
    direto pro dashboard sem mostrar o resumo. */
 function renderQuizSummaryIntegrated(host){
+  if(quizCarouselKeyHandler){ document.removeEventListener('keydown', quizCarouselKeyHandler); quizCarouselKeyHandler=null; }
   logSessionResult(quizStats.right, quizStats.wrong);
   const total=quizStats.right+quizStats.wrong, accuracy=total?Math.round(quizStats.right/total*100):0;
   const dueAfter=countActuallyDue(DATA);

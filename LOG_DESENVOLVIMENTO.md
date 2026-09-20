@@ -860,4 +860,329 @@ de autorização explícita da pessoa.
 
 ### Commit após aprovação
 
+Commit `d439546` (mensagem "Adiciona fluxo seguro de revisoes e solucoes"),
+já criado após teste manual aprovado pelo usuário.
+
+## ALTERAÇÃO 013 — legibilidade do Quiz clínico (pergunta, alternativas, caso sem imagem)
+
+**Número da alteração:** 013
+**Data:** 20/09/2026
+
+### Objetivo
+
+No Quiz & Progresso em tela cheia, quando a lesão não tem imagem, o painel
+esquerdo mostrava "CASO TEÓRICO" com as características em chips minúsculos
+— exatamente a principal pista para responder, quase ilegível — dentro de
+uma área enorme e vazia. A pergunta e as alternativas A/B/C/D também
+estavam pequenas demais.
+
+### O que mudou
+
+- **Caso sem imagem:** o painel "CASO TEÓRICO" agora usa toda a altura
+  disponível (em vez de ficar centralizado numa ilha pequena dentro de uma
+  área vazia), com título maior, descrição maior e as características em
+  chips bem maiores (~16–19px, mais respiro entre eles).
+- **Pergunta** ("Qual é o diagnóstico mais provável?"): foi de ~16px pro
+  padrão do resto do app pra um tamanho dedicado de ~18–22px conforme a
+  largura da tela.
+- **Alternativas A/B/C/D:** caixas mais altas, mais respiro, texto maior
+  (~15–18px) e o círculo da letra maior — mais fácil de ler e de clicar.
+- **Caso com imagem:** a imagem passou a aproveitar melhor a altura do
+  painel (antes ficava limitada a 390px fixos, mesmo com o painel bem mais
+  alto); pergunta/alternativas recebem a mesma melhoria de legibilidade.
+- Em telas menores, tudo se ajusta sozinho (usa `clamp()`/media queries,
+  sem valores gigantes fixos que quebrariam telas pequenas); nenhum zoom
+  global foi usado.
+
+### O que NÃO mudou
+
+Lógica de geração das questões, respostas corretas, pontuação, SESSIONLOG,
+SRS, DATA, imagens, busca de imagens, Firebase/Cloudinary e a Central de
+Revisões — nada disso foi tocado, só CSS e uma troca de `style` inline por
+uma classe CSS no título da pergunta.
+
+Foi deixado um comentário no código (sem nenhuma mudança visível ainda)
+marcando onde entrará futuramente o atalho "🖼 Adicionar imagem a esta
+lesão" depois de responder, pra não precisar reorganizar esse bloco depois.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `LOG_DESENVOLVIMENTO.md`
+
+### Testes realizados
+
+- `node tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node tests/lesion-review.test.js`: 29 PASS, 0 FAIL (não deveria ter sido
+  afetado por uma mudança só de CSS/quiz — confirmado que continua assim);
+- `git diff --check`: sem erros de espaço em branco.
+
+Esta é uma mudança visual/CSS. Não existe teste automatizado de layout
+visual no projeto; a confirmação visual (pergunta legível, alternativas
+maiores, caso sem imagem preenchendo bem o painel, responsividade) precisa
+ser feita manualmente pelo usuário no navegador — não foi possível testar
+visualmente nesta sessão (sem acesso a um navegador autenticado).
+
+### Teste manual recomendado
+
+1. Abrir uma sessão do Quiz com uma lesão SEM imagem — conferir que "CASO
+   TEÓRICO" e as características ficam grandes e bem distribuídas, sem
+   sobra de espaço vazio nem chips minúsculos.
+2. Abrir uma sessão com uma lesão COM imagem — conferir que a imagem
+   aproveita bem o painel, sem distorcer.
+3. Conferir a pergunta e as alternativas A/B/C/D antes de responder — texto
+   grande e fácil de ler/clicar.
+4. Responder e conferir que o feedback (certo/errado, detalhes, botões de
+   confiança) continua aparecendo normalmente.
+5. Redimensionar a janela pra uma largura menor e conferir que nada quebra.
+
+### Commit após aprovação
+
+Ainda não criado (aguardando aprovação do usuário).
+
+## ALTERAÇÃO 014 — Imagens dentro do Quiz clínico
+
+**Número da alteração:** 014
+**Data:** 20/09/2026
+
+### Objetivo
+
+Evoluir como o Quiz mostra imagens. Antes, mesmo quando uma lesão tinha
+várias imagens cadastradas, o Quiz só mostrava a primeira. Também não
+existia nenhum jeito de adicionar uma imagem a uma lesão durante o Quiz —
+era preciso sair da sessão, abrir "Editar lesão" e voltar.
+
+### O que mudou para quem usa o Atlas
+
+- Lesão sem imagem: continua mostrando "CASO TEÓRICO" normalmente.
+- Lesão com 1 imagem: continua simples, sem nenhum controle extra.
+- Lesão com 2 ou mais imagens: agora aparece um carrossel — setas para ir
+  para a imagem anterior/seguinte, um contador ("Imagem 1 de 3", por
+  exemplo), e dá para navegar também pelas setas ←/→ do teclado. Da última
+  imagem, a seta "próxima" volta para a primeira (e vice-versa). Trocar de
+  imagem não afeta a resposta nem a pontuação.
+- Depois de responder qualquer questão, aparece um botão
+  "🖼 Adicionar imagem a esta lesão". Ele abre um painel por cima do Quiz —
+  a sessão continua exatamente do jeito que estava (mesma pergunta, mesma
+  resposta, mesmo placar) por baixo. Nesse painel dá para enviar um
+  arquivo, colar uma URL de imagem, ou buscar imagens livres — os mesmos
+  jeitos que já existem no editor de lesões. Assim que a imagem é salva, o
+  visualizador do Quiz já atualiza sozinho (sem precisar de F5): se a
+  lesão não tinha nenhuma imagem, o "CASO TEÓRICO" vira imagem; se já
+  tinha uma, aparece o carrossel; se já tinha várias, o contador atualiza.
+
+### O que NÃO mudou
+
+Como as questões são sorteadas, qual é a resposta certa, a pontuação, o
+histórico de sessões, a repetição espaçada, a Central de Revisões,
+Firebase/Cloudinary e a forma como o Atlas decide "de quem" é cada imagem
+— nada disso foi tocado. O painel novo só sabe adicionar imagem à lesão da
+questão que está na tela; não mexe em nenhuma outra lesão nem apaga
+imagens existentes.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `tests/quiz-images.test.js` (novo)
+- `AI.md`
+- `README.md`
+- `LOG_DESENVOLVIMENTO.md`
+
+### Testes realizados
+
+- `node tests/quiz-images.test.js`: 18 PASS, 0 FAIL;
+- `node tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node tests/lesion-review.test.js`: 29 PASS, 0 FAIL (não deveria ter sido
+  afetado; confirmado que continua intacto);
+- `git diff --check`: sem erros de espaço em branco.
+
+Este projeto não tem nenhuma dependência de teste de navegador (sem
+jsdom). Os testes automatizados cobrem a parte que dá pra verificar sem
+abrir um navegador de verdade (a função que anexa a imagem à lesão certa,
+e checagens de que o código não usa atalhos perigosos como remover a tela
+inteira do Quiz sem querer). O carrossel aparecendo de verdade, o teclado
+funcionando, e o painel abrindo por cima do Quiz sem perder o progresso —
+isso só dá pra confirmar testando manualmente no navegador.
+
+### Teste manual recomendado
+
+1. Abrir uma questão de uma lesão sem imagem — confirmar CASO TEÓRICO
+   normal.
+2. Abrir uma questão de uma lesão com 1 imagem só — confirmar que não
+   aparecem setas nem contador.
+3. Abrir uma questão de uma lesão com 2+ imagens — confirmar setas,
+   contador "Imagem X de Y", e que as setas do teclado também funcionam.
+4. Responder a questão e clicar "🖼 Adicionar imagem a esta lesão" —
+   confirmar que o Quiz continua visível por baixo, com a pergunta e o
+   resultado intactos.
+5. Adicionar uma imagem (upload, URL ou busca) e fechar o painel —
+   confirmar que o visualizador da questão atualizou sozinho, sem F5, e
+   que a pontuação/progresso não mudaram.
+6. Repetir adicionando mais uma imagem na mesma questão e confirmar que o
+   contador atualiza corretamente.
+
+### Commit após aprovação
+
+Ainda não criado (aguardando aprovação do usuário).
+
+## ALTERAÇÃO 015 — Ctrl+V, Quadro de Imagem e revisão manual dentro do Quiz
+
+**Número da alteração:** 015
+**Data:** 20/09/2026
+
+### Objetivo
+
+Completar o trabalho interrompido no modal de imagens do Quiz e permitir que
+um problema observado durante o estudo seja marcado para revisão sem sair da
+questão.
+
+### Estado antes
+
+O Quiz já tinha carrossel e adição por arquivo, URL e Commons, com atualização
+imediata. O modal ainda não aceitava `Ctrl+V` nem abria o Quadro de Imagem.
+Também não havia ação para criar uma revisão diretamente no feedback.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/quiz-images.test.js`
+- `tests/lesion-review.test.js`
+- `tests/critical-flows.test.js`
+- `AI.md`
+- `README.md`
+- `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+- `Ctrl+V` no modal de imagens usa o mesmo upload já existente e o listener
+  fica no próprio modal, sem capturar colagens fora dele.
+- O construtor existente de Quadro de Imagem virou uma função parametrizada e
+  única, reutilizada pelo formulário e pelo Quiz. O quadro pronto segue o
+  callback normal de adição e atualização do carrossel.
+- O feedback pós-resposta ganhou `🔔 Marcar para revisão`, ao lado da ação de
+  imagem e com quebra de linha responsiva.
+- O pequeno modal de revisão chama exatamente
+  `createLesionReview(lesion.id, requestText)`, preservando persistência,
+  proteção de duplicata e atualização imediata do badge já existentes.
+- Nenhum desses fluxos avança questão, altera resposta/pontuação, reinicia
+  progresso ou grava em `SRS`/`SESSIONLOG`.
+- A galeria do modal ganhou botões sempre visíveis `✏ Editar` e `🗑 Remover`.
+  Editar salva somente a legenda; remover pede confirmação e retira somente
+  o item escolhido do array da lesão atual, sem apagar o arquivo remoto.
+- Adição, edição e remoção usam a mesma rotina de persistência/atualização do
+  modal, portanto a galeria e o lado esquerdo do Quiz refletem imediatamente
+  transições como 1→0, 2→1 e 3→2.
+
+### Testes realizados
+
+- `node --test tests/quiz-images.test.js`: 30 PASS, 0 FAIL;
+- `node tests/lesion-review.test.js`: 35 PASS, 0 FAIL;
+- `node tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+O usuário pode colar uma imagem, criar um quadro ou registrar uma revisão da
+lesão atual sem fechar o Quiz. Imagens continuam sendo apenas adicionadas; a
+revisão apenas documenta o problema e não executa correção automática.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 016 — upload diferido no editor (sem backend)
+
+**Número da alteração:** 016
+**Data:** 20/09/2026
+
+### Objetivo
+
+Impedir que imagens NOVAS adicionadas durante a edição de uma lesão (Ctrl+V,
+selecionar arquivo ou Wikimedia Commons) sejam enviadas ao Cloudinary antes do
+usuário confirmar. Antes, cada imagem ia para o Cloudinary no momento em que
+era adicionada, o que acumulava assets de teste mesmo quando a edição era
+cancelada.
+
+### Mudança de estratégia
+
+A tentativa anterior desta mesma alteração tentava excluir assets via uma
+Firebase Cloud Function. Isso exigiria o plano Blaze (backend pago) só para
+limpar imagens de teste, então foi **descartada por completo**. Foram
+removidos: a Function (`functions/`), `firebase.json`, `.firebaserc`, o
+`.gitignore` criado pelo `firebase init`, `tests/cloudinary-deletion.test.js`,
+as funções `requestCloudinaryAssetDeletion()`/`hasSecureCloudinaryIdentifier()`,
+o script `firebase-functions-compat` e os ganchos de delete no Editor e no
+Quiz. Não há mais dependência de Firebase Functions nem segredo administrativo.
+
+### O que mudou para quem usa o Atlas
+
+- Adicionar uma imagem no formulário "Editar lesão" (colar com Ctrl+V,
+  escolher um arquivo ou buscar no Wikimedia Commons) mostra a imagem na hora,
+  mas ela fica **temporária** — marcada como "⏳ não enviada". Nada vai ao
+  Cloudinary ainda.
+- Dá para adicionar várias, trocar, editar a legenda, remover e testar à
+  vontade sem criar nenhum arquivo remoto.
+- Só ao clicar em **Salvar** as imagens temporárias que sobraram são enviadas
+  ao Cloudinary; as que foram removidas antes nunca são enviadas.
+- Se um envio necessário falhar, a lesão NÃO é salva (nada pela metade) e o
+  Atlas avisa para tentar de novo.
+- **Cancelar** (ou Esc/clique fora) descarta as imagens temporárias sem enviar
+  nada e sem alterar a lesão.
+- Imagens que já existiam continuam normais. Remover uma delas apenas tira a
+  referência da lesão (sem exclusão remota nesta versão).
+- URL externa continua sendo salva como URL, sem upload.
+
+### Detalhes técnicos
+
+- Imagem temporária = blob URL (para exibir) + `File` em memória
+  (`{source:'pending', _file, _objectUrl}`), nunca gravada em `DATA`/IndexedDB
+  antes de Salvar.
+- `addLocalFile(file)` (Ctrl+V / arquivo) só cria a blob URL e guarda o `File`.
+- `openCommonsImageSearch(..., deferUpload=true)` baixa o arquivo e devolve
+  objeto temporário, preservando `sourcePage`, `sourceSite`, `license`,
+  `artist`, `attribution`, `originalUrl`. O Quiz chama sem esse parâmetro e
+  mantém o upload imediato.
+- `releasePendingObjectUrls()` revoga todas as blob URLs em qualquer
+  fechamento (Cancelar/Esc/clique fora) e depois de Salvar.
+- No Salvar, o upload roda ANTES de `storage.set`, e só as temporárias
+  presentes sobem (`source==='pending' && _file`); cada temporária é
+  substituída pelo retorno de `uploadToCloudinary()`.
+
+### Arquivos alterados/removidos
+
+- `index.html` (modificado)
+- `tests/quiz-images.test.js` (cenários de upload diferido: Ctrl+V, arquivo,
+  Commons e Quadro de Imagem)
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+- **Removidos:** `functions/`, `firebase.json`, `.firebaserc`, `.gitignore`
+  (criado pelo firebase init), `tests/cloudinary-deletion.test.js`
+
+### Testes realizados
+
+- `node --test tests/quiz-images.test.js`: 46 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 35 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Nenhuma imagem nova é enviada ao Cloudinary antes de Salvar. Cancelar não cria
+asset remoto e não altera os dados. `SEED`, `REVIEW`, `SRS`, `SESSIONLOG`, a
+reconciliação V2 e os dados atuais não foram alterados.
+
+### Quadro de Imagem (correção pontual)
+
+O construtor de Quadro de Imagem (compartilhado com o Quiz) entrou na mesma
+regra. Agora ele é parametrizável: o formulário Editar chama com
+`deferUpload=true`, então os painéis ficam temporários (blob URL) e o quadro
+final vira imagem pendente — nenhum upload antes de Salvar. O Quiz chama sem
+esse parâmetro e mantém o upload imediato. Remover o quadro antes de Salvar ou
+cancelar não gera upload; no Salvar, o quadro sobe uma única vez pelo pipeline
+de `pendingImgs`.
+
+### Commit após aprovação
+
 Ainda não criado.

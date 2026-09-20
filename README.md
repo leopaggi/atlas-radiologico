@@ -403,3 +403,105 @@ estáticas (só autorizar/rollback tocam `DATA`; nenhuma função de
 processamento cria revisão nova). Ver `AI.md` para os detalhes completos.
 
 Validação: motor V1+V2 com **119 PASS, 0 FAIL e 5 TODO**; fluxos críticos com **14 PASS e 0 FAIL**. O teste de duplicatas mantém exclusivamente o FAIL histórico das 28 entradas malformadas de `DUPLICATE_PAIRS_V171`, fora do escopo desta alteração.
+
+### Legibilidade do Quiz clínico (2026-09-20)
+
+Mudança só visual (CSS), sem tocar lógica de questões/correção/`SESSIONLOG`/
+`SRS`/`DATA`/imagens/Central de Revisões. No Quiz & Progresso, o painel
+"CASO TEÓRICO" (lesão sem imagem) parava de ficar minúsculo numa área vazia
+enorme — agora ocupa a altura toda do painel, com título/descrição/chips de
+características bem maiores. A pergunta ganhou uma classe dedicada com
+`clamp(18px, …, 22px)` (antes ficava no padrão do navegador, ~16px). As
+alternativas A/B/C/D ficaram com caixas mais altas, mais respiro e texto/
+letra maiores — editado tanto na regra base quanto na regra
+`.study-dashboard .quiz-mcq-option`, que é a que de fato vale dentro do Modo
+Estudo embutido. A imagem, no caso com imagem, deixou de ficar limitada a
+390px fixos e agora aproveita melhor um painel mais alto. Tudo usa
+`clamp()`/media queries, sem zoom global nem valores fixos que quebrem
+telas menores.
+
+`tests/critical-flows.test.js` teve só as âncoras de linha reatualizadas
+(deslocadas pelas novas regras no `<style>` do topo do arquivo): **20 PASS,
+0 FAIL**. `tests/lesion-review.test.js` segue intacto: **29 PASS, 0 FAIL**.
+Não há teste automatizado de layout visual no projeto — a confirmação de
+que o resultado bate com o pedido depende de teste manual no navegador.
+
+### Imagens dentro do Quiz clínico (2026-09-20)
+
+O Quiz passou a mostrar TODAS as imagens de uma lesão, não só a primeira:
+0 imagens continua no CASO TEÓRICO; 1 imagem continua simples, sem
+controles; 2+ imagens ganham um carrossel (setas, "Imagem X de Y",
+navegação circular e por teclado ←/→, que não interfere com campos de
+texto nem com os modais abertos). Depois de responder, aparece
+"🖼 Adicionar imagem a esta lesão", que abre um painel focado *sobre* o
+Quiz — sem fechá-lo, sem perder questão/resposta/pontuação/progresso — pra
+alimentar a lesão certa (sempre a da questão atual) sem sair da sessão.
+Cada imagem é salva na hora, usando o mesmo `saveData()` seguro de sempre.
+
+Nada foi reimplementado: o painel reaproveita `uploadToCloudinary()` e a
+busca de imagens livres no Wikimedia Commons, que só precisou ser
+"destravada" de dentro do formulário de edição (virou uma função
+independente, parametrizada, sem mudar seu comportamento no formulário).
+Nenhuma imagem de outra lesão é tocada, nenhuma é removida, nenhum ID de
+asset muda, e a Central de Revisões/`REVIEW`/`SRS`/`SESSIONLOG`/`SEED`
+continuam fora do escopo.
+
+`tests/quiz-images.test.js` (novo): **18 PASS, 0 FAIL** — cobre
+`addImageToLesionData()` dinamicamente e o restante (modal, reuso da busca,
+carrossel, limpeza de listener) estaticamente. `tests/critical-flows.test.js`
+segue **20 PASS, 0 FAIL** (só âncoras reatualizadas) e
+`tests/lesion-review.test.js` intacto: **29 PASS, 0 FAIL**. Sem jsdom/
+dependências de browser no projeto, a confirmação visual e interativa
+(carrossel de verdade, teclado, modal sobre o Quiz) depende de teste manual.
+
+### Ctrl+V, Quadro de Imagem e revisão pelo Quiz (2026-09-20)
+
+O modal `🖼 Adicionar imagem a esta lesão` aceita agora imagens coladas por
+`Ctrl+V` somente enquanto está aberto e oferece também `▦ criar quadro de
+imagens`. O quadro usa o mesmo construtor do formulário de edição, agora
+parametrizado pela lesão e por callback; upload, URL e Commons permanecem
+disponíveis. Toda adição continua vinculada à lesão da questão atual e
+atualiza o visualizador imediatamente.
+
+Após responder, aparece também `🔔 Marcar para revisão`. O pequeno modal
+mostra o nome da lesão e recebe texto livre, salvando exclusivamente por
+`createLesionReview(lesionId, requestText)`. Isso apenas registra o problema
+na fila `LESION_REVISIONS`; não corrige/remove imagens e não reinicia questão,
+pontuação, `SRS` ou `SESSIONLOG`. Cancelar não cria revisão, duplicatas
+idênticas continuam bloqueadas e o badge 🔔 reage imediatamente.
+
+Cada miniatura desse modal mostra ainda `✏ Editar` e `🗑 Remover`, inclusive
+em touchscreen. A edição altera somente a legenda. A remoção pede confirmação
+e desassocia apenas aquela imagem da lesão atual (sem exclusão remota nesta
+versão). Ambas persistem e atualizam imediatamente galeria e visualizador do
+Quiz; remover a única imagem devolve o caso para `CASO TEÓRICO`.
+
+Cobertura atual: `tests/quiz-images.test.js` com **40 PASS** e
+`tests/lesion-review.test.js` com **35 PASS**, além dos fluxos críticos.
+
+### Upload diferido no editor de lesão (2026-09-20)
+
+Imagens NOVAS adicionadas no formulário `Editar lesão` (Ctrl+V, selecionar
+arquivo ou Wikimedia Commons) agora ficam **somente locais/temporárias**
+enquanto o formulário está aberto: aparecem na hora (blob URL) e o arquivo
+fica em memória, mas **nada é enviado ao Cloudinary antes de `Salvar`**. Isso
+evita acumular assets de teste. Ao clicar em `Salvar`, só as imagens
+temporárias que continuarem no formulário sobem ao Cloudinary; as que foram
+removidas antes nunca são enviadas. Se um upload necessário falhar, a lesão
+não é gravada e o Atlas avisa — nada é salvo pela metade.
+
+`Cancelar` (ou Esc/clique fora) descarta as imagens temporárias sem enviar
+nada e sem alterar os dados da lesão. Imagens que já estavam salvas continuam
+sendo tratadas como sempre; remover uma delas apenas remove a referência (sem
+exclusão remota automática nesta versão). URLs externas continuam sendo
+salvas como URL, sem upload.
+
+A estratégia anterior (uma Firebase Cloud Function para excluir assets do
+Cloudinary) foi **descartada**: exigiria o plano Blaze. Não há mais backend,
+`functions/`, `firebase.json`/`.firebaserc` nem segredo administrativo. O Quiz
+mantém o comportamento atual de imagens (o upload diferido do Quiz, se
+necessário, será tratado à parte). O construtor de **Quadro de Imagem** também
+entrou na regra: aberto pelo formulário Editar, ele monta o quadro localmente e
+só envia ao Cloudinary no `Salvar`; aberto pelo Quiz, continua enviando na hora.
+
+Testes: `tests/quiz-images.test.js` com **46 PASS**.
