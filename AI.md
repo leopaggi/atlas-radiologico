@@ -1167,3 +1167,111 @@ reabre, requestText/createdAt/attempts/proposedChanges preservados,
 cancelReason/cancelledAt/cancelledBy, badges, e checagem estática de que a UI
 só chama a função central). Resultado: **48 PASS, 0 FAIL**. Âncoras de
 `tests/critical-flows.test.js` para 4813/4803/7113/9531.
+
+## Alteração 019 — Quiz: editar a lesão no Acervo e pular pergunta
+
+### Editar esta lesão no Acervo (voltar ao mesmo ponto)
+
+Depois de responder, além de "🖼 Adicionar imagem a esta lesão" e "🔔 Marcar
+para revisão", há "✏ Editar esta lesão no Acervo". Ele reutiliza o formulário
+completo já existente — `openForm(e.id, { preserveUnderlyingOverlay: true,
+onSaved })` — sem criar um segundo formulário.
+
+- `openForm(id, opts)` agora aceita `opts.preserveUnderlyingOverlay` e
+  `opts.onSaved`. Internamente define `closeForm()`: no modo preservar, remove
+  SOMENTE o overlay do formulário (nunca `closeOverlay()`, que apagaria a
+  `#study-overlay` por baixo); nos demais casos mantém o comportamento antigo.
+- O overlay do formulário recebe a classe `lesion-form-overlay`; o handler do
+  carrossel do Quiz ignora ←/→ enquanto `.lesion-form-overlay` existe.
+- Salvar ou Cancelar fecha só o formulário e volta para a MESMA questão:
+  `quizQueue`, `quizIndex`, `quizStats`, `quizSessionWrongIds`, a resposta e o
+  feedback não são tocados. Nada de nova resposta, `srsGradeLevel` ou
+  `SESSIONLOG`.
+- Após salvar, `onSaved()` reconstrói o detalhe do feedback (nome/tags/notes/
+  referência) e recarrega a mídia (`refreshQuizImgs(true)`) sem re-renderizar a
+  questão; o rótulo da alternativa correta também é atualizado se o nome mudou.
+
+### Pular pergunta (⏭)
+
+Antes de responder existe "⏭ Pular" (fora do `#quiz-feedback`). Ao pular:
+- move a questão ATUAL para o FIM de `quizQueue` (`splice(quizIndex,1)` +
+  `push`), sem duplicar;
+- NÃO marca resposta, NÃO revela a correta, NÃO toca `quizStats`, `SRS`,
+  `SESSIONLOG` nem `quizSessionWrongIds`;
+- NÃO incrementa `quizIndex` — logo o progresso (`quizIndex/length`) não
+  aumenta indevidamente;
+- re-renderiza a próxima questão, trocando o handler do carrossel (não acumula
+  listeners).
+Se for a última questão ainda não respondida
+(`quizQueue.length - quizIndex <= 1`), não mexe na fila: mostra o toast
+"Esta é a última questão pendente da sessão." (evita loop infinito). Depois de
+responder, o botão some.
+
+### Testes
+
+`tests/quiz-images.test.js` ganhou 9 cenários (edição no Acervo: botão só no
+pós-resposta, reutilização do openForm, `preserveUnderlyingOverlay`/`closeForm`,
+carrossel ignorando ←/→ com o formulário aberto, atualização do feedback/mídia;
+Pular: posição do botão, mover para o fim sem duplicar/avançar, sem tocar
+score/SRS/SESSIONLOG, guarda da última questão, sem acúmulo de listeners).
+Resultado: **65 PASS, 0 FAIL**. Âncoras de `tests/critical-flows.test.js` para
+4815/4805/7115/9551.
+
+### Controles textuais do carrossel
+
+Com 2+ imagens, além das setas laterais, aparece uma linha de controles:
+`← Imagem anterior` · `Imagem X de Y` · `Próxima imagem →` (com `aria-label`).
+Os botões textuais e as setas laterais usam o MESMO estado (`quizImgIdx`) e a
+MESMA `renderMedia()`; navegação circular. Com 0 imagens, CASO TEÓRICO sem
+controles; com 1, sem botões. O contador atualiza ao clicar nas setas, nos
+botões ou no teclado ←/→. O lightbox continua abrindo só ao clicar na imagem.
+Após "Editar esta lesão no Acervo", o índice da imagem é preservado
+(`refreshQuizImgs(false, true)`), normalizado ao novo conjunto (nunca fora do
+array). Nada de score/SRS/SESSIONLOG é tocado.
+
+## Alteração 020 — Navegação entre questões no Quiz (Anterior/Próxima)
+
+O Quiz ganhou `← Anterior` · `⏭ Pular` · `Próxima →` num bloco de navegação de
+QUESTÕES, distinto dos controles de IMAGEM (`← Imagem anterior` / `Próxima
+imagem →`, que continuam junto da mídia e no teclado ←/→).
+
+### Estado temporário por questão
+
+`quizQuestionState` (objeto por `lesionId`, SÓ em memória — nunca em
+DATA/IndexedDB/Firestore) guarda `visited`, `answered`, `selectedAnswerId`,
+`objectiveCorrect`, `grade` e `imgIdx`. `quizHistory`/`quizCursor` formam a
+trilha de questões visitadas. `startQuizInsideDashboard` zera tudo e registra a
+primeira visita.
+
+### Anterior / Próxima
+
+- **← Anterior**: volta na trilha (`quizCursor--`), restaura a questão e seu
+  estado (alternativas bloqueadas, resposta marcada, feedback, ações
+  pós-resposta, grade aplicada e índice do carrossel). Desabilitado na primeira
+  visitada.
+- **Próxima →**: se voltamos, apenas retorna na trilha (`quizCursor++`); na
+  fronteira, só avança se a atual já foi respondida — senão mostra "Responda ou
+  use Pular para avançar."
+- Nenhuma das duas reordena a fila, pontua, altera SRS/SESSIONLOG/
+  `quizSessionWrongIds` ou toca DATA.
+
+### Não duplicar contagem
+
+O acerto objetivo é contado UMA vez, ao responder (`st.answered`); o grau de
+confiança é contado UMA vez, ao classificar (`applyGrade` com guarda
+`if(st.grade) return`). Revisitar uma questão respondida restaura o estado e
+NÃO permite responder/classificar de novo — sem duplicar `quizStats`, SRS,
+`recordQuizAnswerToday` ou SESSIONLOG.
+
+### Progresso e fim da sessão
+
+O progresso (`pct`) passa a ser `questões respondidas / total`, então navegar ou
+pular NÃO aumenta o percentual. O resumo continua aparecendo só quando
+`quizIndex` ultrapassa a fila (fim real). Pular mantém o comportamento anterior
+(move a atual para o fim, sem pontuar, com a guarda da última pendente).
+
+### Testes
+
+`tests/quiz-images.test.js` ganhou 9 cenários de navegação. Resultado:
+**82 PASS, 0 FAIL**. Âncoras de `tests/critical-flows.test.js` para
+4821/4811/7121/9557.

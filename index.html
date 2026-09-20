@@ -715,6 +715,10 @@ body{
 .study-domain-row:nth-child(8n+1) .study-domain-fill{background:#2fdf7f}.study-domain-row:nth-child(8n+2) .study-domain-fill{background:#2d8cff}.study-domain-row:nth-child(8n+3) .study-domain-fill{background:#ff9b3f}.study-domain-row:nth-child(8n+4) .study-domain-fill{background:#ff5964}.study-domain-row:nth-child(8n+5) .study-domain-fill{background:#8b63f6}.study-domain-row:nth-child(8n+6) .study-domain-fill{background:#d94fc5}.study-domain-row:nth-child(8n+7) .study-domain-fill{background:#23cde3}.study-domain-row:nth-child(8n) .study-domain-fill{background:#ffd057}
 .study-line{stroke:#20a4ff!important;filter:drop-shadow(0 0 5px #20a4ff)}.study-dot{fill:#51baff!important}
 .quiz-mcq-grid{display:grid;gap:12px;margin:14px 0}
+.quiz-question-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:0 0 12px;}
+.quiz-question-nav .btn{font-size:12.5px;}
+.quiz-question-nav .btn:disabled{opacity:.4;cursor:default;}
+.quiz-grade-applied{display:inline-block;font-size:13px;color:var(--text);padding:8px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel-2);}
 .quiz-mcq-option{display:flex;align-items:center;gap:14px;text-align:left;width:100%;padding:16px 18px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer;transition:.15s;font-size:clamp(15px,.6vw + 13px,18px);line-height:1.35}
 .quiz-mcq-option:hover:not(:disabled){border-color:#2ca7ff;background:#0c80b51a;transform:translateX(2px)}
 .quiz-mcq-letter{width:34px;height:34px;border:1.5px solid #36b8d9;border-radius:50%;display:grid;place-items:center;color:#66d9ef;font-weight:800;font-size:15px;flex:none}
@@ -745,6 +749,9 @@ body{
 .quiz-carousel-prev{left:8px}
 .quiz-carousel-next{right:8px}
 .quiz-carousel-counter{text-align:center;font-size:12px;color:var(--muted);margin-top:6px;font-family:'IBM Plex Mono',monospace;letter-spacing:.03em}
+.quiz-carousel-controls{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:8px}
+.quiz-carousel-textnav{font-size:12.5px;white-space:nowrap}
+.quiz-carousel-textcount{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:.03em;white-space:nowrap}
 .quiz-answer-detail{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}
 .quiz-post-answer-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
 .quiz-add-img-action,.quiz-review-action{font-size:12.5px}
@@ -7829,7 +7836,15 @@ function openDetail(id){
   };
 }
 
-function openForm(id){
+function openForm(id, opts){
+  opts = opts || {};
+  // Modo "sobre o Quiz": o formulário é aberto por cima da overlay do estudo
+  // (#study-overlay). Nesse caso, fechar o formulário remove SOMENTE ele —
+  // nunca closeOverlay(), que apagaria a overlay do Quiz por baixo. onSaved é
+  // chamado após um salvamento bem-sucedido, para a questão atual se atualizar
+  // sem reiniciar a sessão.
+  const preserveUnderlyingOverlay = opts.preserveUnderlyingOverlay === true;
+  const onSaved = typeof opts.onSaved === 'function' ? opts.onSaved : null;
   editingId = id || null;
   const existing = id ? DATA.find(x=>x.id===id) : null;
   const formEntryId = existing ? existing.id : ('u_'+Date.now()+'_'+Math.random().toString(36).slice(2,8));
@@ -7848,7 +7863,7 @@ function openForm(id){
   const sections = [...new Set(DATA.map(e=>e.s))].sort();
 
   const ov = document.createElement('div');
-  ov.className = 'overlay';
+  ov.className = 'overlay lesion-form-overlay';
   ov.innerHTML = `
     <div class="modal">
       <h2>${existing?'Editar lesão':'Nova lesão'}</h2>
@@ -7963,14 +7978,21 @@ function openForm(id){
   function revokeObjectUrl(url){ if(url&&pendingObjectUrls.has(url)){ try{ URL.revokeObjectURL(url); }catch(_e){} pendingObjectUrls.delete(url); } }
   function releasePendingObjectUrls(){ pendingObjectUrls.forEach(u=>{ try{ URL.revokeObjectURL(u); }catch(_e){} }); pendingObjectUrls.clear(); }
 
+  // Fecha SOMENTE este formulário no modo "sobre o Quiz"; nos demais casos
+  // mantém o comportamento antigo (closeOverlay() remove todas as overlays).
+  const closeForm = ()=>{
+    if(preserveUnderlyingOverlay){ if(ov.isConnected) ov.remove(); }
+    else { closeOverlay(); }
+  };
+
   // Fechar edição clicando fora da janela ou pressionando Esc.
   ov.addEventListener('click', (ev)=>{
-    if(ev.target===ov){ releasePendingObjectUrls(); closeOverlay(); }
+    if(ev.target===ov){ releasePendingObjectUrls(); closeForm(); }
   });
   const closeFormOnEsc = (ev)=>{
     if(ev.key==='Escape' && ov.isConnected){
       releasePendingObjectUrls();
-      closeOverlay();
+      closeForm();
       document.removeEventListener('keydown', closeFormOnEsc);
     }
   };
@@ -8255,7 +8277,7 @@ function openForm(id){
     pendingImgs.push({label:'',data:url,source:'url'}); imgsChanged=true; el.value=''; renderImgGallery();
   };
 
-  document.getElementById('f-cancel').onclick = ()=>{ releasePendingObjectUrls(); document.removeEventListener('keydown', closeFormOnEsc); closeOverlay(); };
+  document.getElementById('f-cancel').onclick = ()=>{ releasePendingObjectUrls(); document.removeEventListener('keydown', closeFormOnEsc); closeForm(); };
   document.getElementById('f-save').onclick = async ()=>{
     const name = document.getElementById('f-name').value.trim();
     const sec = document.getElementById('f-section').value.trim();
@@ -8356,7 +8378,7 @@ function openForm(id){
       saveBtn.disabled = false;
       releasePendingObjectUrls();
       document.removeEventListener('keydown', closeFormOnEsc);
-      closeOverlay();
+      closeForm();
       // Restaura o filtro/escopo de navegação de antes de abrir o formulário
       // (ex: "todas as seções", tag "sem imagens" ativa) em vez de forçar o
       // pulo automático pra seção/site desta lesão. Se você abriu a lesão
@@ -8368,6 +8390,9 @@ function openForm(id){
       toast(cloudOk
         ? (existing?'Alterações salvas.':'Lesão adicionada ao seu banco.')
         : '⚠ Salvo neste dispositivo, mas a sincronização com a nuvem falhou — veja o aviso na barra lateral.');
+      // Avisa quem abriu o formulário (ex: o Quiz) que os dados mudaram, para
+      // atualizar a questão atual SEM reiniciar a sessão.
+      if(onSaved){ try{ onSaved(); }catch(_e){ console.error('onSaved do formulário falhou', _e); } }
     }
   };
 }
@@ -9730,6 +9755,22 @@ let quizIndex = 0;
 let quizStats = {right:0, wrong:0, easy:0, medium:0, hard:0, again:0};
 let quizSessionWrongIds = []; // ids errados nesta sessão de quiz, usado no resumo pra "refazer erros"
 let quizCarouselKeyHandler = null; // handler de ←/→ do carrossel de imagens da questão atual; trocado a cada renderQuizCardIntegrated()
+// Estado TEMPORÁRIO da sessão de quiz — NUNCA persistido em DATA/IndexedDB/
+// Firestore. Por lesão, guarda o que já foi respondido/classificado e o índice
+// do carrossel; quizHistory/quizCursor formam a "trilha" de questões visitadas,
+// usada pela navegação Anterior/Próxima.
+let quizQuestionState = {}; // { [lesionId]: {visited,answered,selectedAnswerId,objectiveCorrect,grade,imgIdx} }
+let quizHistory = [];       // ids visitados, em ordem
+let quizCursor = -1;        // posição atual dentro de quizHistory
+function getQuizQuestionState(id){
+  if(!quizQuestionState[id]) quizQuestionState[id]={visited:false,answered:false,selectedAnswerId:null,objectiveCorrect:null,grade:null,imgIdx:0};
+  return quizQuestionState[id];
+}
+function recordQuizVisit(id){
+  quizHistory = quizHistory.slice(0, quizCursor+1); // descarta o "futuro" ao seguir por um novo caminho
+  quizHistory.push(id);
+  quizCursor = quizHistory.length-1;
+}
 
 
 function getStudyStreak(){
@@ -9900,12 +9941,16 @@ function startQuizInsideDashboard(queue){
   quizIndex=0;
   quizStats={right:0,wrong:0,easy:0,medium:0,hard:0,again:0};
   quizSessionWrongIds=[];
+  quizQuestionState={};
+  quizHistory=[];
+  quizCursor=-1;
   const ov=getStudyOverlay();
   const host=ov.querySelector('#study-embedded-host');
   const section=ov.querySelector('#study-embedded-section');
   if(!host || !section){ toast('Abra Quiz & Progresso para iniciar a sessão.'); return; }
   host.dataset.integratedQuiz='1';
   host.dataset.answered='0';
+  recordQuizVisit(quizQueue[0].id);
   renderQuizCardIntegrated(host);
   section.scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -10203,9 +10248,48 @@ function openQuizReviewModal(lesionId){
   requestEl.focus();
 }
 
+/* Navegação ENTRE QUESTÕES (sem alterar a ordem da fila): ← Anterior volta
+   para a questão anteriormente VISITADA; Próxima → avança na trilha de visitas
+   ou, na fronteira, só avança se a atual já foi respondida. Nada aqui pontua,
+   altera SRS/SESSIONLOG/quizSessionWrongIds nem mexe em DATA. */
+function goPrevQuestion(host){
+  if(quizCursor<=0) return;
+  quizCursor--;
+  const idx=quizQueue.findIndex(q=>q.id===quizHistory[quizCursor]);
+  if(idx<0){ quizCursor++; toast('Questão não encontrada.'); return; }
+  quizIndex=idx;
+  renderQuizCardIntegrated(host);
+}
+function goNextQuestion(host){
+  // 1) Se voltamos com Anterior, Próxima apenas retorna na trilha de visitas.
+  if(quizCursor<quizHistory.length-1){
+    quizCursor++;
+    const idx=quizQueue.findIndex(q=>q.id===quizHistory[quizCursor]);
+    if(idx<0){ quizCursor--; toast('Questão não encontrada.'); return; }
+    quizIndex=idx;
+    renderQuizCardIntegrated(host);
+    return;
+  }
+  // 2) Na fronteira: só avança se a questão atual já foi respondida.
+  const cur=quizQueue[quizIndex];
+  const st=cur?quizQuestionState[cur.id]:null;
+  if(!st || !st.answered){ toast('Responda ou use Pular para avançar.'); return; }
+  quizIndex++;
+  if(quizIndex<quizQueue.length) recordQuizVisit(quizQueue[quizIndex].id);
+  renderQuizCardIntegrated(host);
+}
 function renderQuizCardIntegrated(host){
   if(quizIndex>=quizQueue.length){ renderQuizSummaryIntegrated(host); return; }
-  const e=quizQueue[quizIndex],choices=buildQuizChoices(e),pct=Math.round(quizIndex/Math.max(quizQueue.length,1)*100),letters=['A','B','C','D'];
+  const e=quizQueue[quizIndex];
+  const st=getQuizQuestionState(e.id);
+  st.visited=true;
+  host.dataset.answered = st.answered ? '1' : '0';
+  const choices=buildQuizChoices(e),letters=['A','B','C','D'];
+  // Progresso reflete questões RESPONDIDAS (não a posição de navegação): navegar
+  // com Anterior/Próxima ou pular NÃO aumenta o progresso.
+  const answeredCount=quizQueue.reduce((n,q)=>{ const s=quizQuestionState[q.id]; return n+(s&&s.answered?1:0); },0);
+  const pct=Math.round(answeredCount/Math.max(quizQueue.length,1)*100);
+  const canPrev=quizCursor>0;
   host.innerHTML=`<div class="quiz-integrated-title quiz-study-toolbar">
       <div class="quiz-study-title"><b>🧠 Modo Estudo</b><small>Aprenda com feedback completo e referências.</small></div>
       <div class="quiz-progress-wrap"><div class="quiz-progress-meta"><span>Questão ${quizIndex+1} de ${quizQueue.length}</span><b>${pct}%</b></div><div class="quiz-session-track"><div class="quiz-session-fill" style="width:${pct}%"></div></div></div>
@@ -10213,61 +10297,183 @@ function renderQuizCardIntegrated(host){
     </div>
     <div class="quiz-study-shell"><div class="quiz-study-media" id="quiz-media"></div><div class="quiz-study-question">
       <div class="quiz-meta-hint">${esc(e.s)} · ${esc(e.site)}</div><h3 class="quiz-question-title">Qual é o diagnóstico mais provável?</h3>
-      <div class="quiz-mcq-grid">${choices.map((x,i)=>`<button class="quiz-mcq-option" data-id="${escAttr(x.id)}"><span class="quiz-mcq-letter">${letters[i]}</span><span>${esc(x.name)}</span></button>`).join('')}</div><div id="quiz-feedback"></div>
+      <div class="quiz-mcq-grid">${choices.map((x,i)=>`<button class="quiz-mcq-option" data-id="${escAttr(x.id)}"><span class="quiz-mcq-letter">${letters[i]}</span><span>${esc(x.name)}</span></button>`).join('')}</div>
+      <div class="quiz-question-nav">
+        <button type="button" class="btn btn-ghost quiz-qnav-prev" id="quiz-prev-btn"${canPrev?'':' disabled'}>← Anterior</button>
+        <button type="button" class="btn btn-ghost quiz-qnav-skip" id="quiz-skip-btn">⏭ Pular</button>
+        <button type="button" class="btn btn-ghost quiz-qnav-next" id="quiz-next-btn">Próxima →</button>
+      </div>
+      <div id="quiz-feedback"></div>
     </div></div>
     <div class="modal-actions"><button class="btn btn-ghost" id="quiz-back-dashboard">← voltar ao progresso</button></div>`;
 
   const media=host.querySelector('#quiz-media');
+  const skipBtn=host.querySelector('#quiz-skip-btn');
+  const prevBtn=host.querySelector('#quiz-prev-btn');
+  const nextBtn=host.querySelector('#quiz-next-btn');
   // Imagens da questão ATUAL — recomeça do zero a cada renderQuizCardIntegrated()
-  // (nunca herda o índice/array da questão anterior).
+  // (nunca herda o array da questão anterior). O índice vem do estado da sessão
+  // (st.imgIdx) e é restaurado/normalizado para a mesma questão.
   let quizImgs=[];
-  let quizImgIdx=0;
+  let quizImgIdx=st.imgIdx||0;
 
   function renderMedia(){
     if(!quizImgs.length){
       const q=quizTheoryPrompt(e);
       media.innerHTML=`<div class="quiz-noimage"><b>CASO TEÓRICO</b><span>Reconheça a lesão pelas características registradas no seu Atlas.</span><div class="quiz-theory-clues">${q.clues.map(t=>`<span>${esc(t)}</span>`).join('')}</div></div>`;
+      st.imgIdx=0;
       return;
     }
     if(quizImgIdx<0) quizImgIdx=quizImgs.length-1;
     if(quizImgIdx>=quizImgs.length) quizImgIdx=0;
+    st.imgIdx=quizImgIdx;
     const cur=quizImgs[quizImgIdx], hasMultiple=quizImgs.length>1;
     media.innerHTML=`<div class="quiz-carousel${hasMultiple?' has-multi':''}">
         ${hasMultiple?'<button type="button" class="quiz-carousel-arrow quiz-carousel-prev" aria-label="imagem anterior">‹</button>':''}
         <img src="${cur.data}">
         ${hasMultiple?'<button type="button" class="quiz-carousel-arrow quiz-carousel-next" aria-label="imagem seguinte">›</button>':''}
       </div>
-      ${hasMultiple?`<div class="quiz-carousel-counter">Imagem ${quizImgIdx+1} de ${quizImgs.length}</div>`:''}
+      ${hasMultiple?`<div class="quiz-carousel-controls">
+        <button type="button" class="btn btn-ghost quiz-carousel-textnav quiz-carousel-textprev" aria-label="Imagem anterior">← Imagem anterior</button>
+        <span class="quiz-carousel-counter quiz-carousel-textcount" aria-live="polite">Imagem ${quizImgIdx+1} de ${quizImgs.length}</span>
+        <button type="button" class="btn btn-ghost quiz-carousel-textnav quiz-carousel-textnext" aria-label="Próxima imagem">Próxima imagem →</button>
+      </div>`:''}
       ${cur.label?`<div class="quiz-img-label">${esc(cur.label)}</div>`:''}`;
     const im=media.querySelector('img'); if(im) im.onclick=()=>openImageLightbox(cur.data);
     if(hasMultiple){
-      media.querySelector('.quiz-carousel-prev').onclick=()=>{ quizImgIdx--; renderMedia(); };
-      media.querySelector('.quiz-carousel-next').onclick=()=>{ quizImgIdx++; renderMedia(); };
+      // As setas laterais e os botões textuais controlam o MESMO quizImgIdx —
+      // um único estado de carrossel. Navegação circular (o wrap acontece no
+      // início do próximo renderMedia()).
+      const goPrev=()=>{ quizImgIdx--; renderMedia(); };
+      const goNext=()=>{ quizImgIdx++; renderMedia(); };
+      media.querySelector('.quiz-carousel-prev').onclick=goPrev;
+      media.querySelector('.quiz-carousel-next').onclick=goNext;
+      media.querySelector('.quiz-carousel-textprev').onclick=goPrev;
+      media.querySelector('.quiz-carousel-textnext').onclick=goNext;
     }
   }
-  function refreshQuizImgs(jumpToLast){
+  // jumpToLast: vai para a última imagem (após adicionar imagem).
+  // keepIndex: preserva a imagem atual, normalizando ao novo tamanho (após
+  // editar a lesão sem trocar de questão). Tudo num único estado (quizImgIdx).
+  function refreshQuizImgs(jumpToLast, keepIndex){
+    const keepIdx = quizImgIdx;
     getEntryImgs(e).then(imgs=>{
       const all=imgs.length?imgs:(e.img?[{data:e.img,label:''}]:[]);
-      if(!hasEntryImgs(e) && !all.length){ /* nunca teve imagem: mantém CASO TEÓRICO */ quizImgs=[]; quizImgIdx=0; renderMedia(); return; }
-      if(hasEntryImgs(e) && !all.length){ media.innerHTML=`<div class="quiz-noimage"><b>CASO TEÓRICO</b><span>Use as características registradas no Atlas.</span></div>`; return; }
+      if(!hasEntryImgs(e) && !all.length){ /* nunca teve imagem: mantém CASO TEÓRICO */ quizImgs=[]; quizImgIdx=0; st.imgIdx=0; renderMedia(); return; }
+      if(hasEntryImgs(e) && !all.length){ media.innerHTML=`<div class="quiz-noimage"><b>CASO TEÓRICO</b><span>Use as características registradas no Atlas.</span></div>`; st.imgIdx=0; return; }
       quizImgs=all;
-      quizImgIdx = jumpToLast ? all.length-1 : 0;
+      if(keepIndex) quizImgIdx = all.length ? Math.min(Math.max(keepIdx,0), all.length-1) : 0;
+      else quizImgIdx = jumpToLast ? all.length-1 : 0;
       renderMedia();
     });
   }
-  refreshQuizImgs(false);
+  refreshQuizImgs(false, true);
+
+  function hideSkip(){ if(skipBtn){ skipBtn.disabled=true; skipBtn.style.display='none'; } }
+  function markOptionsAnswered(){
+    host.querySelectorAll('.quiz-mcq-option').forEach(b=>{
+      b.disabled=true;
+      if(b.dataset.id===e.id) b.classList.add('is-correct');
+      else if(b.dataset.id===st.selectedAnswerId) b.classList.add('is-wrong');
+    });
+  }
+  // Detalhe do feedback reconstruível: usado ao responder e, depois de editar a
+  // lesão no Acervo, para refletir nome/tags/notes/referência atualizados SEM
+  // reiniciar a questão.
+  function renderDetail(){
+    const links=ensureLinks(e);
+    return `<div class="quiz-answer-detail"><b>${esc(e.name)}</b><div class="quiz-points">${(e.tags||[]).slice(0,8).map(t=>`<span class="quiz-point">${esc(t)}</span>`).join('')}</div>${e.notes?`<div class="detail-notes">${esc(e.notes)}</div>`:''}${links.length?`<a class="detail-link" href="${links[0].url}" target="_blank" rel="noopener">↗ referência / imagens</a>`:''}</div>`;
+  }
+  const GRADE_LABELS={easy:'🟢 Fácil',medium:'🔵 Média',hard:'🟠 Difícil',again:'⚪ Não sei'};
+  function applyGrade(g){
+    if(st.grade) return; // já classificada — nunca duplica SRS/estatística/SESSIONLOG
+    st.grade=g;
+    srsGradeLevel(e.id,g);quizStats[g]++;recordQuizAnswerToday(st.objectiveCorrect,g);refreshStudyDashboardLive();
+    renderAnsweredFeedback(); // NÃO avança sozinho: o usuário decide com "Próxima →"
+  }
+  function renderAnsweredFeedback(){
+    const fb=host.querySelector('#quiz-feedback');
+    const gradeHtml = st.grade
+      ? `<div class="quiz-learning-label">Classificação registrada</div><div class="quiz-grade-applied">${GRADE_LABELS[st.grade]||st.grade}</div>`
+      : `<div class="quiz-learning-label">Como foi reconhecer este caso?</div><div class="quiz-grade-4"><button class="g-easy" data-grade="easy">🟢 Fácil<small>segurança alta</small></button><button class="g-medium" data-grade="medium">🔵 Média<small>precisei pensar</small></button><button class="g-hard" data-grade="hard">🟠 Difícil<small>baixa segurança</small></button><button class="g-again" data-grade="again">⚪ Não sei<small>revisar cedo</small></button></div>`;
+    fb.innerHTML=`<div class="${st.objectiveCorrect?'quiz-feedback-good':'quiz-feedback-bad'}">${st.objectiveCorrect?'✓ Resposta correta!':'✕ Resposta incorreta — a correta está destacada.'}</div>
+      ${renderDetail()}
+      <div class="quiz-post-answer-actions"><button type="button" class="btn btn-ghost quiz-add-img-action" id="quiz-add-img-btn">🖼 Adicionar imagem a esta lesão</button><button type="button" class="btn btn-ghost quiz-edit-lesion-action" id="quiz-edit-lesion-btn">✏ Editar esta lesão no Acervo</button><button type="button" class="btn btn-ghost quiz-review-action" id="quiz-review-btn">🔔 Marcar para revisão</button></div>
+      ${gradeHtml}`;
+    fb.querySelector('#quiz-add-img-btn').onclick=()=>{
+      openQuizAddImageModal(e.id, ()=> refreshQuizImgs(true));
+    };
+    fb.querySelector('#quiz-edit-lesion-btn').onclick=()=>{
+      // Reutiliza o formulário completo já existente, aberto POR CIMA do Quiz
+      // (preserveUnderlyingOverlay). Salvar ou cancelar fecha só o formulário e
+      // volta para a MESMA questão — a sessão e a resposta não são tocadas.
+      // Após salvar, atualiza o detalhe do feedback e a mídia.
+      openForm(e.id, {
+        preserveUnderlyingOverlay: true,
+        onSaved: ()=>{
+          const detailEl = fb.querySelector('.quiz-answer-detail');
+          if(detailEl) detailEl.outerHTML = renderDetail();
+          const correctOpt = host.querySelector(`.quiz-mcq-option[data-id="${e.id}"] span:last-child`);
+          if(correctOpt) correctOpt.textContent = e.name;
+          // keepIndex: preserva a imagem atual do carrossel (normalizada ao
+          // novo conjunto), em vez de pular para a última.
+          refreshQuizImgs(false, true);
+        }
+      });
+    };
+    fb.querySelector('#quiz-review-btn').onclick=()=>{ openQuizReviewModal(e.id); };
+    fb.querySelectorAll('[data-grade]').forEach(gb=>gb.onclick=()=>applyGrade(gb.dataset.grade));
+  }
+
+  if(st.answered){
+    // Questão já respondida nesta sessão (ex: voltamos com Anterior): restaura
+    // alternativa marcada, feedback, ações e a grade já aplicada — sem permitir
+    // responder/classificar de novo.
+    markOptionsAnswered();
+    hideSkip();
+    renderAnsweredFeedback();
+  } else {
+    host.querySelectorAll('.quiz-mcq-option').forEach(btn=>btn.onclick=()=>{
+      if(st.answered)return;
+      st.answered=true; st.selectedAnswerId=btn.dataset.id; st.objectiveCorrect=(btn.dataset.id===e.id);
+      host.dataset.answered='1';
+      // Acerto objetivo é contado UMA vez, ao responder (o grau de confiança é
+      // contado à parte, ao classificar).
+      if(st.objectiveCorrect)quizStats.right++;else{quizStats.wrong++;if(!quizSessionWrongIds.includes(e.id))quizSessionWrongIds.push(e.id);}
+      markOptionsAnswered();
+      hideSkip();
+      renderAnsweredFeedback();
+    });
+  }
+
+  // Navegação entre questões + Pular.
+  if(prevBtn) prevBtn.onclick=()=>goPrevQuestion(host);
+  if(nextBtn) nextBtn.onclick=()=>goNextQuestion(host);
+  // ⏭ Pular (somente antes de responder): move a questão ATUAL para o FIM da
+  // fila da sessão e renderiza a próxima, SEM marcar resposta, SEM tocar
+  // quizStats/SRS/SESSIONLOG/quizSessionWrongIds e SEM avançar o quizIndex
+  // (portanto o progresso não aumenta indevidamente). Se for a última questão
+  // ainda não respondida, não altera a fila e só avisa (evita loop infinito).
+  if(skipBtn) skipBtn.onclick=()=>{
+    if(st.answered) return;
+    if(quizQueue.length - quizIndex <= 1){ toast('Esta é a última questão pendente da sessão.'); return; }
+    const cur=quizQueue.splice(quizIndex,1)[0];
+    quizQueue.push(cur);
+    recordQuizVisit(quizQueue[quizIndex].id);
+    renderQuizCardIntegrated(host);
+  };
 
   // Navegação por teclado ←/→ do carrossel — troca o handler a cada questão
   // renderizada (nunca acumula listeners) e ignora quando o foco está num
-  // campo de texto ou quando o modal de adicionar imagem/lightbox está
-  // aberto, pra não interferir com outros controles.
+  // campo de texto ou quando o modal de adicionar imagem/lightbox/formulário
+  // está aberto, pra não interferir com outros controles. Só IMAGENS.
   if(quizCarouselKeyHandler) document.removeEventListener('keydown', quizCarouselKeyHandler);
   quizCarouselKeyHandler = (ev)=>{
     if(ev.key!=='ArrowLeft' && ev.key!=='ArrowRight') return;
     if(quizImgs.length<2) return;
     const tag=(document.activeElement&&document.activeElement.tagName)||'';
     if(tag==='INPUT'||tag==='TEXTAREA'||(document.activeElement&&document.activeElement.isContentEditable)) return;
-    if(document.querySelector('.quiz-img-modal-overlay, .quiz-review-modal-overlay, .lightbox-overlay')) return;
+    if(document.querySelector('.quiz-img-modal-overlay, .quiz-review-modal-overlay, .lightbox-overlay, .lesion-form-overlay')) return;
     if(ev.key==='ArrowLeft') quizImgIdx--; else quizImgIdx++;
     renderMedia();
   };
@@ -10279,27 +10485,8 @@ function renderQuizCardIntegrated(host){
   };
   host.querySelector('#quiz-back-dashboard').onclick=leaveQuiz;
   host.querySelector('#quiz-finish-session').onclick=leaveQuiz;
-  host.querySelectorAll('.quiz-mcq-option').forEach(btn=>btn.onclick=()=>{
-    if(host.dataset.answered==='1')return;host.dataset.answered='1';
-    const objectiveCorrect=btn.dataset.id===e.id;
-    host.querySelectorAll('.quiz-mcq-option').forEach(b=>{b.disabled=true;if(b.dataset.id===e.id)b.classList.add('is-correct');else if(b===btn)b.classList.add('is-wrong');});
-    const fb=host.querySelector('#quiz-feedback'),links=ensureLinks(e);
-    fb.innerHTML=`<div class="${objectiveCorrect?'quiz-feedback-good':'quiz-feedback-bad'}">${objectiveCorrect?'✓ Resposta correta!':'✕ Resposta incorreta — a correta está destacada.'}</div>
-      <div class="quiz-answer-detail"><b>${esc(e.name)}</b><div class="quiz-points">${(e.tags||[]).slice(0,8).map(t=>`<span class="quiz-point">${esc(t)}</span>`).join('')}</div>${e.notes?`<div class="detail-notes">${esc(e.notes)}</div>`:''}${links.length?`<a class="detail-link" href="${links[0].url}" target="_blank" rel="noopener">↗ referência / imagens</a>`:''}</div>
-      <div class="quiz-post-answer-actions"><button type="button" class="btn btn-ghost quiz-add-img-action" id="quiz-add-img-btn">🖼 Adicionar imagem a esta lesão</button><button type="button" class="btn btn-ghost quiz-review-action" id="quiz-review-btn">🔔 Marcar para revisão</button></div>
-      <div class="quiz-learning-label">Como foi reconhecer este caso?</div><div class="quiz-grade-4">
-      <button class="g-easy" data-grade="easy">🟢 Fácil<small>segurança alta</small></button><button class="g-medium" data-grade="medium">🔵 Média<small>precisei pensar</small></button><button class="g-hard" data-grade="hard">🟠 Difícil<small>baixa segurança</small></button><button class="g-again" data-grade="again">⚪ Não sei<small>revisar cedo</small></button></div>`;
-    fb.querySelector('#quiz-add-img-btn').onclick=()=>{
-      openQuizAddImageModal(e.id, ()=> refreshQuizImgs(true));
-    };
-    fb.querySelector('#quiz-review-btn').onclick=()=>{ openQuizReviewModal(e.id); };
-    fb.querySelectorAll('[data-grade]').forEach(gb=>gb.onclick=()=>{
-      const g=gb.dataset.grade;srsGradeLevel(e.id,g);quizStats[g]++;recordQuizAnswerToday(objectiveCorrect,g);refreshStudyDashboardLive();
-      if(objectiveCorrect)quizStats.right++;else{quizStats.wrong++;if(!quizSessionWrongIds.includes(e.id))quizSessionWrongIds.push(e.id);}
-      quizIndex++;host.dataset.answered='0';renderQuizCardIntegrated(host);
-    });
-  });
 }
+
 /* Tela de resultado renderizada DENTRO da mesma overlay/host — nunca cria
    uma overlay nova. É o que faltava: sem isso, o fim da sessão pulava
    direto pro dashboard sem mostrar o resumo. */

@@ -525,3 +525,40 @@ use o fluxo próprio `✓ funcionou — manter` / `↩ não funcionou — desfaz
 Nada em `DATA` é alterado pelo cancelamento.
 
 Testes: `tests/lesion-review.test.js` com **48 PASS**.
+
+### Quiz: editar a lesão no Acervo e pular pergunta (2026-09-20)
+
+Depois de responder, o Quiz ganhou "✏ Editar esta lesão no Acervo": abre o
+formulário completo por cima do Quiz; ao salvar ou cancelar, fecha só o
+formulário e volta para a MESMA questão — a sessão, a resposta e o placar não
+são reiniciados. As imagens e o texto do feedback são atualizados com os dados
+novos.
+
+Antes de responder, há "⏭ Pular": a questão vai para o fim da fila da sessão e
+reaparece antes do fim. Pular não conta como acerto/erro, não mexe no SRS, no
+SESSIONLOG, no placar nem no progresso. Se for a única questão pendente, o
+Atlas apenas avisa que é a última.
+
+Testes: `tests/quiz-images.test.js` com **65 PASS**.
+
+### Carrossel de imagens do Quiz (2026-09-20)
+
+Quando o caso tem mais de uma imagem, além das setas laterais aparecem os
+controles `← Imagem anterior` e `Próxima imagem →` com o contador `Imagem X de
+Y` no meio (navegação circular). As setas laterais, os botões e o teclado ←/→
+controlam o mesmo índice. Se você editar a lesão no Acervo e voltar, o carrossel
+tenta manter a mesma imagem. Só com 2+ imagens os controles aparecem; clicar
+neles não abre o lightbox.
+
+### Navegação entre questões no Quiz (2026-09-20)
+
+Depois de responder, o Quiz tem um bloco de navegação de questões: `← Anterior`
+· `⏭ Pular` · `Próxima →`. Anterior volta para a questão anteriormente visitada
+(com a resposta, o feedback e a classificação já aplicada preservados); Próxima
+retorna na trilha ou avança se a questão atual já foi respondida (senão avisa
+"Responda ou use Pular para avançar."). Navegar não pontua, não mexe em SRS/
+SESSIONLOG e não aumenta o progresso (que conta questões respondidas). Os
+controles de imagem (`← Imagem anterior` / `Próxima imagem →`) continuam
+separados, junto da mídia e no teclado ←/→.
+
+Testes: `tests/quiz-images.test.js` com **82 PASS**.

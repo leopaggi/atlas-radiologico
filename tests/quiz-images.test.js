@@ -253,7 +253,7 @@ test('openCommonsImageSearch(): foi parametrizada (lesionMeta/initialTerm/onImag
 // -----------------------------------------------------------------------
 test('carrossel: o índice/array de imagens é declarado DENTRO de renderQuizCardIntegrated() — reinicia a cada questão, nunca é uma variável global compartilhada', () => {
   assert.match(renderQuizCardIntegratedFn.body, /let\s+quizImgs\s*=\s*\[\]/);
-  assert.match(renderQuizCardIntegratedFn.body, /let\s+quizImgIdx\s*=\s*0/);
+  assert.match(renderQuizCardIntegratedFn.body, /let\s+quizImgIdx\s*=\s*st\.imgIdx\s*\|\|\s*0/);
 });
 
 test('carrossel: navegação por teclado ignora campos de texto e o modal de adicionar imagem/lightbox abertos', () => {
@@ -279,12 +279,19 @@ test('carrossel: o listener de teclado é limpo ao sair do Quiz (voltar/finaliza
   assert.match(renderQuizSummaryIntegratedFn.body, /removeEventListener\(['"]keydown['"],\s*quizCarouselKeyHandler\)/);
 });
 
-test('pós-resposta: o atalho de adicionar imagem só é montado dentro do handler de resposta (nunca antes de responder)', () => {
-  const answerHandlerIdx = renderQuizCardIntegratedFn.body.indexOf(".querySelectorAll('.quiz-mcq-option').forEach(btn=>btn.onclick=()=>{");
-  assert.notEqual(answerHandlerIdx, -1, 'handler de resposta não encontrado');
-  const addImgIdx = renderQuizCardIntegratedFn.body.indexOf('openQuizAddImageModal(e.id');
-  assert.notEqual(addImgIdx, -1);
-  assert.ok(addImgIdx > answerHandlerIdx, 'o atalho "adicionar imagem" precisa estar dentro do fluxo pós-resposta, não antes');
+test('pós-resposta: as ações (adicionar imagem/editar/revisão) só existem no feedback respondido', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  const fbStart = src.indexOf('function renderAnsweredFeedback(){');
+  assert.notEqual(fbStart, -1, 'renderAnsweredFeedback() não encontrado');
+  const fbEnd = src.indexOf('\n  if(st.answered){', fbStart);
+  assert.notEqual(fbEnd, -1);
+  const fbBlock = src.slice(fbStart, fbEnd);
+  assert.match(fbBlock, /openQuizAddImageModal\(e\.id/);
+  assert.match(fbBlock, /openForm\(e\.id, \{/);
+  assert.match(fbBlock, /openQuizReviewModal\(e\.id\)/);
+  // o feedback respondido é montado só no fluxo de resposta, depois do HTML inicial
+  const initialHtmlEnd = src.indexOf('const media=host.querySelector');
+  assert.ok(fbStart > initialHtmlEnd, 'as ações pós-resposta não podem existir antes de responder');
 });
 
 test('SEGURANÇA ESTÁTICA: o fluxo de adicionar imagem do Quiz não referencia REVIEW/SRS/SESSIONLOG/SEED', () => {
@@ -312,7 +319,7 @@ test('SEGURANÇA: adicionar imagem/quadro não altera questão, resposta, pontua
 // "Salvar". Sem Firebase Function e sem delete remoto.
 // -----------------------------------------------------------------------
 function openFormSlice() {
-  const start = html.indexOf('function openForm(id)');
+  const start = html.indexOf('function openForm(id');
   assert.notEqual(start, -1, 'openForm não encontrada');
   const end = html.indexOf('\nfunction openCollageBuilder(', start);
   assert.notEqual(end, -1, 'fim de openForm não encontrado');
@@ -342,7 +349,7 @@ test('EDITAR (upload diferido): remover uma imagem temporária antes do Salvar n
 
 test('EDITAR (upload diferido): Cancelar não envia imagem temporária (só libera blob URLs e fecha)', () => {
   const src = openFormSlice();
-  assert.match(src, /f-cancel'\)\.onclick = \(\)=>\{ releasePendingObjectUrls\(\);[^}]*closeOverlay\(\)/);
+  assert.match(src, /f-cancel'\)\.onclick = \(\)=>\{ releasePendingObjectUrls\(\);[^}]*closeForm\(\)/);
   const idx = src.indexOf("f-cancel')");
   const slice = src.slice(idx, idx + 200);
   assert.doesNotMatch(slice, /uploadToCloudinary/);
@@ -521,4 +528,245 @@ test('QUIZ (upload diferido): não reinicia questão nem toca score/SESSIONLOG/S
   assert.doesNotMatch(src, /\bSESSIONLOG\b/);
   assert.doesNotMatch(src, /\bSRS\b/);
   assert.doesNotMatch(src, /renderQuizCardIntegrated|openProgressDashboard/);
+});
+
+// -----------------------------------------------------------------------
+// QUIZ → EDITAR ESTA LESÃO NO ACERVO → VOLTAR AO MESMO PONTO
+// -----------------------------------------------------------------------
+test('QUIZ → EDITAR: botão aparece só no pós-resposta e reutiliza openForm (sem segundo formulário)', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  const fbStart = src.indexOf('function renderAnsweredFeedback(){');
+  const editBtnIdx = src.indexOf('id="quiz-edit-lesion-btn"');
+  const editHandlerIdx = src.indexOf("fb.querySelector('#quiz-edit-lesion-btn').onclick=");
+  assert.notEqual(fbStart, -1);
+  assert.ok(editBtnIdx > fbStart, 'o botão de editar deve existir apenas no feedback respondido');
+  assert.ok(editHandlerIdx > editBtnIdx);
+  const editEnd = src.indexOf("fb.querySelector('#quiz-review-btn')", editHandlerIdx);
+  const editBlock = src.slice(editHandlerIdx, editEnd);
+  assert.match(editBlock, /openForm\(e\.id, \{/, 'precisa reutilizar openForm com a lesão da questão atual');
+  assert.match(editBlock, /preserveUnderlyingOverlay: true/);
+  assert.doesNotMatch(editBlock, /renderQuizCardIntegrated|quizIndex|quizStats|srsGradeLevel|recordQuizAnswerToday/, 'editar não pode reiniciar a questão nem pontuar');
+});
+
+test('QUIZ → EDITAR: openForm ganha opts e closeForm preserva a overlay do Quiz quando pedido', () => {
+  const src = openFormSlice();
+  assert.match(src, /function openForm\(id, opts\)\{/);
+  assert.match(src, /const preserveUnderlyingOverlay = opts\.preserveUnderlyingOverlay === true;/);
+  assert.match(src, /const closeForm = \(\)=>\{\s*if\(preserveUnderlyingOverlay\)\{ if\(ov\.isConnected\) ov\.remove\(\); \}\s*else \{ closeOverlay\(\); \}/);
+  assert.match(src, /ov\.className = 'overlay lesion-form-overlay'/);
+  assert.match(src, /if\(onSaved\)\{ try\{ onSaved\(\); \}/);
+});
+
+test('QUIZ → EDITAR: o carrossel ignora ←/→ enquanto o formulário (.lesion-form-overlay) está aberto', () => {
+  assert.match(renderQuizCardIntegratedFn.source, /\.lesion-form-overlay'\)\) return;/);
+});
+
+test('QUIZ → EDITAR: após salvar, atualiza o detalhe do feedback e a mídia sem reiniciar a questão', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  const editStart = src.indexOf("fb.querySelector('#quiz-edit-lesion-btn').onclick=");
+  const editEnd = src.indexOf("fb.querySelector('#quiz-review-btn')", editStart);
+  const editBlock = src.slice(editStart, editEnd);
+  assert.match(editBlock, /detailEl\.outerHTML = renderDetail\(\)/);
+  assert.match(editBlock, /refreshQuizImgs\(false, true\)/);
+});
+
+// -----------------------------------------------------------------------
+// PULAR PERGUNTA (⏭) — só antes de responder; move para o fim da fila
+// -----------------------------------------------------------------------
+function skipBlockSource() {
+  const src = renderQuizCardIntegratedFn.source;
+  const start = src.indexOf('if(skipBtn) skipBtn.onclick=');
+  assert.notEqual(start, -1, 'handler de Pular não encontrado');
+  const end = src.indexOf('\n  };', start);
+  assert.notEqual(end, -1);
+  return src.slice(start, end);
+}
+
+test('PULAR: botão existe antes de responder, fica fora do #quiz-feedback e some depois de responder', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  const skipIdx = src.indexOf('id="quiz-skip-btn"');
+  const feedbackIdx = src.indexOf('id="quiz-feedback"');
+  assert.notEqual(skipIdx, -1, 'botão Pular não encontrado no HTML da questão');
+  assert.ok(skipIdx < feedbackIdx, 'o botão Pular deve ficar antes do feedback (não é ação pós-resposta)');
+  assert.match(src, /skipBtn\.style\.display='none'/, 'o botão precisa sumir depois de responder');
+});
+
+test('PULAR: move a questão atual para o FIM da fila, sem duplicar e sem avançar o quizIndex', () => {
+  const block = skipBlockSource();
+  assert.match(block, /quizQueue\.splice\(quizIndex,1\)\[0\]/);
+  assert.match(block, /quizQueue\.push\(cur\)/);
+  assert.doesNotMatch(block, /quizIndex\+\+/, 'pular não pode avançar o índice/progresso');
+  assert.doesNotMatch(block, /quizQueue\.push\(quizQueue\[quizIndex\]\)/, 'não pode duplicar a questão');
+});
+
+test('PULAR: NÃO toca score/SRS/SESSIONLOG/quizSessionWrongIds nem revela a resposta', () => {
+  const block = skipBlockSource();
+  assert.doesNotMatch(block, /quizStats|SRS|SESSIONLOG|recordQuizAnswerToday|srsGradeLevel|quizSessionWrongIds/);
+  assert.doesNotMatch(block, /is-correct|is-wrong|quiz-feedback|renderDetail/);
+});
+
+test('PULAR: guarda contra loop infinito quando é a última questão pendente', () => {
+  const block = skipBlockSource();
+  assert.match(block, /quizQueue\.length - quizIndex <= 1/);
+  assert.match(block, /toast\('Esta é a última questão pendente da sessão\.'\)/);
+  // nesse caso não mexe na fila (o return vem antes do splice)
+  const guardIdx = block.indexOf('quizQueue.length - quizIndex <= 1');
+  const spliceIdx = block.indexOf('quizQueue.splice');
+  assert.ok(guardIdx < spliceIdx, 'a checagem da última questão precisa vir antes de mexer na fila');
+});
+
+test('PULAR: re-renderiza trocando o handler do carrossel (nunca acumula listeners)', () => {
+  // renderQuizCardIntegrated remove o handler anterior logo no início e o
+  // recria no fim; como pular chama renderQuizCardIntegrated(host), não acumula.
+  assert.match(renderQuizCardIntegratedFn.source, /if\(quizCarouselKeyHandler\) document\.removeEventListener\('keydown', quizCarouselKeyHandler\);/);
+  assert.match(skipBlockSource(), /renderQuizCardIntegrated\(host\)/);
+});
+
+// -----------------------------------------------------------------------
+// CARROSSEL: controles textuais (← Imagem anterior / contador / Próxima →)
+// -----------------------------------------------------------------------
+test('CARROSSEL: 2+ imagens mostram os controles textuais (← anterior / contador / próxima →)', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  assert.match(src, /const cur=quizImgs\[quizImgIdx\], hasMultiple=quizImgs\.length>1;/);
+  assert.match(src, /hasMultiple\?`<div class="quiz-carousel-controls">/);
+  assert.match(src, /quiz-carousel-textprev" aria-label="Imagem anterior">← Imagem anterior</);
+  assert.match(src, /quiz-carousel-textnext" aria-label="Próxima imagem">Próxima imagem →</);
+  assert.match(src, /quiz-carousel-textcount" aria-live="polite">Imagem \$\{quizImgIdx\+1\} de \$\{quizImgs\.length\}</);
+});
+
+test('CARROSSEL: 0 imagem mantém CASO TEÓRICO e 1 imagem não mostra controles (só hasMultiple)', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  assert.match(src, /if\(!quizImgs\.length\)[\s\S]*?CASO TEÓRICO/);
+  // os controles existem num único ponto, gated por hasMultiple
+  assert.equal((src.match(/quiz-carousel-controls/g) || []).length, 1);
+  assert.match(src, /hasMultiple\?`<div class="quiz-carousel-controls">[\s\S]*?<\/div>`:''\}/);
+});
+
+test('CARROSSEL: setas laterais e botões textuais controlam o MESMO quizImgIdx (um só estado)', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  assert.match(src, /const goPrev=\(\)=>\{ quizImgIdx--; renderMedia\(\); \};/);
+  assert.match(src, /const goNext=\(\)=>\{ quizImgIdx\+\+; renderMedia\(\); \};/);
+  assert.match(src, /media\.querySelector\('\.quiz-carousel-prev'\)\.onclick=goPrev;/);
+  assert.match(src, /media\.querySelector\('\.quiz-carousel-next'\)\.onclick=goNext;/);
+  assert.match(src, /media\.querySelector\('\.quiz-carousel-textprev'\)\.onclick=goPrev;/);
+  assert.match(src, /media\.querySelector\('\.quiz-carousel-textnext'\)\.onclick=goNext;/);
+});
+
+test('CARROSSEL: navegação circular e índice sempre dentro dos limites', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  assert.match(src, /if\(quizImgIdx<0\) quizImgIdx=quizImgs\.length-1;/);
+  assert.match(src, /if\(quizImgIdx>=quizImgs\.length\) quizImgIdx=0;/);
+});
+
+test('CARROSSEL: clicar nos controles NÃO abre o lightbox (lightbox só no clique da imagem)', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  assert.match(src, /const im=media\.querySelector\('img'\); if\(im\) im\.onclick=\(\)=>openImageLightbox\(cur\.data\);/);
+  const controlsBlock = src.slice(src.indexOf('quiz-carousel-controls'), src.indexOf('const im=media.querySelector'));
+  assert.doesNotMatch(controlsBlock, /openImageLightbox/);
+});
+
+test('CARROSSEL: teclado ←/→ usa o mesmo quizImgIdx e respeita formulário/modais/inputs', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  assert.match(src, /if\(ev\.key==='ArrowLeft'\) quizImgIdx--; else quizImgIdx\+\+;/);
+  assert.match(src, /if\(document\.querySelector\('\.quiz-img-modal-overlay, \.quiz-review-modal-overlay, \.lightbox-overlay, \.lesion-form-overlay'\)\) return;/);
+  assert.match(src, /if\(tag==='INPUT'\|\|tag==='TEXTAREA'/);
+});
+
+test('CARROSSEL: preserva o índice após editar a lesão (keepIndex) e nunca sai do array', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  assert.match(src, /function refreshQuizImgs\(jumpToLast, keepIndex\)\{/);
+  assert.match(src, /if\(keepIndex\) quizImgIdx = all\.length \? Math\.min\(Math\.max\(keepIdx,0\), all\.length-1\) : 0;/);
+  assert.match(src, /refreshQuizImgs\(false, true\);/);
+});
+
+test('CARROSSEL: navegação de imagens não toca score/SRS/SESSIONLOG', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  const start = src.indexOf('function renderMedia(){');
+  const end = src.indexOf('\n  function refreshQuizImgs', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const block = src.slice(start, end);
+  assert.doesNotMatch(block, /quizStats|SRS|SESSIONLOG|srsGradeLevel|recordQuizAnswerToday|quizIndex/);
+});
+
+// -----------------------------------------------------------------------
+// NAVEGAÇÃO ENTRE QUESTÕES (← Anterior / Próxima →) + estado por questão
+// -----------------------------------------------------------------------
+const goPrevFn = extractFunction(html, 'goPrevQuestion');
+const goNextFn = extractFunction(html, 'goNextQuestion');
+const getQStateFn = extractFunction(html, 'getQuizQuestionState');
+const recordVisitFn = extractFunction(html, 'recordQuizVisit');
+
+test('NAV QUESTÕES: ← Anterior e Próxima → existem junto de Pular e usam ids próprios', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  assert.match(src, /id="quiz-prev-btn"[^>]*>← Anterior</);
+  assert.match(src, /id="quiz-skip-btn">⏭ Pular</);
+  assert.match(src, /id="quiz-next-btn">Próxima →</);
+  assert.match(src, /prevBtn\.onclick=\(\)=>goPrevQuestion\(host\)/);
+  assert.match(src, /nextBtn\.onclick=\(\)=>goNextQuestion\(host\)/);
+});
+
+test('NAV QUESTÕES: Anterior volta na trilha de visitas (quizHistory/quizCursor) sem reordenar a fila nem tocar DATA', () => {
+  const src = goPrevFn.source;
+  assert.match(src, /if\(quizCursor<=0\) return;/);
+  assert.match(src, /quizCursor--;/);
+  assert.match(src, /quizQueue\.findIndex\(q=>q\.id===quizHistory\[quizCursor\]\)/);
+  assert.doesNotMatch(src, /quizQueue\.(splice|push)\(/, 'navegar não reordena a fila');
+  assert.doesNotMatch(src, /\bDATA\b/, 'navegar não toca DATA');
+});
+
+test('NAV QUESTÕES: Próxima retorna na trilha quando voltamos; na fronteira só avança se respondida', () => {
+  const src = goNextFn.source;
+  assert.match(src, /if\(quizCursor<quizHistory\.length-1\)\{[\s\S]*?quizCursor\+\+;[\s\S]*?renderQuizCardIntegrated\(host\);\s*return;/);
+  assert.match(src, /if\(!st \|\| !st\.answered\)\{ toast\('Responda ou use Pular para avançar\.'\); return; \}/);
+  assert.match(src, /quizIndex\+\+;/);
+  assert.doesNotMatch(src, /\bDATA\b/);
+});
+
+test('NAV QUESTÕES: estado por questão guarda o necessário (visited/answered/selected/objective/grade/imgIdx)', () => {
+  const src = getQStateFn.source;
+  for (const k of ['visited','answered','selectedAnswerId','objectiveCorrect','grade','imgIdx']) {
+    assert.ok(src.includes(k), 'estado precisa conter ' + k);
+  }
+  assert.match(recordVisitFn.source, /quizHistory = quizHistory\.slice\(0, quizCursor\+1\);/);
+  assert.match(recordVisitFn.source, /quizHistory\.push\(id\);/);
+});
+
+test('NAV QUESTÕES: questão respondida é restaurada (alternativas bloqueadas + feedback) sem responder de novo', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  assert.match(src, /if\(st\.answered\)\{[\s\S]*?markOptionsAnswered\(\);[\s\S]*?renderAnsweredFeedback\(\);/);
+  assert.match(src, /function markOptionsAnswered\(\)\{[\s\S]*?b\.disabled=true;/);
+});
+
+test('NAV QUESTÕES: NÃO duplica score/SRS/SESSIONLOG ao voltar ou classificar de novo', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  assert.match(src, /st\.answered=true; st\.selectedAnswerId=btn\.dataset\.id; st\.objectiveCorrect=/);
+  assert.match(src, /if\(st\.objectiveCorrect\)quizStats\.right\+\+;else\{quizStats\.wrong\+\+;/);
+  assert.match(src, /function applyGrade\(g\)\{\s*if\(st\.grade\) return;/);
+  assert.match(src, /srsGradeLevel\(e\.id,g\);quizStats\[g\]\+\+;recordQuizAnswerToday\(st\.objectiveCorrect,g\);/);
+});
+
+test('NAV QUESTÕES: progresso usa questões RESPONDIDAS (navegar/pular não aumenta)', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  assert.match(src, /const answeredCount=quizQueue\.reduce\([\s\S]*?s&&s\.answered\?1:0/);
+  assert.match(src, /const pct=Math\.round\(answeredCount\/Math\.max\(quizQueue\.length,1\)\*100\)/);
+});
+
+test('NAV QUESTÕES: resumo só no fim real e Pular mantém a fila íntegra (sem duplicar)', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  assert.match(src, /if\(quizIndex>=quizQueue\.length\)\{ renderQuizSummaryIntegrated\(host\); return; \}/);
+  const skip = skipBlockSource();
+  assert.match(skip, /const cur=quizQueue\.splice\(quizIndex,1\)\[0\];\s*quizQueue\.push\(cur\);/);
+  assert.match(skip, /if\(st\.answered\) return;/);
+});
+
+test('NAV QUESTÕES: índice do carrossel restaurado por questão e sem conflito com os controles de imagem', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  assert.match(src, /let quizImgIdx=st\.imgIdx\|\|0;/);
+  assert.match(src, /st\.imgIdx=quizImgIdx;/);
+  assert.match(src, /refreshQuizImgs\(false, true\);/);
+  assert.match(src, /id="quiz-prev-btn"/);
+  assert.match(src, /id="quiz-next-btn"/);
+  assert.match(src, /quiz-carousel-textprev/);
+  assert.match(src, /quiz-carousel-textnext/);
 });

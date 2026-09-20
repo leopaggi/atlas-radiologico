@@ -1313,3 +1313,123 @@ dados atuais não foram alterados.
 ### Commit após aprovação
 
 Ainda não criado.
+
+## ALTERAÇÃO 019 — Quiz: editar a lesão no Acervo e pular pergunta
+
+**Número da alteração:** 019
+**Data:** 20/09/2026
+
+### Objetivo
+
+Depois de responder, permitir abrir o formulário completo da lesão da questão
+atual sem sair do Quiz e voltar exatamente ao mesmo ponto; e, antes de
+responder, permitir pular uma pergunta (mandando-a para o fim da fila) sem
+marcar acerto/erro.
+
+### O que mudou para quem usa o Atlas
+
+- Após responder, além de adicionar imagem e marcar para revisão, há
+  `✏ Editar esta lesão no Acervo`. O formulário abre por cima do Quiz; ao
+  salvar ou cancelar, ele fecha e a sessão continua na MESMA questão, com a
+  resposta e o feedback preservados (e atualizados com os dados novos).
+- Antes de responder, há `⏭ Pular`. A questão vai para o fim da fila e
+  reaparece antes do fim da sessão. Pular não conta como acerto/erro e não mexe
+  em placar, SRS, SESSIONLOG nem progresso. Se for a única pendente, aparece o
+  aviso "Esta é a última questão pendente da sessão."
+
+### Detalhes técnicos
+
+- `openForm(id, opts)` ganhou `opts.preserveUnderlyingOverlay` e `opts.onSaved`.
+  No modo preservar, o fechamento usa `closeForm()` (remove só o formulário) em
+  vez de `closeOverlay()` (que apagaria `#study-overlay`).
+- Overlay do formulário com a classe `lesion-form-overlay`; o carrossel do Quiz
+  ignora ←/→ enquanto ela existir.
+- Pular: `quizQueue.splice(quizIndex,1)` + `push` (move, não duplica), sem
+  `quizIndex++`, sem tocar `quizStats`/`SRS`/`SESSIONLOG`/`quizSessionWrongIds`.
+  Guarda: `quizQueue.length - quizIndex <= 1` → toast e não mexe na fila.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/quiz-images.test.js`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### Testes realizados
+
+- `node --test tests/quiz-images.test.js`: 65 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 51 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+O Quiz passa a permitir editar a lesão da questão sem perder o ponto da sessão e
+a pular perguntas sem pontuar. `SEED`, `REVIEW`, `SRS`, `SESSIONLOG`, a
+reconciliação V2 e os dados atuais não foram alterados.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+### Controles textuais do carrossel (mesma entrega)
+
+Além das setas laterais, com 2+ imagens aparece `← Imagem anterior` ·
+`Imagem X de Y` · `Próxima imagem →` (aria-label adequado), tudo sobre o mesmo
+`quizImgIdx`/`renderMedia()`. Circular; contador atualiza na hora; lightbox só
+no clique da imagem; após editar a lesão o índice é preservado/normalizado
+(`refreshQuizImgs(false, true)`). 0/1 imagem continuam sem controles.
+
+## ALTERAÇÃO 020 — Navegação entre questões no Quiz
+
+**Número da alteração:** 020
+**Data:** 20/09/2026
+
+### Objetivo
+
+Permitir navegar entre as questões já visitadas da sessão (`← Anterior` /
+`Próxima →`) sem alterar a ordem da fila e sem duplicar respostas/estatísticas,
+separando claramente da navegação de imagens e do `⏭ Pular`.
+
+### O que mudou para quem usa o Atlas
+
+- Bloco de navegação de questões: `← Anterior` · `⏭ Pular` · `Próxima →`.
+- Anterior volta para a questão anterior visitada, já com a resposta, o
+  feedback e a classificação preservados.
+- Próxima retorna na trilha de visitas; se a questão atual ainda não foi
+  respondida, avisa "Responda ou use Pular para avançar." em vez de avançar.
+- Navegar não pontua e não aumenta o progresso; Pular continua igual.
+
+### Detalhes técnicos
+
+- `quizQuestionState` (por `lesionId`, só em memória), `quizHistory`/`quizCursor`.
+- Acerto objetivo contado ao responder; grade contada em `applyGrade` (guardada
+  por `st.grade`). Progresso = respondidas/total.
+- `goPrevQuestion`/`goNextQuestion` só navegam (sem reordenar a fila nem tocar
+  DATA). Pular movido para o bloco de questões, mantendo a lógica.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/quiz-images.test.js`
+- `tests/lesion-review.test.js`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### Testes realizados
+
+- `node --test tests/quiz-images.test.js`: 82 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 51 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+O usuário navega entre questões sem perder estado e sem duplicar pontuação. As
+questões puladas continuam pendentes e o resumo não aparece antes do fim real.
+`SEED`, `REVIEW`, `SRS`, `SESSIONLOG`, a reconciliação V2 e os dados atuais não
+foram alterados.
+
+### Commit após aprovação
+
+Ainda não criado.

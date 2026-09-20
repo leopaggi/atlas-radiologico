@@ -531,11 +531,11 @@ test('REGRESSÃO: os badges do header reagem IMEDIATAMENTE em cada transição d
 });
 
 test('Quiz: botão de marcar revisão aparece somente dentro do fluxo pós-resposta', () => {
-  const answerHandlerIdx = renderQuizCardSource.indexOf(".querySelectorAll('.quiz-mcq-option').forEach(btn=>btn.onclick=()=>{");
+  const fbStart = renderQuizCardSource.indexOf('function renderAnsweredFeedback(){');
   const reviewButtonIdx = renderQuizCardSource.indexOf('id="quiz-review-btn"');
   const reviewHandlerIdx = renderQuizCardSource.indexOf('openQuizReviewModal(e.id)');
-  assert.notEqual(answerHandlerIdx, -1);
-  assert.ok(reviewButtonIdx > answerHandlerIdx);
+  assert.notEqual(fbStart, -1, 'renderAnsweredFeedback() não encontrado');
+  assert.ok(reviewButtonIdx > fbStart, 'o botão de revisão precisa existir apenas no feedback respondido');
   assert.ok(reviewHandlerIdx > reviewButtonIdx);
 });
 
