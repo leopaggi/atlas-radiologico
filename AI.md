@@ -1114,3 +1114,56 @@ externa só no concluído; falha de upload não persiste parcialmente; sem tocar
 As âncoras de `tests/critical-flows.test.js` passaram para 4780/4770/7080/9440
 (helpers compartilhados inseridos antes das quatro âncoras). `SEED`, `REVIEW`,
 `SRS`, `SESSIONLOG`, a reconciliação V2 e os dados atuais não foram alterados.
+
+## Alteração 018 — cancelamento manual do pedido de revisão
+
+O usuário pode encerrar um pedido de revisão que não é mais necessário (ex:
+corrigiu manualmente, marcou por engano, resolveu fora do fluxo de solução),
+SEM apagar nada. Novo status `cancelled`; o pedido continua em
+`LESION_REVISIONS` com histórico, tentativas e proposta preservados.
+
+### Função central
+
+`cancelLesionReview(reviewId, reason)` — única porta de entrada. Localiza a
+revisão, valida se o status é cancelável, marca `status='cancelled'`,
+`cancelledAt`, `cancelledBy='user'` e `cancelReason` (normalizado; `null` se
+vazio), registra o evento `cancelled` no histórico, persiste via
+`saveLesionRevisions()` e atualiza os badges. NUNCA toca `DATA`, nunca aplica
+`proposedChanges`, nunca faz rollback, nunca mexe em SRS/REVIEW/imagens/
+ownership. A lógica NÃO fica nos botões.
+
+### Status canceláveis
+
+`CANCELLABLE_REVIEW_STATUSES = ['pending', 'proposed', 'rejected']`. Um pedido
+recusado (`rejected`) volta ao 🔔 e também pode ser encerrado (ex: você resolveu
+o problema à mão depois de recusar a proposta). Não é possível cancelar
+`applied_pending_validation` (tem o fluxo próprio manter/desfazer), `accepted`
+ou `cancelled`.
+
+### UI
+
+- Central de Revisões (🔔): botão discreto `✕ Cancelar pedido` para pedidos
+  canceláveis, abrindo `openCancelReviewModal()` — mostra lesão, pedido
+  original, campo opcional "Motivo do cancelamento", botões `voltar` e
+  `Cancelar pedido` (este com `btn-danger`).
+- Central de Soluções (💡, aba Propostas): mesmo botão; ao cancelar, o item
+  sai imediatamente da aba e o badge 💡 diminui.
+- Histórico: quando cancelada, mostra "Status: Cancelado pelo usuário",
+  data/hora e motivo (ou "Sem motivo informado").
+
+### Getters/badges
+
+`cancelled` fica naturalmente fora de `getPendingReviews()`,
+`getProposedSolutions()`, `getAppliedSolutionsAwaitingValidation()` e
+`getReadySolutions()` (os filtros já são por status específico). Os badges
+reagem imediatamente (sem F5) e, após F5, a revisão continua cancelada.
+
+### Testes
+
+`tests/lesion-review.test.js` ganhou 13 cenários de cancelamento (pending→
+cancelled, proposed→cancelled, applied/accepted/cancelled não canceláveis,
+id inexistente, saída das filas ativas, histórico preservado, reload não
+reabre, requestText/createdAt/attempts/proposedChanges preservados,
+cancelReason/cancelledAt/cancelledBy, badges, e checagem estática de que a UI
+só chama a função central). Resultado: **48 PASS, 0 FAIL**. Âncoras de
+`tests/critical-flows.test.js` para 4813/4803/7113/9531.

@@ -63,7 +63,7 @@ test('SEGURANÇA ESTÁTICA: só authorizeAndApplyReviewSolution/rollbackAppliedR
     'createLesionReview', 'getPendingReviews', 'getProposedSolutions',
     'getAppliedSolutionsAwaitingValidation', 'getReadySolutions', 'getReviewHistory',
     'validateProposedChanges', 'setReviewSolution', 'rejectProposedReviewSolution',
-    'approveAppliedReviewSolution', 'updateReviewCenterBadges'
+    'approveAppliedReviewSolution', 'updateReviewCenterBadges', 'cancelLesionReview'
   ];
   for (const name of untouched) {
     const body = extractFn(moduleSource, name);
@@ -602,4 +602,272 @@ test('loadData() carrega LESION_REVISIONS no boot (estaticamente)', () => {
   assert.notEqual(loadLesionRevisionsIdx, -1, 'loadData precisa carregar as revisões salvas ao abrir o app');
   const nextFunctionIdx = html.indexOf('\nasync function saveData(){', loadDataStart);
   assert.ok(loadLesionRevisionsIdx < nextFunctionIdx, 'a chamada precisa estar dentro do corpo de loadData()');
+});
+
+// ===========================================================================
+// CANCELAMENTO MANUAL DO PEDIDO (cancelLesionReview)
+// ===========================================================================
+
+test('CANCELAR pending: pending -> cancelled, marca cancelledAt/cancelledBy e sai de getPendingReviews()', () => {
+  const ctx = buildTestContext();
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  assert.equal(ctx.countPendingLesionReviews(), 1);
+  const before = Date.now();
+  const res = ctx.cancelLesionReview(review.id, 'corrigi manualmente');
+  assert.equal(res.ok, true);
+  assert.equal(res.review.status, 'cancelled');
+  assert.equal(res.review.cancelledBy, 'user');
+  assert.ok(res.review.cancelledAt >= before, 'cancelledAt precisa ser criado');
+  assert.equal(res.review.cancelReason, 'corrigi manualmente');
+  assert.equal(ctx.countPendingLesionReviews(), 0, '🔔 precisa cair imediatamente');
+  assert.equal(ctx.getPendingReviews().length, 0);
+});
+
+test('CANCELAR proposed: proposed -> cancelled, sai de getProposedSolutions() e nenhuma alteração é aplicada', () => {
+  const lesion = makeLesion();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
+  assert.equal(ctx.countReadyLesionSolutions(), 1);
+  const res = ctx.cancelLesionReview(review.id, '');
+  assert.equal(res.ok, true);
+  assert.equal(res.review.status, 'cancelled');
+  assert.equal(ctx.getProposedSolutions().length, 0, '💡 precisa cair imediatamente');
+  assert.equal(ctx.countReadyLesionSolutions(), 0);
+  assert.deepEqual(ctx.DATA[0], lesion, 'cancelar NUNCA pode alterar DATA');
+  assert.equal(ctx.saveDataCalls.length, 0, 'cancelar NUNCA chama saveData()');
+  assert.equal(res.review.solution.proposedChanges.classification, 'BIRADS', 'a proposta precisa continuar preservada no histórico');
+});
+
+test('CANCELAR: sem motivo informado guarda cancelReason null e o histórico registra o evento', () => {
+  const ctx = buildTestContext();
+  const { review } = ctx.createLesionReview('seed_1', 'marcado por engano');
+  const res = ctx.cancelLesionReview(review.id, '   ');
+  assert.equal(res.review.cancelReason, null);
+  const entry = res.review.history.find(h => h.action === 'cancelled');
+  assert.ok(entry, 'precisa registrar o evento cancelled no histórico');
+  assert.equal(entry.details.previousStatus, 'pending');
+});
+
+test('NÃO CANCELAR applied_pending_validation (tem o fluxo próprio manter/desfazer)', () => {
+  const lesion = makeLesion();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  const res = ctx.cancelLesionReview(review.id, 'não quero mais');
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'not_cancellable');
+  assert.equal(res.review.status, 'applied_pending_validation', 'o status não pode mudar');
+  assert.equal(ctx.DATA[0].classification, 'BIRADS', 'nada em DATA pode ser desfeito por tentativa de cancelamento');
+  assert.equal(ctx.getAppliedSolutionsAwaitingValidation().length, 1);
+});
+
+test('NÃO CANCELAR accepted', () => {
+  const lesion = makeLesion();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  ctx.approveAppliedReviewSolution(review.id);
+  const res = ctx.cancelLesionReview(review.id, 'tarde demais');
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'not_cancellable');
+  assert.equal(res.review.status, 'accepted');
+});
+
+test('NÃO CANCELAR cancelled novamente', () => {
+  const ctx = buildTestContext();
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  assert.equal(ctx.cancelLesionReview(review.id, 'primeiro').ok, true);
+  const res = ctx.cancelLesionReview(review.id, 'segundo');
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'not_cancellable');
+  assert.equal(res.review.status, 'cancelled');
+  assert.equal(res.review.cancelReason, 'primeiro', 'o motivo original não pode ser sobrescrito');
+});
+
+test('cancelLesionReview() em id inexistente devolve not_found sem lançar erro', () => {
+  const ctx = buildTestContext();
+  const res = ctx.cancelLesionReview('lrev_inexistente', 'x');
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'not_found');
+});
+
+test('cancelled NÃO entra em nenhuma fila ativa (pending/proposed/applied) nem em getReadySolutions()', () => {
+  const ctx = buildTestContext();
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  ctx.cancelLesionReview(review.id, 'ok');
+  assert.equal(ctx.getPendingReviews().length, 0);
+  assert.equal(ctx.getProposedSolutions().length, 0);
+  assert.equal(ctx.getAppliedSolutionsAwaitingValidation().length, 0);
+  assert.equal(ctx.getReadySolutions().length, 0);
+  assert.equal(ctx.countPendingLesionReviews(), 0);
+  assert.equal(ctx.countReadyLesionSolutions(), 0);
+});
+
+test('cancelled continua acessível pelo histórico (getReviewHistory), com o motivo preservado', () => {
+  const ctx = buildTestContext();
+  const { review } = ctx.createLesionReview('seed_1', 'revisar referências');
+  ctx.cancelLesionReview(review.id, 'já resolvi');
+  const history = ctx.getReviewHistory(review.id);
+  assert.ok(history.some(h => h.action === 'cancelled'));
+  const entry = history.find(h => h.action === 'cancelled');
+  assert.equal(entry.details.reason, 'já resolvi');
+});
+
+test('F5/reload: revisão cancelada continua cancelada e fora das filas ativas', async () => {
+  const ctx = buildTestContext();
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
+  ctx.cancelLesionReview(review.id, 'corrigi manualmente');
+  await ctx.saveLesionRevisions();
+
+  const sharedBacking = ctx.__backing;
+  const ctx2 = {
+    console, Date, Math, JSON, Object, Array,
+    DATA: [], saveDataCalls: [],
+    __backing: sharedBacking,
+    storage: {
+      async get(key) {
+        if (Object.prototype.hasOwnProperty.call(sharedBacking, key)) return { value: sharedBacking[key] };
+        throw new Error('not found: ' + key);
+      },
+      async set(key, value) { sharedBacking[key] = value; }
+    }
+  };
+  ctx2.saveData = () => { ctx2.saveDataCalls.push(Date.now()); };
+  vm.createContext(ctx2);
+  vm.runInContext(moduleSource, ctx2, { filename: 'lesion-review-module-reload-cancel.js' });
+  await ctx2.loadLesionRevisions();
+
+  assert.equal(ctx2.getPendingReviews().length, 0, 'não pode voltar para 🔔');
+  assert.equal(ctx2.getProposedSolutions().length, 0, 'não pode voltar para 💡');
+  assert.equal(ctx2.getReadySolutions().length, 0);
+  const reloaded = serialize(readGlobal(ctx2, 'LESION_REVISIONS'))[review.id];
+  assert.equal(reloaded.status, 'cancelled');
+  assert.equal(reloaded.cancelledBy, 'user');
+  assert.equal(reloaded.cancelReason, 'corrigi manualmente');
+  assert.equal(reloaded.requestText, 'corrigir classificação', 'requestText precisa ser preservado');
+  assert.equal(reloaded.solution.proposedChanges.classification, 'BIRADS', 'proposedChanges precisa ser preservado no histórico');
+});
+
+test('cancelar NÃO apaga requestText, createdAt, attempts[] nem histórico anterior', () => {
+  const lesion = makeLesion();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  const createdAt = review.createdAt;
+  ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  ctx.rollbackAppliedReviewSolution(review.id, 'não funcionou');
+  // rejected -> proposed -> autorizar de novo -> aplicado, para ter attempts[]
+  ctx.setReviewSolution(review.id, 'aplicar TIRADS', { classification: 'TIRADS' });
+  const historyBefore = review.history.length;
+  const attemptsBefore = review.attempts.length;
+
+  // volta pra proposed (rollback deixou em rejected; nova proposta reabre)
+  const res = ctx.cancelLesionReview(review.id, 'resolvido fora do fluxo');
+  assert.equal(res.ok, true);
+  assert.equal(res.review.requestText, 'corrigir classificação');
+  assert.equal(res.review.createdAt, createdAt);
+  assert.equal(res.review.attempts.length, attemptsBefore, 'attempts[] precisa ser preservado');
+  assert.ok(res.review.history.length > historyBefore, 'o histórico anterior é mantido e o evento cancelled é acrescentado');
+  assert.ok(res.review.history.some(h => h.action === 'changes_applied'));
+  assert.ok(res.review.history.some(h => h.action === 'rollback_completed'));
+});
+
+test('badges do header: cancelar atualiza 🔔 e 💡 imediatamente (sem F5)', () => {
+  const ctx = buildTestContext({ dom: true });
+  const els = ctx.__elements;
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  assert.equal(els['pending-reviews-badge'].textContent, '1');
+  assert.equal(els['pending-reviews-btn'].classList.emptyState, false);
+
+  ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
+  assert.equal(els['ready-solutions-badge'].textContent, '1');
+
+  ctx.cancelLesionReview(review.id, 'ok');
+  assert.equal(els['ready-solutions-badge'].textContent, '', '💡 precisa zerar imediatamente');
+  assert.equal(els['ready-solutions-btn'].classList.emptyState, true);
+  assert.equal(els['pending-reviews-badge'].textContent, '', '🔔 precisa continuar zerado');
+});
+
+test('ESTÁTICO: cancelLesionReview() é a função central e a UI não implementa a lógica no botão', () => {
+  assert.match(moduleSource, /function cancelLesionReview\(reviewId, reason\)\{/);
+  assert.match(moduleSource, /const CANCELLABLE_REVIEW_STATUSES = \['pending', 'proposed', 'rejected'\];/);
+  // a UI de confirmação chama a função central
+  const modalStart = html.indexOf('function openCancelReviewModal(');
+  assert.notEqual(modalStart, -1);
+  const modalEnd = html.indexOf('\nfunction openPendingReviewsModal(', modalStart);
+  assert.notEqual(modalEnd, -1);
+  const modalBlock = html.slice(modalStart, modalEnd);
+  assert.match(modalBlock, /cancelLesionReview\(reviewId, reason\)/);
+  assert.doesNotMatch(modalBlock, /\bDATA\b/);
+  // botão aparece na Central de Revisões e na aba Propostas
+  assert.match(html, /review-cancel-request">✕ Cancelar pedido/);
+});
+
+// ===========================================================================
+// CANCELAMENTO DE REVISÃO rejected (volta ao 🔔 e também pode ser encerrada)
+// ===========================================================================
+
+test('CANCELAR rejected: rejected -> cancelled, sai de getPendingReviews() e preserva o histórico da rejeição', () => {
+  const lesion = makeLesion();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
+  ctx.rejectProposedReviewSolution(review.id, 'sistema errado pro órgão');
+  // rejected volta para o 🔔
+  assert.equal(ctx.getPendingReviews().length, 1);
+  assert.equal(ctx.countPendingLesionReviews(), 1);
+  assert.equal(review.status, 'rejected');
+
+  const historyBefore = review.history.length;
+  const res = ctx.cancelLesionReview(review.id, 'resolvi manualmente');
+  assert.equal(res.ok, true);
+  assert.equal(res.review.status, 'cancelled');
+  assert.equal(res.review.cancelledBy, 'user');
+  assert.equal(res.review.cancelReason, 'resolvi manualmente');
+  assert.ok(res.review.cancelledAt, 'cancelledAt precisa ser criado');
+  assert.equal(ctx.getPendingReviews().length, 0, 'rejected cancelada precisa sair do 🔔');
+  assert.equal(ctx.countPendingLesionReviews(), 0);
+  assert.equal(ctx.countReadyLesionSolutions(), 0);
+  // histórico da rejeição anterior preservado + evento cancelled acrescentado
+  assert.ok(res.review.history.length > historyBefore);
+  assert.ok(res.review.history.some(h => h.action === 'proposal_rejected'), 'o histórico da rejeição precisa continuar lá');
+  assert.ok(res.review.history.some(h => h.action === 'cancelled'));
+  assert.equal(res.review.solution.proposedChanges.classification, 'BIRADS', 'a proposta recusada precisa continuar preservada');
+});
+
+test('CANCELAR rejected: NÃO altera DATA, NÃO refaz rollback, NÃO aplica solução e preserva attempts[]', () => {
+  const lesion = makeLesion();
+  const originalSnapshot = JSON.parse(JSON.stringify(lesion));
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
+  ctx.authorizeAndApplyReviewSolution(review.id);   // aplica + cria attempts[0]
+  ctx.rollbackAppliedReviewSolution(review.id, 'não funcionou'); // desfaz -> rejected
+  assert.equal(ctx.DATA[0].classification, null, 'rollback já devolveu a lesão ao estado original');
+  const attemptsBefore = serialize(review.attempts);
+  const saveDataBefore = ctx.saveDataCalls.length;
+
+  const res = ctx.cancelLesionReview(review.id, 'já resolvi por fora');
+  assert.equal(res.ok, true);
+  assert.equal(res.review.status, 'cancelled');
+  assert.deepEqual(serialize(res.review.attempts), attemptsBefore, 'attempts[] precisa ficar intacto');
+  assert.deepEqual(serialize(ctx.DATA[0]), originalSnapshot, 'cancelar rejected NUNCA altera DATA');
+  assert.equal(ctx.saveDataCalls.length, saveDataBefore, 'cancelar NUNCA chama saveData()');
+  assert.ok(res.review.history.some(h => h.action === 'rollback_completed'), 'o rollback anterior precisa continuar no histórico');
+});
+
+test('badge 🔔: cancelar uma revisão rejected diminui o contador imediatamente', () => {
+  const ctx = buildTestContext({ dom: true });
+  const els = ctx.__elements;
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
+  ctx.rejectProposedReviewSolution(review.id, 'não serve');
+  assert.equal(els['pending-reviews-badge'].textContent, '1', 'rejected volta a contar no 🔔');
+  ctx.cancelLesionReview(review.id, 'ok');
+  assert.equal(els['pending-reviews-badge'].textContent, '', '🔔 precisa cair imediatamente');
+  assert.equal(els['pending-reviews-btn'].classList.emptyState, true);
 });

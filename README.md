@@ -511,3 +511,17 @@ Os helpers `buildPendingImage`/`uploadPendingImage` são compartilhados entre
 Editar e Quiz (sem duplicar lógica).
 
 Testes: `tests/quiz-images.test.js` com **56 PASS**.
+
+### Cancelar um pedido de revisão (2026-09-20)
+
+Na Central de Revisões (🔔) e na aba Propostas da Central de Soluções (💡),
+pedidos ainda não aplicados podem ser encerrados com `✕ Cancelar pedido`. O
+pedido NÃO é apagado: ele vira `cancelled`, sai das filas ativas (os badges 🔔
+e 💡 caem na hora, sem F5) e continua visível no histórico com data/hora e
+motivo (opcional). Isso serve para quando você mesmo corrigiu o problema, para
+quando marcou por engano, ou quando a revisão deixou de ser necessária. Não é
+possível cancelar uma correção já aplicada aguardando validação — nesse caso
+use o fluxo próprio `✓ funcionou — manter` / `↩ não funcionou — desfazer`.
+Nada em `DATA` é alterado pelo cancelamento.
+
+Testes: `tests/lesion-review.test.js` com **48 PASS**.

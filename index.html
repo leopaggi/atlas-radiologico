@@ -464,6 +464,10 @@ body{
 .review-tab-btn{background:none;border:1px solid var(--line);color:var(--muted);padding:7px 12px;border-radius:var(--radius);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;}
 .review-tab-btn.active{color:var(--teal);border-color:var(--teal-dim);background:var(--tag-bg-active);}
 .review-center-list[hidden]{display:none;}
+.review-cancel-modal{max-width:520px;}
+.review-cancel-lesion{font-size:13px;color:var(--text);margin:2px 0 0;line-height:1.4;}
+.review-cancelled-info{background:var(--panel-2);border:1px solid var(--line);border-left:3px solid var(--red);border-radius:var(--radius);padding:9px 12px;margin:0 0 14px;font-size:12.5px;color:var(--muted);line-height:1.5;}
+.review-cancelled-info b{color:var(--text);}
 .review-fields-diff{margin-top:8px;display:flex;flex-direction:column;gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px;}
 .review-fields-diff-row{font-size:12px;color:var(--muted);}
 .review-fields-diff-row b{color:var(--text);}
@@ -2981,6 +2985,36 @@ function rollbackAppliedReviewSolution(reviewId, reasonText){
 
   saveLesionRevisions();
   saveData();
+  updateReviewCenterBadges();
+  return { ok:true, reason:null, review };
+}
+
+/* CANCELAMENTO MANUAL — o próprio usuário encerra um pedido de revisão que
+   não é mais necessário (ex: corrigiu manualmente, marcou por engano). NÃO
+   apaga nada: o pedido continua em LESION_REVISIONS com todo o histórico,
+   tentativas e proposta preservados — apenas deixa de ser ativo. Permitido a
+   partir de 'pending', 'proposed' ou 'rejected' (um pedido recusado volta ao
+   🔔 e também pode ser encerrado se o problema já foi resolvido à mão).
+   'applied_pending_validation' tem o fluxo próprio (manter/desfazer) e não é
+   cancelável por aqui; 'accepted' já terminou; 'cancelled' não pode ser
+   cancelada de novo. NUNCA toca DATA, nunca aplica proposedChanges, nunca faz
+   rollback, nunca mexe em SRS/REVIEW/imagens/ownership — só o estado do pedido. */
+const CANCELLABLE_REVIEW_STATUSES = ['pending', 'proposed', 'rejected'];
+function cancelLesionReview(reviewId, reason){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return { ok:false, reason:'not_found', review:null };
+  if(!CANCELLABLE_REVIEW_STATUSES.includes(review.status)){
+    return { ok:false, reason:'not_cancellable', status:review.status, review };
+  }
+  const previousStatus = review.status;
+  const now = Date.now();
+  review.status = 'cancelled';
+  review.updatedAt = now;
+  review.cancelledAt = now;
+  review.cancelledBy = 'user';
+  review.cancelReason = (reason||'').trim() || null;
+  pushLesionReviewHistory(review, 'cancelled', { reason: review.cancelReason, previousStatus });
+  saveLesionRevisions();
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
 }
@@ -8631,7 +8665,8 @@ const REVIEW_HISTORY_ACTION_LABELS = {
   application_approved:'correção mantida (2º aceite)',
   application_rejected:'correção não aprovada (2º aceite negado)',
   rollback_completed:'lesão restaurada ao estado anterior (rollback)',
-  reopened:'reaberta'
+  reopened:'reaberta',
+  cancelled:'cancelado pelo usuário'
 };
 
 const LESION_REVIEW_FIELD_LABELS = { name:'nome', notes:'descrição', classification:'classificação', tags:'tags', enTerm:'termo em inglês' };
@@ -8682,6 +8717,12 @@ function openReviewHistoryModal(reviewId){
       <h2>Histórico da revisão</h2>
       <div class="modal-sub">${meta.name}${meta.sub?' · '+meta.sub:''}</div>
       <div class="review-history-request"><b>Pedido original:</b> ${(review.requestText||'').replace(/</g,'&lt;')}</div>
+      ${review.status==='cancelled' ? `
+        <div class="review-cancelled-info">
+          <div><b>Status:</b> Cancelado pelo usuário</div>
+          <div><b>Data/hora:</b> ${review.cancelledAt ? new Date(review.cancelledAt).toLocaleString('pt-BR') : '—'}</div>
+          <div><b>Motivo:</b> ${review.cancelReason ? String(review.cancelReason).replace(/</g,'&lt;') : 'Sem motivo informado'}</div>
+        </div>` : ''}
       <div class="review-history-list">
         ${history.map(h=>{
           const rows = [];
@@ -8732,6 +8773,47 @@ function openReasonPromptModal(reviewId, onConfirm, opts){
   };
 }
 
+/* Confirmação de cancelamento de um pedido de revisão. Mostra a lesão e o
+   pedido original, aceita um motivo opcional e chama a função central
+   cancelLesionReview() — a lógica NUNCA fica no botão. */
+function openCancelReviewModal(reviewId, onCancelled){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return;
+  const meta = reviewCenterLesionMeta(review.lesionId);
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected){ ov.remove(); document.removeEventListener('keydown', closeOnEsc); } };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = `
+    <div class="modal review-cancel-modal">
+      <h2>Cancelar este pedido de revisão?</h2>
+      <div class="modal-sub">Use esta opção quando o problema já tiver sido resolvido manualmente ou quando a revisão não for mais necessária.</div>
+      <div class="review-cancel-lesion"><b>${meta.name}</b>${meta.sub?' · '+meta.sub:''}</div>
+      <div class="review-center-row-request">${(review.requestText||'').replace(/</g,'&lt;')}</div>
+      <div class="field"><label>Motivo do cancelamento (opcional)</label><textarea id="cancel-review-reason" placeholder="Ex.: corrigi manualmente a imagem; revisão não é mais necessária."></textarea></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="cancel-review-back">voltar</button>
+        <button class="btn btn-danger" id="cancel-review-confirm">Cancelar pedido</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const cleanup = ()=>{ ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+  ov.querySelector('#cancel-review-back').onclick = cleanup;
+  ov.querySelector('#cancel-review-confirm').onclick = async ()=>{
+    const reason = ov.querySelector('#cancel-review-reason').value;
+    const res = cancelLesionReview(reviewId, reason);
+    cleanup();
+    if(res.ok){
+      await saveLesionRevisions();
+      toast('Pedido de revisão cancelado.');
+      if(typeof onCancelled==='function') onCancelled();
+    } else {
+      toast('Não foi possível cancelar este pedido (' + (res.reason||'erro') + ').');
+    }
+  };
+}
+
 function openPendingReviewsModal(){
   const ov = document.createElement('div');
   ov.className = 'overlay';
@@ -8747,16 +8829,20 @@ function openPendingReviewsModal(){
     </div>`;
   document.body.appendChild(ov);
   const list = ov.querySelector('#pending-reviews-list');
-  const reviews = getPendingReviews();
-  if(reviews.length===0){
-    list.innerHTML = '<div class="review-center-empty">Nenhuma revisão pendente no momento.</div>';
-  } else {
+  const renderList = ()=>{
+    const reviews = getPendingReviews();
+    list.innerHTML = '';
+    if(reviews.length===0){
+      list.innerHTML = '<div class="review-center-empty">Nenhuma revisão pendente no momento.</div>';
+      return;
+    }
     reviews.forEach(r=>{
       const meta = reviewCenterLesionMeta(r.lesionId);
       const when = r.updatedAt ? new Date(r.updatedAt).toLocaleString('pt-BR') : '';
       const statusTag = r.status==='rejected'
         ? '<span class="review-status-tag rejected">recusada — reaberta pra nova proposta</span>'
         : '<span class="review-status-tag pending">pendente</span>';
+      const cancellable = CANCELLABLE_REVIEW_STATUSES.includes(r.status);
       const row = document.createElement('div');
       row.className = 'review-center-row';
       row.innerHTML = `
@@ -8768,12 +8854,16 @@ function openPendingReviewsModal(){
         <div class="review-center-row-actions">
           ${meta.found?'<button type="button" class="btn btn-ghost review-open-lesion">ver lesão</button>':''}
           <button type="button" class="btn btn-ghost review-open-history">histórico</button>
+          ${cancellable?'<button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>':''}
         </div>`;
       if(meta.found) row.querySelector('.review-open-lesion').onclick = ()=>{ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); openDetail(meta.lesion.id); };
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
+      const cancelBtn = row.querySelector('.review-cancel-request');
+      if(cancelBtn) cancelBtn.onclick = ()=> openCancelReviewModal(r.id, renderList);
       list.appendChild(row);
     });
-  }
+  };
+  renderList();
   ov.querySelector('#pending-reviews-close').onclick = ()=>{ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); };
 }
 
@@ -8845,6 +8935,7 @@ function openReadySolutionsModal(){
           <button type="button" class="btn btn-ghost review-open-history">histórico</button>
           <button type="button" class="btn btn-primary review-authorize">✓ autorizar correção</button>
           <button type="button" class="btn btn-ghost review-reject-proposal">✕ recusar proposta</button>
+          <button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>
         </div>`;
       if(meta.found) row.querySelector('.review-open-lesion').onclick = ()=>{ closeAllAndCleanup(); openDetail(meta.lesion.id); };
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
@@ -8870,6 +8961,7 @@ function openReadySolutionsModal(){
           confirmLabel: '✕ recusar proposta'
         });
       };
+      row.querySelector('.review-cancel-request').onclick = ()=> openCancelReviewModal(r.id, renderBothLists);
       proposedList.appendChild(row);
     });
   };

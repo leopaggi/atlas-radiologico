@@ -180,10 +180,14 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // uploadPendingImage() (usados pelo Editar E pelo Quiz) inseridos logo após
   // updateLesionImageLabel(), antes das quatro âncoras; o modal transacional
   // do Quiz fica depois de importHandler e não desloca as três primeiras.
-  assert.equal(recovery.line, 4780);
-  assert.equal(brokenArtifacts.line, 4770);
-  assert.equal(loadData.line, 7080);
-  assert.equal(importHandler.line, 9440);
+  // +33 nesta continuação: cancelamento manual do pedido de revisão —
+  // cancelLesionReview()/CANCELLABLE_REVIEW_STATUSES no módulo
+  // LESION_REVISIONS (antes das âncoras) e o CSS do modal de cancelamento no
+  // <style> do topo. As quatro âncoras deslocam igualmente.
+  assert.equal(recovery.line, 4814);
+  assert.equal(brokenArtifacts.line, 4804);
+  assert.equal(loadData.line, 7114);
+  assert.equal(importHandler.line, 9532);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

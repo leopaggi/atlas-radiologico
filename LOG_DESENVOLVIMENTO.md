@@ -1249,3 +1249,67 @@ foram alterados.
 ### Commit após aprovação
 
 Ainda não criado.
+
+## ALTERAÇÃO 018 — cancelamento manual do pedido de revisão
+
+**Número da alteração:** 018
+**Data:** 20/09/2026
+
+### Objetivo
+
+Permitir que o usuário encerre um pedido de revisão que não é mais necessário
+(corrigiu manualmente, marcou por engano, resolveu fora do fluxo de solução),
+sem apagar o histórico.
+
+### O que mudou para quem usa o Atlas
+
+- Na Central de Revisões (🔔) e na aba "Propostas" da Central de Soluções (💡),
+  aparece um botão discreto `✕ Cancelar pedido` para pedidos ainda não
+  aplicados.
+- Ao clicar, abre uma confirmação que mostra a lesão e o pedido original, com
+  um campo opcional de motivo; os botões são `voltar` e `Cancelar pedido`.
+- O pedido não é apagado: vira "cancelado", sai das filas ativas (os badges 🔔
+  e 💡 caem na hora, sem F5) e continua no histórico, com data/hora e motivo
+  (ou "Sem motivo informado").
+- Correções já aplicadas aguardando validação NÃO podem ser canceladas por
+  aqui — elas continuam com o fluxo próprio de manter/desfazer.
+- Nada nos dados da lesão é alterado pelo cancelamento.
+
+### Detalhes técnicos
+
+- Novo status `cancelled`; função central `cancelLesionReview(reviewId, reason)`
+  (a UI só a chama — a lógica não fica no botão).
+- Grava `cancelledAt`, `cancelledBy='user'` e `cancelReason` (opcional),
+  preservando `requestText`, `createdAt`, `attempts[]`, `solution`/
+  `proposedChanges` e todo o histórico.
+- `CANCELLABLE_REVIEW_STATUSES = ['pending', 'proposed', 'rejected']` (um
+  pedido recusado volta ao 🔔 e também pode ser encerrado).
+- `cancelled` não é retornado por `getPendingReviews()`,
+  `getProposedSolutions()` nem `getAppliedSolutionsAwaitingValidation()`;
+  continua acessível por `getReviewHistory()`.
+- `cancelLesionReview()` não toca `DATA`, não aplica `proposedChanges`, não faz
+  rollback e não altera SRS/REVIEW/imagens/ownership.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/lesion-review.test.js`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### Testes realizados
+
+- `node --test tests/lesion-review.test.js`: 48 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 56 PASS, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+O usuário consegue encerrar pedidos de revisão sem perder histórico e sem
+alterar a lesão. `SEED`, `REVIEW`, `SRS`, `SESSIONLOG`, a reconciliação V2 e os
+dados atuais não foram alterados.
+
+### Commit após aprovação
+
+Ainda não criado.
