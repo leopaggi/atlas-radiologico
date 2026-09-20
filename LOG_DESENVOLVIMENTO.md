@@ -1178,10 +1178,73 @@ reconciliação V2 e os dados atuais não foram alterados.
 O construtor de Quadro de Imagem (compartilhado com o Quiz) entrou na mesma
 regra. Agora ele é parametrizável: o formulário Editar chama com
 `deferUpload=true`, então os painéis ficam temporários (blob URL) e o quadro
-final vira imagem pendente — nenhum upload antes de Salvar. O Quiz chama sem
-esse parâmetro e mantém o upload imediato. Remover o quadro antes de Salvar ou
-cancelar não gera upload; no Salvar, o quadro sobe uma única vez pelo pipeline
-de `pendingImgs`.
+final vira imagem pendente — nenhum upload antes de Salvar. Remover o quadro
+antes de Salvar ou cancelar não gera upload; no Salvar, o quadro sobe uma única
+vez pelo pipeline de `pendingImgs`.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 017 — Quiz de imagens transacional (rascunho + Concluído)
+
+**Número da alteração:** 017
+**Data:** 20/09/2026
+
+### Objetivo
+
+Aplicar ao modal de imagens do Quiz ("🖼 Adicionar imagem a esta lesão") a
+mesma filosofia já usada no formulário Editar: imagens novas ficam locais/
+temporárias e só vão ao Cloudinary quando o usuário confirmar. Antes, cada
+imagem (Ctrl+V, arquivo, Commons ou Quadro) era enviada ao Cloudinary e
+persistida imediatamente.
+
+### O que mudou para quem usa o Atlas
+
+- Enquanto o modal está aberto, dá para colar (Ctrl+V), escolher arquivo,
+  buscar no Commons, criar Quadro, editar legenda e remover à vontade — sem
+  enviar nada novo ao Cloudinary.
+- O botão **concluído** é o "salvar" do modal: só então as imagens novas que
+  sobraram sobem ao Cloudinary, são associadas à lesão e persistidas.
+- Fechar com Esc, clicar fora ou cancelar descarta tudo: nenhuma imagem sobe,
+  a lesão não muda e o Quiz continua na mesma questão.
+- Imagens que já existiam aparecem normalmente e não são reenviadas. Remover
+  uma delas só tira a referência (sem exclusão remota).
+- URL externa continua sendo salva como URL, sem upload, e só é associada no
+  concluído.
+- Se um upload falhar, o modal continua aberto com os previews, informa o erro
+  e não salva nada pela metade; o que já subiu não é reenviado na nova
+  tentativa.
+
+### Detalhes técnicos
+
+- Rascunho local `draftImgs` (cópia das imagens da lesão); o modal não toca
+  `DATA` até o concluído.
+- Helpers compartilhados `buildPendingImage()` e `uploadPendingImage()`
+  (usados pelo Editar E pelo Quiz — sem duplicar lógica).
+- Commons e Quadro reutilizam `deferUpload=true` (mesmo mecanismo do Editar).
+- `releaseDraftObjectUrls()` revoga as blob URLs no fechar/concluir.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/quiz-images.test.js`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### Testes realizados
+
+- `node --test tests/quiz-images.test.js`: 56 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 35 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+O modal do Quiz não altera mais `DATA` a cada ação. Nenhuma imagem nova sobe ao
+Cloudinary antes de "concluído"; cancelar deixa a lesão exatamente como estava.
+`SEED`, `REVIEW`, `SRS`, `SESSIONLOG`, a reconciliação V2 e os dados atuais não
+foram alterados.
 
 ### Commit após aprovação
 

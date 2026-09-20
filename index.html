@@ -4546,6 +4546,24 @@ function updateLesionImageLabel(lesion, imageIndex, label){
   lesion._userUpdatedAt = Date.now();
   return lesion.images[imageIndex];
 }
+/* Imagem NOVA ainda NÃO enviada: fica temporária (blob URL para exibir + File
+   em memória) até o usuário confirmar (Salvar no Editar / Concluído no Quiz).
+   Compartilhada pelo formulário Editar e pelo modal de imagens do Quiz — não
+   é um segundo sistema de imagens. */
+function buildPendingImage(file, trackObjectUrl){
+  const objectUrl = trackObjectUrl(file);
+  return { label:'', data:objectUrl, source:'pending', _file:file, _objectUrl:objectUrl };
+}
+/* Envia UMA imagem pendente ao Cloudinary, preservando a legenda e metadados
+   extras (ex: Commons). Compartilhada pelo Editar e pelo Quiz. */
+async function uploadPendingImage(img, lesionMeta){
+  const remote = await uploadToCloudinary(img._file, lesionMeta);
+  remote.label = img.label || '';
+  for(const k of ['sourcePage','sourceSite','license','artist','attribution','originalUrl']){
+    if(img[k]!==undefined) remote[k] = img[k];
+  }
+  return remote;
+}
 /* redimensiona/comprime antes de salvar, para manter cada imagem leve */
 function resizeImageToDataUrl(file, maxDim, quality){
   return new Promise((resolve, reject)=>{
@@ -8174,8 +8192,7 @@ function openForm(id){
     if(!file || !file.type || !file.type.startsWith('image/')) return;
     const targetIdx = replaceTargetIdx;
     replaceTargetIdx = null;
-    const objectUrl = trackObjectUrl(file);
-    const temp = { label:'', data:objectUrl, source:'pending', _file:file, _objectUrl:objectUrl };
+    const temp = buildPendingImage(file, trackObjectUrl);
     if(targetIdx!==null && pendingImgs[targetIdx]){
       const old = pendingImgs[targetIdx];
       if(old && old.source==='pending') revokeObjectUrl(old._objectUrl);
@@ -8236,12 +8253,7 @@ function openForm(id){
         if(x.source==='pending' && x._file){
           if(!hasCloudinaryConfig()){ toast('Cloudinary indisponível: não foi possível enviar as imagens novas. Nada foi salvo.'); return; }
           try{
-            const remote=await uploadToCloudinary(x._file,{id:entryId,name});
-            remote.label=x.label||'';
-            for(const k of ['sourcePage','sourceSite','license','artist','attribution','originalUrl']){
-              if(x[k]!==undefined) remote[k]=x[k];
-            }
-            normalized.push(remote);
+            normalized.push(await uploadPendingImage(x, {id:entryId,name}));
           }catch(err){
             console.error('Cloudinary upload (salvar)',err);
             toast('Falha ao enviar uma imagem nova ao Cloudinary. Nada foi salvo — tente novamente.');
@@ -9897,7 +9909,7 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
   cov.className = 'quiz-img-modal-overlay';
   cov.innerHTML = `<div class="modal quiz-img-modal">
     <h2>🖼 Adicionar imagem a: ${esc(lesion.name)}</h2>
-    <div class="modal-sub">salva direto na lesão, sem sair do Quiz</div>
+    <div class="modal-sub">as imagens novas só vão para o Cloudinary ao clicar em "concluído"</div>
     <div class="img-upload-box" id="quiz-add-img-upload-box" tabindex="0">
       <button type="button" class="btn btn-ghost" id="quiz-add-img-pick-btn">📎 adicionar imagem</button>
       <button type="button" class="btn btn-ghost" id="quiz-add-img-collage-btn" style="margin-left:6px;color:var(--teal);border-color:var(--teal-dim);">▦ criar quadro de imagens</button>
@@ -9911,28 +9923,45 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
       <button type="button" class="btn btn-ghost" id="quiz-add-img-url-btn" style="height:38px;align-self:flex-start;">+ URL</button>
     </div>
     <div class="img-gallery" id="quiz-add-img-gallery"></div>
-    <div class="modal-actions"><button class="btn btn-primary" id="quiz-add-img-done">concluído</button></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="quiz-add-img-cancel">cancelar</button>
+      <button class="btn btn-primary" id="quiz-add-img-done">concluído</button>
+    </div>
   </div>`;
   document.body.appendChild(cov);
+
+  /* RASCUNHO LOCAL: o modal NÃO altera a lesão real enquanto está aberto.
+     Ctrl+V/arquivo/Commons/Quadro viram imagens temporárias (source:'pending',
+     File em memória + blob URL). Só "concluído" envia as temporárias ao
+     Cloudinary e aplica o rascunho à lesão. Esc/clique fora/cancelar descarta
+     tudo — a lesão fica exatamente como estava. */
+  const draftImgs = (Array.isArray(lesion.images) ? lesion.images : []).map(x=>({...x}));
+  const draftObjectUrls = new Set();
+  function trackDraftObjectUrl(file){ const url=URL.createObjectURL(file); draftObjectUrls.add(url); return url; }
+  function revokeDraftObjectUrl(url){ if(url&&draftObjectUrls.has(url)){ try{ URL.revokeObjectURL(url); }catch(_e){} draftObjectUrls.delete(url); } }
+  function releaseDraftObjectUrls(){ draftObjectUrls.forEach(u=>{ try{ URL.revokeObjectURL(u); }catch(_e){} }); draftObjectUrls.clear(); }
+
   const escHandler = ev=>{ if(ev.key==='Escape' && cov.isConnected){ ev.stopPropagation(); close(); } };
-  const close = ()=>{ if(cov.isConnected) cov.remove(); document.removeEventListener('keydown', escHandler, true); };
+  const close = ()=>{ releaseDraftObjectUrls(); if(cov.isConnected) cov.remove(); document.removeEventListener('keydown', escHandler, true); };
   cov.addEventListener('click', ev=>{ if(ev.target===cov) close(); });
   document.addEventListener('keydown', escHandler, true);
-  cov.querySelector('#quiz-add-img-done').onclick = close;
+  cov.querySelector('#quiz-add-img-cancel').onclick = close;
 
   const statusEl = cov.querySelector('#quiz-add-img-cloud-status');
   const galleryEl = cov.querySelector('#quiz-add-img-gallery');
   function setStatus(msg, kind){
     if(msg){ statusEl.textContent=msg; statusEl.className='img-cloud-status '+(kind||''); return; }
-    statusEl.textContent = hasCloudinaryConfig() ? '☁ Cloudinary ativo.' : '⚠ Cloudinary indisponível — não é possível adicionar imagens agora.';
+    statusEl.textContent = hasCloudinaryConfig() ? '☁ Cloudinary ativo — imagens novas só sobem ao clicar em "concluído".' : '⚠ Cloudinary indisponível — não é possível salvar imagens novas agora.';
     statusEl.className = 'img-cloud-status '+(hasCloudinaryConfig()?'ok':'warn');
   }
   function renderGallery(){
     galleryEl.innerHTML = '';
-    (lesion.images||[]).forEach((img, idx)=>{
+    draftImgs.forEach((img, idx)=>{
       const item = document.createElement('div');
       item.className = 'img-gallery-item';
-      item.innerHTML = `<img src="${img.data}" class="img-gallery-thumb" title="clique pra ampliar">
+      const badge = img.source==='pending' ? '⏳ não enviada' : (img.source==='url' ? '🔗 URL' : '☁ Cloudinary');
+      item.innerHTML = `<span class="img-source-badge">${badge}</span>
+        <img src="${img.data}" class="img-gallery-thumb" title="clique pra ampliar">
         <div class="quiz-img-current-label" title="${escAttr(img.label||'')}">${esc(img.label||'Sem legenda')}</div>
         <div class="img-gallery-actions">
           <button type="button" class="img-gallery-swap quiz-img-edit">✏ Editar</button>
@@ -9949,29 +9978,24 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
       item.querySelector('.quiz-img-edit').onclick = ()=>{ editBox.hidden=false; labelInput.focus(); labelInput.select(); };
       item.querySelector('.quiz-img-edit-cancel').onclick = ()=>{ editBox.hidden=true; };
       item.querySelector('.quiz-img-edit-save').onclick = ()=>{
-        if(!updateLesionImageLabel(lesion, idx, labelInput.value)) return;
-        persistAndRefresh('Legenda atualizada.');
+        draftImgs[idx].label = labelInput.value;
+        renderGallery();
       };
       item.querySelector('.quiz-img-remove').onclick = ()=>{
         if(!confirm('Remover esta imagem desta lesão?')) return;
-        const removed = removeImageFromLesionData(lesion, idx);
-        if(!removed) return;
-        // Remove apenas a referência da lesão e persiste. Sem exclusão remota
-        // automática nesta versão (sem backend/Function).
-        persistAndRefresh('Imagem removida desta lesão.');
+        const removed = draftImgs.splice(idx,1)[0];
+        if(removed && removed.source==='pending') revokeDraftObjectUrl(removed._objectUrl);
+        renderGallery();
       };
       galleryEl.appendChild(item);
     });
   }
-  function persistAndRefresh(message){
-    saveData();
-    renderGallery();
-    onImagesAdded();
-    if(message) toast(message);
-  }
-  function afterAdd(added){
-    added.forEach(img=> addImageToLesionData(lesion, img));
-    persistAndRefresh(added.length>1?`${added.length} imagens adicionadas.`:'Imagem adicionada.');
+  function addDraftImages(imgs){ imgs.forEach(im=> draftImgs.push(im)); renderGallery(); }
+  function addLocalFiles(files){
+    for(const file of files){
+      if(!file || !file.type || !file.type.startsWith('image/')) continue;
+      addDraftImages([buildPendingImage(file, trackDraftObjectUrl)]);
+    }
   }
 
   setStatus();
@@ -9979,34 +10003,15 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
 
   const fileInput = cov.querySelector('#quiz-add-img-file-input');
   cov.querySelector('#quiz-add-img-pick-btn').onclick = ()=> fileInput.click();
-  async function addFiles(files){
-    for(const file of files){
-      if(!file || !file.type.startsWith('image/')) continue;
-      if(!hasCloudinaryConfig()){ toast('Cloudinary precisa estar ativo para adicionar imagens.'); break; }
-      try{
-        setStatus('☁ Enviando '+(file.name||'imagem')+' para o Cloudinary…', 'ok');
-        const remote = await uploadToCloudinary(file, {id: lesion.id, name: lesion.name});
-        afterAdd([remote]);
-        setStatus();
-      }catch(err){
-        console.error('Cloudinary upload (quiz)', err);
-        setStatus('Falha no Cloudinary: '+err.message, 'warn');
-        toast('Falha no upload da imagem.');
-      }
-    }
-  }
-  fileInput.addEventListener('change', async (ev)=>{
-    await addFiles([...ev.target.files]);
-    ev.target.value='';
-  });
-  const handlePaste = async (ev)=>{
+  fileInput.addEventListener('change', (ev)=>{ addLocalFiles([...ev.target.files]); ev.target.value=''; });
+  const handlePaste = (ev)=>{
     const files=[...(ev.clipboardData?.items||[])]
       .filter(item=>item.type&&item.type.startsWith('image/'))
       .map(item=>item.getAsFile())
       .filter(Boolean);
     if(!files.length) return;
     ev.preventDefault();
-    await addFiles(files);
+    addLocalFiles(files);
   };
   // O listener pertence ao próprio modal: fora dele, Ctrl+V não é capturado.
   cov.addEventListener('paste', handlePaste);
@@ -10016,20 +10021,61 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
     const url = el.value.trim();
     if(!url){ toast('Cole a URL da imagem.'); return; }
     if(!/^https?:\/\//i.test(url)){ toast('Cole uma URL http/https válida.'); return; }
-    afterAdd([{label:'', data:url, source:'url'}]);
+    addDraftImages([{label:'', data:url, source:'url'}]);
     el.value='';
   };
 
   cov.querySelector('#quiz-add-img-web-btn').onclick = ()=>{
     const initialTerm = lesion.enTerm || lesion.name;
-    openCommonsImageSearch({id: lesion.id, name: lesion.name}, initialTerm, (imgs)=>{ afterAdd(imgs); });
+    // deferUpload=true: baixa e mantém temporário; sobe só no "concluído".
+    openCommonsImageSearch({id: lesion.id, name: lesion.name}, initialTerm, (imgs)=>{
+      imgs.forEach(im=>{ const objectUrl = trackDraftObjectUrl(im._file); im.data=objectUrl; im._objectUrl=objectUrl; });
+      addDraftImages(imgs);
+    }, true);
   };
   cov.querySelector('#quiz-add-img-collage-btn').onclick = ()=>{
-    openCollageBuilder({id: lesion.id, name: lesion.name}, collage=>{ afterAdd([collage]); });
+    // deferUpload=true: o quadro final fica temporário; sobe só no "concluído".
+    openCollageBuilder({id: lesion.id, name: lesion.name}, collage=>{
+      if(collage && collage.source==='pending' && collage._objectUrl) draftObjectUrls.add(collage._objectUrl);
+      addDraftImages([collage]);
+    }, null, true);
+  };
+
+  cov.querySelector('#quiz-add-img-done').onclick = async ()=>{
+    // "concluído" = salvar deste modal: envia ao Cloudinary SOMENTE as
+    // temporárias que sobraram e, só depois de TODOS os uploads darem certo,
+    // aplica o rascunho à lesão e persiste. Se algum upload falhar, o modal
+    // continua aberto, os previews locais são mantidos e o que já subiu não é
+    // reenviado numa nova tentativa.
+    for(let i=0;i<draftImgs.length;i++){
+      const img = draftImgs[i];
+      if(!(img && img.source==='pending' && img._file)) continue;
+      if(!hasCloudinaryConfig()){ toast('Cloudinary indisponível: não foi possível enviar as imagens novas.'); return; }
+      setStatus('☁ Enviando imagens novas…','ok');
+      try{
+        const remote = await uploadPendingImage(img, {id: lesion.id, name: lesion.name});
+        revokeDraftObjectUrl(img._objectUrl);
+        draftImgs[i] = remote; // sucesso: não será reenviado numa nova tentativa
+      }catch(err){
+        console.error('Cloudinary upload (quiz concluir)', err);
+        setStatus('Falha ao enviar uma imagem. Nada foi salvo — tente novamente.','warn');
+        toast('Falha ao enviar uma imagem ao Cloudinary. A lesão não foi alterada.');
+        renderGallery();
+        return;
+      }
+    }
+    // Só agora o rascunho vira estado real da lesão.
+    lesion.images = draftImgs.map(x=>({...x, lesionId:lesion.id, lesionName:lesion.name}));
+    lesion._userUpdatedAt = Date.now();
+    await saveData();
+    onImagesAdded();
+    releaseDraftObjectUrls();
+    if(cov.isConnected) cov.remove();
+    document.removeEventListener('keydown', escHandler, true);
+    toast('Imagens salvas na lesão.');
   };
   cov.querySelector('#quiz-add-img-upload-box').focus();
 }
-
 function openQuizReviewModal(lesionId){
   const lesion = DATA.find(x=>x.id===lesionId);
   if(!lesion){ toast('Lesão não encontrada.'); return; }

@@ -176,10 +176,14 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // âncoras). O upload diferido do editor (blob URL + File em memória) fica
   // DENTRO de openForm (depois de recovery/brokenArtifacts/loadData), então
   // essas três voltam a cair; a importação recua pelo mesmo bloco removido.
-  assert.equal(recovery.line, 4762);
-  assert.equal(brokenArtifacts.line, 4752);
-  assert.equal(loadData.line, 7062);
-  assert.equal(importHandler.line, 9428);
+  // +18 nesta continuação: helpers compartilhados buildPendingImage()/
+  // uploadPendingImage() (usados pelo Editar E pelo Quiz) inseridos logo após
+  // updateLesionImageLabel(), antes das quatro âncoras; o modal transacional
+  // do Quiz fica depois de importHandler e não desloca as três primeiras.
+  assert.equal(recovery.line, 4780);
+  assert.equal(brokenArtifacts.line, 4770);
+  assert.equal(loadData.line, 7080);
+  assert.equal(importHandler.line, 9440);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

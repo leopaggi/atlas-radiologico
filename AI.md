@@ -1057,10 +1057,60 @@ alterados.
 ### Quadro de Imagem — também diferido
 
 O construtor de **Quadro de Imagem** (`openCollageBuilder`, compartilhado com o
-Quiz) agora é parametrizável: o formulário Editar chama com
-`deferUpload=true`, então os painéis ficam temporários (blob URL) e o quadro
-final vira uma imagem pendente (`{source:'pending', _file, _objectUrl}`) —
-NENHUM upload acontece antes de Salvar. O Quiz chama sem esse parâmetro e
-mantém o upload imediato. Remover o quadro antes de Salvar ou cancelar a edição
-não gera nenhum upload; no Salvar o quadro sobe uma única vez, pelo mesmo
-pipeline de `pendingImgs`.
+Quiz) é parametrizável: com `deferUpload=true` (usado pelo formulário Editar E
+pelo modal do Quiz), os painéis ficam temporários (blob URL) e o quadro final
+vira uma imagem pendente (`{source:'pending', _file, _objectUrl}`) — NENHUM
+upload acontece antes de confirmar. Remover o quadro antes de confirmar ou
+cancelar não gera nenhum upload; na confirmação o quadro sobe uma única vez,
+pelo mesmo pipeline de imagens pendentes.
+
+## Alteração 017 — Quiz de imagens transacional (rascunho + Concluído)
+
+O modal "🖼 Adicionar imagem a esta lesão" (pós-resposta do Quiz) deixou de
+alterar `DATA` a cada ação. Agora ele trabalha com um **rascunho local**
+(`draftImgs`, cópia das imagens atuais da lesão) enquanto está aberto, e só o
+botão **concluído** aplica o rascunho à lesão real.
+
+- **Ctrl+V / selecionar arquivo**: viram imagem temporária
+  (`buildPendingImage` → `{source:'pending', _file, _objectUrl}`), exibida na
+  hora por blob URL. Nenhum upload.
+- **Commons**: `openCommonsImageSearch(..., deferUpload=true)` — baixa e mantém
+  temporário, preservando `sourcePage`/`sourceSite`/`license`/`artist`/
+  `attribution`/`originalUrl`.
+- **Quadro de Imagem**: `openCollageBuilder(..., null, true)` — composição local,
+  quadro final temporário.
+- **URL externa**: entra no rascunho como `source:'url'` (sem upload) e só é
+  associada no concluído.
+- **Editar legenda / Remover**: alteram apenas o rascunho.
+- **Concluído**: envia ao Cloudinary SOMENTE as temporárias que sobraram
+  (`source==='pending' && _file`), uma vez cada, substitui cada temporária pelo
+  objeto remoto e só então aplica `lesion.images`, marca `_userUpdatedAt`,
+  `saveData()`, atualiza o visualizador (`onImagesAdded()`) e fecha.
+- **Esc / clique fora / cancelar**: revogam as blob URLs e descartam o rascunho
+  — `DATA` fica intacto e o Quiz continua na mesma questão.
+- **Falha de upload**: o modal continua aberto, informa o erro e mantém os
+  previews; o que já subiu é substituído no rascunho, então uma nova tentativa
+  não reenvia os sucessos. Nada é persistido parcialmente.
+- **Imagem já existente**: nunca é reenviada (só `source:'pending'` sobe); sem
+  delete remoto.
+
+### Reutilização (sem segundo sistema)
+
+`buildPendingImage(file, trackObjectUrl)` e `uploadPendingImage(img,
+lesionMeta)` são helpers compartilhados (usados pelo Editar E pelo Quiz). A
+busca do Commons e o construtor de Quadro são os mesmos, apenas parametrizados
+por `deferUpload`. O modal mantém sua classe própria
+(`.quiz-img-modal-overlay`) e nunca chama `closeOverlay()`.
+
+### Testes
+
+`tests/quiz-images.test.js` cobre os cenários de rascunho do Quiz (Ctrl+V/
+arquivo/Commons/Quadro sem upload imediato; remover no rascunho sem upload;
+Esc/clique fora sem upload e sem tocar `DATA`; concluído sobe só as temporárias
+presentes, uma vez cada, persistindo depois; imagem antiga não reenviada; URL
+externa só no concluído; falha de upload não persiste parcialmente; sem tocar
+`quizIndex`/`quizStats`/`SESSIONLOG`/`SRS`). Resultado: **56 PASS, 0 FAIL**.
+
+As âncoras de `tests/critical-flows.test.js` passaram para 4780/4770/7080/9440
+(helpers compartilhados inseridos antes das quatro âncoras). `SEED`, `REVIEW`,
+`SRS`, `SESSIONLOG`, a reconciliação V2 e os dados atuais não foram alterados.

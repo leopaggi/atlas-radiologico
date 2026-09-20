@@ -185,8 +185,8 @@ test('openQuizAddImageModal(): usa uma classe própria, não ".overlay" (fora do
   assert.doesNotMatch(openQuizAddImageModalFn.source, /cov\.className\s*=\s*['"]overlay['"]/);
 });
 
-test('openQuizAddImageModal(): reaproveita uploadToCloudinary() e openCommonsImageSearch() — não reimplementa upload/busca', () => {
-  assert.match(openQuizAddImageModalFn.source, /uploadToCloudinary\(/, 'precisa reaproveitar o mesmo upload do editor de lesões');
+test('openQuizAddImageModal(): reaproveita os helpers compartilhados de upload e a busca de Commons — não reimplementa upload/busca', () => {
+  assert.match(openQuizAddImageModalFn.source, /uploadPendingImage\(/, 'precisa reaproveitar o mesmo helper de upload do editor de lesões');
   assert.match(openQuizAddImageModalFn.source, /openCommonsImageSearch\(/, 'precisa reaproveitar a mesma busca de imagens livres');
   assert.doesNotMatch(openQuizAddImageModalFn.source, /wikimedia\.org/i, 'não pode ter uma segunda integração de busca duplicada');
 });
@@ -206,16 +206,17 @@ test('galeria do Quiz exibe controles claros e persistentes de Editar e Remover'
   assert.match(openQuizAddImageModalFn.source, /confirm\(['"]Remover esta imagem desta lesão\?['"]\)/);
 });
 
-test('remoção e edição usam a lesão atual, persistem e disparam o callback do visualizador', () => {
-  assert.match(openQuizAddImageModalFn.source, /removeImageFromLesionData\(lesion,\s*idx\)/);
-  assert.match(openQuizAddImageModalFn.source, /updateLesionImageLabel\(lesion,\s*idx,\s*labelInput\.value\)/);
-  assert.match(openQuizAddImageModalFn.source, /function persistAndRefresh\(message\)[\s\S]*?saveData\(\);[\s\S]*?renderGallery\(\);[\s\S]*?onImagesAdded\(\)/);
-  assert.ok((openQuizAddImageModalFn.source.match(/persistAndRefresh\(/g) || []).length >= 4, 'adicionar, editar e remover devem convergir no mesmo refresh');
+test('remoção e edição operam no rascunho local e só aplicam à lesão no "concluído"', () => {
+  assert.match(openQuizAddImageModalFn.source, /draftImgs\.splice\(idx,1\)/);
+  assert.match(openQuizAddImageModalFn.source, /draftImgs\[idx\]\.label = labelInput\.value/);
+  assert.match(openQuizAddImageModalFn.source, /lesion\.images = draftImgs\.map\(/);
+  assert.match(openQuizAddImageModalFn.source, /await saveData\(\);/);
+  assert.match(openQuizAddImageModalFn.source, /onImagesAdded\(\)/);
 });
 
-test('Ctrl+V: lê imagens do clipboard e usa o mesmo fluxo de upload do modal', () => {
+test('Ctrl+V: lê imagens do clipboard e adiciona como temporário local (sem upload imediato)', () => {
   assert.match(openQuizAddImageModalFn.source, /clipboardData\?\.items/);
-  assert.match(openQuizAddImageModalFn.source, /await\s+addFiles\(files\)/);
+  assert.match(openQuizAddImageModalFn.source, /addLocalFiles\(files\)/);
   assert.match(openQuizAddImageModalFn.source, /cov\.addEventListener\(['"]paste['"],\s*handlePaste\)/);
   assert.match(openQuizAddImageModalFn.source, /#quiz-add-img-upload-box['"]\)\.focus\(\)/);
 });
@@ -234,8 +235,8 @@ test('Quadro de Imagem: Quiz e editor reutilizam o mesmo openCollageBuilder() pa
   assert.ok((html.match(/openCollageBuilder\(/g) || []).length >= 4, 'a mesma função deve atender criação/edição no formulário e o Quiz');
 });
 
-test('callback pós-adição persiste e atualiza imediatamente galeria e visualizador do Quiz', () => {
-  assert.match(openQuizAddImageModalFn.source, /saveData\(\);\s*renderGallery\(\);\s*onImagesAdded\(\)/);
+test('callback do "concluído" persiste e atualiza o visualizador do Quiz (só depois do upload)', () => {
+  assert.match(openQuizAddImageModalFn.source, /lesion\.images = draftImgs\.map\([\s\S]*?await saveData\(\);[\s\S]*?onImagesAdded\(\);/);
   assert.match(renderQuizCardIntegratedFn.source, /openQuizAddImageModal\(e\.id,\s*\(\)=>\s*refreshQuizImgs\(true\)\)/);
 });
 
@@ -325,8 +326,7 @@ test('EDITAR (upload diferido): Ctrl+V e seleção de arquivo NÃO chamam upload
   const end = src.indexOf("imgFileInput.addEventListener('change'", start);
   const body = src.slice(start, end);
   assert.doesNotMatch(body, /uploadToCloudinary/, 'addLocalFile não pode subir ao Cloudinary');
-  assert.match(body, /trackObjectUrl\(file\)/);
-  assert.match(body, /source:'pending'/);
+  assert.match(body, /buildPendingImage\(file,\s*trackObjectUrl\)/);
   assert.match(src, /function trackObjectUrl\(file\)\{ const url=URL\.createObjectURL\(file\);/);
   assert.match(src, /imgBox\.addEventListener\('paste',[\s\S]*?addLocalFile\(f\)/);
   assert.match(src, /imgFileInput\.addEventListener\('change',[\s\S]*?addLocalFile\(file\)/);
@@ -351,14 +351,12 @@ test('EDITAR (upload diferido): Cancelar não envia imagem temporária (só libe
 test('EDITAR (upload diferido): Salvar envia somente as temporárias presentes e substitui pelo retorno do Cloudinary', () => {
   const src = openFormSlice();
   assert.match(src, /if\(x\.source==='pending' && x\._file\)\{/);
-  assert.match(src, /const remote=await uploadToCloudinary\(x\._file/);
-  assert.match(src, /normalized\.push\(remote\)/);
-  assert.match(src, /remote\.label=x\.label\|\|''/);
+  assert.match(src, /normalized\.push\(await uploadPendingImage\(x, \{id:entryId,name\}\)\)/);
 });
 
 test('EDITAR (upload diferido): a persistência (storage.set) acontece depois dos uploads necessários', () => {
   const src = openFormSlice();
-  const uploadIdx = src.indexOf('uploadToCloudinary(x._file');
+  const uploadIdx = src.indexOf('uploadPendingImage(x,');
   const persistIdx = src.indexOf('storage.set(STORAGE_KEY');
   assert.notEqual(uploadIdx, -1);
   assert.notEqual(persistIdx, -1);
@@ -430,12 +428,97 @@ test('QUADRO (Editar): remover/cancelar antes de Salvar não gera upload (só bl
 
 test('QUADRO (Editar): Salvar faz o upload do quadro exatamente uma vez (pipeline de pendingImgs)', () => {
   const src = openFormSlice();
-  const uploads = (src.match(/uploadToCloudinary\(x\._file/g) || []).length;
+  const uploads = (src.match(/uploadPendingImage\(x,/g) || []).length;
   assert.equal(uploads, 1, 'o quadro pendente deve subir uma única vez, no Salvar');
-  assert.match(src, /const remote=await uploadToCloudinary\(x\._file/);
+  assert.match(src, /normalized\.push\(await uploadPendingImage\(x, \{id:entryId,name\}\)\)/);
 });
 
-test('QUADRO (Quiz): continua com upload imediato (sem deferUpload) — comportamento preservado', () => {
-  assert.match(openQuizAddImageModalFn.source, /openCollageBuilder\(\{id: lesion\.id, name: lesion\.name\}, collage=>\{ afterAdd\(\[collage\]\); \}\)/);
-  assert.doesNotMatch(openQuizAddImageModalFn.source, /deferUpload/, 'o Quiz não pode usar upload diferido');
+test('QUADRO (Quiz): agora usa upload diferido (deferUpload=true), igual ao Editar', () => {
+  assert.match(openQuizAddImageModalFn.source, /openCollageBuilder\(\{id: lesion\.id, name: lesion\.name\},[\s\S]*?\},\s*null,\s*true\)/);
+});
+
+// -----------------------------------------------------------------------
+// MODAL DO QUIZ — transacional (rascunho local + "concluído").
+// -----------------------------------------------------------------------
+test('HELPERS COMPARTILHADOS: buildPendingImage/uploadPendingImage atendem Editar e Quiz', () => {
+  assert.match(html, /function buildPendingImage\(file, trackObjectUrl\)\{/);
+  assert.match(html, /async function uploadPendingImage\(img, lesionMeta\)\{/);
+  assert.match(html, /return \{ label:'', data:objectUrl, source:'pending', _file:file, _objectUrl:objectUrl \};/);
+  assert.match(html, /const remote = await uploadToCloudinary\(img\._file, lesionMeta\);/);
+  assert.ok((html.match(/buildPendingImage\(/g) || []).length >= 2, 'Editar e Quiz compartilham buildPendingImage');
+  assert.ok((html.match(/uploadPendingImage\(/g) || []).length >= 2, 'Editar e Quiz compartilham uploadPendingImage');
+});
+
+test('QUIZ (upload diferido): Ctrl+V/arquivo só criam temporário local — o único upload está no "concluído"', () => {
+  const src = openQuizAddImageModalFn.source;
+  const start = src.indexOf('function addLocalFiles(files){');
+  const end = src.indexOf('\n  }', start);
+  const body = src.slice(start, end);
+  assert.doesNotMatch(body, /uploadPendingImage|uploadToCloudinary/);
+  assert.match(body, /buildPendingImage\(file,\s*trackDraftObjectUrl\)/);
+  assert.equal((src.match(/uploadPendingImage\(/g) || []).length, 1, 'o upload só pode acontecer no handler de "concluído"');
+});
+
+test('QUIZ (upload diferido): Commons é chamado com deferUpload=true (mesmo mecanismo do Editar)', () => {
+  assert.match(openQuizAddImageModalFn.source, /openCommonsImageSearch\(\{id: lesion\.id, name: lesion\.name\}, initialTerm,[\s\S]*?\},\s*true\)/);
+});
+
+test('QUIZ (upload diferido): remover temporária no rascunho não gera upload', () => {
+  const src = openQuizAddImageModalFn.source;
+  const idx = src.indexOf('draftImgs.splice(idx,1)');
+  assert.notEqual(idx, -1);
+  const slice = src.slice(idx, idx + 200);
+  assert.doesNotMatch(slice, /uploadPendingImage|uploadToCloudinary/);
+});
+
+test('QUIZ (upload diferido): Esc/clique fora/cancelar descartam o rascunho sem upload e sem tocar DATA', () => {
+  const src = openQuizAddImageModalFn.source;
+  assert.match(src, /const close = \(\)=>\{ releaseDraftObjectUrls\(\); if\(cov\.isConnected\) cov\.remove\(\);/);
+  const idx = src.indexOf('const close = ()=>');
+  const slice = src.slice(idx, idx + 220);
+  assert.doesNotMatch(slice, /saveData|uploadPendingImage|uploadToCloudinary|lesion\.images/);
+  assert.match(src, /cov\.addEventListener\('click', ev=>\{ if\(ev\.target===cov\) close\(\); \}\)/);
+  assert.match(src, /ev\.key==='Escape'[\s\S]*?close\(\)/);
+});
+
+test('QUIZ (concluído): sobe só as temporárias presentes, cada uma uma vez, e persiste depois', () => {
+  const src = openQuizAddImageModalFn.source;
+  assert.match(src, /if\(!\(img && img\.source==='pending' && img\._file\)\) continue;/);
+  assert.match(src, /const remote = await uploadPendingImage\(img, \{id: lesion\.id, name: lesion\.name\}\)/);
+  assert.match(src, /draftImgs\[i\] = remote;/);
+  const uploadIdx = src.indexOf('await uploadPendingImage(img');
+  const persistIdx = src.indexOf('await saveData()');
+  assert.ok(uploadIdx !== -1 && persistIdx !== -1 && uploadIdx < persistIdx, 'persistência só depois dos uploads');
+});
+
+test('QUIZ (upload diferido): imagem já existente não é reenviada (rascunho começa como cópia)', () => {
+  assert.match(openQuizAddImageModalFn.source, /const draftImgs = \(Array\.isArray\(lesion\.images\) \? lesion\.images : \[\]\)\.map\(x=>\(\{\.\.\.x\}\)\);/);
+  assert.match(openQuizAddImageModalFn.source, /if\(!\(img && img\.source==='pending' && img\._file\)\) continue;/);
+});
+
+test('QUIZ (upload diferido): URL externa entra no rascunho e só é associada no "concluído"', () => {
+  assert.match(openQuizAddImageModalFn.source, /addDraftImages\(\[\{label:'', data:url, source:'url'\}\]\)/);
+  assert.match(openQuizAddImageModalFn.source, /lesion\.images = draftImgs\.map\(/);
+});
+
+test('QUIZ (concluído): falha de upload mantém o modal aberto e NÃO persiste a galeria parcialmente', () => {
+  const src = openQuizAddImageModalFn.source;
+  const catchIdx = src.indexOf("console.error('Cloudinary upload (quiz concluir)'");
+  assert.notEqual(catchIdx, -1);
+  const returnIdx = src.indexOf('return;', catchIdx);
+  assert.notEqual(returnIdx, -1);
+  const slice = src.slice(catchIdx, returnIdx + 'return;'.length);
+  assert.match(slice, /renderGallery\(\)/);
+  assert.match(slice, /return;/);
+  assert.doesNotMatch(slice, /saveData|lesion\.images/);
+});
+
+test('QUIZ (upload diferido): não reinicia questão nem toca score/SESSIONLOG/SRS', () => {
+  const src = openQuizAddImageModalFn.source;
+  assert.doesNotMatch(src, /\bquizIndex\b/);
+  assert.doesNotMatch(src, /\bquizStats\b/);
+  assert.doesNotMatch(src, /\bquizQueue\b/);
+  assert.doesNotMatch(src, /\bSESSIONLOG\b/);
+  assert.doesNotMatch(src, /\bSRS\b/);
+  assert.doesNotMatch(src, /renderQuizCardIntegrated|openProgressDashboard/);
 });

@@ -498,10 +498,16 @@ salvas como URL, sem upload.
 
 A estratégia anterior (uma Firebase Cloud Function para excluir assets do
 Cloudinary) foi **descartada**: exigiria o plano Blaze. Não há mais backend,
-`functions/`, `firebase.json`/`.firebaserc` nem segredo administrativo. O Quiz
-mantém o comportamento atual de imagens (o upload diferido do Quiz, se
-necessário, será tratado à parte). O construtor de **Quadro de Imagem** também
-entrou na regra: aberto pelo formulário Editar, ele monta o quadro localmente e
-só envia ao Cloudinary no `Salvar`; aberto pelo Quiz, continua enviando na hora.
+`functions/`, `firebase.json`/`.firebaserc` nem segredo administrativo.
 
-Testes: `tests/quiz-images.test.js` com **46 PASS**.
+O mesmo vale para o **Quiz**: o modal "🖼 Adicionar imagem a esta lesão" agora é
+transacional — Ctrl+V, arquivo, Commons e Quadro entram como imagens
+temporárias (blob) num rascunho local, e **só o botão `concluído`** envia ao
+Cloudinary as imagens novas que sobraram, aplica à lesão e persiste. Esc, clique
+fora ou cancelar descartam o rascunho sem subir nada e sem alterar a lesão. O
+Quiz permanece na mesma questão (sem tocar resposta, score, `SESSIONLOG` ou
+`SRS`). Se um upload falhar, o modal continua aberto e nada é salvo pela metade.
+Os helpers `buildPendingImage`/`uploadPendingImage` são compartilhados entre
+Editar e Quiz (sem duplicar lógica).
+
+Testes: `tests/quiz-images.test.js` com **56 PASS**.
