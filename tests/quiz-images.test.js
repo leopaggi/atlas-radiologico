@@ -701,7 +701,7 @@ test('NAV QUESTÕES: ← Anterior e Próxima → existem junto de Pular e usam i
   const src = renderQuizCardIntegratedFn.source;
   assert.match(src, /id="quiz-prev-btn"[^>]*>← Anterior</);
   assert.match(src, /id="quiz-skip-btn">⏭ Pular</);
-  assert.match(src, /id="quiz-next-btn">Próxima →</);
+  assert.match(src, /id="quiz-next-btn"[^>]*>Próxima →</);
   assert.match(src, /prevBtn\.onclick=\(\)=>goPrevQuestion\(host\)/);
   assert.match(src, /nextBtn\.onclick=\(\)=>goNextQuestion\(host\)/);
 });
@@ -769,4 +769,90 @@ test('NAV QUESTÕES: índice do carrossel restaurado por questão e sem conflito
   assert.match(src, /id="quiz-next-btn"/);
   assert.match(src, /quiz-carousel-textprev/);
   assert.match(src, /quiz-carousel-textnext/);
+});
+
+// -----------------------------------------------------------------------
+// NAV: Próxima deve habilitar ao RESPONDER (a grade é independente)
+// -----------------------------------------------------------------------
+test('NAV: Próxima fica apagada só quando não dá para avançar e reabilita ao responder/classificar', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  assert.match(src, /const canNext=\(quizCursor<quizHistory\.length-1\)\|\|st\.answered;/);
+  assert.match(src, /id="quiz-next-btn"\$\{canNext\?'':' aria-disabled="true"'\}/);
+  assert.match(src, /function enableNextBtn\(\)\{ if\(nextBtn\) nextBtn\.removeAttribute\('aria-disabled'\); \}/);
+  assert.match(src, /enableNextBtn\(\); \/\/ respondeu/);
+  assert.match(src, /enableNextBtn\(\); \/\/ a classificação/);
+  // o botão NUNCA recebe o atributo disabled (continua clicável para o aviso)
+  const nextIdx = src.indexOf('id="quiz-next-btn"');
+  const nextFrag = src.slice(nextIdx, nextIdx + 120);
+  assert.match(nextFrag, /aria-disabled/);
+  assert.doesNotMatch(nextFrag, /\sdisabled(?:\s|>)/);
+});
+
+// Simulação real das funções de navegação extraídas do index.html.
+function buildNavContext(queue) {
+  const ctx = {
+    console, JSON, Object, Array, Math, Date,
+    quizQueue: queue.map(id => ({ id })),
+    quizIndex: 0,
+    quizQuestionState: {},
+    quizHistory: [],
+    quizCursor: -1,
+    toasts: [],
+    renders: [],
+    renderQuizCardIntegrated() {
+      const id = ctx.quizQueue[ctx.quizIndex] && ctx.quizQueue[ctx.quizIndex].id;
+      if (id) vm.runInContext('getQuizQuestionState(' + JSON.stringify(id) + ')', ctx);
+      ctx.renders.push(ctx.quizIndex);
+    }
+  };
+  // arrow evita o binding de `this` dentro do contexto vm
+  ctx.toast = (msg) => { ctx.toasts.push(msg); };
+  vm.createContext(ctx);
+  vm.runInContext([getQStateFn, recordVisitFn, goPrevFn, goNextFn].map(f => f.source).join('\n'), ctx, { filename: 'quiz-nav.js' });
+  vm.runInContext('recordQuizVisit(quizQueue[0].id)', ctx);
+  vm.runInContext('renderQuizCardIntegrated({})', ctx);
+  return ctx;
+}
+
+test('NAV (dinâmico): respondida (com ou sem grade) → Próxima avança para questão ainda não visitada', () => {
+  const ctx = buildNavContext(['q1', 'q2', 'q3']);
+  ctx.quizQuestionState.q1.answered = true; // sem grade
+  ctx.toasts = [];
+  vm.runInContext('goNextQuestion({})', ctx);
+  assert.equal(ctx.quizIndex, 1);
+  assert.deepEqual(ctx.toasts, [], 'não pode avisar quando a questão está respondida');
+
+  ctx.quizQuestionState.q2.answered = true;
+  ctx.quizQuestionState.q2.grade = 'medium';
+  vm.runInContext('goNextQuestion({})', ctx);
+  assert.equal(ctx.quizIndex, 2, 'respondida + classificada também avança');
+  assert.deepEqual(ctx.toasts, []);
+});
+
+test('NAV (dinâmico): não respondida na fronteira NÃO avança e mostra o aviso', () => {
+  const ctx = buildNavContext(['q1', 'q2']);
+  ctx.toasts = [];
+  vm.runInContext('goNextQuestion({})', ctx);
+  assert.equal(ctx.quizIndex, 0, 'não pode avançar sem responder');
+  assert.deepEqual(ctx.toasts, ['Responda ou use Pular para avançar.']);
+});
+
+test('NAV (dinâmico): Anterior volta e Próxima retorna na trilha, sem duplicar o histórico', () => {
+  const ctx = buildNavContext(['q1', 'q2', 'q3']);
+  ctx.quizQuestionState.q1.answered = true;
+  vm.runInContext('goNextQuestion({})', ctx);
+  ctx.quizQuestionState.q2.answered = true;
+  vm.runInContext('goNextQuestion({})', ctx);
+  assert.deepEqual(ctx.quizHistory, ['q1', 'q2', 'q3']);
+
+  vm.runInContext('goPrevQuestion({})', ctx);
+  assert.equal(ctx.quizIndex, 1);
+  vm.runInContext('goPrevQuestion({})', ctx);
+  assert.equal(ctx.quizIndex, 0);
+
+  vm.runInContext('goNextQuestion({})', ctx);
+  assert.equal(ctx.quizIndex, 1, 'Próxima retorna na trilha');
+  vm.runInContext('goNextQuestion({})', ctx);
+  assert.equal(ctx.quizIndex, 2, 'Próxima retorna na trilha');
+  assert.deepEqual(ctx.quizHistory, ['q1', 'q2', 'q3'], 'navegar não duplica o histórico');
 });

@@ -1433,3 +1433,27 @@ foram alterados.
 ### Commit após aprovação
 
 Ainda não criado.
+
+### Correção pontual — Próxima habilita ao responder (sem exigir grade)
+
+**Correção da ALTERAÇÃO 020.** No reteste manual, o botão `Próxima →` aparecia
+apagado mesmo com a questão já respondida e classificada. A navegação já
+avançava corretamente quando a questão estava respondida (`goNextQuestion` checa
+`st.answered`), mas o estado visual do botão não era explícito.
+
+Agora `Próxima →`:
+- habilita quando há histórico à frente (voltamos com Anterior) **ou** quando a
+  questão atual já foi respondida — a grade (Fácil/Média/Difícil/Não sei) é
+  **independente** e não é exigida para avançar;
+- fica apenas com aparência apagada (`aria-disabled`) quando não dá para
+  avançar, continuando **clicável** para mostrar o aviso "Responda ou use Pular
+  para avançar.";
+- é reabilitada (`enableNextBtn()`) ao responder e ao classificar;
+- nunca recebe o atributo `disabled`.
+
+Testes novos em `tests/quiz-images.test.js`: verificação estática do `canNext`/
+`enableNextBtn` e simulação real (vm) de `goNextQuestion`/`goPrevQuestion` —
+respondida (com ou sem grade) avança; não respondida na fronteira mostra o aviso
+e não avança; Anterior/Próxima percorrem a trilha sem duplicar o histórico.
+Resultado: **86 PASS, 0 FAIL**. Âncoras de `tests/critical-flows.test.js` para
+4822/4812/7122/9558.

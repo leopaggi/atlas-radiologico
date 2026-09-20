@@ -718,6 +718,7 @@ body{
 .quiz-question-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:0 0 12px;}
 .quiz-question-nav .btn{font-size:12.5px;}
 .quiz-question-nav .btn:disabled{opacity:.4;cursor:default;}
+.quiz-qnav-next[aria-disabled="true"]{opacity:.45;}
 .quiz-grade-applied{display:inline-block;font-size:13px;color:var(--text);padding:8px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel-2);}
 .quiz-mcq-option{display:flex;align-items:center;gap:14px;text-align:left;width:100%;padding:16px 18px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer;transition:.15s;font-size:clamp(15px,.6vw + 13px,18px);line-height:1.35}
 .quiz-mcq-option:hover:not(:disabled){border-color:#2ca7ff;background:#0c80b51a;transform:translateX(2px)}
@@ -10290,6 +10291,11 @@ function renderQuizCardIntegrated(host){
   const answeredCount=quizQueue.reduce((n,q)=>{ const s=quizQuestionState[q.id]; return n+(s&&s.answered?1:0); },0);
   const pct=Math.round(answeredCount/Math.max(quizQueue.length,1)*100);
   const canPrev=quizCursor>0;
+  // Próxima habilita quando há histórico à frente (voltamos com Anterior) OU
+  // quando a questão atual já foi respondida — a grade é INDEPENDENTE e não é
+  // exigida para avançar. Quando indisponível, fica com aparência apagada mas
+  // continua clicável para mostrar o aviso ("Responda ou use Pular...").
+  const canNext=(quizCursor<quizHistory.length-1)||st.answered;
   host.innerHTML=`<div class="quiz-integrated-title quiz-study-toolbar">
       <div class="quiz-study-title"><b>🧠 Modo Estudo</b><small>Aprenda com feedback completo e referências.</small></div>
       <div class="quiz-progress-wrap"><div class="quiz-progress-meta"><span>Questão ${quizIndex+1} de ${quizQueue.length}</span><b>${pct}%</b></div><div class="quiz-session-track"><div class="quiz-session-fill" style="width:${pct}%"></div></div></div>
@@ -10301,7 +10307,7 @@ function renderQuizCardIntegrated(host){
       <div class="quiz-question-nav">
         <button type="button" class="btn btn-ghost quiz-qnav-prev" id="quiz-prev-btn"${canPrev?'':' disabled'}>← Anterior</button>
         <button type="button" class="btn btn-ghost quiz-qnav-skip" id="quiz-skip-btn">⏭ Pular</button>
-        <button type="button" class="btn btn-ghost quiz-qnav-next" id="quiz-next-btn">Próxima →</button>
+        <button type="button" class="btn btn-ghost quiz-qnav-next" id="quiz-next-btn"${canNext?'':' aria-disabled="true"'}>Próxima →</button>
       </div>
       <div id="quiz-feedback"></div>
     </div></div>
@@ -10370,6 +10376,7 @@ function renderQuizCardIntegrated(host){
   refreshQuizImgs(false, true);
 
   function hideSkip(){ if(skipBtn){ skipBtn.disabled=true; skipBtn.style.display='none'; } }
+  function enableNextBtn(){ if(nextBtn) nextBtn.removeAttribute('aria-disabled'); }
   function markOptionsAnswered(){
     host.querySelectorAll('.quiz-mcq-option').forEach(b=>{
       b.disabled=true;
@@ -10389,6 +10396,7 @@ function renderQuizCardIntegrated(host){
     if(st.grade) return; // já classificada — nunca duplica SRS/estatística/SESSIONLOG
     st.grade=g;
     srsGradeLevel(e.id,g);quizStats[g]++;recordQuizAnswerToday(st.objectiveCorrect,g);refreshStudyDashboardLive();
+    enableNextBtn(); // a classificação é independente da navegação; Próxima segue habilitada
     renderAnsweredFeedback(); // NÃO avança sozinho: o usuário decide com "Próxima →"
   }
   function renderAnsweredFeedback(){
@@ -10442,6 +10450,7 @@ function renderQuizCardIntegrated(host){
       if(st.objectiveCorrect)quizStats.right++;else{quizStats.wrong++;if(!quizSessionWrongIds.includes(e.id))quizSessionWrongIds.push(e.id);}
       markOptionsAnswered();
       hideSkip();
+      enableNextBtn(); // respondeu → Próxima habilitada (sem exigir grade)
       renderAnsweredFeedback();
     });
   }
