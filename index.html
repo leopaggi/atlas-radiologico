@@ -6649,7 +6649,7 @@ async function loadData(){
       // Novas imagens do arquivo são adicionadas; imagens locais nunca são removidas.
       if(Array.isArray(canon.images) && canon.images.length){
         const byKey = new Map();
-        const addImgs = arr => { if(Array.isArray(arr)) arr.forEach(img=>{ if(!img) return; const k = img.data||img.thumb||img.originalUrl||img.publicId||JSON.stringify(img); if(k) byKey.set(k, {...(byKey.get(k)||{}), ...img}); }); };
+        const addImgs = arr => { if(Array.isArray(arr)) arr.forEach(img=>{ if(!img) return; const k = stableImageKeyV208(img) || JSON.stringify(img); if(k) byKey.set(k, {...(byKey.get(k)||{}), ...img}); }); };
         addImgs(e.images);
         addImgs(canon.images);
         const merged = [...byKey.values()];
