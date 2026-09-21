@@ -184,10 +184,10 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // cancelLesionReview()/CANCELLABLE_REVIEW_STATUSES no módulo
   // LESION_REVISIONS (antes das âncoras) e o CSS do modal de cancelamento no
   // <style> do topo. As quatro âncoras deslocam igualmente.
-  assert.equal(recovery.line, 5824);
-  assert.equal(brokenArtifacts.line, 5814);
-  assert.equal(loadData.line, 8127);
-  assert.equal(importHandler.line, 11088);
+  assert.equal(recovery.line, 5891);
+  assert.equal(brokenArtifacts.line, 5881);
+  assert.equal(loadData.line, 8433);
+  assert.equal(importHandler.line, 11422);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -349,6 +349,7 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
     loadSRS: async () => {},
     loadSessionLog: async () => {},
     loadLesionRevisions: async () => {},
+    loadClassificationReviewDecisions: async () => {},
     saveReview: async () => {},
     saveSRS: async () => {},
     createSafetySnapshot: () => null,
@@ -366,6 +367,9 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
     upgradeDescriptionsV182: async () => {},
     pushToFirebaseNow: async () => {},
     migrateLegacyLocalImagesToCloudinary: async () => ({ migrated: 0 }),
+    // preferências locais de navegação (localStorage) — stub seguro no teste
+    loadSidebarScopePref: () => ({ section: null, site: null }),
+    loadQuizScopePref: () => ({ section: null, site: null }),
     renderAll: () => {},
     console: { error: () => {}, info: () => {}, log: () => {} }
   });

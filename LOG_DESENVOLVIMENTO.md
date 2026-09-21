@@ -2318,3 +2318,439 @@ o local permanece intacto.
 ### Commit após aprovação
 
 Ainda não criado (aguardando reteste).
+
+## ALTERAÇÃO 036 — Preferências locais de navegação (sidebar e Quiz)
+
+**Número da alteração:** 036
+**Data:** 20/09/2026
+
+### Objetivo
+
+Restaurar, após F5, a última seção/site escolhidos na sidebar e no Quiz, de
+forma independente.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/local-scope-prefs.test.js` (novo)
+- `tests/critical-flows.test.js` (stubs de preferência + âncoras)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- Chaves `atlas:v1:lastSidebarScope` e `atlas:v1:lastQuizScope` (localStorage).
+- `readScopePref`/`writeScopePref`/`validateScopePref`/`scopeSectionsMap`.
+- Sidebar grava a preferência nas mudanças manuais; boot restaura.
+- Quiz ganhou `quizScope` próprio, seletores de seção/sítio na sessão
+  personalizada e persistência na chave própria; boot restaura.
+
+### Segurança/limites
+
+Não usa Firebase/IndexedDB/sync/backup/DATA. Validação contra seções/sites
+existentes; JSON inválido/localStorage indisponível ignorados sem erro; só grava
+em ação manual. Nenhum fluxo de dados/ownership/Cloudinary foi tocado.
+
+### Testes realizados
+
+- `node --test tests/local-scope-prefs.test.js`: 14 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 101 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 38 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 138 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 8 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Sidebar e Quiz lembram cada um a sua última seção/site, sem interferir um no
+outro e sem sincronizar pela nuvem.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 037 — Limpeza visual da sidebar
+
+**Número da alteração:** 037
+**Data:** 20/09/2026
+
+> **CORRIGIDO pela Alteração 038:** as ações técnicas NÃO foram removidas da UI;
+> foram recolhidas no bloco `⚙ Ferramentas avançadas`, fechado por padrão.
+
+### Objetivo
+
+Reduzir o espaço vertical ocupado pelas ações técnicas na sidebar, liberando
+espaço para a lista de seções.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/tools-layout.test.js`
+- `tests/snapshots-ownership.test.js`
+- `tests/critical-flows.test.js` (âncoras)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- **Corrigido na Alteração 038:** os controles técnicos (sincronizar este
+  dispositivo, atualizar deste backup/nuvem, diagnóstico do sistema e auditar
+  vínculo de imagens) NÃO foram removidos da UI — foram recolhidos no bloco
+  `⚙ Ferramentas avançadas`, fechado por padrão.
+- Mantidos sempre visíveis: configurar Cloudinary, Salvar backup, Importar backup.
+- Funções internas preservadas (sync explícito, diagnóstico, auditoria).
+
+### Segurança
+
+Nenhum fluxo de sync/snapshot/ownership/auditoria foi removido ou alterado;
+apenas a presença dos controles na UI normal.
+
+### Testes realizados
+
+- `node --test tests/tools-layout.test.js`: 9 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 38 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 101 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 138 PASS, 0 FAIL;
+- `node --test tests/local-scope-prefs.test.js`: 14 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Sidebar normal com apenas Cloudinary + backup; ações técnicas internas.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 038 — Correção: ações técnicas em "⚙ Ferramentas avançadas"
+
+**Número da alteração:** 038
+**Data:** 20/09/2026
+
+### Objetivo
+
+Corrigir a Alteração 037: os controles técnicos NÃO devem sumir da UI; devem
+ficar recolhidos num bloco fechado por padrão, para não ocupar espaço vertical.
+
+### Estado antes (após a 037)
+
+Os 4 controles haviam sido removidos do HTML e seus handlers apagados.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/tools-layout.test.js`
+- `tests/snapshots-ownership.test.js`
+- `tests/critical-flows.test.js` (âncoras)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- Restaurado o bloco recolhível `⚙ Ferramentas avançadas` (`#advanced-tools`,
+  `hidden` por padrão) com os 4 controles dentro.
+- Restaurados os handlers (`openSyncDeviceToCloudModal`,
+  `openUpdateFromCloudModal`, `openSystemDiagnosticModal`,
+  `openImageAuditModal`) e criado `initAdvancedToolsToggle()` (abre/fecha, ▸/▾,
+  `aria-expanded`).
+- Fora do bloco seguem Cloudinary + Salvar/Importar backup.
+
+### Segurança
+
+Nenhuma lógica interna alterada (sync/Firestore/snapshots/ownership/auditoria/
+Cloudinary/backup/Quiz/escopo/DATA).
+
+### Testes realizados
+
+- `node --test tests/tools-layout.test.js`: 11 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 38 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 101 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 138 PASS, 0 FAIL;
+- `node --test tests/local-scope-prefs.test.js`: 14 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Sidebar compacta com as ações técnicas acessíveis em um clique, fechadas por
+padrão.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 039 — Integridade de classification (C-RADS espalhada)
+
+**Número da alteração:** 039
+**Data:** 20/09/2026
+
+### Objetivo
+
+Descobrir por que C-RADS aparecia em lesões fetais não relacionadas e corrigir
+com segurança, sem limpeza cega.
+
+### Estado antes
+
+`applyClassificationAudit20260918` removia por id POSICIONAL; com a reordenação
+do SEED, a lista passou a apontar para outras lesões (inclusive os pólipos
+colorretais, onde C-RADS é válida).
+
+### Causa real
+
+Ids posicionais (`seed_<N>`) + reordenação do SEED → classificações antigas
+persistidas no DATA ficaram associadas a outras lesões; a atualização canônica
+estava desativada (V250), então a classificação errada persistia.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/classification-integrity.test.js` (novo)
+- `tests/critical-flows.test.js` (âncoras)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- Neutralizada a remoção por id posicional.
+- `classificationIdentityKey`/`classificationCanonicalMap`/`buildClassificationAudit`
+  (read-only) e `applyClassificationIdentityFix` (manual, com snapshot).
+- Botão `📋 auditar classificações` em Ferramentas avançadas.
+- Nova razão de snapshot de risco.
+
+### Testes realizados
+
+- `node --test tests/classification-integrity.test.js`: 14 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 138 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 11 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 38 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 101 PASS, 0 FAIL;
+- `node --test tests/local-scope-prefs.test.js`: 14 PASS, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Auditoria read-only + correção confirmada por identidade semântica; SEED com 3
+C-RADS válidas preservadas; nenhuma classificação válida de outra lesão é
+alterada.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 040 — Vencidas x Próximas no painel SRS + atualização ao vivo
+
+**Número da alteração:** 040
+**Data:** 20/09/2026
+
+### Objetivo
+
+Separar "vencidas" de "próximas" no painel de revisões e atualizar o painel
+imediatamente após responder.
+
+### Estado antes
+
+`refreshStudyDashboardLive` não re-renderizava o painel; o badge "N vencidas"
+(overdue) ficava no cabeçalho de "Próximas revisões" (futuras).
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/srs-dashboard.test.js` (novo)
+- `tests/critical-flows.test.js` (âncoras)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- `partitionScheduledReviews(now)` (vencidas `due<=now` / próximas `due>now`).
+- `fmtReviewFuture` ("em X") e `fmtReviewPast` ("vencida há X").
+- `renderReviewPanels(ov)`: bloco "Revisões vencidas" (badge vermelho) + bloco
+  "Próximas revisões" (badge "N agendada(s)"), ambos in-place.
+- `refreshStudyDashboardLive` e `openProgressDashboard` usam `renderReviewPanels`.
+
+### Segurança
+
+Não mexe em Cloudinary, sync Firestore, ownership, altPlacements, revisões de
+conteúdo/IA, snapshots nem na classificação C-RADS.
+
+### Testes realizados
+
+- `node --test tests/srs-dashboard.test.js`: 12 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 101 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/local-scope-prefs.test.js`: 14 PASS, 0 FAIL;
+- `node --test tests/classification-integrity.test.js`: 14 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 38 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 138 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 11 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Painel coerente (vencidas e próximas separadas) e atualizado na hora após
+responder.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 041 — Auditoria de classificações conservadora
+
+**Número da alteração:** 041
+**Data:** 20/09/2026
+
+### Objetivo
+
+Corrigir a regra da Alteração 039 ("SEED sem classification ⇒ espúria"), que era
+agressiva demais, e transformar a auditoria numa ferramenta segura.
+
+### Estado antes
+
+64 de 87 classificações eram marcadas como espúrias só por não constarem no
+SEED — incluindo plausíveis/legítimas.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/classification-integrity.test.js`
+- `tests/critical-flows.test.js` (âncoras)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- Categorias: `canonical`, `mismatch`, `compatible_noncanonical`, `incompatible`,
+  `unknown`.
+- `CLASSIFICATION_CONTEXT_RULES` + `classifyClassificationCompatibility`
+  (conservador: só `incompatible` quando a seção é de outro sistema E sem
+  palavra de contexto).
+- Correção só remove `incompatible` e restaura `mismatch`; nunca toca plausíveis,
+  unknown ou fora do SEED.
+
+### Testes realizados
+
+- `node --test tests/classification-integrity.test.js`: 14 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/srs-dashboard.test.js`: 12 PASS, 0 FAIL;
+- `node --test tests/local-scope-prefs.test.js`: 14 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 101 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 38 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 138 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 11 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Nenhuma classificação plausível é apagada; só o claramente incompatível é
+removido, com snapshot e confirmação.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 042 — Painel de revisões em bloco único
+
+**Número da alteração:** 042
+**Data:** 20/09/2026
+
+### Objetivo
+
+Manter a semântica de vencidas/próximas, mas voltar a ter UM único painel na
+coluna esquerda (a separação em dois blocos deixou a coluna alta).
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/srs-dashboard.test.js`
+- `tests/critical-flows.test.js` (âncoras)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- Container único `#study-review-panel`; `reviewPanelModel(now)` decide
+  `overdue` (prioridade) ou `upcoming`.
+- `renderReviewPanels` renderiza um só bloco; badge com total real; lista top 5.
+- CSS `.study-upcoming.is-overdue` (sem o bloco `.study-overdue` separado).
+
+### Segurança
+
+Só layout/render do painel; sem tocar gráficos, ciclo, domínio, grid, SRS,
+score, SESSIONLOG, Cloudinary, sync, ownership, snapshots ou classificações.
+
+### Testes realizados
+
+- `node --test tests/srs-dashboard.test.js`: 17 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/classification-integrity.test.js`: 14 PASS, 0 FAIL;
+- `node --test tests/local-scope-prefs.test.js`: 14 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 101 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 38 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 138 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 11 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Um painel único, com prioridade para vencidas e transição automática ao
+resolver; layout da coluna esquerda de volta ao tamanho anterior.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 043 — Fila manual "Revisar" com 3 ações
+
+**Número da alteração:** 043
+**Data:** 20/09/2026
+
+### Objetivo
+
+Transformar a categoria "Revisar" (unknown) numa fila manual prática, com
+Manter / Remover / Abrir lesão, sem correção automática.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/classification-integrity.test.js`
+- `tests/critical-flows.test.js` (stub + âncoras)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- `CLASSIFICATION_REVIEW_DECISIONS` (IndexedDB local) + `keepClassificationDecision`
+  / `removeClassificationDecision`; chave = identidade semântica + classification.
+- `buildClassificationAudit` esconde do `unknown` o que tem decisão "keep".
+- Modal: fila "Revisar" com os 3 botões; contadores atualizam sem fechar; "Abrir
+  lesão" usa `openForm` (preserveUnderlyingOverlay) e recalcula ao salvar.
+
+### Segurança
+
+"Manter" não altera DATA; "Remover" cria snapshot e zera só `classification`;
+correção em lote continua só em incompatible+mismatch. Não toca ownership,
+imagens, altPlacements, ids, SRS/SESSIONLOG, Cloudinary ou sync.
+
+### Testes realizados
+
+- `node --test tests/classification-integrity.test.js`: 24 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/srs-dashboard.test.js`: 17 PASS, 0 FAIL;
+- `node --test tests/local-scope-prefs.test.js`: 14 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 101 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 38 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 138 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 11 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+A fila "Revisar" permite decidir caso a caso com persistência local e sem
+globalizar nenhuma classificação.
+
+### Commit após aprovação
+
+Ainda não criado.

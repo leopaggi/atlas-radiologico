@@ -149,6 +149,9 @@ body{
 }
 .backup-btn:hover{border-color:var(--teal);color:var(--teal);background:var(--tag-bg-active);}
 .sidebar-separator{height:1px;background:var(--line);margin:3px 0;}
+#advanced-tools{display:flex;flex-direction:column;gap:4px;min-width:0;max-width:100%;}
+#advanced-tools[hidden]{display:none;}
+#advanced-tools .foot-btn{padding-left:8px;border-left:2px solid var(--line);box-sizing:border-box;overflow-wrap:anywhere;}
 
 /* ---------- Main ---------- */
 #main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
@@ -472,6 +475,17 @@ body{
 .sync-audit-note{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.4}
 .sync-audit-note.ok{color:var(--teal)}
 .sync-audit-note.warn{color:var(--amber)}
+.cls-audit-group{margin-top:10px;font-size:12px;color:var(--muted);min-width:0}
+.cls-audit-group>b{color:var(--text);display:block;margin-bottom:4px}
+.cls-audit-row{border:1px solid var(--line);border-radius:6px;padding:5px 8px;margin:3px 0;overflow-wrap:anywhere;word-break:break-word}
+.cls-audit-row span{color:var(--amber);font-weight:600}
+.cls-queue-item{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:flex-start;border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin:6px 0;min-width:0;box-sizing:border-box}
+.cls-queue-main{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 220px}
+.cls-queue-main b{color:var(--text);font-size:13px;overflow-wrap:anywhere;word-break:break-word}
+.cls-queue-main span{color:var(--muted);font-size:11.5px;overflow-wrap:anywhere;word-break:break-word}
+.cls-queue-main em{color:var(--amber);font-style:normal;font-weight:600}
+.cls-queue-actions{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.cls-queue-actions .btn{max-width:100%;white-space:normal;overflow-wrap:anywhere}
 .review-placement-suggestion{font-size:12.5px;color:var(--text);background:rgba(0,200,180,.08);border:1px solid var(--teal-dim,rgba(0,200,180,.35));border-radius:8px;padding:8px 10px;margin-top:10px;min-width:0;overflow-wrap:anywhere;word-break:break-word;}
 .alt-placement-row{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:8px;padding:4px 8px;margin:4px 0;font-size:12.5px;color:var(--text);min-width:0;box-sizing:border-box;}
 .alt-placement-row span{min-width:0;overflow-wrap:anywhere;word-break:break-word;}
@@ -975,6 +989,10 @@ body{
 .study-dashboard .study-upcoming-head b{display:block;font-size:12px;color:#eef6ff}
 .study-dashboard .study-upcoming-head span:not(.study-upcoming-count){display:block;font-size:9.5px;color:#7890a2;margin-top:2px}
 .study-dashboard .study-upcoming-count{font:700 9.5px 'IBM Plex Mono',monospace;color:#ffad5c;background:#ff9f4315;border:1px solid #ff9f4338;border-radius:99px;padding:4px 7px}
+.study-dashboard .study-upcoming-count.is-overdue{color:#ff6b6b;background:#ff596415;border:1px solid #ff596438}
+.study-dashboard .study-upcoming.is-overdue{border-top-color:#4a2b2b}
+.study-dashboard .study-upcoming.is-overdue .study-upcoming-time{color:#ff9b9b}
+.study-dashboard .study-upcoming.is-overdue .study-upcoming-dot{background:#ff5964;color:#ff5964}
 .study-dashboard .study-upcoming-list{display:flex;flex-direction:column;gap:5px}
 .study-dashboard .study-upcoming-row{width:100%;display:grid;grid-template-columns:9px minmax(0,1fr) auto;gap:8px;align-items:center;text-align:left;border:1px solid #263746;background:#111e29;color:var(--text);border-radius:8px;padding:7px 9px;cursor:pointer}
 .study-dashboard .study-upcoming-row:hover{border-color:#2d8cff;background:#142536}
@@ -1643,11 +1661,14 @@ body{
         <button class="backup-btn" id="btn-import" title="Restaurar um backup .json do Atlas">📂 Importar<br>backup</button>
       </div>
       <div class="sidebar-separator"></div>
-      <button class="foot-btn" id="btn-sync-to-cloud" title="Compara este dispositivo com a nuvem e envia o estado DESTE dispositivo para o Firestore. Cria um snapshot antes e não traz nada de volta.">☁ sincronizar este dispositivo<br><span class="foot-btn-sub">envia o estado deste dispositivo para a nuvem — use quando este dispositivo contém a versão correta</span></button>
-      <button class="foot-btn" id="btn-sync-from-cloud" title="Traz o estado da nuvem para este dispositivo (merge não destrutivo, com confirmação e snapshot antes).">⬇ atualizar deste backup/nuvem<br><span class="foot-btn-sub">traz o estado da nuvem para este dispositivo — ação explícita, com confirmação</span></button>
-      <div class="sidebar-separator"></div>
-      <button class="foot-btn" id="btn-system-diagnostic" title="Gera um relatório de texto (armazenamento, duplicatas, imagens, sincronização) pra copiar e enviar se algo der errado">🩺 diagnóstico do sistema<br><span class="foot-btn-sub">gera um relatório para copiar e enviar — não altera nada</span></button>
-      <button class="foot-btn" id="btn-audit-images" title="Verifica se cada imagem está anexada à lesão certa, usando a etiqueta guardada na própria imagem">🔍 auditar vínculo de imagens<br><span class="foot-btn-sub">confere se as imagens continuam associadas às lesões corretas — não altera nada</span></button>
+      <button type="button" class="foot-btn" id="btn-advanced-tools" aria-expanded="false" aria-controls="advanced-tools">▸ ⚙ Ferramentas avançadas</button>
+      <div id="advanced-tools" hidden>
+        <button class="foot-btn" id="btn-sync-to-cloud" title="Compara este dispositivo com a nuvem e envia o estado DESTE dispositivo para o Firestore. Cria um snapshot antes e não traz nada de volta.">☁ sincronizar este dispositivo<br><span class="foot-btn-sub">envia o estado deste dispositivo para a nuvem — use quando este dispositivo contém a versão correta</span></button>
+        <button class="foot-btn" id="btn-sync-from-cloud" title="Traz o estado da nuvem para este dispositivo (merge não destrutivo, com confirmação e snapshot antes).">⬇ atualizar deste backup/nuvem<br><span class="foot-btn-sub">traz o estado da nuvem para este dispositivo — ação explícita, com confirmação</span></button>
+        <button class="foot-btn" id="btn-system-diagnostic" title="Gera um relatório de texto (armazenamento, duplicatas, imagens, sincronização) pra copiar e enviar se algo der errado">🩺 diagnóstico do sistema<br><span class="foot-btn-sub">gera um relatório para copiar e enviar — não altera nada</span></button>
+        <button class="foot-btn" id="btn-audit-images" title="Verifica se cada imagem está anexada à lesão certa, usando a etiqueta guardada na própria imagem">🔍 auditar vínculo de imagens<br><span class="foot-btn-sub">confere se as imagens continuam associadas às lesões corretas — não altera nada</span></button>
+        <button class="foot-btn" id="btn-classification-audit" title="Compara a classificação de cada lesão com o SEED pela identidade (seção+sítio+nome) e aponta as inválidas; corrigir exige confirmação e cria snapshot">📋 auditar classificações<br><span class="foot-btn-sub">aponta classificações inválidas — não altera nada até você confirmar</span></button>
+      </div>
     </div>
   </div>
 
@@ -5435,6 +5456,51 @@ let DATA = [];
 let sectionOrder = [...DEFAULT_SECTION_ORDER];
 let siteOrder = {}; // { [nomeDaSeção]: [siteA, siteB, ...] } — ordem manual dos sítios dentro de cada seção
 let scope = {section:null, site:null};
+/* Preferências de navegação LOCAL POR NAVEGADOR/ORIGEM (localStorage; NUNCA
+   Firebase, IndexedDB, sync, backup ou DATA). Sidebar e Quiz são INDEPENDENTES:
+   cada um tem a sua chave. Só são gravadas em mudança MANUAL de navegação —
+   nunca em render/F5/sync/importação/abertura de modal/retorno de edição. */
+const SIDEBAR_SCOPE_KEY = 'atlas:v1:lastSidebarScope';
+const QUIZ_SCOPE_KEY = 'atlas:v1:lastQuizScope';
+let quizScope = {section:null, site:null};
+function readScopePref(key){
+  try{
+    const raw = localStorage.getItem(key);
+    if(!raw) return null;
+    const parsed = JSON.parse(raw);
+    if(!parsed || typeof parsed!=='object' || Array.isArray(parsed)) return null;
+    const section = (typeof parsed.section==='string' && parsed.section.trim()) ? parsed.section.trim() : null;
+    const site = (typeof parsed.site==='string' && parsed.site.trim()) ? parsed.site.trim() : null;
+    return { section, site };
+  }catch(_e){ return null; }
+}
+function writeScopePref(key, sc){
+  try{ localStorage.setItem(key, JSON.stringify({ section:(sc&&sc.section)||null, site:(sc&&sc.site)||null })); }catch(_e){}
+}
+function scopeSectionsMap(){
+  const map = {};
+  for(const e of (Array.isArray(DATA)?DATA:[])){
+    if(!e || !e.s) continue;
+    map[e.s] = map[e.s] || {};
+    if(e.site) map[e.s][e.site] = true;
+  }
+  return map;
+}
+/* Valida a preferência contra as seções/sites EXISTENTES. Nunca cria seção/site
+   inexistente. section inválida -> ignora tudo; site inválido -> mantém a seção
+   e zera o site (fallback seguro). */
+function validateScopePref(pref){
+  if(!pref || !pref.section) return { section:null, site:null };
+  const map = scopeSectionsMap();
+  if(!map[pref.section]) return { section:null, site:null };
+  if(pref.site && !map[pref.section][pref.site]) return { section:pref.section, site:null };
+  return { section:pref.section, site:pref.site || null };
+}
+function loadSidebarScopePref(){ return validateScopePref(readScopePref(SIDEBAR_SCOPE_KEY)); }
+function saveSidebarScopePref(){ writeScopePref(SIDEBAR_SCOPE_KEY, scope); }
+function loadQuizScopePref(){ return validateScopePref(readScopePref(QUIZ_SCOPE_KEY)); }
+function saveQuizScopePref(){ writeScopePref(QUIZ_SCOPE_KEY, quizScope); }
+function quizScopeEntries(){ return DATA.filter(e=> entryMatchesScope(e, quizScope.section, quizScope.site)); }
 let activeTags = new Set();
 let searchTerm = '';
 let editingId = null;
@@ -5694,7 +5760,8 @@ const SAFETY_SNAPSHOT_RISK_REASONS = [
   'antes de forçar fusão de duplicatas',
   'antes de aplicar reconciliação V2',
   'antes de restaurar snapshot de segurança',
-  'antes de operação em massa de ownership'
+  'antes de operação em massa de ownership',
+  'antes de corrigir classificações inválidas'
 ];
 function isRiskSnapshotReason(reason){ return SAFETY_SNAPSHOT_RISK_REASONS.includes(reason); }
 
@@ -8109,19 +8176,258 @@ async function applyAltPlacementsAudit20260918(){
    Remove SOMENTE classifications anatomicamente incompatíveis confirmadas
    no backup fresco; não altera s/site, imagens, tags, notes, revisão/SRS ou IDs. */
 const CLASSIFICATION_AUDIT_REMOVE_20260918 = new Set(["seed_1015", "seed_113", "seed_114", "seed_115", "seed_116", "seed_117", "seed_149", "seed_150", "seed_163", "seed_164", "seed_165", "seed_204", "seed_205", "seed_206", "seed_207", "seed_208", "seed_248", "seed_249", "seed_250", "seed_394", "seed_395", "seed_417", "seed_434", "seed_437", "seed_439", "seed_440", "seed_441", "seed_442", "seed_443", "seed_447", "seed_450", "seed_451", "seed_452", "seed_453", "seed_459", "seed_460", "seed_461", "seed_462", "seed_463", "seed_464", "seed_465", "seed_466", "seed_77", "seed_78", "seed_79", "seed_80", "seed_81", "seed_818", "seed_819", "seed_820", "seed_936", "seed_942", "seed_957", "seed_969"]);
+/* IMPORTANTE (correção da C-RADS espalhada): a lista acima é por id POSICIONAL
+   (seed_<N>). Como o SEED é renumerado por POSIÇÃO no boot e a ordem mudou ao
+   longo do tempo, esses ids passaram a apontar para OUTRAS lesões — ex.:
+   seed_818/819/820 hoje são os pólipos/carcinoma colorretal, onde C-RADS é
+   legítimo. Remover por id cego passou a apagar classificação VÁLIDA. Por isso
+   a remoção automática por id foi NEUTRALIZADA; a validação passa a ser pela
+   IDENTIDADE SEMÂNTICA (s+site+name) contra o SEED, e a correção é MANUAL
+   (auditoria read-only + confirmação), nunca automática no boot. */
 async function applyClassificationAudit20260918(){
-  let changed=false;
+  return false; // neutralizada de propósito (ver comentário)
+}
+function classificationIdentityKey(e){
+  const clean = v => String(v==null?'':v).normalize('NFC').trim().toLowerCase().replace(/\s+/g,' ');
+  return clean(e && e.s) + '|||' + clean(e && e.site) + '|||' + clean(e && e.name);
+}
+/* DECISÕES MANUAIS da fila "Revisar" (persistidas no IndexedDB local; NÃO
+   sincronizam com a nuvem para não criar conflito entre origens). Chave =
+   IDENTIDADE SEMÂNTICA (s+site+name) + a classification ATUAL — assim, se a
+   classificação mudar depois, a decisão antiga não esconde o novo valor. NUNCA
+   usa o seed_<N> posicional. Estrutura semanticamente separada das revisões
+   de conteúdo/IA (LESION_REVISIONS). */
+const CLASSIFICATION_REVIEW_DECISIONS_KEY = 'atlas:classificationReviewDecisions';
+let CLASSIFICATION_REVIEW_DECISIONS = {};
+async function loadClassificationReviewDecisions(){
+  try{
+    const r = await storage.get(CLASSIFICATION_REVIEW_DECISIONS_KEY, false);
+    const parsed = JSON.parse(r.value);
+    CLASSIFICATION_REVIEW_DECISIONS = (parsed && typeof parsed==='object' && !Array.isArray(parsed)) ? parsed : {};
+  }catch(_e){ CLASSIFICATION_REVIEW_DECISIONS = {}; }
+}
+async function saveClassificationReviewDecisions(){
+  try{ await storage.set(CLASSIFICATION_REVIEW_DECISIONS_KEY, JSON.stringify(CLASSIFICATION_REVIEW_DECISIONS), false); }catch(_e){}
+}
+function classificationDecisionKey(e){
+  const cls = String((e && e.classification)||'').normalize('NFC').trim().toLowerCase();
+  return classificationIdentityKey(e) + '|||' + cls;
+}
+function classificationKeepDecisionFor(e){
+  const d = CLASSIFICATION_REVIEW_DECISIONS[classificationDecisionKey(e)];
+  return !!(d && d.action==='keep');
+}
+async function registerClassificationDecision(e, action){
+  CLASSIFICATION_REVIEW_DECISIONS[classificationDecisionKey(e)] = {
+    action, classification: (e && e.classification) || null,
+    identity: { s:(e&&e.s)||'', site:(e&&e.site)||'', name:(e&&e.name)||'' },
+    at: Date.now()
+  };
+  await saveClassificationReviewDecisions();
+}
+/* Fila manual "Revisar": Manter (só registra decisão, não altera DATA) e
+   Remover (snapshot antes; zera SÓ classification). */
+async function keepClassificationDecision(lesionId){
+  const e = (Array.isArray(DATA)?DATA:[]).find(x=>x && x.id===lesionId);
+  if(!e || !e.classification){ toast('Nada a manter.'); return false; }
+  await registerClassificationDecision(e, 'keep');
+  toast('Classificação mantida (decisão registrada).');
+  return true;
+}
+async function removeClassificationDecision(lesionId){
+  const e = (Array.isArray(DATA)?DATA:[]).find(x=>x && x.id===lesionId);
+  if(!e || !e.classification){ toast('Nada a remover.'); return false; }
+  if(!confirm('Remover a classificação '+e.classification+' desta lesão?\n\nUm snapshot de segurança é criado antes. Nenhum outro campo é alterado.')) return false;
+  createSafetySnapshot('antes de corrigir classificações inválidas');
+  await registerClassificationDecision(e, 'remove');
+  e.classification = null;
+  try{ await storage.set(STORAGE_KEY, JSON.stringify(DATA), false); }catch(_e){}
+  await pushToFirebaseNow();
+  toast('Classificação removida.');
+  return true;
+}
+/* Mapa canônico do SEED por identidade semântica (s+site+name) -> classification. */
+function classificationCanonicalMap(){
+  const map = new Map();
+  for(const e of (Array.isArray(SEED)?SEED:[])){
+    if(!e) continue;
+    const key = classificationIdentityKey(e);
+    if(!map.has(key)) map.set(key, e.classification || null);
+  }
+  return map;
+}
+/* Regras SEMÂNTICAS CONSERVADORAS por sistema: em que contexto a classificação
+   faz sentido (seção + palavra-chave de sítio/nome). NÃO é prova de erro quando
+   falta no SEED — sem regra segura o item vira 'unknown' (revisar), nunca
+   remoção. */
+const CLASSIFICATION_CONTEXT_RULES = {
+  CRADS:       { sections:['Abdômen Superior'], match:/c[oó]lon|intestin|colorretal|p[oó]lip|colonoscop|divert[ií]c|ap[eê]ndic/ },
+  LUNGRADS:    { sections:['Tórax'], match:/pulm[aã]o|pulmonar|n[oó]dulo/ },
+  BIRADS:      { sections:['Mamas'], match:/mama|mam[áa]ri|axila/ },
+  LIRADS:      { sections:['Abdômen Superior'], match:/f[ií]gado|hep[aá]t|hepatocelular|\bchc\b/ },
+  BOSNIAK:     { sections:['Abdômen Superior'], match:/rim|renal|cisto|c[ií]stic/ },
+  TIRADS:      { sections:['Cabeça e Pescoço'], match:/tireo|tireoid/ },
+  PIRADS:      { sections:['Pelve Masculina'], match:/pr[oó]stat/ },
+  ORADS:       { sections:['Pelve Feminina'], match:/ov[aá]ri|anex|adnex/ },
+  VIRADS:      { sections:['Pelve Masculina','Pelve Feminina'], match:/bexiga|vesical|urotel/ },
+  CADRADS:     { sections:['Tórax'], match:/coron[aá]ri|coronarian|card[ií]ac|angio/ },
+  NODERADS:    { sections:['*'], match:/linfonod|ganglion|\bnode\b/ },
+  ASPECTS:     { sections:['Neurorradiologia'], match:/avc|isqu[eê]mic|acidente vascular/ },
+  AAST_KIDNEY: { sections:['Abdômen Superior'], match:/rim|renal/ },
+  AAST_LIVER:  { sections:['Abdômen Superior'], match:/f[ií]gado|hep[aá]t/ },
+  AAST_SPLEEN: { sections:['Abdômen Superior'], match:/ba[cç]o|espl[eê]nic|espl[eé]nic/ }
+};
+/* 'compatible' | 'incompatible' | 'unknown'. Conservador: só marca
+   'incompatible' quando a seção é claramente de OUTRO sistema E não há palavra
+   de contexto. Empate/ambiguidade => 'unknown' (revisar). */
+function classifyClassificationCompatibility(system, e){
+  const rule = CLASSIFICATION_CONTEXT_RULES[system];
+  if(!rule) return 'unknown';
+  const hay = String((e && e.site)||'') + ' ' + String((e && e.name)||'');
+  const sectionOk = rule.sections.includes('*') || rule.sections.includes(e && e.s);
+  const keywordOk = rule.match.test(hay);
+  if(sectionOk && keywordOk) return 'compatible';
+  if(!sectionOk && !keywordOk) return 'incompatible';
+  return 'unknown';
+}
+/* AUDITORIA READ-ONLY por identidade semântica (s+site+name). Não grava nada.
+   - canonical:               bate com a classification do SEED;
+   - mismatch:                SEED tem classificação DIFERENTE (a do SEED é canônica);
+   - compatible_noncanonical: SEED não define, mas contexto é plausível;
+   - incompatible:            claramente incompatível com o contexto;
+   - unknown:                 sem base segura (sistema sem regra, contexto ambíguo
+                              ou identidade fora do SEED) => REVISAR, não remover.
+   IMPORTANTE: ausência de classification no SEED NÃO é prova de erro. */
+function buildClassificationAudit(){
+  const canon = classificationCanonicalMap();
+  const canonical=[], mismatch=[], compatible=[], incompatible=[], unknown=[];
+  let total=0;
   for(const e of (Array.isArray(DATA)?DATA:[])){
-    if(e && CLASSIFICATION_AUDIT_REMOVE_20260918.has(e.id) && e.classification){
-      e.classification=null;
-      changed=true;
+    if(!e || !e.classification) continue;
+    total++;
+    const item = { id:e.id, name:e.name, section:e.s, site:e.site, classification:e.classification };
+    const key = classificationIdentityKey(e);
+    const c = canon.get(key);
+    if(c === e.classification){ canonical.push(item); continue; }
+    if(c){ item.canonical = c; mismatch.push(item); continue; }
+    if(!CLASSIFICATION_SYSTEMS[e.classification]){ item.reason='sistema_desconhecido'; if(!classificationKeepDecisionFor(e)) unknown.push(item); continue; }
+    const compat = classifyClassificationCompatibility(e.classification, e);
+    if(compat === 'compatible'){ item.reason='seed_sem_classificacao_contexto_plausivel'; compatible.push(item); }
+    else if(compat === 'incompatible'){ item.reason='contexto_incompativel'; incompatible.push(item); }
+    else {
+      item.reason = canon.has(key) ? 'seed_sem_classificacao_contexto_ambiguo' : 'identidade_ausente_no_seed';
+      // decisão manual "Manter" (mesma identidade + classificação) tira da fila
+      if(!classificationKeepDecisionFor(e)) unknown.push(item);
     }
+  }
+  return { total, canonical:canonical.length, mismatch:mismatch.length, compatible:compatible.length,
+    incompatible:incompatible.length, unknown:unknown.length,
+    lists:{ canonical, mismatch, compatible, incompatible, unknown } };
+}
+/* CORREÇÃO (manual/confirmada): cria snapshot antes; só mexe em classification
+   dos itens INCOMPATIBLE (-> null) e MISMATCH (-> valor canônico do SEED).
+   NUNCA toca canonical, compatible_noncanonical, unknown nem registros fora do
+   SEED. Preserva name/notes/tags/s/site/images/ownership/altPlacements/ids. */
+async function applyClassificationIdentityFix(){
+  if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return false; }
+  const audit = buildClassificationAudit();
+  const fixes = [...audit.lists.incompatible, ...audit.lists.mismatch];
+  if(!fixes.length){ toast('Nenhuma classificação claramente incompatível encontrada.'); return false; }
+  const byId = new Map(fixes.map(x=>[x.id,x]));
+  createSafetySnapshot('antes de corrigir classificações inválidas');
+  let changed=0;
+  for(const e of (Array.isArray(DATA)?DATA:[])){
+    const f = e && byId.get(e.id);
+    if(!f) continue;
+    if(f.canonical){ if(e.classification!==f.canonical){ e.classification=f.canonical; changed++; } }
+    else if(e.classification){ e.classification=null; changed++; }
   }
   if(changed){
     try{ await storage.set(STORAGE_KEY,JSON.stringify(DATA),false); }catch(_e){}
-    try{ await pushToFirebaseNow(); }catch(_e){}
+    await pushToFirebaseNow();
   }
-  return changed;
+  toast(changed ? ('Classificações corrigidas: '+changed+'.') : 'Nada a corrigir.');
+  return changed>0;
+}
+function openClassificationAuditModal(){
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected){ ov.remove(); document.removeEventListener('keydown', closeOnEsc); } };
+  document.addEventListener('keydown', closeOnEsc);
+  const group = (arr, label) => arr.length ? `<div class="cls-audit-group"><b>${label} (${arr.length})</b>${arr.map(x=>`<div class="cls-audit-row">${escAttr(x.id)} · ${escAttr(x.name||'')} · ${escAttr(x.section||'')} / ${escAttr(x.site||'')} · <span>${escAttr(x.classification)}</span>${x.canonical?' → '+escAttr(x.canonical):''}</div>`).join('')}</div>` : '';
+  // Fila manual "Revisar": cada item com 3 ações.
+  const reviewQueue = (arr) => arr.length ? `<div class="cls-audit-group"><b>Revisar — fila manual (${arr.length})</b>${arr.map(x=>`
+    <div class="cls-queue-item">
+      <div class="cls-queue-main">
+        <b>${escAttr(x.name||'')}</b>
+        <span>${escAttr(x.section||'')} · ${escAttr(x.site||'')}</span>
+        <span>Classificação atual: <em>${escAttr(x.classification)}</em></span>
+      </div>
+      <div class="cls-queue-actions">
+        <button type="button" class="btn btn-primary" data-cls-keep="${escAttr(x.id)}">✓ Manter</button>
+        <button type="button" class="btn btn-ghost" data-cls-remove="${escAttr(x.id)}">✕ Remover</button>
+        <button type="button" class="btn btn-ghost" data-cls-open="${escAttr(x.id)}">✎ Abrir lesão</button>
+      </div>
+    </div>`).join('')}</div>` : '<div class="sync-audit-note ok">Nada para revisar manualmente.</div>';
+  const render = ()=>{
+    const a = buildClassificationAudit();
+    return `
+      <div class="sync-audit-table">
+        <div class="sync-audit-head"><span>Classificações</span><b>Qtd</b><b>—</b></div>
+        <div class="sync-audit-row"><span>Total com classification</span><b>${a.total}</b><b>—</b></div>
+        <div class="sync-audit-row"><span>Canônicas (batem com o SEED)</span><b>${a.canonical}</b><b>—</b></div>
+        <div class="sync-audit-row"><span>Plausíveis não canônicas (não mexer)</span><b>${a.compatible}</b><b>—</b></div>
+        <div class="sync-audit-row"><span>Incompatíveis (serão removidas)</span><b>${a.incompatible}</b><b>—</b></div>
+        <div class="sync-audit-row"><span>Divergentes (voltam ao SEED)</span><b>${a.mismatch}</b><b>—</b></div>
+        <div class="sync-audit-row"><span>Revisar (fila manual)</span><b>${a.unknown}</b><b>—</b></div>
+      </div>
+      <div class="sync-audit-note">Ausência de classificação no SEED <b>não</b> é prova de erro: só o que é claramente incompatível é removido; o resto vai para a fila "Revisar". A decisão "Manter" vale só para ESTA lesão + esta classificação (não globaliza).</div>
+      ${group(a.lists.incompatible, 'Incompatíveis — serão removidas')}
+      ${group(a.lists.mismatch, 'Divergentes — voltam ao valor do SEED')}
+      ${group(a.lists.compatible, 'Plausíveis não canônicas — NÃO serão tocadas')}
+      ${reviewQueue(a.lists.unknown)}`;
+  };
+  ov.innerHTML = `<div class="modal review-ai-modal">
+    <h2>📋 Auditar classificações</h2>
+    <div class="modal-sub">somente leitura até você agir — a fila "Revisar" tem decisões manuais</div>
+    <div id="cls-audit-box"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="cls-audit-close">fechar</button>
+      <button class="btn btn-primary" id="cls-audit-fix" disabled>Corrigir inválidas (com snapshot)</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  const box = ov.querySelector('#cls-audit-box');
+  const fixBtn = ov.querySelector('#cls-audit-fix');
+  const refresh = ()=>{ box.innerHTML = render(); const a = buildClassificationAudit(); fixBtn.disabled = (a.incompatible + a.mismatch) === 0; };
+  refresh();
+  const closeModal = ()=>{ ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+  ov.querySelector('#cls-audit-close').onclick = closeModal;
+  // Ações da fila "Revisar" (delegação; o modal nunca fecha ao decidir).
+  box.addEventListener('click', async (ev)=>{
+    const t = ev.target;
+    if(!t || typeof t.closest!=='function') return;
+    const keep = t.closest('[data-cls-keep]');
+    const rem = t.closest('[data-cls-remove]');
+    const open = t.closest('[data-cls-open]');
+    if(keep){ await keepClassificationDecision(keep.getAttribute('data-cls-keep')); refresh(); return; }
+    if(rem){ const ok = await removeClassificationDecision(rem.getAttribute('data-cls-remove')); if(ok){ if(typeof renderAll==='function') renderAll(); refresh(); } return; }
+    if(open){
+      const id = open.getAttribute('data-cls-open');
+      // mantém a auditoria aberta por baixo; Esc fecha só o formulário
+      document.removeEventListener('keydown', closeOnEsc);
+      openForm(id, { preserveUnderlyingOverlay:true, onSaved: ()=>{ refresh(); if(typeof renderAll==='function') renderAll(); } });
+      return;
+    }
+  });
+  fixBtn.onclick = async ()=>{
+    if(!confirm('Remover SOMENTE as classificações claramente incompatíveis e restaurar as divergentes pelo SEED?\n\nAs plausíveis não canônicas e as da fila "Revisar" NÃO são tocadas. Um snapshot de segurança é criado antes.')) return;
+    fixBtn.disabled = true;
+    await applyClassificationIdentityFix();
+    if(typeof renderAll==='function') renderAll();
+    refresh();
+  };
 }
 
 async function loadData(){
@@ -8213,6 +8519,7 @@ async function loadData(){
   await loadSRS();
   await loadSessionLog();
   await loadLesionRevisions();
+  await loadClassificationReviewDecisions();
 
   // Funde duplicatas exatas (mesma seção+sítio+nome) — pode acontecer quando uma
   // lesão foi criada manualmente num dispositivo que ainda não tinha essa lesão
@@ -8284,6 +8591,12 @@ async function loadData(){
   await pushToFirebaseNow();
   const recoveredImgs = await migrateLegacyLocalImagesToCloudinary();
   if(recoveredImgs.migrated) console.info(`[Atlas] v166 recuperou ${recoveredImgs.migrated} imagem(ns) locais e enviou ao Cloudinary.`);
+
+  // Restaura as preferências LOCAIS de navegação (localStorage), independentes:
+  // sidebar e Quiz. Validadas contra as seções/sites atuais; preferência inválida
+  // ou localStorage indisponível cai no padrão (Todas as seções), sem quebrar o boot.
+  scope = loadSidebarScopePref();
+  quizScope = loadQuizScopePref();
   renderAll();
 }
 async function saveData(){
@@ -8388,7 +8701,7 @@ function renderTree(){
   allDiv.className = 'tree-section-head' + (!scope.section ? ' active-scope' : '');
   allDiv.style.marginBottom = '6px';
   allDiv.innerHTML = `<span>Todas as seções</span><span class="count">${DATA.length}</span>`;
-  allDiv.onclick = ()=>{ scope={section:null,site:null}; renderAll(); };
+  allDiv.onclick = ()=>{ scope={section:null,site:null}; saveSidebarScopePref(); renderAll(); };
   tree.appendChild(allDiv);
 
   const orderedNames = orderedSectionNames(map);
@@ -8417,6 +8730,7 @@ function renderTree(){
       if(openSections.has(sectionName)) openSections.clear();
       else openSections = new Set([sectionName]);
       scope = {section:sectionName, site:null};
+      saveSidebarScopePref();
       renderAll();
     };
     head.ondragstart = (ev)=>{
@@ -8458,7 +8772,7 @@ function renderTree(){
       sEl.draggable = true;
       sEl.dataset.siteIdx = siteIdx;
       sEl.innerHTML = `<span class="drag-handle" title="arraste para reordenar">⠿</span><span class="tree-site-name">${siteName}</span><span class="count">${sites[siteName]}</span>`;
-      sEl.onclick = (ev)=>{ ev.stopPropagation(); scope = {section:sectionName, site:siteName}; renderAll(); };
+      sEl.onclick = (ev)=>{ ev.stopPropagation(); scope = {section:sectionName, site:siteName}; saveSidebarScopePref(); renderAll(); };
       sEl.ondragstart = (ev)=>{
         ev.stopPropagation();
         sEl.classList.add('dragging');
@@ -8548,6 +8862,7 @@ function renderTagbar(){
       const searchInput = document.getElementById('search');
       if(searchInput) searchInput.value = '';
       scope = {section:null, site:null};
+      saveSidebarScopePref();
       renderAll();
     };
     bar.appendChild(clr);
@@ -11010,10 +11325,29 @@ function openImageAuditModal(){
     thumb.onclick = (e)=>{ e.stopPropagation(); openImageLightbox(thumb.src); };
   });
 }
+// Sincronização explícita e diagnóstico/auditoria ficam dentro do bloco
+// recolhível "⚙ Ferramentas avançadas" (fechado por padrão). Continuam usando
+// as funções internas já existentes — nenhuma lógica duplicada.
 document.getElementById('btn-system-diagnostic').onclick = openSystemDiagnosticModal;
 document.getElementById('btn-audit-images').onclick = openImageAuditModal;
+document.getElementById('btn-classification-audit').onclick = openClassificationAuditModal;
 document.getElementById('btn-sync-to-cloud').onclick = openSyncDeviceToCloudModal;
 document.getElementById('btn-sync-from-cloud').onclick = openUpdateFromCloudModal;
+(function initAdvancedToolsToggle(){
+  const btn = document.getElementById('btn-advanced-tools');
+  const panel = document.getElementById('advanced-tools');
+  if(!btn || !panel) return;
+  const label = open => (open ? '▾ ' : '▸ ') + '⚙ Ferramentas avançadas';
+  btn.textContent = label(false);
+  btn.setAttribute('aria-expanded', 'false');
+  panel.hidden = true;
+  btn.onclick = ()=>{
+    const open = panel.hidden;
+    panel.hidden = !open;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.textContent = label(open);
+  };
+})();
 // As ferramentas técnicas (forçar envio, exportar checkpoint, reconciliar V2,
 // fundir duplicatas, recuperar dados antigos, restaurar padrão e snapshots)
 // foram RETIRADAS da interface — não aparecem em lugar nenhum da UI. A
@@ -11460,9 +11794,77 @@ function startQuizInsideDashboard(queue){
   section.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
+/* ============================================================
+   PRÓXIMAS REVISÕES x VENCIDAS (SRS) — semântica e render único
+   - VENCIDA: tem SRS com due > 0 e due <= agora.
+   - PRÓXIMA: tem SRS com due > agora.
+   - "nunca estudada" NÃO entra em nenhuma das duas (é pendente do acervo).
+   Tempo relativo: futuro = "em X"; passado = "vencida há X". Nunca cruzar.
+   ============================================================ */
+function fmtReviewFuture(ts){
+  const diff=Number(ts)-Date.now(), hour=3600000, day=86400000;
+  if(diff<=hour) return 'em < 1 h';
+  if(diff<day) return 'em '+Math.max(1,Math.round(diff/hour))+' h';
+  const d=new Date(Number(ts));
+  if(diff<2*day) return 'amanhã · '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+' · '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+function fmtReviewPast(ts){
+  const diff=Date.now()-Number(ts), hour=3600000, day=86400000;
+  if(diff<hour) return 'vencida há < 1 h';
+  if(diff<day) return 'vencida há '+Math.max(1,Math.round(diff/hour))+' h';
+  return 'vencida há '+Math.max(1,Math.round(diff/day))+' dia'+(Math.round(diff/day)===1?'':'s');
+}
+function scheduledReviewEntries(){
+  return (Array.isArray(DATA)?DATA:[]).filter(e=>e && SRS[e.id] && Number(SRS[e.id].due)>0);
+}
+/* Separa o SRS agendado em VENCIDAS (due <= agora) e PRÓXIMAS (due > agora),
+   cada uma ordenada por due crescente. "Nunca estudada" não entra (sem SRS). */
+function partitionScheduledReviews(now){
+  now = Number(now)||Date.now();
+  const scheduled = scheduledReviewEntries();
+  const overdue = scheduled.filter(e=>Number(SRS[e.id].due)<=now).sort((a,b)=>Number(SRS[a.id].due)-Number(SRS[b.id].due));
+  const upcoming = scheduled.filter(e=>Number(SRS[e.id].due)>now).sort((a,b)=>Number(SRS[a.id].due)-Number(SRS[b.id].due));
+  return { overdue, upcoming };
+}
+function reviewUpcomingRowHtml(e, timeText){
+  return `<button class="study-upcoming-row" data-id="${escAttr(e.id)}" style="--section-color:${studySectionColor(e.s)}"><span class="study-upcoming-accent"></span><span class="study-upcoming-dot"></span><span class="study-upcoming-case"><b>${esc(e.name)}</b><small>${esc(e.s)} · ${esc(e.site)}</small></span><span class="study-upcoming-time">${esc(timeText)}</span></button>`;
+}
+/* Renderiza (in-place) os dois blocos: "Revisões vencidas" e "Próximas revisões".
+   Chamado no dashboard E no refresh ao vivo — por isso o card some/reordena na
+   hora depois de responder, sem fechar/reabrir. */
+/* UM ÚNICO painel: vencidas têm prioridade; sem vencidas, mostra as próximas.
+   O badge usa o TOTAL real; a lista limita a 5 para preservar o layout. */
+function reviewPanelModel(now){
+  const { overdue, upcoming } = partitionScheduledReviews(now);
+  const useOverdue = overdue.length > 0;
+  const list = useOverdue ? overdue : upcoming;
+  const head = useOverdue
+    ? { title:'Revisões vencidas', sub:'SRS · já passaram do vencimento', badge:overdue.length+' vencida'+(overdue.length===1?'':'s'), badgeClass:'is-overdue' }
+    : { title:'Próximas revisões', sub:'SRS · casos clínicos agendados', badge:(upcoming.length?upcoming.length+' agendada'+(upcoming.length===1?'':'s'):'em dia'), badgeClass:'' };
+  return { mode: useOverdue?'overdue':'upcoming', overdueCount:overdue.length, upcomingCount:upcoming.length, list, head };
+}
+function renderReviewPanels(ov){
+  if(!ov) return;
+  const panel=ov.querySelector('#study-review-panel');
+  if(!panel) return;
+  const model = reviewPanelModel(Date.now());
+  const useOverdue = model.mode==='overdue';
+  const rows = model.list.slice(0,5).map(e=>reviewUpcomingRowHtml(e, useOverdue ? fmtReviewPast(SRS[e.id].due) : fmtReviewFuture(SRS[e.id].due))).join('');
+  panel.className = 'study-upcoming' + (useOverdue ? ' is-overdue' : '');
+  panel.innerHTML = `
+    <div class="study-upcoming-head"><div><b>${model.head.title}</b><span>${model.head.sub}</span></div><span class="study-upcoming-count${model.head.badgeClass?' '+model.head.badgeClass:''}">${model.head.badge}</span></div>
+    <div class="study-upcoming-list">${rows || '<div class="study-upcoming-empty">Nenhuma revisão futura agendada ainda. As próximas aparecem aqui conforme você responde ao quiz.</div>'}</div>`;
+  ov.querySelectorAll('.study-upcoming-row').forEach(row=>row.onclick=()=>{
+    const target=DATA.find(e=>e.id===row.dataset.id);
+    if(target) startQuizInsideDashboard([target,...buildSmartStudyQueue(5).filter(e=>e.id!==target.id)].slice(0,5));
+  });
+}
+
 function refreshStudyDashboardLive(){
   const ov=getStudyOverlay();
   if(!ov || !ov.isConnected) return;
+  renderReviewPanels(ov);
 
   const total=DATA.length||1;
   const todayRec=SESSIONLOG[todayKey()]||{};
@@ -12039,8 +12441,7 @@ function openProgressDashboardReplacing(host){
    abria uma segunda overlay separada (origem do "abre 2 telas"). */
 function renderCustomSetupInside(){
   const ov=getStudyOverlay();
-  const inScope=scopedEntries();
-  const dueScope=countDue(inScope), dueAll=countDue(DATA);
+  const dueScope=countDue(quizScopeEntries()), dueAll=countDue(DATA);
   const areaStats=computeAreaStats();
   const weak=areaStats.filter(a=>a.c0+a.c1>0).sort((a,b)=>a.pct2-b.pct2 || b.total-a.total)[0];
   ov.innerHTML=`<div class="modal progress-modal study-dashboard study-custom-session">
@@ -12051,9 +12452,13 @@ function renderCustomSetupInside(){
       <div class="study-kpi kpi-teal"><div class="study-kpi-icon">📈</div><div><div class="v">${weak?Math.round(weak.pct2*100)+'%':'—'}</div><div class="t">domínio da área mais fraca${weak?' · '+weak.s:''}</div></div></div>
     </div>
     <div class="quiz-options-box">
-      <div class="progress-section-label" style="margin-top:0">ESCOPO</div>
-      <label class="quiz-radio"><input type="radio" name="quiz-scope" value="scope" checked> Seleção atual (${inScope.length} lesões)</label>
+      <div class="progress-section-label" style="margin-top:0">ESCOPO (memória própria do Quiz, independente da sidebar)</div>
+      <label class="quiz-radio"><input type="radio" name="quiz-scope" value="scope" checked> Seleção do Quiz (<span id="quiz-scope-count">${quizScopeEntries().length}</span> lesões)</label>
       <label class="quiz-radio"><input type="radio" name="quiz-scope" value="all"> Todo o acervo (${DATA.length} lesões)</label>
+      <div class="field-row" style="margin-top:8px;margin-bottom:0;">
+        <div class="field" style="margin-bottom:0;"><label>Seção do Quiz</label><select id="quiz-scope-section"></select></div>
+        <div class="field" style="margin-bottom:0;"><label>Sítio (opcional)</label><select id="quiz-scope-site"></select></div>
+      </div>
       <div class="progress-section-label">FOCO DA SESSÃO</div>
       <label class="quiz-check"><input type="checkbox" id="quiz-only-due" checked> Priorizar somente revisões pendentes</label>
       <label class="quiz-check"><input type="checkbox" id="quiz-shuffle" checked> Embaralhar casos</label>
@@ -12066,17 +12471,33 @@ function renderCustomSetupInside(){
   </div>`;
   function currentCandidates(){
     const useAll=ov.querySelector('input[name="quiz-scope"]:checked').value==='all';
-    let base=useAll?DATA.slice():inScope.slice();
+    let base=useAll?DATA.slice():quizScopeEntries();
     if(ov.querySelector('#quiz-only-due').checked) base=base.filter(e=>isDue(e.id));
     return base;
   }
   function updatePreview(){
     const n=currentCandidates().length, shown=Math.min(n,30);
+    const cnt=ov.querySelector('#quiz-scope-count');
+    if(cnt) cnt.textContent=String(quizScopeEntries().length);
     ov.querySelector('#quiz-count-preview').textContent = n
       ? `${shown} caso(s) serão usados agora${n>30?' · '+(n-30)+' ficam para a próxima sessão':''}.`
       : 'Nenhum caso disponível com esses filtros.';
     ov.querySelector('#custom-start').disabled=!n;
   }
+  // Seletores de seção/sítio do Quiz: alteração MANUAL atualiza quizScope e a
+  // preferência local (chave própria), sem tocar a sidebar.
+  const secSel=ov.querySelector('#quiz-scope-section'), siteSel=ov.querySelector('#quiz-scope-site');
+  const secMap=scopeSectionsMap();
+  const secNames=Object.keys(secMap).sort();
+  function renderSiteOptions(){
+    const sites=quizScope.section ? Object.keys(secMap[quizScope.section]||{}).sort() : [];
+    siteSel.innerHTML = `<option value="">(todos os sítios)</option>` + sites.map(s=>`<option value="${escAttr(s)}"${quizScope.site===s?' selected':''}>${escAttr(s)}</option>`).join('');
+    siteSel.disabled = !quizScope.section;
+  }
+  secSel.innerHTML = `<option value="">(toda a seleção)</option>` + secNames.map(s=>`<option value="${escAttr(s)}"${quizScope.section===s?' selected':''}>${escAttr(s)}</option>`).join('');
+  renderSiteOptions();
+  secSel.onchange = ()=>{ quizScope = { section: secSel.value || null, site: null }; saveQuizScopePref(); renderSiteOptions(); updatePreview(); };
+  siteSel.onchange = ()=>{ quizScope = { section: quizScope.section, site: siteSel.value || null }; saveQuizScopePref(); updatePreview(); };
   ov.querySelectorAll('input').forEach(inp=>inp.addEventListener('change',updatePreview));
   updatePreview();
   ov.querySelector('#custom-back').onclick=()=>openProgressDashboard();
@@ -12101,19 +12522,6 @@ function openProgressDashboard(){
     else confidenceCounts.fresh++;
   });
   const due=countActuallyDue(DATA), streak=getStudyStreak(), todayRec=SESSIONLOG[todayKey()]||{}, todayN=Number(todayRec.reviewed)||0, goal=15;
-  const nowTs=Date.now();
-  const upcomingReviews=DATA.map(e=>({e,s:SRS[e.id]}))
-    .filter(x=>x.s && Number(x.s.due)>nowTs)
-    .sort((a,b)=>Number(a.s.due)-Number(b.s.due))
-    .slice(0,5);
-  const fmtDue=(ts)=>{
-    const diff=Number(ts)-Date.now(), hour=60*60*1000, day=24*hour;
-    if(diff<=hour) return 'em < 1 h';
-    if(diff<day) return 'em '+Math.max(1,Math.round(diff/hour))+' h';
-    const d=new Date(Number(ts));
-    if(diff<2*day) return 'amanhã · '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
-    return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+' · '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
-  };
   let r14=0,w14=0; const trend=[];
   for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const rec=SESSIONLOG[todayKey(d)]||{};const r=Number(rec.right)||0,w=Number(rec.wrong)||0;r14+=r;w14+=w;trend.push({label:String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'),acc:(r+w)?Math.round(r/(r+w)*100):null});}
   const acc14=(r14+w14)?Math.round(r14/(r14+w14)*100):0;
@@ -12167,10 +12575,7 @@ function openProgressDashboard(){
         <button class="study-start-main" id="study-today">▶ INICIAR SESSÃO DE HOJE<small>15 casos · SRS + difíceis + novos</small></button>
         <div class="study-mode-grid"><button class="study-mode" id="study-quick">⚡ Sessão rápida<br><small>5 casos</small></button><button class="study-mode" id="study-cbr">🎓 Sessão CBR<br><small>20 casos mistos</small></button><button class="study-mode" id="study-custom">☷ Personalizada<br><small>área e filtros</small></button></div>
         <div class="study-streak-note">${todayN>=goal?'✓ Meta diária concluída.':`Faltam ${Math.max(0,goal-todayN)} questões para a meta de hoje.`}</div>
-        <div class="study-upcoming">
-          <div class="study-upcoming-head"><div><b>Próximas revisões</b><span>SRS · casos clínicos agendados</span></div><span class="study-upcoming-count">${due?due+' vencida'+(due===1?'':'s'):'em dia'}</span></div>
-          <div class="study-upcoming-list">${upcomingReviews.length?upcomingReviews.map(x=>`<button class="study-upcoming-row" data-id="${escAttr(x.e.id)}" style="--section-color:${studySectionColor(x.e.s)}"><span class="study-upcoming-accent"></span><span class="study-upcoming-dot"></span><span class="study-upcoming-case"><b>${esc(x.e.name)}</b><small>${esc(x.e.s)} · ${esc(x.e.site)}</small></span><span class="study-upcoming-time">${fmtDue(x.s.due)}</span></button>`).join(''):`<div class="study-upcoming-empty">Nenhuma revisão futura agendada ainda. As próximas aparecem aqui conforme você responde ao quiz.</div>`}</div>
-        </div>
+        <div class="study-upcoming" id="study-review-panel"></div>
       </div>
       <div class="study-chart study-performance-card"><h3>Evolução do desempenho</h3><div class="study-chart-sub">% de acerto nas sessões dos últimos 14 dias</div>
         <svg class="study-line-svg" viewBox="0 0 380 160" preserveAspectRatio="none">
@@ -12233,11 +12638,8 @@ function openProgressDashboard(){
   document.getElementById('study-cbr').onclick=()=>{const bySection={};DATA.forEach(e=>(bySection[e.s]||(bySection[e.s]=[])).push(e));const q=[],seen=new Set();while(q.length<20){let added=0;for(const s of shuffleArr(Object.keys(bySection))){const e=shuffleArr(bySection[s]).find(x=>!seen.has(x.id));if(e){seen.add(e.id);q.push(e);added++;if(q.length>=20)break;}}if(!added)break;}if(q.length)startQuizInsideDashboard(q);};
   document.getElementById('study-custom').onclick=()=>{ renderCustomSetupInside(); };
   document.getElementById('study-embedded-start').onclick=()=>{const q=buildSmartStudyQueue(5);if(q.length)startQuizInsideDashboard(q);};
-  ov.querySelectorAll('.study-upcoming-row').forEach(row=>row.onclick=()=>{
-    const target=DATA.find(e=>e.id===row.dataset.id);
-    if(target) startQuizInsideDashboard([target,...buildSmartStudyQueue(5).filter(e=>e.id!==target.id)].slice(0,5));
-  });
-  ov.querySelectorAll('.study-domain-row').forEach(row=>row.onclick=()=>{const sec=row.dataset.sec;startQuizInsideDashboard(shuffleArr(DATA.filter(e=>e.s===sec)).slice(0,15));});
+  renderReviewPanels(ov);
+  ov.querySelectorAll('.study-domain-row').forEach(row=>row.onclick=()=>{const sec=row.dataset.sec;quizScope={section:sec,site:null};saveQuizScopePref();startQuizInsideDashboard(shuffleArr(DATA.filter(e=>e.s===sec)).slice(0,15));});
   document.getElementById('progress-close').onclick=closeOverlay;
 }
 

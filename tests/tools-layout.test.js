@@ -33,14 +33,43 @@ function extractFunction(source, name) {
 
 const footBlock = html.slice(html.indexOf('<div id="sidebar-foot">'), html.indexOf('<div id="main">'));
 const REMOVED_IDS = ['btn-force-cloud', 'btn-export-checkpoint-v2', 'btn-reconcile-v2', 'btn-force-dedup', 'btn-recover-data', 'btn-reset', 'btn-restore-snapshot'];
+// Controles técnicos recolhidos no bloco "Ferramentas avançadas" (as funções continuam no código).
+const ADVANCED_IDS = ['btn-sync-to-cloud', 'btn-sync-from-cloud', 'btn-system-diagnostic', 'btn-audit-images'];
 
-test('UI: a área de ferramentas mostra SÓ diagnóstico e auditar vínculo', () => {
-  assert.match(footBlock, /id="btn-system-diagnostic"/);
-  assert.match(footBlock, /id="btn-audit-images"/);
-  assert.match(footBlock, /gera um relatório para copiar e enviar — não altera nada/);
-  assert.match(footBlock, /confere se as imagens continuam associadas às lesões corretas — não altera nada/);
+test('UI: controles técnicos ficam DENTRO do bloco recolhível "Ferramentas avançadas"', () => {
+  const btnIdx = footBlock.indexOf('id="btn-advanced-tools"');
+  assert.notEqual(btnIdx, -1, 'o botão "Ferramentas avançadas" precisa existir na sidebar');
+  const panelIdx = footBlock.indexOf('id="advanced-tools"', btnIdx);
+  assert.notEqual(panelIdx, -1, 'o painel "advanced-tools" precisa existir');
+  const panel = footBlock.slice(panelIdx, footBlock.indexOf('</div>', panelIdx));
+  for (const id of ADVANCED_IDS) {
+    assert.match(panel, new RegExp('id="' + id + '"'), id + ' precisa estar dentro do bloco');
+  }
   for (const id of REMOVED_IDS) {
     assert.doesNotMatch(footBlock, new RegExp('id="' + id + '"'), id + ' não pode aparecer na UI');
+  }
+});
+
+test('UI: o bloco "Ferramentas avançadas" começa FECHADO (só uma linha)', () => {
+  assert.match(footBlock, /id="advanced-tools" hidden/);
+  assert.match(footBlock, /id="btn-advanced-tools"[^>]*aria-expanded="false"/);
+  assert.match(footBlock, /▸ ⚙ Ferramentas avançadas/);
+});
+
+test('UI: clique alterna Ferramentas avançadas (abre/fecha) com indicador ▸/▾', () => {
+  const src = html.slice(html.indexOf('function initAdvancedToolsToggle'), html.indexOf('// As ferramentas técnicas'));
+  assert.match(src, /panel\.hidden = !open/);
+  assert.match(src, /btn\.setAttribute\('aria-expanded', open \? 'true' : 'false'\)/);
+  assert.match(src, /\? '▾ ' : '▸ '/);
+  assert.match(src, /id="btn-advanced-tools"\)\.onclick|btn\.onclick = /);
+});
+
+test('UI: a sidebar mantém Cloudinary + Salvar/Importar backup FORA do bloco avançado', () => {
+  const advIdx = footBlock.indexOf('id="btn-advanced-tools"');
+  for (const id of ['btn-cloudinary', 'btn-export', 'btn-import']) {
+    const i = footBlock.indexOf('id="' + id + '"');
+    assert.notEqual(i, -1, id + ' precisa continuar visível');
+    assert.ok(i < advIdx, id + ' precisa ficar FORA (acima) do bloco avançado');
   }
 });
 
@@ -66,7 +95,8 @@ test('UI: diagnóstico e auditoria de imagens continuam SOMENTE LEITURA', () => 
 });
 
 test('UI: implementação interna das ferramentas técnicas continua no código', () => {
-  for (const name of ['forceThisDeviceToCloud', 'openExportCheckpointV2Modal', 'openReconcileV2Modal', 'openRecoveryInspector', 'forceDuplicateCleanupNow', 'restoreFactoryDefault', 'runDuplicateCleanup', 'reconcileCatalogByIdentityV2']) {
+  for (const name of ['forceThisDeviceToCloud', 'openExportCheckpointV2Modal', 'openReconcileV2Modal', 'openRecoveryInspector', 'forceDuplicateCleanupNow', 'restoreFactoryDefault', 'runDuplicateCleanup', 'reconcileCatalogByIdentityV2',
+    'syncThisDeviceToCloud', 'openSyncDeviceToCloudModal', 'openUpdateFromCloudModal', 'openSystemDiagnosticModal', 'openImageAuditModal']) {
     assert.match(html, new RegExp('(?:async\\s+)?function\\s+' + name + '\\s*\\('), name + ' precisa continuar no código');
   }
   // o factory reset interno mantém a confirmação forte em dois passos

@@ -432,8 +432,9 @@ test('SYNC UI: "sincronizar este dispositivo" é explícito (confirmação no mo
   assert.match(openSyncToCloudFn.body, /syncThisDeviceToCloud\(\{ onStep/);
   assert.match(openSyncToCloudFn.body, /buildSyncAudit\(\)/, 'mostra a auditoria antes de enviar');
   assert.doesNotMatch(openSyncToCloudFn.body, /syncFromFirebase/, 'o envio não puxa da nuvem');
+  // o controle fica dentro do bloco recolhível "Ferramentas avançadas"
   assert.match(html, /id="btn-sync-to-cloud"/);
-  assert.match(html, /envia o estado deste dispositivo para a nuvem — use quando este dispositivo contém a versão correta/);
+  assert.match(html, /(?:async\s+)?function openSyncDeviceToCloudModal\(/);
 });
 
 test('SYNC UI: "atualizar deste backup/nuvem" exige confirmação, cria snapshot e reusa o merge não destrutivo', () => {
@@ -442,6 +443,7 @@ test('SYNC UI: "atualizar deste backup/nuvem" exige confirmação, cria snapshot
   const pullIdx = openUpdateFromCloudFn.body.indexOf('syncFromFirebase');
   assert.ok(snapIdx !== -1 && pullIdx !== -1 && snapIdx < pullIdx, 'snapshot antes do pull');
   assert.match(html, /id="btn-sync-from-cloud"/);
+  assert.match(html, /(?:async\s+)?function openUpdateFromCloudModal\(/);
 });
 
 test('SYNC: nenhuma sincronização automática destrutiva no boot (F5/login continuam seguros)', () => {

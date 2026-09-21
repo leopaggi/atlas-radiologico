@@ -2209,3 +2209,439 @@ servidor; `syncCountersMatch` dinâmico detecta divergência de imagens/SRS/
 lesões; push não puxa/ownership; leitura pós-envio força servidor; auditoria
 relê sem reutilizar; paths de write/read coerentes). Resultado: **38 PASS,
 0 FAIL**. Âncoras de `tests/critical-flows.test.js`: 5824/5814/8127/11088.
+
+## Alteração 036 — Preferências locais de navegação (última seção/site na sidebar e no Quiz)
+
+Motivo: após F5, o Atlas não lembrava a última seção/site escolhidos.
+
+### Onde ficam (local por navegador/origem)
+
+`localStorage`, com chaves versionadas e **independentes**:
+
+- `atlas:v1:lastSidebarScope` → `{ section, site }` da sidebar;
+- `atlas:v1:lastQuizScope` → `{ section, site }` do Quiz.
+
+**Nunca** usa Firebase/Firestore/IndexedDB/sync/backup/`DATA`. Localhost e GitHub
+Pages podem ter preferências diferentes (origens diferentes).
+
+### Sidebar
+
+`scope` (estado já existente) é gravado por `saveSidebarScopePref()` **somente
+em mudança manual**: "Todas as seções", clique numa seção, clique num sítio e
+"limpar filtros". No boot, `loadData()` faz `scope = loadSidebarScopePref()`.
+
+### Quiz
+
+O Quiz ganhou `quizScope` próprio (independente do `scope` da sidebar):
+
+- clicar numa área em "Domínio do conteúdo" define
+  `quizScope={section, site:null}` e grava;
+- a "Sessão personalizada" ganhou seletores de **Seção do Quiz** e **Sítio**
+  (opcional) que atualizam `quizScope` e gravam na chave própria;
+- a "Seleção do Quiz" da sessão personalizada usa `quizScopeEntries()` (não mais
+  a seleção da sidebar).
+- No boot, `quizScope = loadQuizScopePref()`.
+
+### Validação e fallback
+
+`validateScopePref()` confere contra as seções/sites EXISTENTES (derivados do
+`DATA`):
+
+- `section` inexistente → ignora a preferência inteira (volta ao padrão);
+- `section` válida + `site` inexistente → mantém a seção e zera o site;
+- nunca cria seção/site inexistente.
+
+`readScopePref`/`writeScopePref` usam `try/catch`: JSON inválido, valor
+inesperado ou `localStorage` indisponível são ignorados sem erro visível, e o
+boot segue no padrão.
+
+### Não sobrescreve por acidente
+
+As preferências só são gravadas em ação manual de navegação. Render, F5, sync,
+importação de backup, refresh interno, abertura de modal, retorno de edição e
+restauração de questão **não** chamam `saveSidebarScopePref`/`saveQuizScopePref`.
+
+### Independência
+
+Alterar o Quiz não muda a sidebar e vice-versa (chaves e estados separados).
+Ex.: sidebar em `Neurorradiologia → Região selar` e Quiz em `Tórax → Pulmão`
+continuam assim após F5.
+
+### Testes
+
+Novo `tests/local-scope-prefs.test.js` (**14 PASS**): chaves versionadas
+independentes; salvar/restaurar sidebar e Quiz; independência; seção inexistente
+ignorada; site inexistente com fallback; JSON inválido; `localStorage`
+indisponível; ausência de Firebase/IndexedDB/`DATA`; gravação só em mudança
+manual; import/sync não sobrescrevem; gravação nos handlers manuais da sidebar e
+nos seletores do Quiz; seleção do Quiz usando `quizScope`. Âncoras de
+`tests/critical-flows.test.js`: 5869/5859/8172/11141.
+
+## Alteração 037 — Limpeza visual da sidebar (ações técnicas fora da UI)
+
+Motivo: o bloco de manutenção ocupava muito espaço vertical e forçava scrollbar
+na lista de seções.
+
+> **CORRIGIDO pela Alteração 038:** os controles NÃO foram removidos da UI. Eles
+> foram **recolhidos no bloco `⚙ Ferramentas avançadas`**, fechado por padrão.
+> Ver a Alteração 038.
+
+### Controles técnicos (na 037, movidos para "Ferramentas avançadas")
+
+- `☁ sincronizar este dispositivo`
+- `⬇ atualizar deste backup/nuvem`
+- `🩺 diagnóstico do sistema`
+- `🔍 auditar vínculo de imagens`
+
+### O que continua sempre visível na sidebar
+
+- `☁ configurar Cloudinary`
+- `💾 Salvar backup`
+- `📂 Importar backup`
+
+### Funções internas preservadas
+
+Nenhuma lógica foi apagada. Continuam no código e acessíveis (botão dentro do
+bloco e/ou console): `syncThisDeviceToCloud`, `openSyncDeviceToCloudModal`,
+`openUpdateFromCloudModal`, `openSystemDiagnosticModal`,
+`openImageAuditModal`, `forceThisDeviceToCloud` e as demais ferramentas
+técnicas.
+
+### Não alterado
+
+Sync, snapshots, ownership, auditoria, backup e a lista de seções — nada disso
+mudou. Só a presença dos controles na UI normal.
+
+### Testes
+
+`tests/tools-layout.test.js` atualizado: os 4 controles não existem mais no
+HTML/sidebar; Cloudinary/Salvar/Importar continuam visíveis; as funções internas
+(`syncThisDeviceToCloud`, `openSyncDeviceToCloudModal`,
+`openUpdateFromCloudModal`, `openSystemDiagnosticModal`,
+`openImageAuditModal`) continuam definidas. `tests/snapshots-ownership.test.js`
+ajustado para confirmar que o fluxo de sync continua interno (sem os botões).
+Âncoras de `tests/critical-flows.test.js`: 5866/5856/8169/11138.
+
+## Alteração 038 — Correção: ações técnicas recolhidas em "⚙ Ferramentas avançadas"
+
+**Correção da Alteração 037.** Os controles técnicos NÃO foram removidos da UI:
+eles foram recolhidos num bloco **`⚙ Ferramentas avançadas`**, **fechado por
+padrão**, para preservar espaço vertical na sidebar.
+
+### Bloco recolhível
+
+- Fechado (padrão): apenas a linha `▸ ⚙ Ferramentas avançadas`.
+- Aberto: `▾ ⚙ Ferramentas avançadas` e, dentro, os 4 controles:
+  `☁ sincronizar este dispositivo`, `⬇ atualizar deste backup/nuvem`,
+  `🩺 diagnóstico do sistema`, `🔍 auditar vínculo de imagens`.
+- Alterna ao clique; não persiste em localStorage (sempre fecha ao recarregar).
+
+### Fora do bloco (sempre visível)
+
+`☁ configurar Cloudinary`, `💾 Salvar backup`, `📂 Importar backup`.
+
+### Handlers
+
+Restaurados e ligados às funções internas já existentes (sem duplicar lógica):
+`openSyncDeviceToCloudModal`, `openUpdateFromCloudModal`,
+`openSystemDiagnosticModal`, `openImageAuditModal`. O toggle é
+`initAdvancedToolsToggle()` (aria-expanded + indicador ▸/▾).
+
+### Layout
+
+Bloco aberto compacto (coluna com gap pequeno, indentação discreta), sem overflow
+horizontal, sem altura fixa e sem scroll próprio; fechado ocupa só uma linha.
+
+### Não alterado
+
+Sync, Firestore, snapshots, ownership, auditoria, Cloudinary, backup, Quiz,
+localStorage de escopo e `DATA` — apenas reorganização visual/handlers.
+
+### Testes
+
+`tests/tools-layout.test.js` (11 PASS): bloco presente; 4 controles dentro do
+bloco; começa fechado; clique alterna (abre/fecha) com ▸/▾; handlers corretos;
+Cloudinary/Salvar/Importar fora do bloco; funções internas intactas.
+`tests/snapshots-ownership.test.js` (38 PASS) volta a exigir os controles
+existentes. Âncoras de `tests/critical-flows.test.js`: 5874/5864/8177/11164.
+
+## Alteração 039 — Integridade de `classification` (C-RADS espalhada por id posicional)
+
+Motivo: lesões de Medicina Fetal (ex.: Rim policístico infantil, Ureterocele
+fetal, Displasia esquelética fetal, Megabexiga fetal) apareciam com
+"C-RADS — colonoscopia virtual", o que é anatomicamente impossível.
+
+### Causa real
+
+Os ids são **posicionais** (`seed_<N>`, renumerados por posição no boot). Ao
+longo do tempo o `SEED` foi reordenado/ampliado (a seção Medicina Fetal foi
+inserida), então o MESMO `seed_<N>` passou a apontar para OUTRA lesão. O `DATA`
+persistido (IndexedDB/Firestore) guarda os campos por esse id, então
+classificações antigas ficaram "coladas" em lesões diferentes. Como a
+atualização canônica de campos está desativada (V250), a classificação errada
+persistia e aparecia na lesão errada.
+
+Agravante: a auditoria antiga `CLASSIFICATION_AUDIT_REMOVE_20260918` é uma lista
+de ids POSICIONAIS; com a reordenação, ela passou a apontar para outras lesões —
+inclusive `seed_818/819/820`, que hoje são justamente os pólipos/carcinoma
+colorretal (onde **C-RADS é legítima**). Ou seja, a lista antiga podia apagar
+classificação VÁLIDA.
+
+### Auditoria no SEED (read-only)
+
+- `C-RADS` no SEED: **3 registros**, todos em `Abdômen Superior / Intestino /
+  cólon` (Pólipo hiperplásico, Pólipo adenomatoso colônico, Carcinoma
+  colorretal) — **válidos**. O SEED não tem C-RADS em Medicina Fetal.
+
+### Correção (sem limpeza cega por string)
+
+- A remoção automática por id posicional foi **NEUTRALIZADA**
+  (`applyClassificationAudit20260918` → no-op).
+- Novo `buildClassificationAudit()` (read-only) compara a `classification` de
+  cada lesão de `DATA` com o **SEED pela identidade semântica `s+site+name`**:
+  - `valid` (bate), `mismatch` (SEED tem outra), `spurious` (SEED não tem
+    classificação nessa identidade), `unknown` (identidade fora do SEED — lesão
+    do usuário, não mexer).
+- `applyClassificationIdentityFix()` (manual, com confirmação): cria
+  `createSafetySnapshot('antes de corrigir classificações inválidas')`, remove
+  `spurious` (→ null) e restaura `mismatch` (→ valor canônico do SEED).
+  Preserva `name/notes/tags/s/site/images/ownership/altPlacements/ids`.
+- UI: `📋 auditar classificações` em **Ferramentas avançadas** — mostra o
+  relatório e só corrige após confirmação.
+
+### Recorrência
+
+`tests/classification-integrity.test.js` (novo): C-RADS válida na identidade
+colônica; C-RADS em fetal é espúria; divergência restaurada; lesão fora do SEED
+não é tocada; auditoria read-only; correção cria snapshot, remove só espúria e
+preserva o resto; e testes estáticos de que editar/nova lesão/importação/revisão
+não espalham `classification`.
+
+### Observação
+
+O SEED do repositório está limpo (3 C-RADS válidas). Os registros espalhados
+existem no `DATA` do usuário (estado antigo persistido); a auditoria no app lista
+os ids exatos e a correção os limpa. Para números exatos do estado real, usar o
+`📋 auditar classificações` (ou um backup fresco).
+
+## Alteração 040 — Painel "Próximas revisões" x "Revisões vencidas" (SRS) e atualização ao vivo
+
+Motivo: (1) depois de responder uma revisão, o card continuava no painel e só
+atualizava ao fechar/reabrir; (2) o painel mostrava "18 vencidas" no cabeçalho
+de "Próximas revisões", enquanto os cards abaixo diziam "em 11 h" — misturando
+dois conceitos.
+
+### Semântica real (confirmada no código)
+
+- `SRS[id] = { interval (dias), due (ms), streak, lastGrade, updatedAt }`.
+- **VENCIDA:** tem SRS com `due > 0` e `due <= agora`.
+- **PRÓXIMA:** tem SRS com `due > agora`.
+- **Nunca estudada** (sem SRS) não entra em nenhuma das duas — é "pendente do
+  acervo" (`isDue` a considera pendente, mas não é revisão agendada).
+- O KPI "revisões pendentes" e o antigo badge "N vencidas" usavam
+  `countActuallyDue(DATA)` = vencidas agendadas (exclui nunca estudadas).
+- A lista de "Próximas revisões" filtrava `due > agora` (futuras), top 5.
+
+### Causa do card não sumir/atualizar
+
+`refreshStudyDashboardLive()` (chamada por `applyGrade` após responder)
+atualizava KPIs, domínio, ciclo e estado, mas **não** re-renderizava o painel de
+revisões. O SRS era salvo, porém o painel só refletia ao reconstruir o dashboard.
+
+### O que significava "18 vencidas" e por que aparecia "em 11 h"
+
+"18 vencidas" = `countActuallyDue(DATA)` (revisões com `due <= agora`), mostrado
+no cabeçalho de "Próximas revisões". A lista logo abaixo mostrava apenas as
+FUTURAS (`due > agora`), com "em X h". Ou seja: o badge contava as vencidas, mas
+a lista mostrava as próximas — daí a incoerência.
+
+### Correção
+
+- `partitionScheduledReviews(now)` separa **vencidas** (`due <= now`) e
+  **próximas** (`due > now`), cada uma ordenada por `due` crescente; "nunca
+  estudada" fica fora.
+- `renderReviewPanels(ov)` renderiza **dois blocos** in-place:
+  - **"Revisões vencidas"** (só quando há), com badge vermelho "N vencidas" e
+    tempo relativo `fmtReviewPast` → "vencida há 2 h" / "vencida há 3 dias";
+  - **"Próximas revisões"**, com badge "N agendada(s)" (ou "em dia") e tempo
+    `fmtReviewFuture` → "em 11 h" / "amanhã · HH:MM".
+- `refreshStudyDashboardLive()` chama `renderReviewPanels(ov)` — o painel agora
+  atualiza **imediatamente** após responder (o card sai/reordena na hora), sem
+  fechar/reabrir.
+- `openProgressDashboard()` usa os mesmos containers (`#study-overdue`,
+  `#study-upcoming-list`, `#study-upcoming-count`).
+
+### Sem duplicação
+
+`applyGrade` já é guardado por `if(st.grade) return;` e chama `srsGradeLevel`
+(1x), `quizStats[g]++` (1x), `recordQuizAnswerToday` (1x) — sem duplicar SRS,
+score ou SESSIONLOG. Clicar num card abre a sessão com aquela lesão
+(`startQuizInsideDashboard`), sem criar revisão de conteúdo.
+
+### Testes
+
+Novo `tests/srs-dashboard.test.js` (12 PASS): passado → vencida; futuro →
+próxima; nunca estudada fora; vencido nunca mostra "em"; futuro nunca mostra
+"vencida"; ordenação por `due`; reagendar reduz o contador; refresh ao vivo
+re-renderiza; dashboard com blocos separados; sem duplicar SRS/score/SESSIONLOG;
+clique não cria revisão. Âncoras de `tests/critical-flows.test.js`:
+5885/5875/8297/11285.
+
+## Alteração 041 — Auditoria de classificações conservadora (não remover por ausência no SEED)
+
+**Correção da Alteração 039.** A regra antiga era agressiva demais:
+
+> "SEED sem classification para essa identidade ⇒ spurious (será removida)".
+
+Ela marcava como espúrias 64 de 87 classificações — incluindo plausíveis e
+legítimas (LUNG-RADS em lesão torácica, BI-RADS em mama/axila, LI-RADS em
+fígado, Bosniak em rim), além das realmente absurdas (C-RADS em Medicina Fetal).
+**Ausência de `classification` no SEED NÃO é prova de erro**: pode ter sido
+adicionada manualmente depois e ser válida.
+
+### Nova regra
+
+- `canonical` — bate com a `classification` do SEED.
+- `mismatch` — SEED define uma classificação diferente (a do SEED é canônica).
+- `compatible_noncanonical` — SEED não define, mas a anatomia/contexto é
+  plausível (regras semânticas por sistema). **Não mexer.**
+- `incompatible` — classificação claramente de outro sistema (seção diferente
+  E sem palavra-chave de contexto). **Único candidato a remoção.**
+- `unknown` — sem base segura (sistema sem regra, contexto ambíguo ou
+  identidade fora do SEED). **Revisar; não remover.**
+
+`CLASSIFICATION_CONTEXT_RULES` (conservador, seção + palavra-chave de
+sítio/nome): C-RADS→cólon; LUNG-RADS→pulmão; BI-RADS→mama/axila;
+LI-RADS→fígado; Bosniak→rim/cisto; TI-RADS→tireoide; PI-RADS→próstata;
+O-RADS→ovário/anexo; VI-RADS→bexiga; CAD-RADS→coronária; Node-RADS→linfonodo;
+ASPECTS→neuro; AAST_*→rim/fígado/baço. `classifyClassificationCompatibility()`
+só marca `incompatible` quando a seção é claramente de OUTRO sistema **e** não há
+palavra de contexto; empate/ambiguidade vira `unknown`.
+
+### Correção automática (botão)
+
+Só remove `incompatible` (→ `null`) e restaura `mismatch` (→ valor canônico do
+SEED), com `createSafetySnapshot('antes de corrigir classificações inválidas')`.
+**Nunca** toca `canonical`, `compatible_noncanonical`, `unknown` nem registros
+fora do SEED.
+
+### C-RADS (confirmado)
+
+- C-RADS em Medicina Fetal ⇒ **incompatible**.
+- C-RADS nos 3 registros colônicos canônicos ⇒ **canonical** (não removida).
+- C-RADS em outra lesão abdominal (ex.: fígado) ⇒ `unknown` (revisar).
+
+### Testes
+
+`tests/classification-integrity.test.js` reescrito (14 PASS): C-RADS colônica
+canônica; C-RADS fetal incompatível; C-RADS abdominal não colônica em revisar;
+BI-RADS mama / Bosniak rim / LI-RADS fígado plausíveis; LI-RADS pâncreas e
+LUNG-RADS coração em revisar (nunca removidos); sistema desconhecido em revisar;
+divergente restaurada; auditoria read-only; correção só toca
+incompatible+mismatch e preserva plausíveis/unknown; snapshot antes. Âncoras de
+`tests/critical-flows.test.js`: 5885/5875/8336/11324.
+
+## Alteração 042 — Painel de revisões em bloco único (vencidas têm prioridade)
+
+Motivo: a Alteração 040 separou "Revisões vencidas" e "Próximas revisões" em
+dois blocos empilhados na coluna esquerda, deixando a coluna alta e com espaço
+vazio à direita.
+
+### Regra do painel
+
+**Um único painel** na coluna esquerda:
+- **Se há vencidas:** mostra **"Revisões vencidas"** (`SRS · já passaram do
+  vencimento`), badge **"N vencidas"**, lista ordenada por `due` crescente com
+  tempo "vencida há X".
+- **Se não há vencidas:** mostra **"Próximas revisões"** (`SRS · casos clínicos
+  agendados`), badge **"N agendadas"** (ou "em dia"), lista ordenada por `due`
+  com tempo "em X"/"amanhã · HH:MM".
+- Nunca os dois ao mesmo tempo.
+
+O badge usa o **total real** (ex.: 8 vencidas); a lista limita a **5** cards para
+preservar o layout (como o painel antigo).
+
+### Transição automática
+
+`renderReviewPanels` (via `refreshStudyDashboardLive`) usa `reviewPanelModel`:
+depois de responder/reagendar, recalcula na hora. Se ainda houver vencidas,
+continua em "Revisões vencidas"; se a última for resolvida, o MESMO painel vira
+"Próximas revisões" — sem fechar/reabrir, sem F5, sem render global.
+
+### Semântica preservada
+
+Vencida = `due <= agora`; próxima = `due > agora`; nunca estudada fora dos dois;
+vencida nunca mostra "em"; futura nunca mostra "vencida"; contador em tempo real;
+sem duplicar SRS/score/SESSIONLOG.
+
+### Layout
+
+Container único `#study-review-panel` (classe `.study-upcoming`, com
+`.is-overdue` quando é o caso). Sem alterar gráficos, ciclo, domínio, cards da
+direita ou o grid do dashboard.
+
+### Testes
+
+`tests/srs-dashboard.test.js` (17 PASS): com vencidas mostra "Revisões vencidas"
+e não "Próximas revisões"; sem vencidas mostra "Próximas revisões"; badge com
+total real (8) mesmo limitando a lista; resolver a última vencida troca para
+próximas; "em dia"; tempos relativos; ordenação; read-only/refresh; sem
+duplicação. Âncoras de `tests/critical-flows.test.js`: 5884/5874/8335/11323.
+
+## Alteração 043 — Fila manual "Revisar" com 3 ações (Manter / Remover / Abrir lesão)
+
+Motivo: a categoria "Revisar" (`unknown`) da auditoria de classificações era
+apenas uma lista somente-leitura; faltava um jeito prático de decidir caso a caso
+sem correção automática.
+
+### Fila manual
+
+Cada item de "Revisar" virou um card com **nome, seção, sítio e classificação
+atual** e 3 ações:
+
+- **✓ Manter** — NÃO altera `DATA`. Registra uma decisão manual de que aquela
+  classificação foi revisada e deve ser aceita. O item sai da fila.
+- **✕ Remover** — confirma ("Remover a classificação X desta lesão?"), cria
+  `createSafetySnapshot('antes de corrigir classificações inválidas')`, zera
+  SOMENTE `lesion.classification`, `saveData`, registra a decisão e recalcula.
+- **✎ Abrir lesão** — abre o editor daquela lesão (`openForm` com
+  `preserveUnderlyingOverlay`), mantendo a auditoria aberta por baixo; ao salvar,
+  recalcula a auditoria (a lesão pode mudar de categoria). Esc fecha só o
+  formulário.
+
+### Persistência e identidade
+
+`CLASSIFICATION_REVIEW_DECISIONS` (IndexedDB local, chave
+`atlas:classificationReviewDecisions`) guarda `{action, classification,
+identity, at}`. A chave da decisão é
+**IDENTIDADE SEMÂNTICA (s+site+name) + a `classification` atual** — nunca o
+`seed_<N>` posicional. Consequências:
+
+- a decisão **não é global**: manter "BIRADS" numa lesão não valida BIRADS para
+  outras;
+- se a `classification` mudar depois (ex.: BIRADS → LIRADS), a decisão antiga
+  **não esconde** o novo valor — o item volta para a fila;
+- persiste após F5 (IndexedDB); **não** sincroniza com a nuvem (evita conflito
+  entre origens). Estrutura separada de `LESION_REVISIONS`.
+
+### Contadores
+
+A tabela da auditoria é re-renderizada a cada decisão (sem fechar o modal):
+"Manter" tira 1 de Revisar mantendo a classificação no `DATA`; "Remover" tira 1 de
+Revisar e diminui 1 em "Total com classification".
+
+### Correção em lote
+
+`applyClassificationIdentityFix` continua mexendo **só** em `incompatible` e
+`mismatch` — não toca `canonical`, `compatible_noncanonical`, `unknown`/Revisar
+nem decisões manuais.
+
+### Testes
+
+`tests/classification-integrity.test.js` (24 PASS): unknown na fila; card com
+nome/seção/sítio/classificação e 3 ações; Manter não altera DATA e sai da fila;
+Manter persiste após reload; chave por identidade semântica (id diferente mantém
+a decisão); mudar a classification invalida a decisão; Remover cria snapshot,
+zera só classification e preserva o resto; correção em lote não toca unknown;
+Abrir lesão usa `openForm` e recalcula ao salvar. Âncoras de
+`tests/critical-flows.test.js`: 5891/5881/8433/11422.

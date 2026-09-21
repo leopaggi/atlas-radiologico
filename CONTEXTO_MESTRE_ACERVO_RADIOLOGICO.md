@@ -6,18 +6,24 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## 1. Estado do Git / publicação
 
-- Último commit publicado (confirmado): **`68e8421`** — "Melhora navegacao
-  completa do quiz".
-- Branch local: **`master`** (HEAD em `68e8421`).
-- Remoto: `origin` = `https://github.com/leopaggi/atlas-radiologico.git`.
-- Branch publicada: **`origin/main`**, hoje apontando para o MESMO commit
-  `68e84219ab2ed1f150444033cf341272517369b0`.
+- Último commit publicado antes deste bloco (confirmado): **`6dd2e94`** —
+  "Confirma sincronizacao com verificacao do servidor".
+- Branch local: **`master`**. Remoto: `origin` =
+  `https://github.com/leopaggi/atlas-radiologico.git`; branch publicada
+  **`origin/main`**.
 - Observação: o branch local `master` **não tem upstream configurado**
-  (`master@{upstream}` falha). Publicar exige `git push origin master:main`
-  (ou configurar o upstream) — confirmar com o usuário antes.
+  (`master@{upstream}` falha). Publicar exige `git push origin master:main`.
 - Publicação é por substituição do `index.html` no GitHub Pages
   (`leopaggi.github.io/atlas-radiologico/`).
-- Há **alterações ainda não commitadas** (ver seção 10).
+- Este bloco (ver seção 10) cobre: painel SRS único (vencidas têm prioridade;
+  sem vencidas mostra próximas; atualização imediata após resposta); auditoria
+  de classificações conservadora (`canonical`/`compatible_noncanonical`/
+  `incompatible`/`mismatch`/`unknown`) com correção em lote só em
+  `incompatible`+`mismatch`; fila manual "Revisar" (`✓ Manter`/`✕ Remover`/
+  `✎ Abrir lesão`) com decisões por identidade semântica + classification;
+  "Ferramentas avançadas" recolhíveis e fechadas por padrão; e preferências
+  locais independentes `atlas:v1:lastQuizScope`/`atlas:v1:lastSidebarScope`
+  (não sincronizadas pela nuvem).
 
 ## 2. Arquitetura atual
 
@@ -26,6 +32,10 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 - **Armazenamento local:** IndexedDB (banco `atlas_radiologico_idb`) via camada
   `storage.get/set/delete/list`. Nunca reintroduzir `localStorage` para dados
   principais.
+  - **Exceção (preferências de UI):** a última seção/site da sidebar e do Quiz
+    fica em `localStorage` (`atlas:v1:lastSidebarScope` / `atlas:v1:lastQuizScope`),
+    local por origem, independente e sem nuvem. Só grava em mudança manual;
+    validada contra seções/sites existentes.
 - **Nuvem:** Firebase Firestore (projeto `atlas-radiologico`) como fonte da
   verdade. O push local→nuvem é automático em `saveData`/`pushToFirebaseNow`; o
   pull nuvem→local NÃO é automático no boot (desativado na Alteração 008) e só
@@ -48,11 +58,16 @@ uma cópia antiga e o repositório, o repositório e o código valem.
     **11/11 altPlacements**, 44/44 SRS. **Sincronização considerada validada.**
 - **Imagens:** Cloudinary (`res.cloudinary.com/soegtip6/.../atlas-radiologico/`).
 - **Backup/export:** botões `Salvar backup` / `Importar backup` (inalterados).
-- **UI de ferramentas (normal):** só `🩺 diagnóstico do sistema` e
-  `🔍 auditar vínculo de imagens` (ambos somente leitura) + `Salvar backup` /
-  `Importar backup`. As ferramentas técnicas/destrutivas foram REMOVIDAS da
-  interface; a implementação interna permanece no código para manutenção
-  (`forceThisDeviceToCloud`, `openExportCheckpointV2Modal`,
+- **UI de ferramentas (normal):** sempre visíveis `☁ configurar Cloudinary`,
+  `💾 Salvar backup` e `📂 Importar backup`. As ações técnicas ficam recolhidas no
+  bloco **`⚙ Ferramentas avançadas`** (`#advanced-tools`), **fechado por padrão**,
+  que abre/fecha ao clique (indicador ▸/▾): sincronizar este dispositivo,
+  atualizar deste backup/nuvem, diagnóstico do sistema e auditar vínculo de
+  imagens. Não persiste aberto (sempre fecha ao recarregar). As ferramentas
+  destrutivas seguem fora da UI. A implementação interna permanece no código
+  (`syncThisDeviceToCloud`, `openSyncDeviceToCloudModal`,
+  `openUpdateFromCloudModal`, `openSystemDiagnosticModal`,
+  `openImageAuditModal`, `forceThisDeviceToCloud`, `openExportCheckpointV2Modal`,
   `openReconcileV2Modal`, `openRecoveryInspector`, `forceDuplicateCleanupNow`,
   `restoreFactoryDefault`, `runDuplicateCleanup`, `reconcileCatalogByIdentityV2`).
 
@@ -68,12 +83,44 @@ Untracked, intocados. Nunca devem entrar em commit sem pedido explícito:
 6. `atlas-radiologico-backup-restaurado-61-assets-importavel.json`
 7. `atlas-radiologico-checkpoint-pos-reconciliacao-v2_2026-09-19_22-23-27.json`
 
+## 3.1. Integridade de `classification` (ids posicionais)
+
+- Os ids são **posicionais** (`seed_<N>`, renumerados por posição no boot). Se o
+  `SEED` for reordenado/ampliado, o mesmo id passa a apontar para outra lesão e o
+  `DATA` persistido (IndexedDB/Firestore) mantém campos antigos "colados" na
+  lesão errada. Foi assim que C-RADS apareceu em lesões fetais.
+- A auditoria antiga `applyClassificationAudit20260918` (lista de ids
+  posicionais) foi **NEUTRALIZADA** — ela podia apagar C-RADS **válida** dos
+  pólipos colorretais (hoje `seed_818/819/820`).
+- **Ausência de `classification` no SEED NÃO é prova de erro** (pode ter sido
+  adicionada manualmente e ser legítima). A regra "SEED sem classificação ⇒
+  espúria" foi considerada agressiva demais e substituída (Alteração 041).
+- **Auditoria read-only:** `buildClassificationAudit()` compara com o `SEED` pela
+  IDENTIDADE SEMÂNTICA `s+site+name` → `canonical` / `mismatch` /
+  `compatible_noncanonical` / `incompatible` / `unknown`.
+- **Regras conservadoras:** `CLASSIFICATION_CONTEXT_RULES` +
+  `classifyClassificationCompatibility()` só marcam `incompatible` quando a seção
+  é claramente de OUTRO sistema **e** não há palavra de contexto; ambiguidade vira
+  `unknown` (revisar).
+- **Correção em lote:** `applyClassificationIdentityFix()` (snapshot antes) remove
+  só `incompatible` (→ null) e restaura `mismatch` (→ valor do SEED); **nunca**
+  toca `canonical`, `compatible_noncanonical`, `unknown` nem fora do SEED.
+- **Fila manual "Revisar" (unknown):** cada item tem `✓ Manter` (não altera DATA;
+  registra decisão), `✕ Remover` (confirma + snapshot; zera só `classification`)
+  e `✎ Abrir lesão` (editor; recalcula ao salvar). Decisões em
+  `CLASSIFICATION_REVIEW_DECISIONS` (IndexedDB local, chave = identidade semântica
+  `s+site+name` + classification atual; **não** sincroniza com a nuvem; não
+  globaliza; se a classificação mudar, o item volta para a fila). UI:
+  `📋 auditar classificações` em **Ferramentas avançadas**.
+- `C-RADS` no SEED: 3 registros, todos em `Abdômen Superior / Intestino / cólon`
+  (canônicos). C-RADS em Medicina Fetal = `incompatible`.
+
 ## 4. Snapshots automáticos (locais, leves)
 
 - `createSafetySnapshot(motivo)` grava no IndexedDB SOMENTE para motivos de
   risco (`SAFETY_SNAPSHOT_RISK_REASONS`): importar backup, restaurar padrão,
   recuperar dados antigos, fundir duplicatas, reconciliar V2, restaurar
-  snapshot, operação em massa de ownership.
+  snapshot, operação em massa de ownership, corrigir classificações inválidas.
 - Retenção de 5 (`SAFETY_SNAPSHOT_LIMIT`); sem duplicar binários do Cloudinary
   (imagem fica só como URL). Schema 2.
 - Restauração é SEMPRE manual e cria um snapshot do estado atual antes.
@@ -186,6 +233,16 @@ Status: `pending`, `rejected`, `proposed` (legado), `applied_pending_validation`
   `_objectUrl`); miniatura e lightbox usam `data || _objectUrl` (preview LOCAL
   enquanto pending, sem upload antecipado).
 - Quiz não duplica contagem/questão; progresso = respondidas/total.
+- **SRS — vencidas x próximas:** `SRS[id]={interval(dias),due(ms),streak,lastGrade}`.
+  VENCIDA = `due>0 && due<=agora`; PRÓXIMA = `due>agora`; "nunca estudada" fica
+  fora das duas. `partitionScheduledReviews` separa e ordena por `due`.
+  `reviewPanelModel` decide UM ÚNICO painel: se há vencidas → "Revisões vencidas"
+  (badge "N vencidas", tempo "vencida há X"); senão → "Próximas revisões" (badge
+  "N agendadas"/"em dia", tempo "em X"). O badge usa o total real; a lista limita
+  a 5. `renderReviewPanels` é chamado por `refreshStudyDashboardLive` — o painel
+  atualiza na hora após responder e troca automaticamente para "Próximas" quando
+  a última vencida é resolvida. Tempo relativo: `fmtReviewPast`/`fmtReviewFuture`,
+  nunca cruzados.
 
 ## 9. Correção responsiva da Central de Revisões/Soluções
 
@@ -209,10 +266,13 @@ Destino: `https://ntfy.sh/acervo-leo-7k29-radiologia`. Detalhes em `AGENTS.md`.
 | `tests/lesion-review.test.js` | **138 PASS**, 0 FAIL |
 | `tests/snapshots-ownership.test.js` | **38 PASS**, 0 FAIL |
 | `tests/quiz-images.test.js` | **101 PASS**, 0 FAIL |
+| `tests/local-scope-prefs.test.js` | **14 PASS**, 0 FAIL |
+| `tests/classification-integrity.test.js` | **24 PASS**, 0 FAIL |
+| `tests/srs-dashboard.test.js` | **17 PASS**, 0 FAIL |
 | `tests/critical-flows.test.js` | 20 PASS, 0 FAIL |
-| `tests/tools-layout.test.js` | 8 PASS, 0 FAIL |
+| `tests/tools-layout.test.js` | **11 PASS**, 0 FAIL |
 | `tests/legacy-id-migration.test.js` | 156 PASS, 5 TODO, 0 FAIL |
-| Total (suíte completa) | **466 testes, 461 PASS, 5 TODO, 0 FAIL** |
+| Total (suíte completa) | **524 testes, 519 PASS, 5 TODO, 0 FAIL** |
 
 - `tests/duplicate-detection.test.js` tem 1 FAIL **histórico e fora de escopo**
   (`DUPLICATE_PAIRS_V171`, 28 entradas malformadas). Não corrigir sem pedido.
@@ -241,8 +301,9 @@ auditoria + sincronização explícita localhost ↔ nuvem.
 1. **Sincronização validada** (2026-09-20) — localhost e site publicado
    conferidos com os mesmos contadores (53 registros com imagens, 66 imagens,
    11 altPlacements, 44 SRS). Nenhuma ação pendente aqui.
-2. **Persistir a última seção/posição escolhida no Quiz e na sidebar** (reabrir
-   no mesmo ponto após F5).
+2. **Preferências locais de navegação** (2026-09-20): a última seção/site da
+   sidebar e do Quiz já são lembrados de forma independente em `localStorage`
+   (`atlas:v1:lastSidebarScope` / `atlas:v1:lastQuizScope`), sem nuvem. Feito.
 3. **Eventuais refinamentos do fluxo de IA** (sem API/segredo; sempre com
    confirmação humana e sem autoaceite).
 4. **Manutenção incremental** (pequenas correções, sempre preservando dados,

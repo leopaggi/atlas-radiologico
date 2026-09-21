@@ -790,3 +790,104 @@ sem alterar o dispositivo. O modal mostra as 5 etapas reais e tem
 pós-escrita.
 
 Testes: `tests/snapshots-ownership.test.js` com **38 PASS**.
+
+### Última seção/site lembrados (2026-09-20)
+
+Depois de F5/reabrir, o Atlas volta para a última seção/site que você escolheu —
+na **sidebar** e no **Quiz**, de forma **independente**. Fica salvo só neste
+navegador (localStorage, chaves `atlas:v1:lastSidebarScope` e
+`atlas:v1:lastQuizScope`), sem Firebase/IndexedDB e sem entrar no backup. A
+sessão personalizada do Quiz ganhou seletores de seção/sítio próprios. A
+preferência é validada contra as seções/sites existentes (seção inexistente é
+ignorada; sítio inexistente cai para a seção) e só é gravada quando você muda a
+navegação manualmente — render, F5, sync e importação não a sobrescrevem.
+
+Testes: `tests/local-scope-prefs.test.js` com **14 PASS**.
+
+### Sidebar mais limpa — "⚙ Ferramentas avançadas" (2026-09-20)
+
+As ações técnicas (sincronizar este dispositivo, atualizar deste backup/nuvem,
+diagnóstico do sistema e auditar vínculo de imagens) foram recolhidas num bloco
+**`⚙ Ferramentas avançadas`, fechado por padrão**, para preservar espaço vertical
+na sidebar. Ele abre/fecha ao clique (indicador ▸/▾). Fora dele, sempre visíveis:
+`configurar Cloudinary`, `Salvar backup` e `Importar backup`. Nenhum fluxo de
+sync/snapshot/ownership foi alterado.
+
+Testes: `tests/tools-layout.test.js` com **11 PASS**.
+
+### Correção — "Ferramentas avançadas" recolhível (2026-09-20)
+
+Correção da limpeza anterior: as ações técnicas **não** foram removidas da UI —
+agora ficam num bloco `⚙ Ferramentas avançadas`, **fechado por padrão**, que abre
+ao clique (indicador ▸/▾). Dentro dele: sincronizar este dispositivo, atualizar
+deste backup/nuvem, diagnóstico do sistema e auditar vínculo de imagens. Fora
+dele, sempre visíveis: configurar Cloudinary, Salvar backup e Importar backup.
+Os handlers usam as funções internas já existentes (sem duplicar lógica).
+
+Testes: `tests/tools-layout.test.js` com **11 PASS**.
+
+### Classificação C-RADS corrigida (2026-09-20)
+
+Lesões de Medicina Fetal apareciam com "C-RADS — colonoscopia virtual" por um
+bug de **ids posicionais**: o `SEED` é renumerado por posição e foi reordenado
+(entrou Medicina Fetal), então classificações antigas ficaram associadas a
+outras lesões. A auditoria antiga por id também passou a apontar para os
+pólipos colorretais (onde C-RADS é válida) e foi neutralizada. Agora há
+`📋 auditar classificações` em Ferramentas avançadas: auditoria somente leitura
+que compara com o SEED pela identidade (seção+sítio+nome) e uma correção manual
+(com snapshot) que remove só as espúrias e restaura as divergentes, sem tocar em
+nada mais.
+
+Testes: `tests/classification-integrity.test.js` com **14 PASS**.
+
+### Painel de revisões do Quiz: vencidas x próximas (2026-09-20)
+
+O painel de SRS agora separa claramente **Revisões vencidas** (due já passou,
+tempo "vencida há X") de **Próximas revisões** (due no futuro, tempo "em X"),
+cada uma ordenada pelo vencimento. Antes, o cabeçalho de "Próximas revisões"
+mostrava "N vencidas" enquanto a lista só exibia itens futuros ("em 11 h") —
+confuso. Além disso, o painel passou a ser atualizado **imediatamente** depois
+de responder (o card some/reordena na hora), sem precisar fechar e reabrir.
+"Nunca estudada" não entra em nenhum dos dois blocos. Sem duplicar SRS, score ou
+SESSIONLOG.
+
+Testes: `tests/srs-dashboard.test.js` com **12 PASS**.
+
+### Auditoria de classificações conservadora (2026-09-20)
+
+Correção: a auditoria anterior marcava como "espúria" qualquer classificação
+ausente no SEED — agressivo demais (64 de 87, incluindo LUNG-RADS/BI-RADS/
+LI-RADS/Bosniak plausíveis). **Ausência no SEED não é prova de erro.** Agora a
+auditoria classifica em: canônica, divergente (restaura o SEED), plausível não
+canônica (não mexer), incompatível (único caso removível) e revisar/unknown (não
+mexer). As regras são conservadoras por sistema (seção + contexto). A correção
+em lote só remove as claramente incompatíveis e restaura as divergentes, com
+snapshot antes.
+
+Testes: `tests/classification-integrity.test.js` com **14 PASS**.
+
+### Painel de revisões em bloco único (2026-09-20)
+
+O painel de SRS voltou a ter **um único bloco** na coluna esquerda: se há
+revisões vencidas, mostra só "Revisões vencidas" (badge "N vencidas", tempo
+"vencida há X"); se não há vencidas, mostra "Próximas revisões" (badge
+"N agendadas"/"em dia", tempo "em X"). Nunca os dois juntos. Ao responder a
+última vencida, o mesmo painel passa automaticamente para "Próximas revisões",
+sem fechar/reabrir. O badge mostra o total real; a lista limita a 5 cards para
+manter o layout.
+
+Testes: `tests/srs-dashboard.test.js` com **17 PASS**.
+
+### Fila manual "Revisar" das classificações (2026-09-20)
+
+A categoria "Revisar" da auditoria de classificações virou uma fila prática com
+3 ações por item: **✓ Manter** (não altera os dados; registra que a classificação
+foi revisada), **✕ Remover** (com confirmação e snapshot; zera só a
+classificação) e **✎ Abrir lesão** (abre o editor e recalcula ao salvar). A
+decisão "Manter" vale só para aquela lesão + aquela classificação (não
+globaliza), é chaveada pela identidade semântica (seção+sítio+nome) + a
+classificação atual, persiste no IndexedDB e não é sincronizada com a nuvem. Se a
+classificação mudar depois, o item volta para a fila. A correção em lote continua
+mexendo só nas incompatíveis/divergentes.
+
+Testes: `tests/classification-integrity.test.js` com **24 PASS**.
