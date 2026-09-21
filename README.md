@@ -891,3 +891,17 @@ classificação mudar depois, o item volta para a fila. A correção em lote con
 mexendo só nas incompatíveis/divergentes.
 
 Testes: `tests/classification-integrity.test.js` com **24 PASS**.
+
+### Merge aditivo de imagens local→nuvem (2026-09-20)
+
+Quando o localhost tem mais imagens e a nuvem tem SRS mais novo (divergência
+cruzada), o Atlas não faz mais overwrite integral: aparece o aviso "Este
+dispositivo e a nuvem possuem dados mais novos em áreas diferentes" e o botão
+`🔀 Mesclar imagens deste dispositivo na nuvem`. Esse merge lê o servidor, faz
+**união aditiva** das imagens por lesão (dedup por publicId/URL; nunca apaga;
+nunca move ownership), **preserva SRS/REVIEW/SESSIONLOG/ordens remotas**, escreve
+e **verifica o servidor**. O pull nuvem→dispositivo também passou a ser aditivo
+nas imagens (imagens que existem só na nuvem são incorporadas). Nenhuma imagem é
+reenviada ao Cloudinary.
+
+Testes: `tests/snapshots-ownership.test.js` com **46 PASS**.

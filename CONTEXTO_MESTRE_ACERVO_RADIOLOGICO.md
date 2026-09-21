@@ -6,8 +6,8 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## 1. Estado do Git / publicação
 
-- Último commit publicado antes deste bloco (confirmado): **`6dd2e94`** —
-  "Confirma sincronizacao com verificacao do servidor".
+- Último commit publicado antes deste bloco (confirmado): **`038f4be`** —
+  "Melhora revisoes classificacoes e ferramentas".
 - Branch local: **`master`**. Remoto: `origin` =
   `https://github.com/leopaggi/atlas-radiologico.git`; branch publicada
   **`origin/main`**.
@@ -56,6 +56,20 @@ uma cópia antiga e o repositório, o repositório e o código valem.
   - **Reteste real APROVADO (2026-09-20):** localhost e site publicado com
     1213/1213 lesões, **53/53 registros com imagens**, **66/66 imagens**,
     **11/11 altPlacements**, 44/44 SRS. **Sincronização considerada validada.**
+  - **Divergência cruzada + merge aditivo de imagens (Alteração 044):** quando o
+    local tem mais imagens e a nuvem tem SRS mais novo, NÃO fazer overwrite
+    integral. O modal avisa e oferece `🔀 Mesclar imagens deste dispositivo na
+    nuvem`. No push de imagens, o registro **remoto é a base** e recebe somente
+    as imagens locais ausentes; a união deduplica por `assetId`, `publicId` e URL
+    normalizada, nunca apaga e nunca move ownership. SRS, REVIEW e SESSIONLOG
+    remotos são preservados pelos merges próprios. A leitura inicial e a
+    verificação pós-escrita são server-only. O pull nuvem→dispositivo também faz
+    união aditiva das imagens, incorporando as que existem apenas na nuvem. Sem
+    upload ao Cloudinary.
+  - **Reteste real do merge APROVADO (2026-09-21):** servidor/site confirmado
+    com **58 registros com imagens**, **73 imagens** e **SRS 44**. O SRS remoto
+    permaneceu 44 após incorporar as imagens locais. Ownership permaneceu
+    protegido. **Merge aditivo considerado validado.**
 - **Imagens:** Cloudinary (`res.cloudinary.com/soegtip6/.../atlas-radiologico/`).
 - **Backup/export:** botões `Salvar backup` / `Importar backup` (inalterados).
 - **UI de ferramentas (normal):** sempre visíveis `☁ configurar Cloudinary`,
@@ -264,7 +278,7 @@ Destino: `https://ntfy.sh/acervo-leo-7k29-radiologia`. Detalhes em `AGENTS.md`.
 | Arquivo | Resultado |
 |---|---|
 | `tests/lesion-review.test.js` | **138 PASS**, 0 FAIL |
-| `tests/snapshots-ownership.test.js` | **38 PASS**, 0 FAIL |
+| `tests/snapshots-ownership.test.js` | **46 PASS**, 0 FAIL |
 | `tests/quiz-images.test.js` | **101 PASS**, 0 FAIL |
 | `tests/local-scope-prefs.test.js` | **14 PASS**, 0 FAIL |
 | `tests/classification-integrity.test.js` | **24 PASS**, 0 FAIL |
@@ -272,35 +286,28 @@ Destino: `https://ntfy.sh/acervo-leo-7k29-radiologia`. Detalhes em `AGENTS.md`.
 | `tests/critical-flows.test.js` | 20 PASS, 0 FAIL |
 | `tests/tools-layout.test.js` | **11 PASS**, 0 FAIL |
 | `tests/legacy-id-migration.test.js` | 156 PASS, 5 TODO, 0 FAIL |
-| Total (suíte completa) | **524 testes, 519 PASS, 5 TODO, 0 FAIL** |
+| Total (suíte completa) | **532 testes, 527 PASS, 5 TODO, 0 FAIL** |
 
 - `tests/duplicate-detection.test.js` tem 1 FAIL **histórico e fora de escopo**
   (`DUPLICATE_PAIRS_V171`, 28 entradas malformadas). Não corrigir sem pedido.
 - `tests/critical-flows.test.js` usa âncoras de linha exatas; após edições antes
   das âncoras, atualizar via script. Valores atuais:
-  **5548/5538/7851/10807**.
+  **6061/6051/8603/11592**.
 - `git diff --check`: sem erros de espaço em branco.
 
-## 12. Alterações ainda não commitadas
+## 12. Entrega da Alteração 044
 
-Modificados: `AGENTS.md`, `AI.md`, `LOG_DESENVOLVIMENTO.md`, `README.md`,
-`index.html`, `tests/critical-flows.test.js`, `tests/lesion-review.test.js`,
-`tests/quiz-images.test.js`.
-Novos (untracked, para adicionar no commit): `tests/snapshots-ownership.test.js`,
-`tests/tools-layout.test.js`, e este `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`.
-
-Cobrem (ALTERAÇÕES 021–034 do log): snapshots+ownership, simplificação das
-ferramentas, ponte de IA, aplicação provisória, `{}`/ação manual, fluxo em lote,
-feedback humano, `latestHumanFeedback`, localizações adicionais, parser robusto
-do lote, correção responsiva da Central de Revisões/Soluções, preview local do
-quadro de imagens pending no Quiz, contador do carrossel no canto superior e a
-auditoria + sincronização explícita localhost ↔ nuvem.
+Arquivos do fechamento: `index.html`, `tests/snapshots-ownership.test.js`,
+`tests/critical-flows.test.js`, `AI.md`, `README.md`,
+`LOG_DESENVOLVIMENTO.md` e este contexto mestre. A entrega cobre a detecção de
+divergência cruzada, o merge aditivo de imagens local→nuvem, a união aditiva no
+pull, a proteção de ownership e a verificação server-only.
 
 ## 13. Próximos passos pendentes
 
-1. **Sincronização validada** (2026-09-20) — localhost e site publicado
-   conferidos com os mesmos contadores (53 registros com imagens, 66 imagens,
-   11 altPlacements, 44 SRS). Nenhuma ação pendente aqui.
+1. **Merge aditivo e sincronização validados** (2026-09-21) — servidor/site
+   conferido após o merge com 58 registros com imagens, 73 imagens e 44 SRS.
+   Nenhuma ação pendente aqui.
 2. **Preferências locais de navegação** (2026-09-20): a última seção/site da
    sidebar e do Quiz já são lembrados de forma independente em `localStorage`
    (`atlas:v1:lastSidebarScope` / `atlas:v1:lastQuizScope`), sem nuvem. Feito.

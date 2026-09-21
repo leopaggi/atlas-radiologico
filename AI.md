@@ -2645,3 +2645,59 @@ a decisão); mudar a classification invalida a decisão; Remover cria snapshot,
 zera só classification e preserva o resto; correção em lote não toca unknown;
 Abrir lesão usa `openForm` e recalcula ao salvar. Âncoras de
 `tests/critical-flows.test.js`: 5891/5881/8433/11422.
+
+## Alteração 044 — Merge aditivo de imagens local→nuvem (divergência cruzada)
+
+Motivo: localhost tinha 58 registros/73 imagens (SRS 41) e a nuvem 53/66 (SRS
+44). Cada lado era mais novo num domínio diferente: **overwrite integral perderia
+o SRS mais novo da nuvem**; e o push simples não incorporava as imagens novas.
+
+### Regra
+
+**Quando local e nuvem possuem dados mais novos em domínios diferentes, NÃO fazer
+overwrite integral. Para imagens, usar merge aditivo preservando SRS e demais
+estruturas remotas.**
+
+### Merge aditivo de imagens
+
+- `imageIdentityKeys(img)` — identidades estáveis (assetId, publicId, URL
+  normalizada de `originalUrl`/`data`/`thumb`). Dedup cruzada: um lado pode ter
+  só o `publicId` e o outro só a URL do MESMO asset.
+- `unionEntryImages(base, add, alvo, sink, label)` — preserva a base, acrescenta
+  só as ausentes (dedup) e **NUNCA move ownership**: imagem com dono diferente da
+  lesão-alvo é bloqueada e registrada. Nunca apaga.
+- **PULL (nuvem→local):** `mergeEntryNonDestructive` agora usa UNION ADITIVA
+  (`base=local`), então imagens que existem só na nuvem passam a ser incorporadas.
+- **PUSH (local→nuvem):** `mergeEntryForImagePush(local, remote)` usa o registro
+  REMOTO como base e soma só as imagens LOCAIS ausentes no remoto.
+
+### `mergeThisDeviceImagesToCloud()`
+
+1. snapshot de segurança; 2. lê a nuvem DIRETO DO SERVIDOR; 3. para cada id,
+   `mergeEntryForImagePush` (union); 4. preserva SRS (`mergeSRSPreservingNewest`),
+   REVIEW (`mergeReviewPreservingProgress`), SESSIONLOG e ordens; 5. persiste
+   local e escreve a nuvem (`writeShardedStateSerialized`); 6. **relê o servidor**
+   e só confirma se `server.totalImages >= local.totalImages` E `server.srs >=
+   beforeServer.srs`. Se não bater: "A nuvem possui imagens que ainda não foram
+   incorporadas neste dispositivo", com servidor × local e conflitos.
+
+### UI
+
+`buildSyncAudit` detecta `crossDivergent` (imagens local>nuvem **e** SRS
+nuvem>local). O modal de sincronização mostra o aviso "Este dispositivo e a nuvem
+possuem dados mais novos em áreas diferentes…" e revela o botão
+`🔀 Mesclar imagens deste dispositivo na nuvem`. O envio integral continua
+disponível, mas com o aviso.
+
+### Sem upload
+
+O merge só copia metadados/URLs; **nenhuma imagem é reenviada ao Cloudinary**.
+
+### Testes
+
+`tests/snapshots-ownership.test.js` (46 PASS): union base+novas sem duplicar;
+dedup por publicId e URL normalizada; ownership igual incorpora / conflitante
+bloqueia e reporta; imagem sem dono incorpora; merge push servidor-only, union,
+preserva SRS/REVIEW/SESSIONLOG, verifica servidor e não faz upload; `crossDivergent`
+na auditoria; aviso + botão na UI. Âncoras de `tests/critical-flows.test.js`:
+6061/6051/8603/11592.

@@ -1964,7 +1964,13 @@ async function buildSyncAudit(){
     cloud.altPlacements !== local.altPlacements ||
     cloud.srs !== local.srs
   );
-  return { local, cloud, cloudError, divergent };
+  // Divergência CRUZADA: cada lado é mais novo em um domínio diferente
+  // (ex.: local tem mais imagens, a nuvem tem SRS mais novo). Overwrite integral
+  // poderia apagar o dado mais recente do outro lado.
+  const localImagesAhead = !!cloud && local.totalImages > cloud.totalImages;
+  const cloudSrsAhead = !!cloud && cloud.srs > local.srs;
+  const crossDivergent = !!(cloud && localImagesAhead && cloudSrsAhead);
+  return { local, cloud, cloudError, divergent, localImagesAhead, cloudSrsAhead, crossDivergent };
 }
 /* Lê o estado da nuvem DIRETO DO SERVIDOR (nunca de cache) e devolve os
    mesmos contadores da auditoria. Usado na verificação pós-envio. */
@@ -2068,6 +2074,7 @@ function renderSyncAuditHtml(audit, direction){
   const l = audit.local || {}, c = audit.cloud;
   let cloudNote;
   if(audit.cloudError) cloudNote = `<div class="sync-audit-note warn">Nuvem indisponível: ${escAttr(audit.cloudError)}</div>`;
+  else if(audit.crossDivergent) cloudNote = `<div class="sync-audit-note warn">Este dispositivo e a nuvem possuem dados mais novos em áreas diferentes (ex.: imagens aqui, SRS na nuvem). Um envio integral poderia sobrescrever dados mais recentes da nuvem — prefira "🔀 Mesclar imagens deste dispositivo na nuvem".</div>`;
   else if(audit.divergent) cloudNote = `<div class="sync-audit-note warn">Há diferença entre este dispositivo e a nuvem.</div>`;
   else cloudNote = `<div class="sync-audit-note ok">Este dispositivo e a nuvem estão com os mesmos contadores.</div>`;
   const cta = direction==='toCloud'
@@ -2096,7 +2103,10 @@ async function openSyncDeviceToCloudModal(){
     <div id="sync-audit-box"><div class="sync-audit-note">Comparando com a nuvem…</div></div>
     <div id="sync-step" class="sync-audit-note"></div>
     <div class="modal-actions" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
-      <button class="btn btn-ghost" id="sync-refresh">🔄 ler servidor de novo</button>
+      <span style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-ghost" id="sync-refresh">🔄 ler servidor de novo</button>
+        <button class="btn btn-primary" id="sync-merge-images" hidden>🔀 Mesclar imagens deste dispositivo na nuvem</button>
+      </span>
       <span style="display:flex;gap:8px;">
         <button class="btn btn-ghost" id="sync-cancel">cancelar</button>
         <button class="btn btn-primary" id="sync-confirm" disabled>☁ Enviar este dispositivo para a nuvem</button>
@@ -2109,18 +2119,62 @@ async function openSyncDeviceToCloudModal(){
   const box = ov.querySelector('#sync-audit-box');
   const stepEl = ov.querySelector('#sync-step');
   const confirmBtn = ov.querySelector('#sync-confirm');
+  const mergeBtn = ov.querySelector('#sync-merge-images');
   const refreshAudit = async ()=>{
     box.innerHTML = '<div class="sync-audit-note">Lendo do servidor…</div>';
     try{
       const audit = await buildSyncAudit(); // sempre nova leitura do servidor
       box.innerHTML = renderSyncAuditHtml(audit, 'toCloud');
       confirmBtn.disabled = false;
+      mergeBtn.hidden = !audit.crossDivergent; // só quando cada lado é mais novo num domínio
     }catch(e){
       box.innerHTML = `<div class="sync-audit-note warn">Não foi possível comparar agora: ${escAttr((e&&e.message)||e)}</div>`;
     }
   };
   await refreshAudit();
   ov.querySelector('#sync-refresh').onclick = refreshAudit;
+  mergeBtn.onclick = async ()=>{
+    mergeBtn.disabled = true;
+    confirmBtn.disabled = true;
+    stepEl.className = 'sync-audit-note';
+    stepEl.textContent = '1/5 · criando snapshot…';
+    const res = await mergeThisDeviceImagesToCloud({ onStep:(n, label)=>{ stepEl.textContent = n+'/5 · '+label+'…'; } });
+    const fmt = c => c ? (c.entriesWithImages+' registros / '+c.totalImages+' imagens / SRS '+c.srs) : '—';
+    if(res.ok){
+      stepEl.className = 'sync-audit-note ok';
+      stepEl.textContent = '5/5 · merge confirmado pelo servidor.';
+      const added = Math.max(0, res.server.totalImages - res.beforeServer.totalImages);
+      box.innerHTML = `
+        <div class="sync-audit-note ok">Merge de imagens concluído.</div>
+        <div class="sync-audit-table">
+          <div class="sync-audit-head"><span>Contador</span><b>Servidor</b><b>Este dispositivo</b></div>
+          <div class="sync-audit-row"><span>Antes (servidor)</span><b>${res.beforeServer.entriesWithImages} / ${res.beforeServer.totalImages} / SRS ${res.beforeServer.srs}</b><b>—</b></div>
+          <div class="sync-audit-row"><span>Adicionadas</span><b>${added} imagem(ns)</b><b>—</b></div>
+          <div class="sync-audit-row"><span>Depois (servidor)</span><b>${res.server.entriesWithImages} / ${res.server.totalImages} / SRS ${res.server.srs}</b><b>${fmt(res.local)}</b></div>
+        </div>
+        ${res.conflicts.length ? `<div class="sync-audit-note warn">${res.conflicts.length} imagem(ns) NÃO mesclada(s) por conflito de ownership (registrado, não movido).</div>` : ''}`;
+      mergeBtn.textContent = '✓ Mesclado';
+      await refreshAudit();
+      toast('Imagens mescladas na nuvem.');
+      return;
+    }
+    mergeBtn.disabled = false;
+    confirmBtn.disabled = false;
+    stepEl.className = 'sync-audit-note warn';
+    if(res.reason==='verify_failed'){
+      stepEl.textContent = 'A nuvem possui imagens que ainda não foram incorporadas neste dispositivo.';
+      box.innerHTML = `
+        <div class="sync-audit-note warn">A nuvem possui imagens que ainda não foram incorporadas neste dispositivo.</div>
+        <div class="sync-audit-table">
+          <div class="sync-audit-head"><span>Contador</span><b>Servidor</b><b>Este dispositivo</b></div>
+          <div class="sync-audit-row"><span>Imagens no servidor</span><b>${res.server?res.server.totalImages:'—'}</b><b>${res.local?res.local.totalImages:'—'}</b></div>
+          <div class="sync-audit-row"><span>Faltando</span><b>${res.server&&res.local?Math.max(0,res.local.totalImages-res.server.totalImages):'—'}</b><b>—</b></div>
+        </div>
+        ${res.conflicts && res.conflicts.length ? `<div class="sync-audit-note warn">${res.conflicts.length} conflito(s) de ownership.</div>` : ''}`;
+    } else {
+      stepEl.textContent = 'Não foi possível concluir o merge. O estado local foi preservado.';
+    }
+  };
   confirmBtn.onclick = async ()=>{
     confirmBtn.disabled = true;
     confirmBtn.textContent = '⏳ Enviando…';
@@ -2431,6 +2485,56 @@ function sanitizeAllImageOwnershipV208(){
   return removed;
 }
 
+/* Conflitos de ownership detectados no PULL (nuvem→local) e no PUSH de imagens
+   (local→nuvem), por sessão. Nunca resolvidos em silêncio. */
+let PULL_IMAGE_OWNERSHIP_CONFLICTS = [];
+let PUSH_IMAGE_OWNERSHIP_CONFLICTS = [];
+/* UNION ADITIVA de imagens: preserva a base (ordem/identidade), acrescenta só as
+   que faltam (dedup por identidade estável) e NUNCA move ownership — uma imagem
+   com dono diferente da lesão-alvo é BLOQUEADA e registrada. Nunca apaga. */
+/* Todas as identidades estáveis de uma imagem (para dedup cruzada: um lado pode
+   ter só o publicId e o outro só a URL do MESMO asset). */
+function imageIdentityKeys(img){
+  const keys = [];
+  if(!img || typeof img!=='object') return keys;
+  if(img.assetId) keys.push('asset:'+String(img.assetId));
+  if(img.publicId) keys.push('public:'+String(img.publicId));
+  const clean = v => String(v||'').trim().replace(/[?#].*$/,'').replace(/\/v\d+\//,'/');
+  if(img.originalUrl) keys.push('url:'+clean(img.originalUrl));
+  if(img.data) keys.push('url:'+clean(img.data));
+  if(img.thumb) keys.push('url:'+clean(img.thumb));
+  if(!keys.length) keys.push('json:'+JSON.stringify(img));
+  return keys;
+}
+function unionEntryImages(baseImgs, addImgs, targetEntry, conflictSink, sourceLabel){
+  const targetId = String((targetEntry && targetEntry.id) || '');
+  const out = [];
+  const seen = new Set();
+  const pushImg = (img) => {
+    const keys = imageIdentityKeys(img);
+    if(keys.some(k=>seen.has(k))) return false; // mesmo asset (publicId ou URL)
+    keys.forEach(k=>seen.add(k));
+    out.push(img);
+    return true;
+  };
+  for(const img of (Array.isArray(baseImgs)?baseImgs:[])){
+    if(!img) continue; pushImg(img);
+  }
+  for(const img of (Array.isArray(addImgs)?addImgs:[])){
+    if(!img) continue;
+    const keys = imageIdentityKeys(img);
+    if(keys.some(k=>seen.has(k))) continue;
+    const owner = imageOwnerIdV1(img);
+    if(owner && !canChangeImageOwnership(img, targetId, null)){
+      registerImageOwnershipConflict({ kind:'image_merge_ownership_conflict_blocked', source:sourceLabel||'', stableKey:keys[0], fromLesionId:owner, toLesionId:targetId, lesionName:(targetEntry&&targetEntry.name)||'' });
+      if(conflictSink) conflictSink.push({ stableKey:keys[0], fromLesionId:owner, toLesionId:targetId, lesionName:(targetEntry&&targetEntry.name)||'' });
+      continue;
+    }
+    keys.forEach(k=>seen.add(k));
+    out.push(img);
+  }
+  return out;
+}
 function mergeEntryNonDestructive(localEntry, remoteEntry){
   const local = localEntry || {};
   const remote = remoteEntry || {};
@@ -2443,25 +2547,12 @@ function mergeEntryNonDestructive(localEntry, remoteEntry){
   if(rt > lt) merged = {...local, ...remote};
   else merged = {...remote, ...local};
 
-  // Imagens: quando um dos lados tem uma edição CLARAMENTE mais recente (timestamp
-  // maior), essa versão vale sozinha — inclusive remoções deliberadas de imagem
-  // erradas. Uma versão anterior deste código sempre SOMAVA as imagens dos dois
-  // lados (união), o que parecia seguro, mas na prática "ressuscitava" imagens que
-  // o usuário tinha acabado de apagar de propósito, sempre que a nuvem ainda tinha
-  // a cópia antiga no momento da sincronização. União só é usada como fallback
-  // seguro quando nenhum dos dois lados tem uma edição claramente mais nova
-  // (registros legados, mesmo cenário do bug de perda de imagem já corrigido).
-  if(lt > rt && Array.isArray(local.images)){
-    merged.images = local.images;
-  }else if(rt > lt && Array.isArray(remote.images)){
-    merged.images = remote.images;
-  }else{
-    const imageCandidates = [
-      ...(Array.isArray(remote.images)?remote.images:[]),
-      ...(Array.isArray(local.images)?local.images:[])
-    ];
-    merged.images = imageCandidates;
-  }
+  // PULL nuvem→local: UNION ADITIVA das imagens — preserva as locais e incorpora
+  // as remotas que faltam (dedup por identidade estável + ownership). NUNCA apaga
+  // imagem local nem move ownership. (Antes, quando um lado tinha timestamp mais
+  // novo, o array do outro era descartado — era isso que escondia imagens novas
+  // que existiam só na nuvem.)
+  merged.images = unionEntryImages(local.images, remote.images, merged, PULL_IMAGE_OWNERSHIP_CONFLICTS, 'pull');
   // v246: aqui só remove duplicata exata de imagem (mesma imagem aparecendo
   // duas vezes na lista) — NUNCA rejeita uma imagem por a etiqueta interna
   // (lesionId) não bater com o id atual. Essa checagem de posse era feita
@@ -2480,6 +2571,85 @@ function mergeEntryNonDestructive(localEntry, remoteEntry){
     if(local.classification) merged.classification = local.classification;
   }
   return merged;
+}
+
+/* PUSH de imagens local→nuvem: base = registro REMOTO (preserva a nuvem) +
+   UNION ADITIVA das imagens LOCAIS ausentes no remoto. Campos não-imagem seguem
+   o merge não destrutivo (edição mais nova domina). Nunca apaga/move. */
+function mergeEntryForImagePush(localEntry, remoteEntry){
+  const merged = mergeEntryNonDestructive(localEntry, remoteEntry);
+  merged.images = unionEntryImages(remoteEntry.images, localEntry.images, merged, PUSH_IMAGE_OWNERSHIP_CONFLICTS, 'push');
+  return merged;
+}
+/* MERGE ADITIVO DE IMAGENS local→nuvem, quando local e nuvem divergem em
+   direções diferentes (ex.: local tem mais imagens, nuvem tem SRS mais novo).
+   NÃO faz overwrite integral: lê o servidor, faz UNION das imagens por lesão,
+   preserva SRS/REVIEW/SESSIONLOG/ordens remotas (só soma o que for mais novo),
+   escreve e VERIFICA o servidor de novo. */
+async function mergeThisDeviceImagesToCloud(opts){
+  const onStep = (opts && typeof opts.onStep==='function') ? opts.onStep : ()=>{};
+  if(!fbDb){ toast('Firebase indisponível neste navegador.'); return { ok:false, reason:'no_firebase' }; }
+  if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return { ok:false, reason:'not_ready' }; }
+  PUSH_IMAGE_OWNERSHIP_CONFLICTS = [];
+  try{
+    onStep(1, 'criando snapshot');
+    createSafetySnapshot('antes de mesclar imagens deste dispositivo na nuvem');
+    onStep(2, 'lendo a nuvem (servidor)');
+    const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'merge de imagens (leitura do servidor)');
+    const remoteData = (Array.isArray(remote && remote.data) ? remote.data : []).filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+    const localData = (Array.isArray(DATA)?DATA:[]).filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+    const localById = new Map(localData.map(e=>[e.id,e]));
+    const remoteById = new Map(remoteData.map(e=>[e.id,e]));
+    const allIds = new Set([...localById.keys(), ...remoteById.keys()]);
+    const beforeServer = syncAuditCounters(remoteData, null, remote && remote.review, remote && remote.srs);
+    const merged = [];
+    onStep(3, 'mesclando imagens (aditivo, sem apagar)');
+    for(const id of allIds){
+      const l = localById.get(id), r = remoteById.get(id);
+      if(l && r) merged.push(mergeEntryForImagePush(l, r));
+      else if(r) merged.push(r);   // só remoto: preserva como está
+      else merged.push(l);         // só local: incorpora (com as imagens)
+    }
+    const present = new Set(merged.map(e=>e&&e.id));
+    for(const canonical of activeCanonicalSeedV172()){
+      if(!present.has(canonical.id)) merged.push(JSON.parse(JSON.stringify(canonical)));
+    }
+    // SRS/REVIEW/SESSIONLOG/ordens: remoto é a base; local só soma o que for mais novo.
+    DATA = merged.filter(Boolean);
+    REVIEW = mergeReviewPreservingProgress(REVIEW, remote && remote.review);
+    SRS = mergeSRSPreservingNewest(SRS, remote && remote.srs);
+    SESSIONLOG = mergeSessionLogPreservingProgress(SESSIONLOG, remote && remote.sessionLog);
+    if(!(Array.isArray(sectionOrder) && sectionOrder.length) && remote && Array.isArray(remote.sectionOrder) && remote.sectionOrder.length) sectionOrder = remote.sectionOrder;
+    if(!(siteOrder && Object.keys(siteOrder).length) && remote && remote.siteOrder && typeof remote.siteOrder==='object' && Object.keys(remote.siteOrder).length) siteOrder = remote.siteOrder;
+    try{ await storage.set(STORAGE_KEY, JSON.stringify(DATA), false); }catch(_e){}
+    try{ await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false); }catch(_e){}
+    try{ await storage.set(SRS_KEY, JSON.stringify(SRS), false); }catch(_e){}
+    try{ await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false); }catch(_e){}
+    try{ await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false); }catch(_e){}
+    try{ await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false); }catch(_e){}
+
+    onStep(4, 'enviando a nuvem mesclada');
+    clearTimeout(fbPushTimer);
+    const ok = await writeShardedStateSerialized(20000);
+    if(!ok){ setSyncStatus(false, 'não deu pra enviar: algum pedaço dos dados ficou grande demais.'); return { ok:false, reason:'write_refused', beforeServer }; }
+    onStep(5, 'verificando no servidor');
+    const server = await readCloudAuditFromServer();
+    const localCounters = syncAuditCounters(DATA, null, REVIEW, SRS);
+    const imagesOk = !!server && server.totalImages >= localCounters.totalImages && server.totalImages >= beforeServer.totalImages;
+    const srsOk = !!server && server.srs >= beforeServer.srs;
+    if(!imagesOk || !srsOk){
+      const msg = 'A nuvem possui imagens que ainda não foram incorporadas neste dispositivo.';
+      setSyncStatus(false, msg);
+      return { ok:false, reason:'verify_failed', beforeServer, server, local:localCounters, conflicts:[...PUSH_IMAGE_OWNERSHIP_CONFLICTS] };
+    }
+    setSyncStatus(true);
+    createSafetySnapshot('após mesclar imagens deste dispositivo na nuvem');
+    return { ok:true, beforeServer, server, local:localCounters, conflicts:[...PUSH_IMAGE_OWNERSHIP_CONFLICTS] };
+  }catch(e){
+    console.error('Falha no merge de imagens local→nuvem.', e);
+    setSyncStatus(false, 'falha ao mesclar imagens: ' + (e.message||e));
+    return { ok:false, reason:'error', error:(e&&e.message)||String(e) };
+  }
 }
 
 async function syncFromFirebase(){

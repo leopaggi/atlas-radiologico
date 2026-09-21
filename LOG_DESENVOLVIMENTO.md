@@ -2754,3 +2754,64 @@ globalizar nenhuma classificação.
 ### Commit após aprovação
 
 Ainda não criado.
+
+## ALTERAÇÃO 044 — Merge aditivo de imagens local→nuvem
+
+**Número da alteração:** 044
+**Data:** 20/09/2026
+
+### Objetivo
+
+Incorporar as imagens novas do localhost na nuvem sem sobrescrever o SRS mais
+novo da nuvem (divergência cruzada).
+
+### Estado antes
+
+O push integral escrevia `DATA`/`SRS`/`REVIEW`/`SESSIONLOG` do local, o que
+sobrescreveria o SRS 44 da nuvem com o 41 local; e o pull nuvem→local, quando o
+local tinha timestamp mais novo, descartava as imagens que existiam só na nuvem.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/snapshots-ownership.test.js`
+- `tests/critical-flows.test.js` (âncoras)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- `imageIdentityKeys` + `unionEntryImages` (dedup por publicId/URL, ownership).
+- Pull (`mergeEntryNonDestructive`) e push (`mergeEntryForImagePush`) usam união
+  aditiva de imagens.
+- `mergeThisDeviceImagesToCloud` (server-only, preserva SRS/REVIEW/SESSIONLOG,
+  escreve e verifica o servidor).
+- `buildSyncAudit.crossDivergent` + aviso e botão na UI.
+
+### Segurança
+
+Nunca apaga imagem; nunca move/reatribui ownership (conflito registrado e
+pulado); preserva SRS/REVIEW/SESSIONLOG/ordens remotas; sem upload Cloudinary;
+sucesso só com confirmação do servidor; boot continua sem pull automático.
+
+### Testes realizados
+
+- `node --test tests/snapshots-ownership.test.js`: 46 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 101 PASS, 0 FAIL;
+- `node --test tests/srs-dashboard.test.js`: 17 PASS, 0 FAIL;
+- `node --test tests/classification-integrity.test.js`: 24 PASS, 0 FAIL;
+- `node --test tests/local-scope-prefs.test.js`: 14 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 138 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 11 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Local (58/73, SRS 41) + nuvem (53/66, SRS 44) → nuvem 58/73 com SRS 44; o site
+publicado, ao "Atualizar deste backup/nuvem", passa a receber 58/73 sem reduzir o
+SRS.
+
+### Commit após aprovação
+
+Ainda não criado.

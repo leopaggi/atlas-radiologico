@@ -184,10 +184,10 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // cancelLesionReview()/CANCELLABLE_REVIEW_STATUSES no módulo
   // LESION_REVISIONS (antes das âncoras) e o CSS do modal de cancelamento no
   // <style> do topo. As quatro âncoras deslocam igualmente.
-  assert.equal(recovery.line, 5891);
-  assert.equal(brokenArtifacts.line, 5881);
-  assert.equal(loadData.line, 8433);
-  assert.equal(importHandler.line, 11422);
+  assert.equal(recovery.line, 6061);
+  assert.equal(brokenArtifacts.line, 6051);
+  assert.equal(loadData.line, 8603);
+  assert.equal(importHandler.line, 11592);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

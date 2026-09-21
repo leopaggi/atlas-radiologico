@@ -549,3 +549,99 @@ test('SYNC PATHS: escrita e leitura usam os MESMOS caminhos (atlas_state/main + 
   assert.match(html, /const FB_META_REF = \(\) => fbDb\.collection\('atlas_state'\)\.doc\('main'\);/);
   assert.match(html, /const FB_CHUNK_REF = \(i\) => fbDb\.collection\('atlas_state'\)\.doc\('data_chunk_'\+i\);/);
 });
+
+
+// ===========================================================================
+// MERGE ADITIVO DE IMAGENS (pull nuvem→local e push local→nuvem)
+// ===========================================================================
+
+const IDENTITY_KEYS_FN = extractFunction(html, 'imageIdentityKeys');
+const UNION_FN = extractFunction(html, 'unionEntryImages');
+const MERGE_PUSH_FN = extractFunction(html, 'mergeEntryForImagePush');
+const MERGE_PUSH_CLOUD_FN = extractFunction(html, 'mergeThisDeviceImagesToCloud');
+
+function buildUnionCtx(){
+  const ctx = { console, JSON, Object, Array, String, Number, Map, Set };
+  vm.createContext(ctx);
+  vm.runInContext(OWNERSHIP_SOURCE + '\n' + 'let PULL_IMAGE_OWNERSHIP_CONFLICTS=[];let PUSH_IMAGE_OWNERSHIP_CONFLICTS=[];\n' + IDENTITY_KEYS_FN.source + '\n' + UNION_FN.source, ctx, { filename: 'union.js' });
+  ctx.__pull = () => vm.runInContext('PULL_IMAGE_OWNERSHIP_CONFLICTS', ctx);
+  return ctx;
+}
+const img = (over) => Object.assign({ data:'https://res.cloudinary.com/x/image/upload/v1/atlas-radiologico/a.jpg', publicId:'atlas-radiologico/a', lesionId:'seed_1' }, over || {});
+
+test('UNION IMAGENS: base + novas (sem duplicar); nunca apaga a base', () => {
+  const ctx = buildUnionCtx();
+  const base = [img({ publicId:'atlas-radiologico/1', data:'https://res.cloudinary.com/x/image/upload/v1/atlas-radiologico/1.jpg' })];
+  const add = [ base[0], img({ publicId:'atlas-radiologico/2', data:'https://res.cloudinary.com/x/image/upload/v1/atlas-radiologico/2.jpg' }) ];
+  const out = ctx.unionEntryImages(base, add, { id:'seed_1', name:'L' }, [], 'pull');
+  assert.equal(out.length, 2, 'não duplica a existente e adiciona a nova');
+  // nunca apaga: base + nada => base
+  assert.equal(ctx.unionEntryImages(base, [], { id:'seed_1' }, [], 'pull').length, 1);
+  // add vazio e base com 2 => 2
+  const two = [base[0], add[1]];
+  assert.equal(ctx.unionEntryImages(two, [], { id:'seed_1' }, [], 'pull').length, 2);
+});
+
+test('UNION IMAGENS: dedup por publicId e por URL normalizada', () => {
+  const ctx = buildUnionCtx();
+  const a = img({ publicId:'atlas-radiologico/x', data:'https://res.cloudinary.com/x/image/upload/v1/atlas-radiologico/x.jpg' });
+  const aUrlVariant = img({ publicId:'', data:'https://res.cloudinary.com/x/image/upload/v999/atlas-radiologico/x.jpg?foo=1#bar' });
+  const out = ctx.unionEntryImages([a], [aUrlVariant], { id:'seed_1' }, [], 'pull');
+  assert.equal(out.length, 1, 'mesmo asset (publicId/URL normalizada) não duplica');
+});
+
+test('UNION IMAGENS: ownership igual permite incorporar; conflitante é BLOQUEADO e reportado', () => {
+  const ctx = buildUnionCtx();
+  const okImg = img({ publicId:'atlas-radiologico/ok', data:'https://res.cloudinary.com/x/image/upload/v1/atlas-radiologico/ok.jpg', lesionId:'seed_1' });
+  const out = ctx.unionEntryImages([], [okImg], { id:'seed_1', name:'L' }, [], 'pull');
+  assert.equal(out.length, 1, 'mesma lesão => incorpora');
+  const foreign = img({ publicId:'atlas-radiologico/f', data:'https://res.cloudinary.com/x/image/upload/v1/atlas-radiologico/f.jpg', lesionId:'seed_9' });
+  const sink = [];
+  const out2 = ctx.unionEntryImages([], [foreign], { id:'seed_1', name:'L' }, sink, 'pull');
+  assert.equal(out2.length, 0, 'imagem de OUTRA lesão não é movida');
+  assert.equal(sink.length, 1, 'conflito reportado');
+  assert.equal(sink[0].fromLesionId, 'seed_9');
+});
+
+test('UNION IMAGENS: imagem sem dono (lesionId vazio) pode ser incorporada', () => {
+  const ctx = buildUnionCtx();
+  const orphan = img({ publicId:'atlas-radiologico/o', data:'https://res.cloudinary.com/x/image/upload/v1/atlas-radiologico/o.jpg', lesionId:'' });
+  const out = ctx.unionEntryImages([], [orphan], { id:'seed_1' }, [], 'pull');
+  assert.equal(out.length, 1);
+});
+
+test('MERGE PUSH (estático): servidor-only, union aditiva, preserva SRS/REVIEW/SESSIONLOG, verifica servidor', () => {
+  const src = MERGE_PUSH_CLOUD_FN.source;
+  assert.match(src, /readShardedState\(/, 'lê do servidor');
+  assert.match(src, /mergeEntryForImagePush\(l, r\)/);
+  assert.match(src, /mergeSRSPreservingNewest\(SRS, remote && remote\.srs\)/, 'SRS remoto preservado (mais novo vence)');
+  assert.match(src, /mergeReviewPreservingProgress\(REVIEW, remote && remote\.review\)/);
+  assert.match(src, /mergeSessionLogPreservingProgress\(SESSIONLOG, remote && remote\.sessionLog\)/);
+  assert.match(src, /writeShardedStateSerialized\(20000\)/);
+  assert.match(src, /readCloudAuditFromServer\(\)/, 'verificação pós-merge no servidor');
+  assert.doesNotMatch(src, /uploadToCloudinary|uploadPendingImage/, 'não reenvia imagens ao Cloudinary');
+  assert.match(src, /server\.totalImages >= localCounters\.totalImages/, 'sucesso só se as imagens estão no servidor');
+  assert.match(src, /server\.srs >= beforeServer\.srs/, 'sucesso só se o SRS não regrediu');
+});
+
+test('MERGE PUSH (estático): mergeEntryForImagePush usa o remoto como base e só soma imagens locais', () => {
+  const src = MERGE_PUSH_FN.source;
+  assert.match(src, /mergeEntryNonDestructive\(localEntry, remoteEntry\)/);
+  assert.match(src, /unionEntryImages\(remoteEntry\.images, localEntry\.images, merged, PUSH_IMAGE_OWNERSHIP_CONFLICTS, 'push'\)/);
+});
+
+test('AUDIT: divergência cruzada é detectada (imagens local>nuvem e SRS nuvem>local)', () => {
+  // buildSyncAudit devolve crossDivergent quando cada lado é mais novo num domínio
+  const src = extractFunction(html, 'buildSyncAudit').source;
+  assert.match(src, /localImagesAhead = !!cloud && local\.totalImages > cloud\.totalImages/);
+  assert.match(src, /cloudSrsAhead = !!cloud && cloud\.srs > local\.srs/);
+  assert.match(src, /crossDivergent = !!\(cloud && localImagesAhead && cloudSrsAhead\)/);
+  assert.match(src, /return \{ local, cloud, cloudError, divergent, localImagesAhead, cloudSrsAhead, crossDivergent \}/);
+});
+
+test('AUDIT (UI): aviso de divergência cruzada e botão de merge de imagens existem', () => {
+  assert.match(html, /dados mais novos em áreas diferentes/);
+  assert.match(html, /id="sync-merge-images"/);
+  assert.match(html, /Mesclar imagens deste dispositivo na nuvem/);
+  assert.match(html, /mergeBtn\.hidden = !audit\.crossDivergent/);
+});
