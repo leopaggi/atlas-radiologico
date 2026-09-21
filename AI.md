@@ -166,6 +166,78 @@ você (a IA lendo isso agora) quanto pra qualquer IA que trabalhar aqui
 depois. O objetivo é nunca mais alguém (humano ou IA) refazer do zero algo
 que já foi resolvido, por falta de contexto.
 
+## Atualização 2026-09-21 — importador externo Radiopaedia (MVP, metadata-only)
+
+- Userscript separado em `tools/radiopaedia-to-atlas.user.js` (NÃO faz parte
+  do bundle; não separar o resto do app por causa dele).
+- Receptor no fim do `index.html`, de propósito: `tests/critical-flows.test.js`
+  usa âncoras de linha exatas (6061/6051/8603/11592) — inserções antes delas
+  quebram o teste. O gancho pós-boot envolve `loadData` por fora
+  (`_loadDataSemImport`), sem editar o corpo original.
+- Regras do MVP (não afrouxar sem pedido): nenhuma gravação automática
+  (nenhum caminho de import chama `saveData`/`pushToFirebaseNow` nem muta
+  `DATA`); similaridade só em faixas na UI (nunca "score %"); todo conteúdo
+  externo passa por `esc()`; fragmento sempre limpo com `history.replaceState`.
+- Etapa 2 (NÃO implementar ainda): imagens, scraping em massa, IA, tradução,
+  Cloudinary, classificação automática.
+- Testes: `tests/external-import.test.js` (67 PASS: casos A–G
+  anti-falso-positivo + 20 itens v2 de PT/tags/descrição/revisão/segurança +
+  6 da instrução de IA + 8 anti-duplicata + 12 da consolidação mesmo-id) e
+  `tests/quiz-image-desc.test.js` (8 PASS). Suíte total: 628 PASS,
+  5 TODO + 1 FAIL histórico conhecido em `duplicate-detection.test.js`.
+- Consolidação mesmo-id: `consolidateSameIdDuplicates(id, {expectedPublicIds})`
+  SÓ via console, com snapshot + aborts; remoção por índice, nunca filter por
+  id; SRS/revisões intocados; restauração sempre manual. Draft do importador
+  já encaminha a referência aos links (persiste só no Salvar).
+- Salvar do formulário tem trava `formSaving` + bloqueio
+  `findExactLesionMatch()` em lesão nova; nunca criar silenciosamente;
+  forçar duplicata exige dupla confirmação.
+- v2: nunca traduzir à força (original preservado); tags só de vocabulário
+  seguro; `aiReview` é só marcação local — sem fetch, sem LLM, sem
+  Cloudinary no importador.
+
+## Atualização 2026-09-21 — produtividade de imagens (assignedAt + dashboard)
+
+- `assignedAt` (ISO) nasce SÓ no Salvar/Concluído, para imagens novas;
+  pending/cancel/falha nunca geram; históricas nunca ganham retroativo.
+- Mesma imagem (mesmo `stableImageKeyV208` não-vazio) conta 1; dia LOCAL.
+- Sync (pull/push/merge) nunca gera; no `unionEntryImages` fica o mais
+  antigo válido. Ownership/dedup intactos.
+- Dashboard: KPI + gráfico semanal + totais, com refresh ao vivo nos saves.
+- Âncoras do `critical-flows.test.js`: 6056/6066/8608/11602 (atualizar se
+  inserir linhas antes delas; CSS do grid deve ser editado in-place).
+- Testes: `tests/image-productivity.test.js` (20 PASS). Suíte: 602 PASS,
+  5 TODO + 1 FAIL histórico em `duplicate-detection.test.js`.
+
+## Atualização 2026-09-21 — descrição geral do quadro de imagens
+
+- Campo canônico de descrição de imagem é `label`; nunca criar
+  `collageDescription`/`boardDescription`.
+- Descrição do quadro é METADADO (vira o `label` no Inserir); o canvas só
+  recebe as sequências individuais, como antes. Composição, resolução,
+  layouts, Cloudinary e sync intocados.
+- Assinatura `openCollageBuilder(..., existingLabel?)`; âncora
+  importHandler: 11651. Testes: `tests/collage-desc.test.js` (15 PASS).
+  Suíte: 625 PASS, 5 TODO + 1 FAIL histórico em `duplicate-detection.test.js`.
+
+## Atualização 2026-09-21 — contadores de imagem na sidebar
+
+- Linha única `TOTAL · 🖼IMAGENS · X/Y` por seção/site, zeros visíveis,
+  tooltip nativo; nome com ellipsis.
+- `sectionStats`/`siteStats`/`buildSidebarImageStats` puros, mesmo conjunto
+  do `structure()`; estoque atual, sem `assignedAt`; sem listeners novos;
+  refresh pelo `renderAll()` existente (Quiz incluído).
+- Âncoras do `critical-flows.test.js`: 6063/6073/8615/11670 (CSS novo e
+  renderTree antes do handler). Testes: `tests/sidebar-image-stats.test.js`
+  (20 PASS).   Suíte: 663 PASS, 5 TODO + 1 FAIL histórico.
+
+## Atualização 2026-09-21 — sidebar só cobertura (X/Y)
+
+- Linha mostra só `38/243` (`cov-num` âmbar + `cov-den` discreto); cálculo
+  (`sectionStats`/`siteStats`) reutilizado, sem total/absoluto/🖼.
+- Testes: `tests/sidebar-image-stats.test.js` (22 PASS). Suíte: 665 PASS,
+  5 TODO + 1 FAIL histórico.
+
 ## Atualização 2026-09-18 — auditoria de `altPlacements`
 
 - Regra obrigatória de manutenção: **toda alteração do `index.html` deve ser entregue junto com `AI.md` e `README.md` atualizados**.

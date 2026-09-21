@@ -127,6 +127,13 @@ body{
 .tree-site .drag-handle:active{cursor:grabbing;}
 .tree-site.dragging{opacity:.4;}
 .tree-site.drag-over{outline:2px dashed var(--teal);outline-offset:-2px;background:var(--teal-dim);}
+/* Cobertura visual por seção/site (X/Y numa linha: nome à esquerda, stats à
+   direita; nome trunca com ellipsis na sidebar estreita). */
+.tree-section-head .tree-name,.tree-site .tree-site-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tree-section-head .tree-cov,.tree-site .tree-cov{flex-shrink:0;white-space:nowrap;}
+.tree-cov .cov-num{color:var(--amber);}
+.tree-cov .cov-den{opacity:.75;}
+@media(max-width:760px){.tree-section-head .tree-cov,.tree-site .tree-cov{font-size:10px;}}
 
 #sidebar-foot{
   border-top:1px solid var(--line);
@@ -1626,8 +1633,8 @@ body{
     grid-template-columns:110px minmax(0,1fr) 62px 34px!important;
   }
 }
-/* ALTERACAO 005 - layout exclusivo do dashboard principal. */.study-dashboard.study-dashboard-home{display:block!important;width:min(calc(100vw - 40px),1780px)!important;max-width:1780px!important;max-height:calc(100vh - 24px)!important;padding:16px 18px!important;overflow:auto!important}.study-dashboard-home .study-dashboard-heading{margin:0 0 14px}.study-dashboard-home .study-dashboard-heading h2{margin:0 0 4px}.study-dashboard-home .study-dashboard-heading .modal-sub{margin:0}.study-dashboard-home>.study-top-kpis{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:14px!important;margin:0 0 14px!important}.study-dashboard-home .study-kpi{min-width:0;padding:15px 16px}.study-dashboard-home .study-kpi .v{font-size:21px}.study-dashboard-home .study-kpi .t{font-size:11.5px}.study-dashboard-home .study-dashboard-main{display:grid;grid-template-columns:minmax(0,1.10fr) minmax(0,1.12fr) minmax(0,.98fr);grid-template-areas:"start performance state" "start cycle cycle";gap:14px;align-items:start}.study-dashboard-home .study-start-card{grid-area:start!important;align-self:start!important;min-width:0!important;width:auto!important;height:auto!important;min-height:0!important}.study-dashboard-home .study-performance-card{grid-area:performance!important;min-width:0;min-height:308px!important;height:auto!important;box-sizing:border-box;padding:16px 18px}.study-dashboard-home .study-state-card{grid-area:state!important;min-width:0;min-height:308px!important;height:auto!important;box-sizing:border-box;padding:16px 18px}.study-dashboard-home .study-chart h3{font-size:14px;line-height:1.25}.study-dashboard-home .study-chart-sub{font-size:11px;line-height:1.35;margin-bottom:12px}.study-dashboard-home .study-cycle-feature{grid-area:cycle!important;align-self:start!important;min-width:0!important;width:auto!important;height:auto!important;min-height:0!important;margin:0!important;padding:4px 8px 6px!important}.study-dashboard-home .study-performance-card .study-line-svg{display:block;width:100%;height:208px!important;min-height:208px!important;max-height:208px!important}.study-dashboard-home .study-performance-card .study-chart-empty{min-height:0!important;margin:3px 0 0!important;padding:3px 6px!important}.study-dashboard-home .study-state-card .study-donut-row{gap:clamp(12px,1.2vw,20px);min-height:225px}.study-dashboard-home .study-state-card .study-donut{width:clamp(160px,10.5vw,188px);height:clamp(160px,10.5vw,188px)}.study-dashboard-home .study-state-card .study-donut:after{inset:22px}.study-dashboard-home .study-upcoming-case b{font-size:11px}.study-dashboard-home .study-upcoming-case small{font-size:9.2px}.study-dashboard-home .study-upcoming-time{font-size:9.5px}.study-dashboard-home .study-cycle-feature .study-cycle-mini{padding:10px 10px 6px!important}.study-dashboard-home .study-cycle-feature .study-cycle-head{margin-bottom:10px!important}.study-dashboard-home .study-cycle-feature .study-cycle-head>div>b{font-size:13.5px!important}.study-dashboard-home .study-cycle-feature .study-cycle-head>div>span{font-size:10.5px!important}.study-dashboard-home .study-cycle-feature .study-cycle-rows{gap:5px!important}.study-dashboard-home .study-cycle-feature .study-cycle-track{height:14px!important}.study-dashboard-home .study-cycle-feature .study-cycle-name{font-size:10.5px!important}.study-dashboard-home .study-cycle-feature .study-cycle-count,.study-dashboard-home .study-cycle-feature .study-cycle-row>b{font-size:9.5px!important}.study-dashboard-home .study-cycle-feature .study-cycle-legend{margin-top:9px!important;gap:6px 13px!important;font-size:9.5px!important}.study-dashboard-home .study-cycle-feature .study-cycle-summary{margin-top:8px!important;padding-top:8px!important}.study-dashboard-home .study-dashboard-bottom{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1fr);gap:14px;align-items:stretch;margin-top:14px}.study-dashboard-home .study-dashboard-bottom>.study-chart,.study-dashboard-home .study-dashboard-bottom>.study-cycle-overall{grid-area:auto!important;grid-column:auto!important;grid-row:auto!important;min-width:0!important;width:auto!important;height:100%!important;min-height:0!important;margin:0!important;box-sizing:border-box}.study-dashboard-home .study-domain-card h3{font-size:14px}.study-dashboard-home .study-domain-name{font-size:11px}.study-dashboard-home .study-domain-pct{font-size:11px}.study-dashboard-home .study-cycle-overall-head b{font-size:15px}.study-dashboard-home .study-cycle-overall-head span{font-size:11px}.study-dashboard-home .study-cycle-overall-values b{font-size:14px}.study-dashboard-home .study-cycle-overall-values span{font-size:10px}.study-dashboard-home .study-cycle-tip p{font-size:11px}.study-dashboard-home>.study-embedded-section{width:auto!important;margin:14px 0 0!important}.study-dashboard-home>.study-close-row{width:auto!important;margin:12px 0 0!important}@media(max-width:1180px){.study-dashboard.study-dashboard-home{display:block!important;width:96vw!important;max-height:none!important}.study-dashboard-home>.study-top-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}.study-dashboard-home .study-dashboard-main{display:flex;flex-direction:column;gap:12px}.study-dashboard-home .study-dashboard-bottom{display:flex;flex-direction:column;gap:12px;margin-top:12px}.study-dashboard-home .study-performance-card,.study-dashboard-home .study-state-card{min-height:0!important}.study-dashboard-home .study-performance-card .study-line-svg{height:175px!important;min-height:175px!important;max-height:175px!important}.study-dashboard-home .study-dashboard-bottom>.study-chart,.study-dashboard-home .study-dashboard-bottom>.study-cycle-overall{height:auto!important}}
-@media(min-width:1181px){.study-dashboard-home .study-start-card{align-self:stretch!important}.study-dashboard-home .study-performance-card,.study-dashboard-home .study-state-card{min-height:234px!important;padding:14px 16px}.study-dashboard-home .study-performance-card .study-line-svg{height:148px!important;min-height:148px!important;max-height:148px!important}.study-dashboard-home .study-state-card .study-donut-row{min-height:164px}.study-dashboard-home .study-state-card .study-donut{width:clamp(145px,9vw,162px);height:clamp(145px,9vw,162px)}.study-dashboard-home .study-cycle-feature{align-self:stretch!important;height:100%!important;box-sizing:border-box}.study-dashboard-home .study-cycle-feature .study-cycle-rows{gap:4px!important}.study-dashboard-home .study-cycle-feature .study-cycle-row{grid-template-columns:minmax(160px,190px) minmax(0,1fr) 76px 40px!important;gap:8px!important}.study-dashboard-home .study-cycle-feature .study-cycle-name{font-size:11.5px!important;line-height:1.15}.study-dashboard-home .study-cycle-feature .study-cycle-track{height:15px!important}.study-dashboard-home .study-cycle-feature .study-cycle-track em{font-size:9px!important;line-height:1}.study-dashboard-home .study-cycle-feature .study-cycle-count,.study-dashboard-home .study-cycle-feature .study-cycle-row>b{font-size:10.5px!important;line-height:1.1}.study-dashboard-home .study-cycle-feature .study-cycle-legend{font-size:10px!important;line-height:1.25}.study-dashboard-home .study-cycle-feature .study-cycle-summary b{font-size:10.5px!important}.study-dashboard-home .study-cycle-feature .study-cycle-summary span{font-size:9.25px!important;line-height:1.2}.study-dashboard-home .study-cycle-overall-values{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;width:100%;margin-top:12px}.study-dashboard-home .study-cycle-overall-values>div{width:auto!important;min-width:0;text-align:center;display:flex;flex-direction:column;align-items:center;padding:0 4px}.study-dashboard-home .study-cycle-overall-values b{font-size:14px;line-height:1.2}.study-dashboard-home .study-cycle-overall-values span{font-size:10.5px;line-height:1.25;margin-top:4px;white-space:normal;text-align:center}}</style>
+/* ALTERACAO 005 - layout exclusivo do dashboard principal. */.study-dashboard.study-dashboard-home{display:block!important;width:min(calc(100vw - 40px),1780px)!important;max-width:1780px!important;max-height:calc(100vh - 24px)!important;padding:16px 18px!important;overflow:auto!important}.study-dashboard-home .study-dashboard-heading{margin:0 0 14px}.study-dashboard-home .study-dashboard-heading h2{margin:0 0 4px}.study-dashboard-home .study-dashboard-heading .modal-sub{margin:0}.study-dashboard-home>.study-top-kpis{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:14px!important;margin:0 0 14px!important}.study-dashboard-home .study-kpi{min-width:0;padding:15px 16px}.study-dashboard-home .study-kpi .v{font-size:21px}.study-dashboard-home .study-kpi .t{font-size:11.5px}.study-dashboard-home .study-dashboard-main{display:grid;grid-template-columns:minmax(0,1.10fr) minmax(0,.56fr) minmax(0,.56fr) minmax(0,.98fr);grid-template-areas:"start performance imgs state" "start cycle cycle cycle";gap:14px;align-items:start}.study-dashboard-home .study-start-card{grid-area:start!important;align-self:start!important;min-width:0!important;width:auto!important;height:auto!important;min-height:0!important}.study-dashboard-home .study-performance-card{grid-area:performance!important;min-width:0;min-height:308px!important;height:auto!important;box-sizing:border-box;padding:16px 18px}.study-dashboard-home .study-state-card{grid-area:state!important;min-width:0;min-height:308px!important;height:auto!important;box-sizing:border-box;padding:16px 18px}.study-dashboard-home .study-chart h3{font-size:14px;line-height:1.25}.study-dashboard-home .study-chart-sub{font-size:11px;line-height:1.35;margin-bottom:12px}.study-dashboard-home .study-cycle-feature{grid-area:cycle!important;align-self:start!important;min-width:0!important;width:auto!important;height:auto!important;min-height:0!important;margin:0!important;padding:4px 8px 6px!important}.study-dashboard-home .study-performance-card .study-line-svg{display:block;width:100%;height:208px!important;min-height:208px!important;max-height:208px!important}.study-dashboard-home .study-performance-card .study-chart-empty{min-height:0!important;margin:3px 0 0!important;padding:3px 6px!important}.study-dashboard-home .study-state-card .study-donut-row{gap:clamp(12px,1.2vw,20px);min-height:225px}.study-dashboard-home .study-state-card .study-donut{width:clamp(160px,10.5vw,188px);height:clamp(160px,10.5vw,188px)}.study-dashboard-home .study-state-card .study-donut:after{inset:22px}.study-dashboard-home .study-upcoming-case b{font-size:11px}.study-dashboard-home .study-upcoming-case small{font-size:9.2px}.study-dashboard-home .study-upcoming-time{font-size:9.5px}.study-dashboard-home .study-cycle-feature .study-cycle-mini{padding:10px 10px 6px!important}.study-dashboard-home .study-cycle-feature .study-cycle-head{margin-bottom:10px!important}.study-dashboard-home .study-cycle-feature .study-cycle-head>div>b{font-size:13.5px!important}.study-dashboard-home .study-cycle-feature .study-cycle-head>div>span{font-size:10.5px!important}.study-dashboard-home .study-cycle-feature .study-cycle-rows{gap:5px!important}.study-dashboard-home .study-cycle-feature .study-cycle-track{height:14px!important}.study-dashboard-home .study-cycle-feature .study-cycle-name{font-size:10.5px!important}.study-dashboard-home .study-cycle-feature .study-cycle-count,.study-dashboard-home .study-cycle-feature .study-cycle-row>b{font-size:9.5px!important}.study-dashboard-home .study-cycle-feature .study-cycle-legend{margin-top:9px!important;gap:6px 13px!important;font-size:9.5px!important}.study-dashboard-home .study-cycle-feature .study-cycle-summary{margin-top:8px!important;padding-top:8px!important}.study-dashboard-home .study-dashboard-bottom{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1fr);gap:14px;align-items:stretch;margin-top:14px}.study-dashboard-home .study-dashboard-bottom>.study-chart,.study-dashboard-home .study-dashboard-bottom>.study-cycle-overall{grid-area:auto!important;grid-column:auto!important;grid-row:auto!important;min-width:0!important;width:auto!important;height:100%!important;min-height:0!important;margin:0!important;box-sizing:border-box}.study-dashboard-home .study-domain-card h3{font-size:14px}.study-dashboard-home .study-domain-name{font-size:11px}.study-dashboard-home .study-domain-pct{font-size:11px}.study-dashboard-home .study-cycle-overall-head b{font-size:15px}.study-dashboard-home .study-cycle-overall-head span{font-size:11px}.study-dashboard-home .study-cycle-overall-values b{font-size:14px}.study-dashboard-home .study-cycle-overall-values span{font-size:10px}.study-dashboard-home .study-cycle-tip p{font-size:11px}.study-dashboard-home>.study-embedded-section{width:auto!important;margin:14px 0 0!important}.study-dashboard-home>.study-close-row{width:auto!important;margin:12px 0 0!important}@media(max-width:1180px){.study-dashboard.study-dashboard-home{display:block!important;width:96vw!important;max-height:none!important}.study-dashboard-home>.study-top-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}.study-dashboard-home .study-dashboard-main{display:flex;flex-direction:column;gap:12px}.study-dashboard-home .study-dashboard-bottom{display:flex;flex-direction:column;gap:12px;margin-top:12px}.study-dashboard-home .study-performance-card,.study-dashboard-home .study-state-card{min-height:0!important}.study-dashboard-home .study-performance-card .study-line-svg{height:175px!important;min-height:175px!important;max-height:175px!important}.study-dashboard-home .study-dashboard-bottom>.study-chart,.study-dashboard-home .study-dashboard-bottom>.study-cycle-overall{height:auto!important}}
+@media(min-width:1181px){.study-dashboard-home .study-start-card{align-self:stretch!important}.study-dashboard-home .study-performance-card,.study-dashboard-home .study-state-card,.study-dashboard-home .study-imgs-card{min-height:234px!important;padding:14px 16px}.study-dashboard-home .study-performance-card .study-line-svg,.study-dashboard-home .study-imgs-card .study-line-svg{height:148px!important;min-height:148px!important;max-height:148px!important}.study-dashboard-home .study-state-card .study-donut-row{min-height:164px}.study-dashboard-home .study-state-card .study-donut{width:clamp(145px,9vw,162px);height:clamp(145px,9vw,162px)}.study-dashboard-home .study-cycle-feature{align-self:stretch!important;height:100%!important;box-sizing:border-box}.study-dashboard-home .study-cycle-feature .study-cycle-rows{gap:4px!important}.study-dashboard-home .study-cycle-feature .study-cycle-row{grid-template-columns:minmax(160px,190px) minmax(0,1fr) 76px 40px!important;gap:8px!important}.study-dashboard-home .study-cycle-feature .study-cycle-name{font-size:11.5px!important;line-height:1.15}.study-dashboard-home .study-cycle-feature .study-cycle-track{height:15px!important}.study-dashboard-home .study-cycle-feature .study-cycle-track em{font-size:9px!important;line-height:1}.study-dashboard-home .study-cycle-feature .study-cycle-count,.study-dashboard-home .study-cycle-feature .study-cycle-row>b{font-size:10.5px!important;line-height:1.1}.study-dashboard-home .study-cycle-feature .study-cycle-legend{font-size:10px!important;line-height:1.25}.study-dashboard-home .study-cycle-feature .study-cycle-summary b{font-size:10.5px!important}.study-dashboard-home .study-cycle-feature .study-cycle-summary span{font-size:9.25px!important;line-height:1.2}.study-dashboard-home .study-cycle-overall-values{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;width:100%;margin-top:12px}.study-dashboard-home .study-cycle-overall-values>div{width:auto!important;min-width:0;text-align:center;display:flex;flex-direction:column;align-items:center;padding:0 4px}.study-dashboard-home .study-cycle-overall-values b{font-size:14px;line-height:1.2}.study-dashboard-home .study-cycle-overall-values span{font-size:10.5px;line-height:1.25;margin-top:4px;white-space:normal;text-align:center}}</style>
 <style>@media(min-width:1181px){.study-dashboard-home .study-upcoming{display:flex;flex:1;flex-direction:column;min-height:0}.study-dashboard-home .study-upcoming-head{flex:none}.study-dashboard-home .study-upcoming-head b{font-size:13px}.study-dashboard-home .study-upcoming-head span:not(.study-upcoming-count){font-size:10.5px}.study-dashboard-home .study-upcoming-list{display:flex;flex:1;flex-direction:column;gap:6px!important;min-height:0}.study-dashboard-home .study-upcoming-list:has(>.study-upcoming-row:nth-child(5))>.study-upcoming-row{flex:1 1 56px;min-height:56px}.study-dashboard-home .study-upcoming-row{grid-template-columns:5px 11px minmax(0,1fr) auto!important;gap:9px;padding:10px 11px}.study-dashboard-home .study-upcoming-accent{width:5px;min-height:34px}.study-dashboard-home .study-upcoming-row .study-upcoming-dot{width:9px;height:9px}.study-dashboard-home .study-upcoming-case b{font-size:12.5px;line-height:1.25}.study-dashboard-home .study-upcoming-case small{font-size:10.5px;line-height:1.25;margin-top:3px}.study-dashboard-home .study-upcoming-time{font-size:11px;line-height:1.2}.study-dashboard-home .study-cycle-feature .study-cycle-rows{gap:2px!important}.study-dashboard-home .study-cycle-feature .study-cycle-row{grid-template-columns:190px minmax(0,1fr) 82px 44px!important;gap:8px!important}.study-dashboard-home .study-cycle-feature .study-cycle-name{font-size:12.5px!important;line-height:1.15}.study-dashboard-home .study-cycle-feature .study-cycle-track{height:17px!important}.study-dashboard-home .study-cycle-feature .study-cycle-track em{font-size:10px!important;line-height:1}.study-dashboard-home .study-cycle-feature .study-cycle-count,.study-dashboard-home .study-cycle-feature .study-cycle-row>b{font-size:11.5px!important;line-height:1.1}.study-dashboard-home .study-cycle-feature .study-cycle-legend{font-size:10.5px!important;line-height:1.2;margin-top:7px!important}.study-dashboard-home .study-cycle-feature .study-cycle-summary{margin-top:6px!important;padding-top:6px!important}.study-dashboard-home .study-cycle-feature .study-cycle-summary b{font-size:11px!important}.study-dashboard-home .study-cycle-feature .study-cycle-summary span{font-size:10px!important;line-height:1.15}.study-dashboard-home .study-cycle-overall-track b{font-size:13.5px}.study-dashboard-home .study-cycle-overall-values{gap:12px!important;margin-top:16px!important}.study-dashboard-home .study-cycle-overall-values>div{min-height:54px;padding:4px 8px!important;justify-content:flex-start}.study-dashboard-home .study-cycle-overall-values>div+div{border-left:1px solid #294157}.study-dashboard-home .study-cycle-overall-values b{font-size:15px!important;line-height:1.2}.study-dashboard-home .study-cycle-overall-values span{font-size:10.5px!important;line-height:1.3;margin-top:5px!important;white-space:normal!important}}</style>
 <style>@media(min-width:1181px){.study-dashboard-home .study-cycle-feature .study-cycle-rows{gap:1px!important}.study-dashboard-home .study-cycle-feature .study-cycle-row{grid-template-columns:200px minmax(0,1fr) 86px 46px!important;gap:8px!important}.study-dashboard-home .study-cycle-feature .study-cycle-name{font-size:13.5px!important;line-height:1}.study-dashboard-home .study-cycle-feature .study-cycle-track em{font-size:11px!important;line-height:1}.study-dashboard-home .study-cycle-feature .study-cycle-count,.study-dashboard-home .study-cycle-feature .study-cycle-row>b{font-size:12.5px!important;line-height:1}.study-dashboard-home .study-cycle-feature .study-cycle-legend{font-size:11.5px!important;line-height:1.1;margin-top:5px!important}.study-dashboard-home .study-cycle-feature .study-cycle-summary{margin-top:4px!important;padding-top:4px!important}.study-dashboard-home .study-cycle-feature .study-cycle-summary b{font-size:11.5px!important;line-height:1}.study-dashboard-home .study-cycle-feature .study-cycle-summary span{font-size:11px!important;line-height:1.05}.study-dashboard-home .study-cycle-overall-values>div{display:grid!important;grid-template-columns:12px minmax(0,1fr);grid-template-rows:auto auto;column-gap:8px;align-items:start;text-align:left}.study-dashboard-home .study-cycle-overall-values>div:before{content:'';grid-column:1;grid-row:1 / 3;width:10px;height:10px;border-radius:50%;margin-top:4px;box-shadow:0 0 8px currentColor}.study-dashboard-home .study-cycle-overall-values>div:nth-child(1):before{background:#16d99a;color:#16d99a}.study-dashboard-home .study-cycle-overall-values>div:nth-child(2):before{background:#218cff;color:#218cff}.study-dashboard-home .study-cycle-overall-values>div:nth-child(3):before{background:#8b4df0;color:#8b4df0}.study-dashboard-home .study-cycle-overall-values>div:nth-child(4):before{background:#ff8b38;color:#ff8b38}.study-dashboard-home .study-cycle-overall-values>div:nth-child(5):before{background:#49647a;color:#49647a}.study-dashboard-home .study-cycle-overall-values b,.study-dashboard-home .study-cycle-overall-values span{grid-column:2;text-align:left}}.study-dashboard.study-custom-session{display:block!important;width:min(92vw,860px)!important;max-width:860px!important;max-height:calc(100vh - 48px)!important;overflow:auto!important;padding:24px!important}.study-custom-session .quiz-integrated-title{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:16px}.study-custom-session .quiz-integrated-title b{font-size:18px;line-height:1.25}.study-custom-session .quiz-integrated-title span{max-width:230px;font-size:11px;line-height:1.35;text-align:right;white-space:normal}.study-custom-session>.study-top-kpis{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:12px!important;margin:0 0 16px!important}.study-custom-session .study-kpi{min-width:0;padding:14px}.study-custom-session .study-kpi .v{font-size:20px}.study-custom-session .study-kpi .t{font-size:11px;line-height:1.3}.study-custom-session .quiz-options-box{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto auto auto;grid-auto-flow:column;column-gap:28px;row-gap:10px;margin:0;padding:18px}.study-custom-session .progress-section-label{margin:0 0 2px;font-size:11px}.study-custom-session .quiz-radio,.study-custom-session .quiz-check{min-width:0;margin:0;font-size:13.5px;line-height:1.35;align-items:flex-start}.study-custom-session .quiz-radio input,.study-custom-session .quiz-check input{flex:none;margin-top:2px}.study-custom-session .quiz-count-preview{margin:14px 0 0;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);font-size:12.5px;line-height:1.45}.study-custom-session .modal-actions{align-items:center;margin-top:16px}.study-custom-session .modal-actions .btn{min-width:150px}@media(max-width:700px){.study-dashboard.study-custom-session{width:calc(100vw - 28px)!important;max-height:none!important;padding:18px!important}.study-custom-session .quiz-integrated-title{flex-direction:column;gap:5px}.study-custom-session .quiz-integrated-title span{max-width:none;text-align:left}.study-custom-session>.study-top-kpis{grid-template-columns:1fr!important;gap:8px!important}.study-custom-session .quiz-options-box{display:flex;flex-direction:column;gap:9px;padding:15px}.study-custom-session .progress-section-label{margin-top:10px}.study-custom-session .progress-section-label:first-child{margin-top:0}.study-custom-session .modal-actions{display:grid;grid-template-columns:1fr 1fr}.study-custom-session .modal-actions .btn{min-width:0}}@media(max-width:470px){.study-custom-session .modal-actions{grid-template-columns:1fr}}</style><script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <style>.study-dashboard-home .study-cycle-feature .study-cycle-legend{display:none!important}@media(min-width:1181px){.study-dashboard-home .study-cycle-feature .study-cycle-summary{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:12px!important;margin-top:8px!important;padding-top:8px!important}.study-dashboard-home .study-cycle-feature .study-cycle-summary>div{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:7px;align-items:center;min-width:0}.study-dashboard-home .study-cycle-feature .study-cycle-summary i{width:10px!important;height:10px!important}.study-dashboard-home .study-cycle-feature .study-cycle-summary b{font-size:14px!important;line-height:1!important}.study-dashboard-home .study-cycle-feature .study-cycle-summary span{font-size:12px!important;line-height:1.1;white-space:nowrap}}</style><script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
@@ -2533,6 +2540,11 @@ function unionEntryImages(baseImgs, addImgs, targetEntry, conflictSink, sourceLa
     keys.forEach(k=>seen.add(k));
     out.push(img);
   }
+  // Produtividade (assignedAt): entre as versões local/remota da mesma imagem
+  // fica o timestamp válido MAIS ANTIGO (primeira atribuição conhecida). O
+  // merge NUNCA gera assignedAt — só o Salvar/Concluído faz isso
+  // (stampNewImagesAssignedAt). Receber da nuvem não é nova atribuição.
+  try{ adoptOldestAssignedAt(out, baseImgs, addImgs); }catch(_e){}
   return out;
 }
 function mergeEntryNonDestructive(localEntry, remoteEntry){
@@ -8863,6 +8875,9 @@ let openSections = new Set();
 
 function renderTree(){
   const map = structure();
+  // Métricas de imagem 1x por render (sem listeners/intervals novos): o
+  // re-render acontece pelo fluxo atual (renderAll após salvar/sync/etc.).
+  const imgStats = buildSidebarImageStats(DATA);
   const tree = document.getElementById('tree');
   tree.innerHTML = '';
 
@@ -8877,7 +8892,6 @@ function renderTree(){
   const orderedNames = orderedSectionNames(map);
   orderedNames.forEach((sectionName, idx)=>{
     const sites = map[sectionName];
-    const total = Object.values(sites).reduce((a,b)=>a+b,0);
     const isOpen = openSections.has(sectionName);
     const isActiveScope = scope.section===sectionName && !scope.site;
 
@@ -8888,12 +8902,13 @@ function renderTree(){
     head.className = 'tree-section-head' + (isOpen?' open':'') + (isActiveScope?' active-scope':'');
     head.draggable = true;
     head.dataset.sectionName = sectionName;
-    head.innerHTML = `<span class="drag-handle" title="arraste para reordenar a seção">⠿</span><span class="chev">▸</span><span>${sectionName}</span>
+    const secStats = (imgStats.sections && imgStats.sections[sectionName]) || blankImageStats();
+    head.innerHTML = `<span class="drag-handle" title="arraste para reordenar a seção">⠿</span><span class="chev">▸</span><span class="tree-name">${sectionName}</span>
       <span class="reorder-btns">
         <button class="reorder-btn" data-dir="-1" title="mover para cima" ${idx===0?'disabled':''}>▲</button>
         <button class="reorder-btn" data-dir="1" title="mover para baixo" ${idx===orderedNames.length-1?'disabled':''}>▼</button>
       </span>
-      <span class="count">${total}</span>`;
+      <span class="count tree-cov" title="${sidebarStatsTitle(secStats)}">${sidebarCoverageHtml(secStats)}</span>`;
     head.onclick = (ev)=>{
       // acordeão: abrir uma seção sempre fecha qualquer outra que estivesse aberta,
       // pra nunca mais ficar com várias abertas e esquecidas ao mesmo tempo.
@@ -8941,7 +8956,8 @@ function renderTree(){
       sEl.className = 'tree-site' + (active?' active-scope':'');
       sEl.draggable = true;
       sEl.dataset.siteIdx = siteIdx;
-      sEl.innerHTML = `<span class="drag-handle" title="arraste para reordenar">⠿</span><span class="tree-site-name">${siteName}</span><span class="count">${sites[siteName]}</span>`;
+      const stStats = (imgStats.sites && imgStats.sites[sectionName] && imgStats.sites[sectionName][siteName]) || blankImageStats();
+      sEl.innerHTML = `<span class="drag-handle" title="arraste para reordenar">⠿</span><span class="tree-site-name">${siteName}</span><span class="count tree-cov" title="${sidebarStatsTitle(stStats)}">${sidebarCoverageHtml(stStats)}</span>`;
       sEl.onclick = (ev)=>{ ev.stopPropagation(); scope = {section:sectionName, site:siteName}; saveSidebarScopePref(); renderAll(); };
       sEl.ondragstart = (ev)=>{
         ev.stopPropagation();
@@ -9336,6 +9352,10 @@ function openForm(id, opts){
   // sem reiniciar a sessão.
   const preserveUnderlyingOverlay = opts.preserveUnderlyingOverlay === true;
   const onSaved = typeof opts.onSaved === 'function' ? opts.onSaved : null;
+  // Trava de submit: o botão Salvar só é desabilitado DEPOIS dos uploads, então
+  // um duplo-clique durante o envio executava o handler 2x e fazia DATA.push
+  // 2x com o MESMO formEntryId (duplicata idêntica, inclusive via importador).
+  let formSaving = false;
   editingId = id || null;
   const existing = id ? DATA.find(x=>x.id===id) : null;
   const formEntryId = existing ? existing.id : ('u_'+Date.now()+'_'+Math.random().toString(36).slice(2,8));
@@ -9689,7 +9709,7 @@ function openForm(id, opts){
         item.querySelector('.img-gallery-edit-collage').addEventListener('click', ()=>{
           openCollageBuilder(getCurrentLesionMeta(), collage=>{
             pendingImgs[idx]=collage; imgsChanged=true; renderImgGallery();
-          }, img.panels);
+          }, img.panels, undefined, img.label);
         });
       }
       item.querySelector('.img-gallery-swap').addEventListener('click', ()=>{
@@ -9812,6 +9832,8 @@ function openForm(id, opts){
 
   document.getElementById('f-cancel').onclick = ()=>{ releasePendingObjectUrls(); document.removeEventListener('keydown', closeFormOnEsc); closeForm(); };
   document.getElementById('f-save').onclick = async ()=>{
+    if(formSaving) return; // idempotência: submit já em andamento (duplo-clique, retry, Enter repetido)
+    formSaving = true;
     const name = document.getElementById('f-name').value.trim();
     const sec = document.getElementById('f-section').value.trim();
     const site = document.getElementById('f-site').value.trim();
@@ -9820,12 +9842,26 @@ function openForm(id, opts){
     const inc = parseInt(document.getElementById('f-inc').value,10) || 2;
     const classification = document.getElementById('f-classification').value || null;
     const notes = document.getElementById('f-notes').value.trim();
-    if(!name || !sec || !site){ toast('Preencha nome, seção e sítio.'); return; }
+    if(!name || !sec || !site){ toast('Preencha nome, seção e sítio.'); formSaving=false; return; }
     if(existing){
       const markReviewCk = document.getElementById('f-mark-review');
       if(markReviewCk && markReviewCk.checked && !document.getElementById('f-review-request').value.trim()){
         toast('Descreva o que precisa ser revisado antes de salvar.');
-        return;
+        formSaving=false; return;
+      }
+    }
+    if(!existing){
+      // Bloqueio de duplicata (vale p/ importador e p/ criação manual): antes
+      // de qualquer upload/persistência, procura identidade semântica exata
+      // (seção+sítio+nome normalizado) ou sourceUrl já registrada. Nunca cria
+      // silenciosamente — o usuário escolhe abrir, cancelar ou forçar (com
+      // confirmação explícita extra).
+      const dup = findExactLesionMatch(sec, site, name, links, null, DATA);
+      if(dup){
+        const choice = await confirmDuplicateLesion(dup.entry, dup.via);
+        if(choice==='open'){ try{ document.getElementById('f-cancel').onclick(); }catch(_e){} formSaving=false; openDetail(dup.entry.id); return; }
+        if(choice!=='force'){ formSaving=false; return; }
+        if(!confirm('Criar mesmo assim uma lesão idêntica? Isso vai DUPLICAR o registro no acervo.')){ formSaving=false; return; }
       }
     }
     const entryId = formEntryId;
@@ -9840,22 +9876,22 @@ function openForm(id, opts){
       const normalized=[];
       for(const x of pendingImgs){
         if(x.source==='pending' && x._file){
-          if(!hasCloudinaryConfig()){ toast('Cloudinary indisponível: não foi possível enviar as imagens novas. Nada foi salvo.'); return; }
+          if(!hasCloudinaryConfig()){ toast('Cloudinary indisponível: não foi possível enviar as imagens novas. Nada foi salvo.'); formSaving=false; return; }
           try{
             normalized.push(await uploadPendingImage(x, {id:entryId,name}));
           }catch(err){
             console.error('Cloudinary upload (salvar)',err);
             toast('Falha ao enviar uma imagem nova ao Cloudinary. Nada foi salvo — tente novamente.');
-            return;
+            formSaving=false; return;
           }
         }else if(x.source==='local' && x.data && /^data:image\//i.test(x.data)){
           // legado: data URL local antiga — mesma regra (upload só no Salvar)
-          if(!hasCloudinaryConfig()){ toast('Cloudinary indisponível: não foi possível sincronizar uma imagem local antiga.'); return; }
+          if(!hasCloudinaryConfig()){ toast('Cloudinary indisponível: não foi possível sincronizar uma imagem local antiga.'); formSaving=false; return; }
           try{
             const blob=await (await fetch(x.data)).blob();
             const file=new File([blob], 'atlas-recuperada-'+Date.now()+'.png', {type:blob.type||'image/png'});
             const remote=await uploadToCloudinary(file,{id:entryId,name}); remote.label=x.label||''; normalized.push(remote);
-          }catch(err){ toast('Falha ao migrar imagem antiga para o Cloudinary. Nada foi apagado.'); return; }
+          }catch(err){ toast('Falha ao migrar imagem antiga para o Cloudinary. Nada foi apagado.'); formSaving=false; return; }
         }else normalized.push({...x});
       }
       remoteImgs = normalized.map(x=>({
@@ -9864,11 +9900,23 @@ function openForm(id, opts){
         lesionId:x.lesionId||entryId,
         lesionName:x.lesionName||name
       }));
+      // Produtividade: carimba assignedAt (ISO) SÓ nas imagens novas
+      // confirmadas neste Salvar. Mantidas/históricas ficam como estão —
+      // sem timestamp inventado. Falha de upload acima já abortou o save.
+      try{ stampNewImagesAssignedAt(existing && Array.isArray(existing.images) ? existing.images : [], remoteImgs, new Date().toISOString()); }catch(_e){}
       await deleteLocalImg(entryId); localImgFlag=false;
     }
     if(existing){
       existing.name=name; existing.s=sec; existing.site=site; existing.tags=tags; existing.img=img; existing.notes=notes; existing.links=links; existing.enTerm=enTerm; existing.inc=inc; existing.localImg=localImgFlag; existing.images=remoteImgs; existing.classification=classification; existing._userUpdatedAt=Date.now();
       if(altPlacementsDraft.length) existing.altPlacements = JSON.parse(JSON.stringify(altPlacementsDraft)); else delete existing.altPlacements;
+    } else if(DATA.some(x=>x && x.id===entryId)){
+      // Rede de segurança anti-mesmo-id (auditoria 2026-09-21): se o id já
+      // está no acervo (ex.: submit duplicado que escapou da trava), atualiza
+      // o registro existente em vez de empilhar outro objeto com o mesmo id.
+      const target = DATA.find(x=>x && x.id===entryId);
+      target.name=name; target.s=sec; target.site=site; target.tags=tags; target.img=img; target.notes=notes; target.links=links; target.enTerm=enTerm; target.inc=inc; target.localImg=localImgFlag; target.images=remoteImgs; target.classification=classification; target._userUpdatedAt=Date.now();
+      if(altPlacementsDraft.length) target.altPlacements = JSON.parse(JSON.stringify(altPlacementsDraft)); else delete target.altPlacements;
+      toast('Registro existente atualizado (id já estava no acervo — nada duplicado).');
     } else {
       const newEntry = {id:entryId, name, s:sec, site, tags, img, notes, links, enTerm, inc, localImg:localImgFlag, images:remoteImgs, classification, _userUpdatedAt:Date.now()};
       if(altPlacementsDraft.length) newEntry.altPlacements = JSON.parse(JSON.stringify(altPlacementsDraft));
@@ -9910,6 +9958,7 @@ function openForm(id, opts){
       });
       if(cloudOk) setSyncStatus(true);
     }finally{
+      formSaving = false; // libera a trava em qualquer desfecho (o form fecha aqui)
       saveBtn.textContent = originalBtnText;
       saveBtn.disabled = false;
       releasePendingObjectUrls();
@@ -9923,6 +9972,7 @@ function openForm(id, opts){
       scope = scopeBeforeForm;
       openSections = openSectionsBeforeForm;
       renderAll();
+      try{ refreshStudyDashboardLive(); }catch(_e){} // dashboard reflete a nova imagem sem F5
       toast(cloudOk
         ? (existing?'Alterações salvas.':'Lesão adicionada ao seu banco.')
         : '⚠ Salvo neste dispositivo, mas a sincronização com a nuvem falhou — veja o aviso na barra lateral.');
@@ -9940,7 +9990,26 @@ function openForm(id, opts){
    os painéis ficam temporários (blob) e o quadro final vira uma imagem
    pendente ({source:'pending', _file}) para subir só no Salvar. O Quiz chama
    sem esse parâmetro e mantém o upload imediato. */
-function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpload){
+// Descrição geral do quadro (metadado, NUNCA queimado no canvas). Puras e
+// testadas. O campo canônico de descrição de imagem no Atlas é `label`
+// (mesmo da legenda individual, do detalhe, do Quiz e da edição) — nada de
+// collageDescription/boardDescription.
+function resolveCollageLabel(descText, seqs){
+  const d = String(descText || '').trim();
+  if(d) return d;
+  const j = (Array.isArray(seqs) ? seqs : []).filter(Boolean).join(' · ');
+  return j || 'Quadro multimodal';
+}
+// No modo edição, pré-preenche só se o rótulo atual for uma descrição de
+// verdade (diferente do join automático das sequências); senão preserva o
+// comportamento antigo sem forçar texto.
+function collageInitialDesc(existingLabel, seqs){
+  const cur = String(existingLabel || '').trim();
+  if(!cur) return '';
+  const auto = (Array.isArray(seqs) ? seqs : []).filter(Boolean).join(' · ');
+  return (cur !== auto) ? cur : '';
+}
+function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpload, existingLabel){
   const isEditMode = Array.isArray(existingPanels);
   const cov=document.createElement('div'); cov.className='overlay';
   cov.style.zIndex='10030';
@@ -9959,6 +10028,7 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
       <div class="field"><label>Resolução</label><select id="collage-size"><option value="1600">1600 px</option><option value="1920" selected>1920 px</option><option value="2400">2400 px</option></select></div>
       <button type="button" class="btn btn-primary" id="collage-generate">gerar quadro</button>
     </div>
+    <div class="field"><label>Descrição geral do quadro</label><textarea id="collage-desc" rows="2" placeholder="Ex.: TC do joelho demonstrando ... (vai para a legenda, sem queimar na imagem)"></textarea></div>
     <canvas id="collage-canvas" style="display:none"></canvas><img id="collage-preview" class="collage-preview">
     <div class="modal-actions"><button class="btn btn-ghost" id="collage-cancel">cancelar</button><button class="btn btn-primary" id="collage-insert" disabled>${isEditMode?'salvar quadro atualizado':'inserir quadro no caso'}</button></div>
   </div>`;
@@ -9966,6 +10036,11 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
   let items = isEditMode
     ? existingPanels.map(p=>({file:null, url:p.url, durableUrl:p.url, seq:p.seq||''}))
     : [];
+  // Pré-preenche a descrição geral ao reeditar um quadro que já tinha uma
+  // (lida via .value, nunca via HTML).
+  cov.querySelector('#collage-desc').value = isEditMode
+    ? collageInitialDesc(existingLabel, items.map(x=>x.seq))
+    : '';
   let finalBlob=null; let finalUrl='';
   const seqs=['RX','MMG','U.S','TC C-','TC C+','RM T1','RM T2','RM T1 +','RM FLAIR','RM DIFUSAO','RM ADC','RM SWI','ANGIORM'];
   const list=cov.querySelector('#collage-list'), drop=cov.querySelector('#collage-drop'), input=cov.querySelector('#collage-files');
@@ -10058,7 +10133,10 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
   cov.querySelector('#collage-generate').onclick=generateCollage;
   cov.querySelector('#collage-insert').onclick=async()=>{
     if(!finalBlob)return;
-    const label=items.map(x=>x.seq).filter(Boolean).join(' · ')||'Quadro multimodal';
+    // A descrição geral (se informada) vira o `label` canônico; as sequências
+    // continuam em `panels[].seq` e queimadas no canvas como antes. O canvas
+    // NUNCA recebe esta descrição.
+    const label=resolveCollageLabel(cov.querySelector('#collage-desc').value, items.map(x=>x.seq));
     const panels=items.map(x=>({url:x.durableUrl||x.url, seq:x.seq||''}));
     if(deferUpload){
       // Upload diferido (formulário Editar): NÃO envia o quadro agora. Cria um
@@ -12045,6 +12123,15 @@ function refreshStudyDashboardLive(){
   const dueKpi=ov.querySelector('.study-kpi:nth-child(4) .v');
   if(dueKpi) dueKpi.textContent=String(countActuallyDue(DATA));
 
+  // Produtividade de imagens ao vivo (sem F5): card hoje + série semanal +
+  // totais. Sem listeners novos — só releitura do DATA quando aberta.
+  const imgsKpi=ov.querySelector('#kpi-images-today');
+  if(imgsKpi) imgsKpi.textContent=String(countImagesAssignedOnDate(DATA, localDayKeyFromDate(new Date())));
+  const weekBox=ov.querySelector('#imgs-week-chart');
+  if(weekBox) weekBox.innerHTML=renderImagesWeekSvg(imagesAssignedLast7Days(DATA));
+  const totLine=ov.querySelector('#imgs-total-line');
+  if(totLine) totLine.textContent=`Imagens no acervo: ${countTotalImages(DATA)} · Lesões com imagem: ${countLesionsWithImages(DATA)} / ${DATA.length}`;
+
   const gradeWeight={easy:1,medium:.70,hard:.35,again:0};
   const sectionMap={};
   DATA.forEach(e=>{
@@ -12282,9 +12369,13 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
       }
     }
     // Só agora o rascunho vira estado real da lesão.
+    const prevQuizImgs = Array.isArray(lesion.images) ? lesion.images : [];
     lesion.images = draftImgs.map(x=>({...x, lesionId:lesion.id, lesionName:lesion.name}));
+    // Produtividade: assignedAt SÓ nas novas confirmadas no Concluído.
+    try{ stampNewImagesAssignedAt(prevQuizImgs, lesion.images, new Date().toISOString()); }catch(_e){}
     lesion._userUpdatedAt = Date.now();
     await saveData();
+    try{ refreshStudyDashboardLive(); }catch(_e){} // dashboard reflete a nova imagem sem F5
     onImagesAdded();
     releaseDraftObjectUrls();
     if(cov.isConnected) cov.remove();
@@ -12413,7 +12504,11 @@ function renderQuizCardIntegrated(host){
     if(quizImgIdx>=quizImgs.length) quizImgIdx=0;
     st.imgIdx=quizImgIdx;
     const cur=quizImgs[quizImgIdx], hasMultiple=quizImgs.length>1;
-    media.innerHTML=`<div class="quiz-carousel${hasMultiple?' has-multi':''}">
+    // Descrição legível ACIMA da imagem, SOMENTE após responder (st.answered)
+    // — antes da resposta, nada é mostrado para não entregar pistas. O bloco
+    // segue o quizImgIdx atual (carrossel) e some na próxima questão, pois
+    // cada render zera o estado de resposta.
+    media.innerHTML=`${quizImageDescHtml(cur.label, st.answered)}<div class="quiz-carousel${hasMultiple?' has-multi':''}">
         ${hasMultiple?'<button type="button" class="quiz-carousel-arrow quiz-carousel-prev" aria-label="imagem anterior">‹</button>':''}
         <img src="${cur.data}">
         ${hasMultiple?'<button type="button" class="quiz-carousel-arrow quiz-carousel-next" aria-label="imagem seguinte">›</button>':''}
@@ -12422,8 +12517,7 @@ function renderQuizCardIntegrated(host){
           <span class="quiz-carousel-ov-count" aria-live="polite" aria-label="Imagem ${quizImgIdx+1} de ${quizImgs.length}">${quizImgIdx+1} / ${quizImgs.length}</span>
           <button type="button" class="quiz-carousel-ov-btn quiz-carousel-ov-next" aria-label="Próxima imagem">›</button>
         </div>`:''}
-      </div>
-      ${cur.label?`<div class="quiz-img-label">${esc(cur.label)}</div>`:''}`;
+      </div>`;
     const im=media.querySelector('img'); if(im) im.onclick=()=>openImageLightbox(cur.data);
     if(hasMultiple){
       // Setas laterais e setas do overlay superior controlam o MESMO quizImgIdx —
@@ -12488,7 +12582,7 @@ function renderQuizCardIntegrated(host){
       <div class="quiz-post-answer-actions"><button type="button" class="btn btn-ghost quiz-add-img-action" id="quiz-add-img-btn">🖼 Adicionar imagem a esta lesão</button><button type="button" class="btn btn-ghost quiz-edit-lesion-action" id="quiz-edit-lesion-btn">✏ Editar esta lesão no Acervo</button><button type="button" class="btn btn-ghost quiz-review-action" id="quiz-review-btn">🔔 Marcar para revisão</button></div>
       ${gradeHtml}`;
     fb.querySelector('#quiz-add-img-btn').onclick=()=>{
-      openQuizAddImageModal(e.id, ()=> refreshQuizImgs(true));
+      openQuizAddImageModal(e.id, ()=>{ refreshQuizImgs(true); renderAll(); }); // sidebar reflete a nova imagem (overlays do Quiz intactas)
     };
     fb.querySelector('#quiz-edit-lesion-btn').onclick=()=>{
       // Reutiliza o formulário completo já existente, aberto POR CIMA do Quiz
@@ -12531,6 +12625,7 @@ function renderQuizCardIntegrated(host){
       hideSkip();
       enableNextBtn(); // respondeu → Próxima habilitada (sem exigir grade)
       renderAnsweredFeedback();
+      renderMedia(); // revela a descrição da imagem atual (só pós-resposta)
     });
   }
 
@@ -12692,6 +12787,11 @@ function openProgressDashboard(){
     else confidenceCounts.fresh++;
   });
   const due=countActuallyDue(DATA), streak=getStudyStreak(), todayRec=SESSIONLOG[todayKey()]||{}, todayN=Number(todayRec.reviewed)||0, goal=15;
+  // Produtividade de imagens (dia local; históricas sem assignedAt só no total).
+  const imgsToday=countImagesAssignedOnDate(DATA, localDayKeyFromDate(new Date()));
+  const imgsWeek=imagesAssignedLast7Days(DATA);
+  const imgsWeekTotal=imgsWeek.reduce((a,s)=>a+(Number(s.count)||0),0);
+  const imgsTotal=countTotalImages(DATA), imgsLesions=countLesionsWithImages(DATA);
   let r14=0,w14=0; const trend=[];
   for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const rec=SESSIONLOG[todayKey(d)]||{};const r=Number(rec.right)||0,w=Number(rec.wrong)||0;r14+=r;w14+=w;trend.push({label:String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'),acc:(r+w)?Math.round(r/(r+w)*100):null});}
   const acc14=(r14+w14)?Math.round(r14/(r14+w14)*100):0;
@@ -12739,6 +12839,7 @@ function openProgressDashboard(){
       <div class="study-kpi"><div class="study-kpi-icon">🎯</div><div><div class="v">${todayN} / ${goal}</div><div class="t">questões hoje</div></div></div>
       <div class="study-kpi"><div class="study-kpi-icon">📈</div><div><div class="v">${(r14+w14)?acc14+'%':'—'}</div><div class="t">acerto · 14 dias</div></div></div>
       <div class="study-kpi"><div class="study-kpi-icon">🧠</div><div><div class="v" style="color:var(--amber)">${due}</div><div class="t">revisões pendentes</div></div></div>
+      <div class="study-kpi"><div class="study-kpi-icon">🖼️</div><div><div class="v" id="kpi-images-today">${imgsToday}</div><div class="t">imagens hoje</div></div></div>
     </div>
     <div class="study-dashboard-main">
       <div class="study-start-card">
@@ -12765,6 +12866,7 @@ function openProgressDashboard(){
         </svg>
         ${points.length<2?`<div class="study-chart-empty">Ainda não há dados suficientes dos últimos 14 dias. Complete algumas sessões para ver a evolução aqui.</div>`:''}
       </div>
+      <div class="study-chart study-imgs-card" style="grid-area:imgs!important;min-width:0;min-height:308px!important;height:auto!important;box-sizing:border-box;padding:16px 18px"><h3>Imagens atribuídas na última semana</h3><div class="study-chart-sub">imagens novas confirmadas por dia</div><div id="imgs-week-chart">${renderImagesWeekSvg(imgsWeek)}</div>${imgsWeekTotal?'':`<div class="study-chart-empty">Nenhuma imagem atribuída nos últimos 7 dias. O gráfico passa a contar a partir desta versão.</div>`}<div class="study-chart-sub" id="imgs-total-line" style="margin:10px 0 0">Imagens no acervo: ${imgsTotal} · Lesões com imagem: ${imgsLesions} / ${DATA.length}</div></div>
       <div class="study-chart study-state-card"><h3>Estado do acervo</h3><div class="study-chart-sub">última autoavaliação registrada em cada caso</div><div class="study-donut-row"><div class="study-donut" style="background:${donut}"><div class="study-donut-center"><b>${DATA.length}</b><span>lesões</span></div></div><div class="study-state-list">
           <div class="study-state-row"><span><i style="background:${CONF_COLORS.easy}"></i>🟢 Fácil</span><b>${confidenceCounts.easy} (${Math.round(ce)}%)</b></div>
           <div class="study-state-row"><span><i style="background:${CONF_COLORS.medium}"></i>🔵 Média</span><b>${confidenceCounts.medium} (${Math.round(cm)}%)</b></div>
@@ -12877,6 +12979,1109 @@ if(fbAuth){
   // Firebase Auth indisponível (offline, bloqueio de rede) — não há como
   // verificar a conta, então o app não abre, em vez de liberar sem checagem.
   showLoginGate('Não foi possível verificar o login (sem conexão com o Firebase). Tente novamente.');
+}
+
+/* ============================================================
+   DESCRIÇÃO DA IMAGEM NO QUIZ (pós-resposta, acima da imagem)
+   ------------------------------------------------------------
+   quizImageDescHtml() é pura e testada: devolve '' antes da resposta ou sem
+   legenda, e o bloco legível (uma única vez por render) após responder. O
+   carrossel a reutiliza via renderMedia(), sempre com o quizImgIdx atual —
+   sem estado paralelo. Estilo inline de propósito: evita mexer no <style>
+   do topo (o que deslocaria as âncoras de linha dos testes).
+   ============================================================ */
+function quizImageDescHtml(label, answered){
+  if (!answered) return '';
+  const t = String(label || '').trim();
+  if (!t) return '';
+  return `<div class="quiz-img-desc" style="font-size:15px;line-height:1.5;color:var(--text);background:rgba(20,184,166,.07);border:1px solid var(--teal-dim);border-radius:10px;padding:10px 12px;margin-bottom:10px;max-width:100%;overflow-wrap:anywhere;">`
+    + `<div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);margin-bottom:4px;">Descrição da imagem</div>`
+    + `<div>${esc(t)}</div></div>`;
+}
+
+/* ============================================================
+   IMPORTADOR EXTERNO MVP — Radiopaedia → Atlas (metadata-only)
+   ------------------------------------------------------------
+   Fluxo: userscript (tools/radiopaedia-to-atlas.user.js) abre o Atlas com
+   `#external-import=<base64url>` no fragmento. Aqui o payload é consumido
+   UMA vez no boot (fragmento limpo via history.replaceState — F5 não
+   reimporta), validado com rigor, comparado ao acervo (4 níveis) e exibido
+   num modal. NADA é salvo/criado/anexado automaticamente: o usuário decide
+   entre abrir uma lesão existente (só navega + bloco informativo), criar
+   nova lesão (abre o formulário em draft, sem persistir) ou cancelar.
+   Sem imagens, sem Cloudinary, sem tradução, sem biblioteca nova.
+   Anexado no fim do script de propósito: não desloca nenhuma âncora de
+   linha dos testes existentes.
+   ============================================================ */
+const EXTERNAL_IMPORT_PREFIX = '#external-import=';
+const EXTERNAL_IMPORT_MAX_BYTES = 4096;
+const EXTERNAL_IMPORT_ALLOWED_HOSTS = ['radiopaedia.org', 'www.radiopaedia.org'];
+// Draft temporário em memória. Nunca persistido sozinho: ou vira campos do
+// formulário (persistidos só no Salvar) ou é descartado no Cancelar.
+let pendingExternalCase = null;
+
+function parseExternalImportHash(hash){
+  if (typeof hash !== 'string' || hash.indexOf(EXTERNAL_IMPORT_PREFIX) !== 0) return null;
+  try {
+    const b64 = decodeURIComponent(hash.slice(EXTERNAL_IMPORT_PREFIX.length));
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const json = new TextDecoder().decode(bytes);
+    if (json.length > EXTERNAL_IMPORT_MAX_BYTES) return { ok: false, error: 'payload grande demais' };
+    return { ok: true, payload: JSON.parse(json) };
+  } catch (e) {
+    return { ok: false, error: 'fragmento ilegível' };
+  }
+}
+
+function validateExternalImportPayload(p){
+  const errors = [];
+  const isObj = p !== null && typeof p === 'object' && !Array.isArray(p);
+  if (!isObj) return { ok: false, errors: ['payload deve ser um objeto'], value: null };
+  const str = (v) => (typeof v === 'string' ? v : '');
+  const source = str(p.source).trim();
+  const title = str(p.title).trim();
+  if (!source || source.length > 50) errors.push('source ausente ou inválido');
+  if (!title || title.length > 300) errors.push('título ausente ou inválido');
+  let sourceUrl = str(p.sourceUrl).trim();
+  try {
+    const u = new URL(sourceUrl);
+    const host = (u.hostname || '').toLowerCase();
+    if (u.protocol !== 'https:' || EXTERNAL_IMPORT_ALLOWED_HOSTS.indexOf(host) < 0) {
+      errors.push('sourceUrl inválida');
+      sourceUrl = '';
+    }
+  } catch (e) {
+    errors.push('sourceUrl inválida');
+    sourceUrl = '';
+  }
+  const opt = (v, max) => {
+    if (v === undefined || v === null || v === '') return '';
+    if (typeof v !== 'string' || v.length > max) { errors.push('campo opcional com tipo/tamanho inesperado'); return ''; }
+    return v;
+  };
+  const value = errors.length ? null : {
+    source, title, sourceUrl,
+    patientAge: opt(p.patientAge, 20),
+    patientSex: opt(p.patientSex, 20),
+    modality: opt(p.modality, 60),
+    presentation: opt(p.presentation, 500)
+  };
+  if (value && errors.length) return { ok: false, errors, value: null };
+  return { ok: errors.length === 0, errors, value };
+}
+
+// Normalização p/ comparação: minúsculas, sem acentos, sem pontuação,
+// espaços colapsados. (A regra s+site+name do acervo continua intacta;
+// isto é só para a pré-checagem do importador.)
+function normalizeExternalTitle(s){
+  return String(s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function diceTokenSimilarity(a, b){
+  const setA = new Set(String(a || '').split(' ').filter(Boolean));
+  const setB = new Set(String(b || '').split(' ').filter(Boolean));
+  if (!setA.size || !setB.size) return 0;
+  let inter = 0;
+  setA.forEach(t => { if (setB.has(t)) inter++; });
+  return (2 * inter) / (setA.size + setB.size);
+}
+
+function levNormSimilarity(a, b){
+  a = String(a || ''); b = String(b || '');
+  if (!a.length || !b.length) return 0;
+  if (a === b) return 1;
+  let prev = new Array(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return 1 - prev[b.length] / Math.max(a.length, b.length);
+}
+
+// Correção 2026-09-21 (falsos positivos): o max(Dice, Levenshtein) deixava o
+// Levenshtein sozinho promover pares sem nenhum token em comum ("Polyethene
+// wear" ~ "Pólipo endometrial", Dice 0, Lev 0.39). Agora a regra é
+// conservadora: SEM token relevante em comum, não há candidato — e títulos
+// curtos (<=2 tokens) só passam com similaridade quase total. Determinístico,
+// local, sem dependências. Faixas usadas na UI (sem %).
+const EXTERNAL_IMPORT_STOPWORDS = ['de','do','da','dos','das','em','no','na','nos','nas','e','o','a','os','as','um','uma','com','por','para','ao','aos','se','sem','sob','sobre','entre','ate','como','the','of','and','an','in','on','with','without','for','to','by','from','at','or'];
+const EXTERNAL_SIM_SHORT_TOKENS = 2;   // título curto: exige quase-identidade
+const EXTERNAL_SIM_SHORT_MIN = 0.8;    // Dice ou Lev mínimos p/ título curto
+const EXTERNAL_SIM_HIGH_MIN = 0.66;    // Dice mínimo p/ 'alta' (título longo)
+const EXTERNAL_SIM_LEV_HIGH_MIN = 0.85;// Lev mínimo p/ 'alta' (título longo)
+const EXTERNAL_SIM_POSS_MIN = 0.5;     // Dice mínimo p/ 'possível' (título longo)
+
+// Tokens relevantes: minúsculos, sem stopwords PT/EN; mantém token curto SÓ
+// se tiver dígito ("tipo 2" ≠ ruído); resto com <3 letras é descartado.
+function tokenizeExternalTitle(s){
+  return normalizeExternalTitle(s).split(' ').filter(t =>
+    t && EXTERNAL_IMPORT_STOPWORDS.indexOf(t) < 0 && (t.length >= 3 || /[0-9]/.test(t))
+  );
+}
+
+function externalTokenOverlap(aTokens, bTokens){
+  const setB = new Set(bTokens);
+  let shared = 0;
+  aTokens.forEach(t => { if (setB.has(t)) shared++; });
+  const denom = aTokens.length + bTokens.length;
+  return { shared, dice: denom ? (2 * shared) / denom : 0 };
+}
+
+// Retorna 'alta', 'possível' ou null. 'exata' é tratada pelo chamador.
+function externalMatchBand(draftTitle, candTitle){
+  const a = normalizeExternalTitle(draftTitle);
+  const b = normalizeExternalTitle(candTitle);
+  if (!a || !b || a === b) return a && a === b ? 'exata' : null;
+  const aT = tokenizeExternalTitle(a);
+  const bT = tokenizeExternalTitle(b);
+  if (!aT.length || !bT.length) return null;
+  const { shared, dice } = externalTokenOverlap(aT, bT);
+  if (shared === 0) return null; // trava principal: zero token em comum, zero candidato
+  const lev = levNormSimilarity(a, b);
+  if (aT.length <= EXTERNAL_SIM_SHORT_TOKENS) {
+    // Título curto: metade das palavras diferente já é outro conceito.
+    if (dice >= EXTERNAL_SIM_SHORT_MIN || lev >= EXTERNAL_SIM_SHORT_MIN) return 'alta';
+    return null;
+  }
+  if (dice >= EXTERNAL_SIM_HIGH_MIN || lev >= EXTERNAL_SIM_LEV_HIGH_MIN) return 'alta';
+  if (dice >= EXTERNAL_SIM_POSS_MIN) return 'possível';
+  return null;
+}
+
+function externalBandLabel(band){
+  if (band === 'exata') return 'correspondência exata';
+  if (band === 'alta') return 'alta similaridade';
+  return 'possível correspondência';
+}
+
+/* ============================================================
+   IMPORTADOR EXTERNO v2 — português + tags + descrição (draft)
+   ------------------------------------------------------------
+   Separa TÍTULO ORIGINAL (rastreabilidade, nunca traduzido à força) de
+   NOME SUGERIDO (preferencialmente em PT). Tudo editável no modal, tudo
+   draft até o Salvar. Sem API externa, sem gravação automática.
+   ============================================================ */
+// Glossário local, pequeno e extensível (chave = título normalizado).
+const EXTERNAL_IMPORT_TRANSLATIONS = {
+  "polyethene wear": "Desgaste de polietileno",
+  "polyethylene wear": "Desgaste de polietileno"
+};
+// Modalidade (termo da fonte, minúsculo) → tag PT. Mapa fechado: sem
+// tradução livre, só equivalências confiáveis desta lista.
+const EXTERNAL_IMPORT_MODALITY_TAGS = {
+  "x-ray": "radiografia",
+  "ct": "tomografia computadorizada",
+  "mri": "ressonância magnética",
+  "ultrasound": "ultrassonografia",
+  "mammography": "mamografia",
+  "pet-ct": "medicina nuclear",
+  "pet": "medicina nuclear",
+  "angiography": "angiografia",
+  "fluoroscopy": "fluoroscopia"
+};
+const EXTERNAL_IMPORT_MAX_TAGS = 8;
+
+// A) sinônimo conhecido no próprio catálogo (enTerm ↔ name), B) glossário,
+// C) original preservado + pendente de revisão. Nunca inventa tradução.
+function suggestPortugueseLesionName(originalTitle, catalog){
+  const norm = normalizeExternalTitle(originalTitle);
+  const list = Array.isArray(catalog) ? catalog : [];
+  const viaCatalog = list.find(e => e && typeof e.enTerm === 'string'
+    && normalizeExternalTitle(e.enTerm) === norm
+    && typeof e.name === 'string' && e.name.trim());
+  if (viaCatalog) return { name: viaCatalog.name, source: 'catalogo', needsReview: false };
+  if (norm && Object.prototype.hasOwnProperty.call(EXTERNAL_IMPORT_TRANSLATIONS, norm)) {
+    return { name: EXTERNAL_IMPORT_TRANSLATIONS[norm], source: 'glossario', needsReview: false };
+  }
+  return { name: String(originalTitle || '').trim(), source: 'original', needsReview: true };
+}
+
+// Vocabulário canônico: norma → grafia usada no acervo (primeira vence).
+function canonicalTagVocabulary(catalog){
+  const map = new Map();
+  (Array.isArray(catalog) ? catalog : []).forEach(e => {
+    (Array.isArray(e && e.tags) ? e.tags : []).forEach(t => {
+      if (typeof t !== 'string' || !t.trim()) return;
+      const n = normalizeExternalTitle(t);
+      if (n && !map.has(n)) map.set(n, t);
+    });
+  });
+  return map;
+}
+
+// Tags conservadoras em PT: nome confiável + contexto forte + modalidade
+// (mapa fechado) + reaproveitamento de tag canônica (nada novo inventado).
+function suggestExternalTags(draft, nameSug, catalog, matches){
+  const out = [];
+  const seen = new Set();
+  const push = (t) => {
+    if (typeof t !== 'string') return;
+    const tag = t.trim();
+    if (!tag) return;
+    const n = normalizeExternalTitle(tag);
+    if (!n || seen.has(n)) return;
+    seen.add(n);
+    out.push(tag);
+  };
+  const vocab = canonicalTagVocabulary(catalog);
+  const canon = (t) => vocab.get(normalizeExternalTitle(t)) || t;
+  if (nameSug && nameSug.source !== 'original' && nameSug.name) push(canon(nameSug.name));
+  (Array.isArray(matches) ? matches : []).forEach(m => {
+    if (!m || (m.band !== 'exata' && m.band !== 'alta')) return;
+    (Array.isArray(m.entry && m.entry.tags) ? m.entry.tags : []).forEach(push);
+  });
+  if (draft && typeof draft.modality === 'string') {
+    const tag = EXTERNAL_IMPORT_MODALITY_TAGS[draft.modality.trim().toLowerCase()];
+    if (tag) push(canon(tag));
+  }
+  const hay = new Set(tokenizeExternalTitle([draft && draft.title, draft && draft.presentation].filter(Boolean).join(' ')));
+  vocab.forEach((spelling) => {
+    if (out.length >= EXTERNAL_IMPORT_MAX_TAGS) return;
+    const need = tokenizeExternalTitle(spelling);
+    if (need.length && need.every(t => hay.has(t))) push(spelling);
+  });
+  return out.slice(0, EXTERNAL_IMPORT_MAX_TAGS);
+}
+
+// Descrição curta derivada SÓ do seguro (nomes, citação da fonte, contexto).
+// Sem base suficiente, devolve vazio — aceitável e testado.
+function suggestExternalDescription(draft, nameSug, topMatch){
+  const pres = (draft && typeof draft.presentation === 'string') ? draft.presentation.trim().slice(0, 300) : '';
+  const trusted = !!(nameSug && nameSug.source !== 'original' && nameSug.name);
+  if (!trusted && !pres && !topMatch) return { text: '', confident: false };
+  const parts = [];
+  if (trusted) parts.push(nameSug.name.trim() + '.');
+  else parts.push(String((draft && draft.title) || '').trim() + ' (título original, sem tradução segura).');
+  if (pres) parts.push('Quadro relatado na fonte: ' + pres);
+  if (topMatch && topMatch.entry) {
+    const ctx = [topMatch.entry.s, topMatch.entry.site].filter(Boolean).join(' › ');
+    parts.push('Entidade relacionada no acervo: ' + topMatch.entry.name + (ctx ? ' (' + ctx + ').' : '.'));
+  }
+  return { text: parts.join(' ').slice(0, 600), confident: trusted };
+}
+
+function buildExternalSuggestion(draft, catalog, matches){
+  const nameSug = suggestPortugueseLesionName(draft.title, catalog);
+  const list = Array.isArray(matches) ? matches : [];
+  const top = list.find(m => m && (m.band === 'exata' || m.band === 'alta')) || null;
+  return {
+    originalTitle: draft.title,
+    name: nameSug.name,
+    nameSource: nameSug.source,
+    needsReview: nameSug.needsReview,
+    tags: suggestExternalTags(draft, nameSug, catalog, list),
+    description: suggestExternalDescription(draft, nameSug, top).text,
+    status: 'automatic',
+    aiReview: 'none'
+  };
+}
+
+// Qualquer edição humana do draft vira edited_by_user (aiReview preservado).
+function applySuggestionEdit(suggestion, field, value){
+  const next = Object.assign({}, suggestion || {});
+  if (field === 'tags' && typeof value === 'string') {
+    next.tags = value.split(',').map(t => t.trim()).filter(Boolean);
+  } else if ((field === 'name' || field === 'description') && typeof value === 'string') {
+    next[field] = value;
+  }
+  next.status = 'edited_by_user';
+  return next;
+}
+
+function sameExternalUrl(a, b){
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const trim = (u) => u.replace(/\/+$/, '');
+  return trim(a) === trim(b);
+}
+
+// Pré-checagem read-only: nunca muta o catálogo. Ordem: URL exata >
+// título exato normalizado > alta similaridade > possível. Máx. 5 e SOMENTE
+// acima do limiar real — prefere "nenhuma correspondência" a chute fraco.
+function findExternalImportCandidates(draft, catalog){
+  const out = [];
+  const list = Array.isArray(catalog) ? catalog : [];
+  const normDraft = normalizeExternalTitle(draft && draft.title);
+  const seen = new Set();
+  const push = (entry, band, score, via) => {
+    if (!entry || seen.has(entry.id)) return;
+    seen.add(entry.id);
+    out.push({ entry, band, score, via });
+  };
+  if (draft && draft.sourceUrl) {
+    list.forEach(e => {
+      const links = Array.isArray(e.links) ? e.links : [];
+      if (links.some(l => l && sameExternalUrl(l.url, draft.sourceUrl))) push(e, 'exata', 1, 'url');
+    });
+  }
+  if (normDraft) {
+    list.forEach(e => {
+      if (!e || typeof e.name !== 'string') return;
+      const n = normalizeExternalTitle(e.name);
+      if (n && n === normDraft) push(e, 'exata', 1, 'titulo');
+    });
+    const scored = [];
+    list.forEach(e => {
+      if (!e || typeof e.name !== 'string' || seen.has(e.id)) return;
+      const band = externalMatchBand(normDraft, e.name);
+      if (!band || band === 'exata') return; // 'exata' já resolvida acima
+      const aT = tokenizeExternalTitle(normDraft);
+      const bT = tokenizeExternalTitle(e.name);
+      const { dice } = externalTokenOverlap(aT, bT);
+      const score = Math.max(dice, levNormSimilarity(normDraft, normalizeExternalTitle(e.name)));
+      scored.push({ e, band, score });
+    });
+    scored.sort((x, y) => y.score - x.score);
+    scored.forEach(s => push(s.e, s.band, s.score, 'nome'));
+  }
+  const rank = { exata: 0, alta: 1, 'possível': 2 };
+  out.sort((x, y) => (rank[x.band] - rank[y.band]) || (y.score - x.score));
+  return out.slice(0, 5);
+}
+
+// HTML 100% escapado (teste cobre: <script> no título nunca executa).
+function externalPendingBlockHtml(draft){
+  const rows = [];
+  if (draft.patientAge || draft.patientSex) {
+    const pac = [draft.patientAge ? esc(draft.patientAge + ' anos') : '', draft.patientSex ? esc(draft.patientSex) : ''].filter(Boolean).join(' / ');
+    rows.push(`<div><b>Paciente:</b> ${pac}</div>`);
+  }
+  if (draft.modality) rows.push(`<div><b>Modalidade:</b> ${esc(draft.modality)}</div>`);
+  if (draft.presentation) rows.push(`<div><b>Quadro:</b> ${esc(draft.presentation)}</div>`);
+  return `<div class="external-pending-block" style="border:1px dashed var(--teal-dim);border-radius:10px;padding:10px 12px;margin:10px 0;background:rgba(20,184,166,.06);">`
+    + `<div style="font-weight:700;margin-bottom:6px;">📌 Caso externo pendente (não salvo)</div>`
+    + `<div><b>Fonte:</b> ${esc(draft.source)}</div>`
+    + `<div><b>Caso:</b> ${esc(draft.title)}</div>`
+    + rows.join('')
+    + `<div><b>Fonte original:</b> <a href="${esc(draft.sourceUrl)}" target="_blank" rel="noopener">abrir ${esc(draft.source)}</a></div>`
+    + `</div>`;
+}
+
+// Lista de candidatos (pura; re-renderizada a cada edição do nome).
+function externalMatchesHtml(matches){
+  if (!matches.length) return '<div style="color:var(--muted-2);font-size:13px;">✅ Nenhuma correspondência relevante encontrada no acervo.</div>';
+  return matches.map(m => {
+    const e = m.entry;
+    const ctx = [e.s, e.site].filter(Boolean).map(esc).join(' &gt; ');
+    return `<div class="external-match" style="border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;">`
+      + `<div style="font-weight:700;">${esc(e.name)}</div>`
+      + (ctx ? `<div style="color:var(--muted-2);font-size:12px;">${ctx}</div>` : '')
+      + `<div style="font-size:12px;margin:4px 0;">${m.via === 'url' ? '🟢 URL já registrada' : '🔎 ' + esc(externalBandLabel(m.band))}</div>`
+      + `<button type="button" class="btn btn-ghost external-open-btn" data-lesion-id="${esc(e.id)}">Abrir esta lesão</button>`
+      + `</div>`;
+  }).join('');
+}
+
+// Seção editável SUGESTÃO PARA O ATLAS (pura; valores via .value no DOM).
+function externalSuggestionHtml(suggestion){
+  const s = suggestion || { name: '', tags: [], description: '', status: 'automatic', aiReview: 'none', needsReview: false };
+  const tags = Array.isArray(s.tags) ? s.tags.join(', ') : '';
+  const aiLine = s.aiReview === 'pending'
+    ? '<div id="external-ai-state" style="font-size:12px;color:var(--teal);">✨ Revisão com IA: pendente (nada foi enviado; concluir no fluxo de Revisões).</div>'
+    : '<div id="external-ai-state" style="font-size:12px;color:var(--muted-2);"></div>';
+  return `<div class="detail-links-label">SUGESTÃO PARA O ATLAS (editável — nada salvo ainda)</div>`
+    + `<div class="field"><label>Nome da lesão no Atlas</label>`
+    + `<input id="external-name-input" value="${esc(s.name || '')}" placeholder="nome em português"></div>`
+    + (s.needsReview ? '<div style="font-size:12px;color:var(--amber,#b45309);">⚠️ Sem tradução segura — revisar o nome antes de criar.</div>' : '')
+    + `<div class="field"><label>Tags sugeridas (separadas por vírgula)</label>`
+    + `<input id="external-tags-input" value="${esc(tags)}" placeholder="tag1, tag2"></div>`
+    + `<div class="field"><label>Descrição sugerida</label>`
+    + `<textarea id="external-desc-input" rows="3" placeholder="ponto de partida, não texto definitivo">${esc(s.description || '')}</textarea></div>`
+    + `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 8px 0;">`
+    + `<button type="button" class="btn btn-ghost" id="external-ai-btn">✨ Revisar com IA</button>`
+    + aiLine + `</div>`;
+}
+
+function externalImportModalHtml(draft, matches, suggestion){
+  return `<div class="modal">`
+    + `<h2>📥 Importar caso externo</h2>`
+    + `<div class="modal-sub">pré-checagem do acervo — nada será salvo sem a sua decisão</div>`
+    + externalPendingBlockHtml(draft)
+    + (suggestion ? externalSuggestionHtml(suggestion) : '')
+    + `<div class="detail-links-label">PRÉ-CHECAGEM DO ACERVO</div>`
+    + `<div id="external-matches">` + externalMatchesHtml(matches) + `</div>`
+    + `<div id="external-alert"></div>`
+    + `<div class="modal-actions" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">`
+    + `<button type="button" class="btn btn-primary" id="external-create-btn">Criar nova lesão</button>`
+    + `<button type="button" class="btn btn-ghost" id="external-cancel-btn">Cancelar</button>`
+    + `</div></div>`;
+}
+
+function wireExternalOpenButtons(ov, draft){
+  ov.querySelectorAll('.external-open-btn').forEach(btn => {
+    btn.onclick = () => { const id = btn.getAttribute('data-lesion-id'); pendingExternalCase = null; closeOverlay(); openExternalOnLesion(draft, id); };
+  });
+}
+
+// Re-precheck após edição do nome: compara título original E nome em PT.
+// Novidades fortes geram o alerta com [Abrir lesão existente] / [Continuar].
+function refreshExternalMatches(ov, draft, suggestion, baseMatches){
+  const nameEl = ov.querySelector('#external-name-input');
+  const nameNow = (nameEl && nameEl.value || '').trim() || draft.title;
+  const probe = Object.assign({}, draft, { title: nameNow });
+  const fresh = findExternalImportCandidates(probe, DATA);
+  const box = ov.querySelector('#external-matches');
+  if (box) box.innerHTML = externalMatchesHtml(fresh);
+  wireExternalOpenButtons(ov, draft);
+  const known = new Set((baseMatches || []).map(m => m.entry.id));
+  const novel = fresh.filter(m => (m.band === 'exata' || m.band === 'alta') && !known.has(m.entry.id));
+  const alertBox = ov.querySelector('#external-alert');
+  if (!alertBox) return;
+  if (!novel.length) { alertBox.innerHTML = ''; return; }
+  const first = novel[0].entry;
+  alertBox.innerHTML = `<div style="border:1px solid var(--amber,#b45309);border-radius:10px;padding:8px 10px;margin:8px 0;">`
+    + `<div style="font-weight:700;">⚠️ Possível lesão já existente após normalização em português</div>`
+    + `<div>${esc(first.name)}${first.s ? ' — ' + esc(first.s) + (first.site ? ' › ' + esc(first.site) : '') : ''}</div>`
+    + `<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">`
+    + `<button type="button" class="btn btn-ghost" id="external-alert-open">Abrir lesão existente</button>`
+    + `<button type="button" class="btn btn-ghost" id="external-alert-keep">Continuar mesmo assim</button>`
+    + `</div></div>`;
+  const openBtn = alertBox.querySelector('#external-alert-open');
+  if (openBtn) openBtn.onclick = () => { pendingExternalCase = null; closeOverlay(); openExternalOnLesion(draft, first.id); };
+  const keepBtn = alertBox.querySelector('#external-alert-keep');
+  if (keepBtn) keepBtn.onclick = () => { alertBox.innerHTML = ''; };
+}
+
+const EXTERNAL_AI_DEFAULT_INSTRUCTION = 'Revisar nome, tags e descrição da lesão.';
+
+// Pura e testada: confirma a marcação (sem API, sem salvar, sem DATA).
+// Vazio usa a instrução genérica; reedição só troca o texto.
+function confirmExternalAiReview(suggestion, instructionText){
+  const next = Object.assign({}, suggestion || {});
+  const t = String(instructionText || '').trim().slice(0, 500);
+  next.aiReview = 'pending';
+  next.aiReviewInstruction = t || EXTERNAL_AI_DEFAULT_INSTRUCTION;
+  return next;
+}
+
+function truncateExternalAiInstruction(t){
+  const s = String(t || '');
+  return s.length > 60 ? s.slice(0, 57) + '...' : s;
+}
+
+function externalAiInstructionModalHtml(currentText){
+  return `<div class="modal">`
+    + `<h2>✨ Revisar com IA</h2>`
+    + `<div class="modal-sub">diga o que a IA deve revisar — nada será enviado agora</div>`
+    + `<div class="field"><label>O que você quer que a IA revise?</label>`
+    + `<textarea id="external-ai-instruction" rows="4" placeholder="Ex.: melhorar a descrição da lesão, deixar mais objetiva e radiológica, revisar tags e terminologia em português...">${esc(currentText || '')}</textarea></div>`
+    + `<div class="modal-actions" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">`
+    + `<button type="button" class="btn btn-primary" id="external-ai-confirm-btn">Marcar para revisão</button>`
+    + `<button type="button" class="btn btn-ghost" id="external-ai-cancel-btn">Cancelar</button>`
+    + `</div></div>`;
+}
+
+// Caixa pequena por cima do modal de importação (remove() só ela — o modal
+// de importação continua aberto). Reeditável: reabre com o texto atual.
+function openExternalAiInstructionModal(ov, draft, suggestion){
+  const live = readLiveSuggestion(ov, suggestion);
+  suggestion.name = live.name; suggestion.tags = live.tags; suggestion.description = live.description;
+  const aiOv = document.createElement('div');
+  aiOv.className = 'overlay external-ai-overlay';
+  aiOv.innerHTML = externalAiInstructionModalHtml(suggestion.aiReviewInstruction);
+  aiOv.onclick = (ev) => { if (ev.target === aiOv) aiOv.remove(); };
+  document.body.appendChild(aiOv);
+  const confirmBtn = document.getElementById('external-ai-confirm-btn');
+  if (confirmBtn) confirmBtn.onclick = () => {
+    const ta = document.getElementById('external-ai-instruction');
+    const next = confirmExternalAiReview(suggestion, ta ? ta.value : '');
+    suggestion.aiReview = next.aiReview;
+    suggestion.aiReviewInstruction = next.aiReviewInstruction;
+    const state = ov.querySelector('#external-ai-state');
+    if (state) {
+      state.style.color = 'var(--teal)';
+      state.textContent = '✨ Revisão com IA pendente: "' + truncateExternalAiInstruction(suggestion.aiReviewInstruction) + '"';
+    }
+    toast('Marcado para revisão com IA — nada foi enviado automaticamente.');
+    aiOv.remove();
+  };
+  const cancelBtn = document.getElementById('external-ai-cancel-btn');
+  if (cancelBtn) cancelBtn.onclick = () => { aiOv.remove(); };
+}
+
+function readLiveSuggestion(ov, suggestion){
+  const get = (id) => { const el = ov.querySelector(id); return el ? el.value : null; };
+  const next = Object.assign({}, suggestion);
+  const name = get('#external-name-input');
+  const tags = get('#external-tags-input');
+  const desc = get('#external-desc-input');
+  if (name !== null) next.name = name;
+  if (tags !== null) next.tags = tags.split(',').map(t => t.trim()).filter(Boolean);
+  if (desc !== null) next.description = desc;
+  return next;
+}
+
+function openExternalImportModal(draft){
+  pendingExternalCase = draft;
+  const matches = findExternalImportCandidates(draft, DATA);
+  const suggestion = buildExternalSuggestion(draft, DATA, matches);
+  const ov = document.createElement('div');
+  ov.className = 'overlay external-import-overlay';
+  ov.innerHTML = externalImportModalHtml(draft, matches, suggestion);
+  ov.onclick = (ev) => { if (ev.target === ov) { pendingExternalCase = null; closeOverlay(); } };
+  document.body.appendChild(ov);
+  wireExternalOpenButtons(ov, draft);
+  const track = (id, field) => {
+    const el = ov.querySelector(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
+      const v = el.value;
+      const next = applySuggestionEdit(suggestion, field, v);
+      suggestion.status = next.status;
+      if (field === 'tags') suggestion.tags = next.tags;
+      else suggestion[field] = next[field];
+      if (field === 'name') refreshExternalMatches(ov, draft, suggestion, matches);
+    });
+  };
+  track('#external-name-input', 'name');
+  track('#external-tags-input', 'tags');
+  track('#external-desc-input', 'description');
+  const aiBtn = ov.querySelector('#external-ai-btn');
+  if (aiBtn) aiBtn.onclick = () => openExternalAiInstructionModal(ov, draft, suggestion);
+  document.getElementById('external-create-btn').onclick = () => {
+    const createBtn = document.getElementById('external-create-btn');
+    if (createBtn && createBtn.dataset.busy === '1') return; // duplo-clique não abre 2 drafts
+    if (createBtn) createBtn.dataset.busy = '1';
+    const live = readLiveSuggestion(ov, suggestion);
+    live.status = suggestion.status;
+    live.aiReview = suggestion.aiReview;
+    live.originalTitle = suggestion.originalTitle;
+    live.nameSource = suggestion.nameSource;
+    live.needsReview = suggestion.needsReview;
+    pendingExternalCase = null; closeOverlay(); openExternalDraft(draft, live);
+  };
+  document.getElementById('external-cancel-btn').onclick = () => { pendingExternalCase = null; closeOverlay(); };
+}
+
+// Nova lesão em DRAFT: abre o formulário existente e pré-preenche nome (em
+// PT, editado no modal), descrição, tags (via mecânica normal do campo) e
+// referência externa (título original preservado no rótulo do link).
+// Nada é persistido até o usuário clicar em Salvar.
+function openExternalDraft(draft, suggestion){
+  const sug = suggestion && typeof suggestion === 'object' ? suggestion : {
+    originalTitle: draft.title, name: draft.title, tags: [], description: '',
+    status: 'automatic', aiReview: 'none', needsReview: false
+  };
+  openForm(null);
+  try {
+    const nameEl = document.getElementById('f-name');
+    if (nameEl && !nameEl.value) nameEl.value = sug.name || draft.title;
+    // Auditoria 2026-09-21 (links:[] nos duplicados): a referência externa
+    // dependia do clique manual em "+ usar esta referência". Agora ela já sai
+    // encaminhada nos campos de link (via mecânica normal do formulário, só
+    // persiste no Salvar; o usuário pode remover antes). Nunca duplica.
+    const lab0 = document.getElementById('f-link-label');
+    const url0 = document.getElementById('f-link-url');
+    const add0 = document.getElementById('f-link-add');
+    if (lab0 && url0 && add0 && !url0.value.trim()) {
+      lab0.value = (draft.source + ' — ' + (sug.originalTitle || draft.title)).slice(0, 120);
+      url0.value = draft.sourceUrl;
+      add0.click();
+    }
+    const notesEl = document.getElementById('f-notes');
+    if (notesEl && !notesEl.value && sug.description) notesEl.value = sug.description;
+    const tagInput = document.getElementById('f-tag-input');
+    if (tagInput && Array.isArray(sug.tags)) {
+      sug.tags.forEach(t => {
+        if (typeof t !== 'string' || !t.trim()) return;
+        tagInput.value = t.trim();
+        try {
+          tagInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        } catch (e) { /* sem KeyboardEvent: usuário digita manualmente */ }
+      });
+      tagInput.value = '';
+    }
+    const modal = document.querySelector('.lesion-form-overlay .modal');
+    if (modal) {
+      const tmp = document.createElement('div');
+      const aiLine = sug.aiReview === 'pending'
+        ? '<div style="font-size:12px;color:var(--teal);">✨ Revisão com IA pendente'
+          + (sug.aiReviewInstruction ? ': &ldquo;' + esc(sug.aiReviewInstruction).slice(0, 200) + '&rdquo;' : '')
+          + ' — concluir manualmente no fluxo de Revisões.</div>'
+        : '';
+      tmp.innerHTML = externalPendingBlockHtml(draft) + aiLine
+        + `<button type="button" class="btn btn-ghost" id="external-use-link-btn">+ usar esta referência nos links</button>`;
+      modal.insertBefore(tmp, modal.firstChild.nextSibling);
+      const useBtn = document.getElementById('external-use-link-btn');
+      if (useBtn) useBtn.onclick = () => {
+        const lab = document.getElementById('f-link-label');
+        const url = document.getElementById('f-link-url');
+        const add = document.getElementById('f-link-add');
+        if (lab && url && add && !url.value) {
+          lab.value = (draft.source + ' — ' + (sug.originalTitle || draft.title)).slice(0, 120);
+          url.value = draft.sourceUrl;
+          add.click();
+          toast('Referência adicionada aos links (será salva com a lesão).');
+        }
+      };
+    }
+  } catch (e) { console.warn('Falha ao pré-preencher draft externo.', e); }
+  pendingExternalCase = null;
+}
+
+// Lesão existente: só navega + bloco informativo. Nenhum anexo automático.
+function openExternalOnLesion(draft, lesionId){
+  const e = (typeof DATA !== 'undefined' && DATA.find(x => x.id === lesionId)) || null;
+  if (!e) { toast('Lesão não encontrada no acervo.'); return; }
+  openDetail(lesionId);
+  try {
+    const modal = document.querySelector('.overlay .modal');
+    if (modal) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = externalPendingBlockHtml(draft);
+      const anchor = modal.querySelector('.detail-meta');
+      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(tmp, anchor.nextSibling);
+      else modal.insertBefore(tmp, modal.firstChild);
+    }
+  } catch (err) { console.warn('Falha ao exibir bloco do caso externo.', err); }
+  pendingExternalCase = null;
+}
+
+function clearExternalImportHash(){
+  try {
+    if (typeof history !== 'undefined' && history.replaceState) {
+      const clean = String(window.location.pathname) + String(window.location.search);
+      history.replaceState(null, '', clean);
+      return true;
+    }
+  } catch (e) { /* fallback abaixo */ }
+  try { window.location.hash = ''; } catch (e2) {}
+  return false;
+}
+
+// Consumido uma única vez no boot (via gancho pós-loadData). Sempre limpa o
+// fragmento antes de validar (F5 nunca reimporta), nunca quebra o boot.
+async function maybeHandleExternalImport(){
+  if (typeof window === 'undefined' || typeof location === 'undefined') return null;
+  const hash = String(location.hash || '');
+  if (hash.indexOf(EXTERNAL_IMPORT_PREFIX) !== 0) return null;
+  clearExternalImportHash();
+  const parsed = parseExternalImportHash(hash);
+  if (!parsed || !parsed.ok) {
+    console.warn('Importação externa ignorada:', parsed && parsed.error);
+    return { status: 'rejeitado' };
+  }
+  const checked = validateExternalImportPayload(parsed.payload);
+  if (!checked.ok) {
+    console.warn('Importação externa inválida:', checked.errors.join(' | '));
+    try { toast('Caso externo inválido — importação cancelada.'); } catch (e) {}
+    return { status: 'rejeitado' };
+  }
+  openExternalImportModal(checked.value);
+  return { status: 'modal' };
+}
+
+// Gancho pós-boot SEM editar loadData(): preserva todas as âncoras de linha
+// dos testes existentes. O try/catch interno garante boot intacto.
+const _loadDataSemImport = loadData;
+loadData = async function(){
+  const result = await _loadDataSemImport.apply(this, arguments);
+  try { await maybeHandleExternalImport(); } catch (e) { console.warn('Falha na importação externa (boot preservado).', e); }
+  return result;
+};
+
+/* ============================================================
+   MÉTRICAS DE IMAGEM DA SIDEBAR (2026-09-21)
+   ------------------------------------------------------------
+   Por seção/site: total de lesões · total de imagens · cobertura
+   (lesões com ≥1 imagem / total). Derivado do DATA atual, mesmo conjunto
+   do structure() (altPlacements contam no posicionamento, como o total
+   existente). entry.images é canônico/dedup nas rotinas atuais — conta
+   images.length (+img legado no total); "com imagem" segue lesionHasAnyImage
+   (igual a hasEntryImgs). Sem assignedAt aqui (produtividade ≠ estoque).
+   Sem listeners/intervals: calculado 1x por renderTree().
+   ============================================================ */
+function forEachImagePlacement(catalog, cb){
+  (Array.isArray(catalog) ? catalog : []).forEach(e => {
+    if (!e || typeof e !== 'object') return;
+    cb(e.s, e.site, e);
+    (Array.isArray(e.altPlacements) ? e.altPlacements : []).forEach(p => {
+      if (p && typeof p === 'object') cb(p.s, p.site, e);
+    });
+  });
+}
+function blankImageStats(){
+  return { lesions: 0, images: 0, withImages: 0 };
+}
+function addPlacementStats(acc, entry){
+  acc.lesions++;
+  acc.images += (Array.isArray(entry.images) ? entry.images.length : 0) + (entry.img ? 1 : 0);
+  if (lesionHasAnyImage(entry)) acc.withImages++;
+}
+// Mapa agregado em UMA passada: { sections:{sec:stats}, sites:{sec:{site:stats}} }.
+function buildSidebarImageStats(catalog){
+  const sections = {};
+  const sites = {};
+  forEachImagePlacement(catalog, (sec, site, entry) => {
+    if (!sections[sec]) sections[sec] = blankImageStats();
+    if (!sites[sec]) sites[sec] = {};
+    if (!sites[sec][site]) sites[sec][site] = blankImageStats();
+    addPlacementStats(sections[sec], entry);
+    addPlacementStats(sites[sec][site], entry);
+  });
+  return { sections, sites };
+}
+function sectionStats(catalog, section){
+  const st = blankImageStats();
+  forEachImagePlacement(catalog, (sec, site, entry) => { if (sec === section) addPlacementStats(st, entry); });
+  return st;
+}
+function siteStats(catalog, section, site){
+  const st = blankImageStats();
+  forEachImagePlacement(catalog, (sec, st2, entry) => { if (sec === section && st2 === site) addPlacementStats(st, entry); });
+  return st;
+}
+// Formato simplificado (2026-09-21): só cobertura "38/243" — sem total
+// isolado, sem nº absoluto de imagens, sem 🖼. Zeros sempre visíveis.
+function sidebarStatsText(st){
+  const s = st || blankImageStats();
+  return `${s.withImages}/${s.lesions}`;
+}
+function sidebarCoverageHtml(st){
+  const s = st || blankImageStats();
+  return `<span class="cov-num">${s.withImages}</span><span class="cov-den">/${s.lesions}</span>`;
+}
+function sidebarStatsTitle(st){
+  const s = st || blankImageStats();
+  return `${s.withImages} de ${s.lesions} lesões possuem pelo menos uma imagem`;
+}
+
+/* ============================================================
+   BLOQUEIO DE DUPLICATA NO SALVAR + IDEMPOTÊNCIA (auditoria 2026-09-21)
+   ------------------------------------------------------------
+   Causa encontrada: o botão Salvar só era desabilitado DEPOIS dos uploads,
+   então um duplo-clique durante o envio executava o handler 2x e fazia
+   DATA.push 2x com o MESMO formEntryId (lesões idênticas, mesmo id).
+   Correção em 2 camadas: (1) trava formSaving no handler (via closure do
+   openForm); (2) antes de qualquer upload/persistência de lesão NOVA,
+   findExactLesionMatch() procura identidade semântica exata
+   (seção+sítio+nome normalizado) ou sourceUrl já registrada — nunca cria
+   silenciosamente (abrir / cancelar / forçar com confirmação extra).
+   ============================================================ */
+function exactLesionIdentityKey(s, site, name){
+  return String(s || '').trim().toLowerCase() + '|||' + String(site || '').trim().toLowerCase() + '|||' + normalizeExternalTitle(name);
+}
+// Pura e testada. excludeId reserva o próprio registro (uso futuro em edição).
+function findExactLesionMatch(sec, site, name, links, excludeId, catalog){
+  const list = Array.isArray(catalog) ? catalog : [];
+  const key = exactLesionIdentityKey(sec, site, name);
+  const byKey = list.find(e => e && e.id !== excludeId && typeof e.name === 'string' && exactLesionIdentityKey(e.s, e.site, e.name) === key);
+  if (byKey) return { entry: byKey, via: 'identidade' };
+  const urls = (Array.isArray(links) ? links : []).map(l => (l && typeof l.url === 'string') ? l.url.trim() : '').filter(Boolean);
+  for (const u of urls) {
+    const hit = list.find(e => e && e.id !== excludeId && Array.isArray(e.links) && e.links.some(l => l && sameExternalUrl(l.url, u)));
+    if (hit) return { entry: hit, via: 'url' };
+  }
+  return null;
+}
+// Modal de 3 vias (Promise). Remove só a própria overlay, nunca o form.
+function confirmDuplicateLesion(entry, via){
+  return new Promise((resolve) => {
+    const ctx = [entry.s, entry.site].filter(Boolean).map(esc).join(' › ');
+    const ov = document.createElement('div');
+    ov.className = 'overlay external-dup-overlay';
+    ov.innerHTML = `<div class="modal"><h2>⚠️ Lesão possivelmente duplicada</h2>`
+      + `<div class="modal-sub">Já existe uma lesão com este nome e localização${via === 'url' ? ' (mesma URL de referência)' : ''}.</div>`
+      + `<div class="external-match" style="border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;">`
+      + `<div style="font-weight:700;">${esc(entry.name)}</div>`
+      + (ctx ? `<div style="color:var(--muted-2);font-size:12px;">${ctx}</div>` : '')
+      + `</div>`
+      + `<div class="modal-actions" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">`
+      + `<button type="button" class="btn btn-ghost" id="dup-open-btn">Abrir existente</button>`
+      + `<button type="button" class="btn btn-ghost" id="dup-cancel-btn">Cancelar</button>`
+      + `<button type="button" class="btn btn-primary" id="dup-force-btn">Continuar mesmo assim</button>`
+      + `</div></div>`;
+    document.body.appendChild(ov);
+    const done = (v) => { try { ov.remove(); } catch (e) {} resolve(v); };
+    document.getElementById('dup-open-btn').onclick = () => done('open');
+    document.getElementById('dup-cancel-btn').onclick = () => done('cancel');
+    document.getElementById('dup-force-btn').onclick = () => done('force');
+    ov.onclick = (ev) => { if (ev.target === ov) done('cancel'); };
+  });
+}
+
+/* ============================================================
+   CONSOLIDAÇÃO SEGURA DE DUPLICATAS DE MESMO ID (auditoria 2026-09-21)
+   ------------------------------------------------------------
+   Caso real: 3 objetos distintos com o MESMO id (triplo submit do mesmo
+   formulário antes da trava formSaving). Como o id é igual, NUNCA remover
+   por `DATA.filter(e => e.id !== ...)` (apagaria as 3 ocorrências) — a
+   remoção é por ÍNDICE (splice decrescente), mantida a 1ª ocorrência.
+   Fluxo (tudo ou nada, com aborts): snapshot OBRIGATÓRIO (motivo da
+   allowlist) → confirma exatamente 3 ocorrências → metadados iguais →
+   3 imagens distintas (stableImageKeyV208) → mescla "mais completo vence
+   por campo" + uniões dedup → splice dos extras → pós-condição → saveData.
+   SRS/LESION_REVISIONS/SESSIONLOG são indexados por id (registro único) e
+   NÃO são tocados. Restauração, se preciso, é MANUAL via snapshot.
+   Uso (console, localhost): await consolidateSameIdDuplicates('u_...',
+   { expectedPublicIds: [...] })
+   ============================================================ */
+async function consolidateSameIdDuplicates(targetId, opts){
+  const o = (opts && typeof opts === 'object') ? opts : {};
+  const report = { ok: false, reason: '', targetId, snapshotId: null, before: 0, after: 0,
+    imagesBefore: [], imagesAfter: [], principalIndex: -1, removed: 0,
+    divergences: [], srsFound: false, revisionsFound: false, persisted: false };
+  if (typeof targetId !== 'string' || !targetId) { report.reason = 'id inválido'; return report; }
+  // 1. Safety snapshot OBRIGATÓRIO; falhou => ABORTA sem tocar no DATA.
+  let snap = null;
+  try { snap = createSafetySnapshot('antes de forçar fusão de duplicatas'); } catch (e) { snap = null; }
+  if (!snap) { report.reason = 'snapshot falhou — abortado sem tocar no DATA'; return report; }
+  report.snapshotId = snap.id || null;
+  // 2. Ocorrências POR ÍNDICE.
+  const idxs = [];
+  for (let i = 0; i < DATA.length; i++) { if (DATA[i] && DATA[i].id === targetId) idxs.push(i); }
+  report.before = idxs.length;
+  if (idxs.length !== 3) { report.reason = 'ocorrências ≠ 3 (achadas: ' + idxs.length + ') — abortado'; return report; }
+  const occ = idxs.map(i => DATA[i]);
+  report.imagesBefore = occ.map(e => (Array.isArray(e.images) ? e.images.length : 0));
+  // 3. Metadados precisam ser os mesmos (s/site/name); senão, análise manual.
+  const sig = (e) => JSON.stringify({ s: e.s || '', site: e.site || '', name: e.name || '' });
+  if (!occ.every(e => sig(e) === sig(occ[0]))) { report.reason = 'metadados (s/site/name) divergentes — abortado para análise manual'; return report; }
+  // 4. Imagens: exatamente 3 identidades distintas (sem duplicar, sem inventar).
+  const keyOf = (img) => stableImageKeyV208(img);
+  const distinct = new Set();
+  occ.forEach(e => (Array.isArray(e.images) ? e.images : []).forEach(img => { const k = keyOf(img); if (k) distinct.add(k); }));
+  if (distinct.size !== 3) { report.reason = 'imagens distintas ≠ 3 (' + distinct.size + ') — abortado'; return report; }
+  if (Array.isArray(o.expectedPublicIds) && o.expectedPublicIds.length) {
+    const pubs = new Set();
+    occ.forEach(e => (Array.isArray(e.images) ? e.images : []).forEach(img => { if (img && img.publicId) pubs.add(String(img.publicId)); }));
+    const missing = o.expectedPublicIds.filter(p => !pubs.has(p));
+    if (missing.length) { report.reason = 'publicIds esperados ausentes: ' + missing.join(', '); return report; }
+  }
+  // 5. Principal = 1ª ocorrência (mesmo id, sem gerar nada novo).
+  const principal = occ[0];
+  report.principalIndex = idxs[0];
+  // Imagens: união por identidade estável (preserva objeto e owner; sem
+  // assignedAt retroativo — o que é null continua null).
+  const seenImg = new Set();
+  const mergedImages = [];
+  occ.forEach(e => (Array.isArray(e.images) ? e.images : []).forEach(img => {
+    if (!img || typeof img !== 'object') return;
+    const k = keyOf(img);
+    if (k) { if (seenImg.has(k)) return; seenImg.add(k); }
+    mergedImages.push(img);
+  }));
+  principal.images = mergedImages;
+  // Tags e links: união deduplicada (normalizada), grafia da 1ª ocorrência.
+  const unionNorm = (lists) => {
+    const seen = new Set();
+    const out = [];
+    lists.forEach(arr => (Array.isArray(arr) ? arr : []).forEach(v => {
+      const s = (v && typeof v === 'object') ? JSON.stringify(v) : String(v || '');
+      const n = s.trim().toLowerCase();
+      if (!n || seen.has(n)) return;
+      seen.add(n);
+      out.push(v);
+    }));
+    return out;
+  };
+  principal.tags = unionNorm(occ.map(e => e.tags));
+  const linkUrl = (l) => (l && typeof l.url === 'string') ? l.url.trim().replace(/\/+$/, '') : '';
+  const seenLink = new Set();
+  const mergedLinks = [];
+  occ.forEach(e => (Array.isArray(e.links) ? e.links : []).forEach(l => {
+    const u = linkUrl(l);
+    if (!u || seenLink.has(u.toLowerCase())) return;
+    seenLink.add(u.toLowerCase());
+    mergedLinks.push(l);
+  }));
+  principal.links = mergedLinks;
+  // Escalares: "mais completo vence" (adota não-vazio; divergência não-vazia
+  // vai para o relatório, mantido o do principal).
+  ['notes', 'enTerm', 'img', 'classification'].forEach(f => {
+    for (let k = 1; k < occ.length; k++) {
+      const other = occ[k][f];
+      if (!principal[f] && other) { principal[f] = other; break; }
+      if (principal[f] && other && principal[f] !== other) { report.divergences.push(f); break; }
+    }
+  });
+  if (typeof principal.localImg !== 'boolean') principal.localImg = !!principal.localImg;
+  // altPlacements: união por identidade (se existir em alguma).
+  const apSeen = new Set();
+  const apOut = [];
+  occ.forEach(e => (Array.isArray(e.altPlacements) ? e.altPlacements : []).forEach(p => {
+    const k = JSON.stringify(p);
+    if (apSeen.has(k)) return;
+    apSeen.add(k);
+    apOut.push(p);
+  }));
+  if (apOut.length) principal.altPlacements = apOut;
+  else delete principal.altPlacements;
+  // 6. SRS/revisões/sessionLog: indexados por id — registro único, intocados.
+  try { report.srsFound = !!(typeof SRS !== 'undefined' && SRS && SRS[targetId]); } catch (e) {}
+  try { report.revisionsFound = !!(typeof LESION_REVISIONS !== 'undefined' && LESION_REVISIONS && LESION_REVISIONS[targetId]); } catch (e) {}
+  // 7. Remove SOMENTE as 2 extras, POR ÍNDICE decrescente (nunca por id).
+  idxs.slice(1).sort((a, b) => b - a).forEach(i => { DATA.splice(i, 1); });
+  report.removed = 2;
+  // 8. Pós-condição.
+  const after = DATA.filter(e => e && e.id === targetId);
+  report.after = after.length;
+  report.imagesAfter = ((after[0] && after[0].images) || []).map(img => img && img.publicId);
+  if (after.length !== 1 || after[0] !== principal || (after[0].images || []).length !== 3) {
+    report.reason = 'pós-condição falhou (restaurar MANUALMENTE o snapshot ' + report.snapshotId + ')';
+    return report;
+  }
+  // 9. Persistência pelo fluxo atual seguro (sem mexer no Cloudinary).
+  try {
+    await saveData();
+    report.persisted = true;
+  } catch (e) {
+    report.reason = 'saveData falhou (memória consolidada; snapshot ' + report.snapshotId + ' preservado; chame saveData() de novo ou restaure o snapshot manualmente)';
+    return report;
+  }
+  report.ok = true;
+  report.reason = 'consolidado: 3 → 1, 3 imagens preservadas';
+  return report;
+}
+
+/* ============================================================
+   PRODUTIVIDADE DE IMAGENS — assignedAt + métricas (2026-09-21)
+   ------------------------------------------------------------
+   assignedAt (ISO) = PRIMEIRA ATRIBUIÇÃO CONFIRMADA da imagem à lesão.
+   Nasce SÓ no carimbo chamado nos dois pontos de confirmação real (Salvar
+   do editor, Concluído do Quiz). Auditoria prévia:
+   nenhum timestamp por imagem existia (só leitura diagnóstica de
+   img.createdAt e _userUpdatedAt da LESÃO). Históricas sem assignedAt nunca
+   ganham um retroativo: entram só no total geral, nunca na série diária.
+   Contagem diária usa DIA LOCAL (não "últimas 24h"). Sync nunca gera
+   assignedAt; no merge fica o válido MAIS ANTIGO (adoptOldestAssignedAt).
+   ============================================================ */
+function isValidAssignedAt(v){
+  return typeof v === 'string' && v.length > 0 && v.length <= 64 && !Number.isNaN(Date.parse(v));
+}
+function localDayKeyFromDate(d){
+  const t = (d instanceof Date) ? d : new Date(d);
+  if (Number.isNaN(t.getTime())) return null;
+  return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+}
+function imageAssignedDayLocal(iso){
+  if (!isValidAssignedAt(iso)) return null;
+  return localDayKeyFromDate(new Date(iso));
+}
+// Carimba assignedAt (ISO agora) SÓ nas imagens novas confirmadas no save.
+// Mantidas sem timestamp (históricas) continuam sem — sem invenção.
+function stampNewImagesAssignedAt(prevImages, nextImages, nowIso){
+  const prev = new Map();
+  (Array.isArray(prevImages) ? prevImages : []).forEach(img => {
+    if (!img || typeof img !== 'object') return;
+    const k = stableImageKeyV208(img);
+    if (k && !prev.has(k)) prev.set(k, img);
+  });
+  let stamped = 0;
+  (Array.isArray(nextImages) ? nextImages : []).forEach(img => {
+    if (!img || typeof img !== 'object') return;
+    if (isValidAssignedAt(img.assignedAt)) return;
+    const k = stableImageKeyV208(img);
+    const old = k ? prev.get(k) : null;
+    if (old && isValidAssignedAt(old.assignedAt)) { img.assignedAt = old.assignedAt; return; }
+    if (old) return; // mantida histórica: sem timestamp, sem invenção
+    img.assignedAt = nowIso;
+    stamped++;
+  });
+  return stamped;
+}
+// Adota o assignedAt válido MAIS ANTIGO entre as versões da mesma imagem.
+// Chamado pelo merge (pull/push/reconciliação): nunca gera timestamp.
+function adoptOldestAssignedAt(outImages, baseImgs, addImgs){
+  const oldest = new Map();
+  const consider = (img) => {
+    if (!img || typeof img !== 'object' || !isValidAssignedAt(img.assignedAt)) return;
+    imageIdentityKeys(Object.assign({}, img, { assignedAt: undefined })).forEach(k => {
+      if (!oldest.has(k) || img.assignedAt < oldest.get(k)) oldest.set(k, img.assignedAt);
+    });
+  };
+  (Array.isArray(baseImgs) ? baseImgs : []).forEach(consider);
+  (Array.isArray(addImgs) ? addImgs : []).forEach(consider);
+  (Array.isArray(outImages) ? outImages : []).forEach(img => {
+    if (!img || typeof img !== 'object') return;
+    let best = isValidAssignedAt(img.assignedAt) ? img.assignedAt : null;
+    imageIdentityKeys(Object.assign({}, img, { assignedAt: undefined })).forEach(k => {
+      const v = oldest.get(k);
+      if (v && (!best || v < best)) best = v;
+    });
+    if (best && best !== img.assignedAt) img.assignedAt = best;
+  });
+}
+function lesionHasAnyImage(e){
+  return !!((e && Array.isArray(e.images) && e.images.length) || (e && (e.localImg || e.img)));
+}
+// Conta imagens com assignedAt no dia local informado. Mesma imagem (mesma
+// identidade estável não-vazia) em 2 lesões conta 1. Sem assignedAt = fora.
+function countImagesAssignedOnDate(catalog, dateStr){
+  if (typeof dateStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return 0;
+  const seen = new Set();
+  let n = 0;
+  (Array.isArray(catalog) ? catalog : []).forEach(e => {
+    (Array.isArray(e && e.images) ? e.images : []).forEach(img => {
+      if (!img || typeof img !== 'object') return;
+      if (imageAssignedDayLocal(img.assignedAt) !== dateStr) return;
+      const k = stableImageKeyV208(img);
+      if (k) { if (seen.has(k)) return; seen.add(k); }
+      n++;
+    });
+  });
+  return n;
+}
+// Total geral INCLUI históricas sem assignedAt (mesma convenção da auditoria:
+// images.length + legado img). Lesões com imagem segue hasEntryImgs.
+function countTotalImages(catalog){
+  let n = 0;
+  (Array.isArray(catalog) ? catalog : []).forEach(e => {
+    if (!e || typeof e !== 'object') return;
+    n += (Array.isArray(e.images) ? e.images.length : 0) + (e.img ? 1 : 0);
+  });
+  return n;
+}
+function countLesionsWithImages(catalog){
+  return (Array.isArray(catalog) ? catalog : []).filter(lesionHasAnyImage).length;
+}
+// Série de 7 dias (hoje + 6 anteriores, zeros incluídos, nunca omitidos).
+function imagesAssignedLast7Days(catalog, refDate){
+  const ref = (refDate instanceof Date) ? new Date(refDate) : new Date();
+  const out = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(ref);
+    d.setDate(d.getDate() - i);
+    const key = localDayKeyFromDate(d);
+    out.push({
+      key,
+      label: String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0'),
+      count: countImagesAssignedOnDate(catalog, key)
+    });
+  }
+  return out;
+}
+// SVG próprio no padrão do gráfico de desempenho (polyline + dots + <title>).
+function renderImagesWeekSvg(series){
+  const list = Array.isArray(series) ? series : [];
+  const max = Math.max(1, ...list.map(s => Number(s.count) || 0));
+  const T = 10, B = 126, L = 10, R = 346;
+  const y = (c) => B - (Math.min(c, max) / max) * (B - T);
+  const x = (i) => (list.length > 1 ? L + i * ((R - L) / (list.length - 1)) : (L + R) / 2);
+  const pts = list.map((s, i) => ({ x: x(i), y: y(Number(s.count) || 0), label: s.label, count: Number(s.count) || 0 }));
+  const poly = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  return `<svg class="study-line-svg" viewBox="0 0 380 160" preserveAspectRatio="none">`
+    + `<line class="study-line-grid" x1="10" y1="10" x2="346" y2="10"/>`
+    + `<line class="study-line-grid" x1="10" y1="68" x2="346" y2="68"/>`
+    + `<line class="study-line-grid" x1="10" y1="126" x2="346" y2="126"/>`
+    + `<text x="352" y="13" class="study-line-axis-label">${max}</text>`
+    + `<text x="352" y="71" class="study-line-axis-label">${Math.round(max / 2)}</text>`
+    + `<text x="352" y="129" class="study-line-axis-label">0</text>`
+    + (pts.length > 1 ? `<polyline class="study-line" points="${poly}"/>` : '')
+    + pts.map(p => `<circle class="study-dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3"><title>dia ${p.label}: ${p.count} ${p.count === 1 ? 'imagem' : 'imagens'}</title></circle>`).join('')
+    + list.map((s, i) => `<text x="${x(i).toFixed(1)}" y="148" class="study-line-x-label" text-anchor="middle">${esc(String(s.label))}</text>`).join('')
+    + `</svg>`;
 }
 
 </script>

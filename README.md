@@ -905,3 +905,104 @@ nas imagens (imagens que existem só na nuvem são incorporadas). Nenhuma imagem
 reenviada ao Cloudinary.
 
 Testes: `tests/snapshots-ownership.test.js` com **46 PASS**.
+
+### Importador externo Radiopaedia → Atlas (MVP, 2026-09-21)
+
+Importação **semiautomática e metadata-only** de casos do Radiopaedia: o
+userscript `tools/radiopaedia-to-atlas.user.js` adiciona o botão
+`📥 Enviar ao Atlas` nas páginas `https://radiopaedia.org/cases/*` e abre o
+Atlas com os metadados no fragmento da URL. O Atlas valida, faz
+pré-checagem de duplicidade em 4 níveis (URL exata, título exato
+normalizado, similaridade em faixas, contexto seção/sítio) e mostra um
+modal — **nada é salvo, criado ou anexado automaticamente**. Sem imagens,
+sem tradução, sem biblioteca nova.
+
+Testes: `tests/external-import.test.js` com **67 PASS** (inclui bateria
+anti-falso-positivo, os 20 itens da v2, a instrução do Revisar com IA, os
+8 anti-duplicata do Salvar e os 12 da consolidação mesmo-id) e
+`tests/quiz-image-desc.test.js` com **8 PASS**.
+
+### Bloqueio de duplicata no Salvar (auditoria 2026-09-21)
+
+Duplo-clique no Salvar durante uploads criava lesões idênticas (mesmo ID).
+Agora há trava de submit e, antes de persistir lesão nova, checagem de
+identidade exata (seção+sítio+nome) ou URL já registrada — com opções
+[Abrir existente]/[Cancelar]/[Continuar mesmo assim + confirmação].
+
+### Consolidação de duplicatas de mesmo id (2026-09-21)
+
+`consolidateSameIdDuplicates(id, {expectedPublicIds})` via console:
+snapshot obrigatório → exige N ocorrências → 1ª como principal + união
+dedup → remove extras por índice (nunca filter por id) → saveData.
+Referência do importador agora já sai encaminhada aos links do draft.
+
+### Revisar com IA — campo de instrução + descrição legível no Quiz (2026-09-21)
+
+O botão `✨ Revisar com IA` do importador abre uma caixa com o campo "O que
+você quer que a IA revise?": confirmar grava `aiReviewInstruction` no draft
+(com texto genérico se vazio, reeditável, com preview discreto) sem nenhuma
+chamada externa. No Quiz, a descrição da imagem saiu de 11px abaixo para um
+bloco legível (15px) **acima** da imagem, exibido **somente após responder**;
+navegar no carrossel atualiza a descrição (segue o `quizImgIdx`) e a próxima
+questão reseta.
+
+### Produtividade de imagens — assignedAt + dashboard (2026-09-21)
+
+Métrica de construção do acervo: cada imagem nova **efetivamente atribuída
+e confirmada em Salvar/Concluído** ganha `assignedAt` (ISO) — uma única vez
+(pending, cancelamento, falha, sync e re-recebimento nunca geram; a mesma
+imagem conta 1; dia contado no **horário local**). Imagens antigas sem
+`assignedAt` entram só no total geral, nunca na série diária (o gráfico é
+confiável a partir desta versão). No `Quiz & Progresso`: card
+`🖼️ N imagens hoje`, gráfico `Imagens atribuídas na última semana` (7 dias,
+linha com pontos, entre Evolução — reduzida à metade — e Estado do acervo)
+e totais `Imagens no acervo: X · Lesões com imagem: Y / TOTAL`, com refresh
+ao vivo ao salvar.
+
+Testes: `tests/image-productivity.test.js` com **20 PASS**.
+
+### Descrição geral do quadro de imagens (2026-09-21)
+
+O construtor de quadros ganhou o campo `Descrição geral do quadro` (após
+Layout/Rótulos/Resolução, antes da prévia): o texto vira o `label` canônico
+da imagem composta no Inserir — **sem queimar no PNG/JPEG** (o canvas
+continua só com as sequências). Vale para criar e reeditar (pré-preenche se
+houver descrição); depois, edita-se pelo campo de legenda existente. No Quiz
+aparece no bloco "Descrição da imagem" pós-resposta; conta 1 `assignedAt`
+no save, como qualquer imagem.
+
+Testes: `tests/collage-desc.test.js` com **15 PASS**.
+
+### Contadores de imagem na sidebar (2026-09-21)
+
+Cada seção/site mostra em uma linha `243 · 🖼126 · 38/243` (total de lesões,
+total de imagens, cobertura com imagem — zeros sempre visíveis, com tooltip).
+Cálculo único por render a partir do DATA, sem listeners novos; atualiza nos
+fluxos que já re-renderizam (salvar, concluir no Quiz, sync).
+
+Testes: `tests/sidebar-image-stats.test.js` com **22 PASS**.
+
+### Sidebar simplificada — só cobertura X/Y (2026-09-21)
+
+Para não comprimir os nomes, a linha mostra só `38/243` (lesões com imagem
+em âmbar, total em cinza; `0/73` visível). O cálculo é o mesmo, reutilizado.
+
+### Importador externo v2 — português, tags e descrição em draft (2026-09-21)
+
+O modal separa **título original** (preservado para rastreabilidade) de
+**nome sugerido em português** (catálogo via `enTerm` > glossário local >
+original + aviso; nunca traduz à força). Sugere tags PT conservadoras
+(reaproveitando o vocabulário do acervo) e descrição curta inicial — tudo
+editável antes de criar, tudo draft até o Salvar. Editar o nome roda a
+pré-checagem de novo e alerta sobre lesão já existente. O botão
+`✨ Revisar com IA` só marca como pendente (sem nenhuma chamada externa).
+
+#### Como instalar radiopaedia-to-atlas.user.js no Tampermonkey
+
+1. Instale a extensão **Tampermonkey** no navegador (Chrome/Edge/Firefox).
+2. No Tampermonkey, clique em **Criar novo script**, apague o modelo.
+3. Copie o conteúdo de `tools/radiopaedia-to-atlas.user.js` e cole.
+4. Salve (Ctrl+S). O Tampermonkey reconhece `// @match` sozinho.
+5. Para testar em desenvolvimento, troque `ATLAS_URL` no topo do script
+   para `http://localhost:3000/` (produção: URL do GitHub Pages).
+6. Abra um caso do Radiopaedia e clique em **📥 Enviar ao Atlas**.

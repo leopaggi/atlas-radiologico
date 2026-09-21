@@ -286,7 +286,12 @@ Destino: `https://ntfy.sh/acervo-leo-7k29-radiologia`. Detalhes em `AGENTS.md`.
 | `tests/critical-flows.test.js` | 20 PASS, 0 FAIL |
 | `tests/tools-layout.test.js` | **11 PASS**, 0 FAIL |
 | `tests/legacy-id-migration.test.js` | 156 PASS, 5 TODO, 0 FAIL |
-| Total (suíte completa) | **532 testes, 527 PASS, 5 TODO, 0 FAIL** |
+| `tests/external-import.test.js` | **67 PASS**, 0 FAIL |
+| `tests/quiz-image-desc.test.js` | **8 PASS**, 0 FAIL |
+| `tests/image-productivity.test.js` | **20 PASS**, 0 FAIL |
+| `tests/collage-desc.test.js` | **15 PASS**, 0 FAIL |
+| `tests/sidebar-image-stats.test.js` | **22 PASS**, 0 FAIL |
+| Total (suíte completa) | **671 testes, 665 PASS, 5 TODO, 0 FAIL** |
 
 - `tests/duplicate-detection.test.js` tem 1 FAIL **histórico e fora de escopo**
   (`DUPLICATE_PAIRS_V171`, 28 entradas malformadas). Não corrigir sem pedido.
@@ -303,7 +308,134 @@ Arquivos do fechamento: `index.html`, `tests/snapshots-ownership.test.js`,
 divergência cruzada, o merge aditivo de imagens local→nuvem, a união aditiva no
 pull, a proteção de ownership e a verificação server-only.
 
-## 13. Próximos passos pendentes
+## 13. Importador externo MVP — Radiopaedia → Atlas (2026-09-21)
+
+- **Fluxo:** userscript Tampermonkey (`tools/radiopaedia-to-atlas.user.js`,
+  fora do bundle) põe botão `📥 Enviar ao Atlas` em
+  `https://radiopaedia.org/cases/*`, coleta SÓ metadados visíveis
+  (título, URL, idade/sexo, modalidade, apresentação — sem imagens, sem
+  tradução, sem inventar ausentes) e abre o Atlas com o payload pequeno em
+  base64 no **fragmento** `#external-import=` (não em query persistente;
+  `ATLAS_URL` configurável p/ localhost).
+- **Recepção (fim do `index.html`, sem deslocar âncoras de teste):** consumo
+  único no boot via gancho pós-`loadData` (wrapper, `loadData` original
+  intacto); validação rigorosa (`validateExternalImportPayload`: https +
+  host radiopaedia.org, título obrigatório, teto 4KB); limpeza imediata do
+  fragmento com `history.replaceState` (F5 nunca reimporta); tudo em
+  try/catch para nunca quebrar o boot.
+- **Pré-checagem (read-only, sem libs):** URL exata > título exato normalizado
+  (minúsculas, sem acentos, sem pontuação) > `externalMatchBand` conservadora
+  em bandas **sem %**: `correspondência exata` / `alta similaridade` /
+  `possível correspondência` (máx. 5; vazio mostra "✅ Nenhuma
+  correspondência relevante"). Trava principal: **zero token relevante em
+  comum ⇒ zero candidato** (stopwords PT/EN + tokens <3 letras fora, salvo
+  com dígito). Título curto (≤2 tokens) só passa com Dice ou Lev ≥ 0.8;
+  título longo: alta com Dice ≥ 0.66 ou Lev ≥ 0.85, possível com Dice ≥ 0.5.
+  Modal com tudo escapado via `esc()`.
+- **v2 (2026-09-21):** separa título original (preservado, ex. no rótulo do
+  link staged) de nome sugerido em PT (`suggestPortugueseLesionName`:
+  catálogo via `enTerm` > glossário `EXTERNAL_IMPORT_TRANSLATIONS` >
+  original + `needsReview`). Tags PT conservadoras (nome confiável +
+  contexto forte + mapa fechado de modalidade + reuso de tag canônica,
+  dedup normalizado, máx. 8); descrição curta só do seguro (vazio
+  aceitável). Modal com campos editáveis (qualquer edição ⇒
+  `edited_by_user`), re-precheck do nome em PT com alerta e
+  [Abrir]/[Continuar], botão `✨ Revisar com IA` que só marca
+  `aiReview:'pending'` (sem fetch, sem arquitetura paralela). Draft
+  pré-preenche nome/notas/tags/links; existente nunca é sobrescrito.
+- **Duas melhorias de UX (2026-09-21):** (1) `✨ Revisar com IA` abre caixa
+  com textarea ("O que você quer que a IA revise?"); confirmar grava
+  `aiReview:'pending'` + `aiReviewInstruction` no draft (vazio usa texto
+  genérico; reeditável com preview discreto) — sem nenhuma chamada externa.
+  (2) Descrição da imagem no Quiz: bloco legível (15px/1.5) **acima** da
+  imagem, visível **só após responder** (`quizImageDescHtml(label,
+  answered)` pura; `renderMedia()` re-executa ao responder e ao navegar,
+  sempre no `quizImgIdx` atual; some na próxima questão). Carrossel,
+  contador, setas, lightbox, SRS e grades intactos.
+- **Decisão 100% humana:** abrir lesão existente (só navega + bloco
+  informativo, sem anexar), criar nova (abre `openForm(null)` em draft com
+  nome pré-preenchido + referência encaminhada aos links, persistindo só no
+  Salvar) ou cancelar (descarta, `DATA` intacto). Nenhum caminho de import
+  chama `saveData`/`pushToFirebaseNow` nem muta `DATA`.
+- **Testes:** `tests/external-import.test.js`, **67 PASS** (escopo +
+  anti-falso-positivo + v2 PT + instrução de IA + bloqueio de duplicata +
+  consolidação mesmo-id), e `tests/quiz-image-desc.test.js`, **8 PASS**
+  (visibilidade, carrossel, reset, escape, sem duplicar).
+- **Consolidação mesmo-id (auditoria 2026-09-21):** 3 objetos distintos com o
+  mesmo `formEntryId` (triplo submit pré-trava). `consolidateSameIdDuplicates`
+  (console, localhost): snapshot obrigatório (motivo da allowlist) → exige
+  exatamente 3 ocorrências → metadados iguais → 3 imagens distintas →
+  principal = 1ª ocorrência + união dedup (imagens/tags/links, escalares
+  "mais completo vence", assignedAt intacto) → splice por índice decrescente
+  (NUNCA filter por id) → pós-condição → saveData. SRS/revisões (mesmo id)
+  intocados. Causa do `links:[]`: a referência exigia clique manual; agora o
+  draft já sai com os campos de link encaminhados (só persiste no Salvar).
+  Rede extra: id já existente no save vira update, nunca push duplicado.
+- **Bloqueio de duplicata no Salvar (auditoria 2026-09-21):** o botão Salvar
+  só desabilitava DEPOIS dos uploads — duplo-clique criava 2+ lesões com o
+  MESMO `formEntryId`. Correção: trava `formSaving` no handler (+ reset em
+  todos os retornos/finally) e `findExactLesionMatch()` antes de
+  upload/persistência de lesão NOVA (identidade seção+sítio+nome normalizado
+  ou sourceUrl já registrada) com modal [Abrir existente]/[Cancelar]/
+  [Continuar mesmo assim + confirmação extra]. Botão Criar do importador com
+  trava anti-duplo-clique. Edição existente intocada (só atualiza).
+
+## 14. Produtividade de imagens — assignedAt + dashboard (2026-09-21)
+
+- **Auditoria prévia:** nenhum timestamp por imagem existia (só leitura
+  diagnóstica de `img.createdAt` e `_userUpdatedAt` da lesão). `assignedAt`
+  (ISO) = primeira atribuição confirmada; nasce SÓ em
+  `stampNewImagesAssignedAt()` nos 2 pontos reais (Salvar do editor,
+  Concluído do Quiz). Históricas nunca ganham retroativo (só total geral).
+- **Regras:** dia LOCAL (não 24h); mesma identidade (`stableImageKeyV208`,
+  chave não-vazia) conta 1; sem assignedAt = fora da série; remoção sem
+  ledger (derivado do estado atual); sync nunca gera — no merge
+  (`unionEntryImages`, pull/push/reconciliação) fica o válido MAIS ANTIGO.
+- **Dashboard:** 5º KPI `🖼️ N imagens hoje` (grid 4→5 col); entre Evolução
+  (largura ~metade: 1.12fr→.56fr) e Estado do acervo, o card `Imagens
+  atribuídas na última semana` (SVG próprio linha+pontos+`<title>`, 7 dias
+  com zeros, subtítulo `Imagens no acervo: X · Lesões com imagem: Y / Z`
+  com Z=`DATA.length`). Empilha em telas menores pelos breakpoints
+  existentes. Refresh ao vivo via `refreshStudyDashboardLive()` chamado nos
+  2 saves (sem listeners novos).
+- **Âncoras:** `critical-flows.test.js` atualizadas para 6056/6066/8608/11602
+  (+5 union, +5 save do editor; CSS do grid editado in-place, resto após
+  11592). Testes: `tests/image-productivity.test.js`, **20 PASS**.
+
+## 15. Descrição geral do quadro de imagens (2026-09-21)
+
+- Campo canônico de descrição de imagem no Atlas é **`label`** (detalhe,
+  Quiz, edição) — nada de `collageDescription`/`boardDescription`.
+- Builder ganhou textarea `Descrição geral do quadro` (após
+  Layout/Rótulos/Resolução, antes da prévia); no `Inserir`, ela vira o
+  `label` (`resolveCollageLabel`: descrição > join das seqs > 'Quadro
+  multimodal'). Canvas NUNCA a recebe (só seqs individuais, como antes).
+- Reedição pré-preenche via `collageInitialDesc` (só se o rótulo não for o
+  join automático); edição posterior pelo input existente da galeria.
+- Efeitos automáticos: Quiz mostra via `quizImageDescHtml` (só pós-resposta);
+  detalhe/lightbox iguais às demais; 1 `assignedAt` no save (painéis-fonte
+  nunca entram no DATA). Assinatura do builder ganhou 5º param opcional
+  `existingLabel` (fluxo Cloudinary/sync intocado).
+- Âncora `importHandler` do `critical-flows`: 11651 (+28). Testes:
+  `tests/collage-desc.test.js`, **15 PASS**.
+
+## 16. Contadores de imagem na sidebar (2026-09-21)
+
+- Linha única por seção/site: `TOTAL · 🖼IMAGENS · COM_IMAGEM/TOTAL` (zeros
+  sempre visíveis; tooltip nativo com o resumo). Nome com ellipsis, stats com
+  `nowrap` (media 760px reduz a fonte).
+- Simplificação visual (2026-09-21): só cobertura `38/243` (numerador
+  `cov-num` em `var(--amber)`, denominador discreto); cálculo reutilizado,
+  sem total isolado, sem absoluto de imagens, sem 🖼.
+- Funções puras: `sectionStats`/`siteStats` + `buildSidebarImageStats` (1
+  passada por render, mesmo conjunto do `structure()`, altPlacements
+  incluídos como o total existente). Estoque atual (`images.length` +
+  `img` legado; "com imagem" = `lesionHasAnyImage`); sem `assignedAt`.
+- Refresh pelo fluxo atual (`renderAll` nos saves; Quiz chama `renderAll`
+  após concluir). Sem listeners/intervals; scope/ordenação/filtro intactos.
+- Testes: `tests/sidebar-image-stats.test.js`, **20 PASS**.
+
+## 17. Próximos passos pendentes
 
 1. **Merge aditivo e sincronização validados** (2026-09-21) — servidor/site
    conferido após o merge com 58 registros com imagens, 73 imagens e 44 SRS.

@@ -184,10 +184,33 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // cancelLesionReview()/CANCELLABLE_REVIEW_STATUSES no módulo
   // LESION_REVISIONS (antes das âncoras) e o CSS do modal de cancelamento no
   // <style> do topo. As quatro âncoras deslocam igualmente.
-  assert.equal(recovery.line, 6061);
-  assert.equal(brokenArtifacts.line, 6051);
-  assert.equal(loadData.line, 8603);
-  assert.equal(importHandler.line, 11592);
+  // +5 nesta continuação: produtividade de imagens — bloco de preservação do
+  // assignedAt mais antigo dentro de unionEntryImages() (antes das quatro
+  // âncoras; merge nunca gera timestamp, só adota o mínimo válido).
+  // +5 só no importHandler: carimbo de assignedAt no Salvar do editor
+  // (stampNewImagesAssignedAt após normalizar as imagens, antes de
+  // deleteLocalImg — depois de loadData, antes do handler de importação).
+  // Quiz/Concluído, dashboard, refresh e helpers novos ficam depois do
+  // handler e não deslocam nada; o CSS do grid foi editado in-place.
+  // +21 só no importHandler (auditoria de duplicatas do importador): trava
+  // formSaving (4) + guarda no handler (2) + bloqueio findExactLesionMatch
+  // antes dos uploads (14) + reset no finally (1) — tudo dentro do openForm,
+  // depois de loadData. Helpers do bloqueio ficam no fim do script.
+  // +28 só no importHandler (descrição geral do quadro): helpers puros
+  // resolveCollageLabel/collageInitialDesc + campo textarea + pré-preenchimento
+  // + label via descrição no insert — tudo no openCollageBuilder, antes do
+  // handler de importação. Fluxo Cloudinary/sync intocado.
+  // +8 só no importHandler (consolidação mesmo-id + auto-stage da referência):
+  // auto-stage do link no draft + rede anti-mesmo-id no save (update em vez
+  // de push duplicado) — dentro de openForm/openExternalDraft, depois de
+  // loadData. consolidateSameIdDuplicates fica no fim do script (valor medido).
+  // +7 nas quatro âncoras (CSS .tree-stats/.tree-name/ellipsis/responsivo no
+  // <style>, antes de tudo) e +4 só no importHandler (métricas 1x por
+  // renderTree + stats nas linhas de seção/site; helpers no fim do script).
+  assert.equal(recovery.line, 6073);
+  assert.equal(brokenArtifacts.line, 6063);
+  assert.equal(loadData.line, 8615);
+  assert.equal(importHandler.line, 11670);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

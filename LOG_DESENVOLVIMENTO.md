@@ -2815,3 +2815,506 @@ SRS.
 ### Commit após aprovação
 
 Ainda não criado.
+
+**Número da alteração:** 045
+**Data:** 21/09/2026
+
+### Objetivo
+
+MVP de importação semiautomática de casos do Radiopaedia (só metadados):
+botão no Tampermonkey → Atlas recebe draft → pré-checagem → usuário decide.
+Nada salvo/criado automaticamente.
+
+### Estado antes
+
+Não existia nenhum fluxo de importação externa; a única ponte com o
+Radiopaedia era o link automático de busca por nome em cada lesão.
+
+### Arquivos modificados
+
+- `tools/radiopaedia-to-atlas.user.js` (novo, fora do bundle)
+- `index.html` (módulo anexado no fim do script, sem deslocar âncoras)
+- `tests/external-import.test.js` (novo)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- Userscript com botão discreto, extração defensiva e payload em base64 no
+  fragmento `#external-import=` (`ATLAS_URL` configurável).
+- Recepção: consumo único no boot (gancho pós-`loadData`), validação
+  rigorosa, `history.replaceState` (F5 não reimporta), try/catch no boot.
+- Pré-checagem em 4 níveis com faixas (sem %): URL exata, título exato
+  normalizado, Dice/Levenshtein, contexto seção/sítio; modal 100% escapado.
+- Draft: nova lesão abre `openForm(null)` pré-preenchido (só Salva persiste);
+  existente abre detalhe + bloco informativo, sem anexar.
+
+### Segurança
+
+Sem imagens, sem Cloudinary, sem tradução; `DATA` nunca mutado pelo fluxo;
+todo conteúdo externo passa por `esc()`; payload limitado a 4KB e restrito a
+https://radiopaedia.org.
+
+### Testes realizados
+
+- `node tests/external-import.test.js`: 16 PASS, 0 FAIL;
+- Suíte completa: 543 PASS, 5 TODO, 0 FAIL (+ 1 FAIL histórico conhecido em
+  `duplicate-detection.test.js`, fora de escopo);
+- Âncoras de `critical-flows.test.js` (6061/6051/8603/11592) inalteradas;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Fluxo Radiopaedia → Atlas → pré-checagem → navegação validado em testes;
+pronto para teste manual com caso real (ver resposta da entrega).
+
+### Commit após aprovação
+
+Ainda não criado.
+
+**Número da alteração:** 046
+**Data:** 21/09/2026
+
+### Objetivo
+
+Eliminar falsos positivos da pré-checagem do importador Radiopaedia:
+"Polyethene wear" sugeria "Pólipo endometrial/endocervical" e "Ureterocele
+fetal".
+
+### Estado antes
+
+Similaridade = max(Dice-tokens, Levenshtein), limiares 0.6/0.35. Os três
+falsos positivos tinham Dice 0 e Lev 0.35–0.39 — o Lev sozinho promovia.
+
+### Arquivos modificados
+
+- `index.html` (só o módulo do importador, no fim do script)
+- `tests/external-import.test.js` (7 testes A–G; teste 8 ajustado)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- `tokenizeExternalTitle` (stopwords PT/EN, fora token <3 letras sem dígito).
+- `externalMatchBand`: trava de zero token comum; título curto (≤2 tokens)
+  só com Dice/Lev ≥ 0.8; longo com alta ≥ 0.66/0.85 e possível ≥ 0.5.
+- Vazio agora mostra "✅ Nenhuma correspondência relevante encontrada".
+- URL exata, título exato, validação, draft e modal inalterados.
+
+### Segurança
+
+Mais conservador por construção; nenhuma mudança em dados, sync, quiz,
+imagens ou classificação.
+
+### Testes realizados
+
+- `node tests/external-import.test.js`: 23 PASS, 0 FAIL;
+- Suíte completa: 550 PASS (+6 do duplicate), 5 TODO, só o FAIL histórico;
+- Âncoras de `critical-flows.test.js` inalteradas;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+"Polyethene wear" → zero candidatos espúrios; "Polyethylene wear",
+"Desgaste do polietileno" e "Pulmonary embolus" continuam encontrados;
+tradução ("Colorectal carcinoma" × "Carcinoma colorretal") não casa.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+**Número da alteração:** 047
+**Data:** 21/09/2026
+
+### Objetivo
+
+Importador v2: trabalhar em português (nome sugerido, tags, descrição em
+draft) preservando o título original, com re-prechecagem após tradução.
+
+### Estado antes
+
+O modal mostrava só os dados crus da fonte; o nome da nova lesão era o
+título em inglês e não havia checagem do nome traduzido contra o acervo.
+
+### Arquivos modificados
+
+- `index.html` (só o módulo do importador, no fim do script)
+- `tests/external-import.test.js` (+18 testes, total 41)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- Glossário `EXTERNAL_IMPORT_TRANSLATIONS` + `suggestPortugueseLesionName`
+  (catálogo via `enTerm` > glossário > original + `needsReview`).
+- `suggestExternalTags` (nome confiável, contexto forte, mapa fechado de
+  modalidade, reuso canônico, dedup, máx. 8) e `suggestExternalDescription`
+  (só do seguro; vazio aceitável).
+- Modal com campos editáveis, status `automatic`/`edited_by_user`, re-check
+  do nome em PT com alerta [Abrir]/[Continuar] e botão `✨ Revisar com IA`
+  (só `aiReview:'pending'`, sem fetch).
+- Draft pré-preenche nome/notas/tags/links (título original no rótulo);
+  existente nunca sobrescrito.
+
+### Segurança
+
+Sem API externa, sem Cloudinary, sem gravação automática; tudo escapado;
+validação e pré-checagem anteriores intactas.
+
+### Testes realizados
+
+- `node tests/external-import.test.js`: 41 PASS, 0 FAIL;
+- Suíte completa: 568 PASS (+6 do duplicate), 5 TODO, só o FAIL histórico;
+- Âncoras de `critical-flows.test.js` inalteradas;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+"Polyethene wear" sugere "Desgaste de polietileno" + tags PT + descrição
+inicial, tudo editável; re-check encontra a lesão PT existente antes de
+criar duplicata.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+**Número da alteração:** 048
+**Data:** 21/09/2026
+
+### Objetivo
+
+Duas melhorias pontuais de UX: (1) campo de instrução no Revisar com IA do
+importador; (2) descrição da imagem do Quiz legível, acima da imagem e só
+pós-resposta.
+
+### Estado antes
+
+(1) O botão só marcava `aiReview:'pending'`, sem o usuário dizer o quê
+revisar. (2) A caption ficava em 11px abaixo da imagem, ilegível e sempre
+visível (entregando pista antes da resposta).
+
+### Arquivos modificados
+
+- `index.html` (modal de instrução + `quizImageDescHtml` + 2 ganchos)
+- `tests/external-import.test.js` (+6 testes da instrução)
+- `tests/quiz-image-desc.test.js` (novo, 8 testes)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- `openExternalAiInstructionModal` + `confirmExternalAiReview` (pura):
+  textarea, Cancelar/Marcar, `aiReviewInstruction` no draft, preview
+  discreto, reeditável, zero chamada externa.
+- `quizImageDescHtml(label, answered)` pura + bloco acima da imagem em
+  `renderMedia()`; `renderMedia()` re-executa ao responder; some na próxima
+  questão; carrossel/contador/setas/lightbox/SRS intactos.
+
+### Segurança
+
+Instrução escapada ao exibir; caption escapada; sem API, Cloudinary, sync
+ou mudança em dados/SRS.
+
+### Testes realizados
+
+- `node tests/quiz-image-desc.test.js`: 8 PASS, 0 FAIL;
+- `node tests/external-import.test.js`: 47 PASS, 0 FAIL;
+- Suíte completa: 582 PASS (+6 do duplicate), 5 TODO, só o FAIL histórico;
+- Âncoras de `critical-flows.test.js` inalteradas;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Instrução da IA registrada no draft sem envios; descrição legível só após
+responder, acompanhando o carrossel e resetando por questão.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+**Número da alteração:** 050
+**Data:** 21/09/2026
+
+### Objetivo
+
+Auditar 3 cards duplicados ("Desgaste de polietileno (Prótese de quadril)")
+criados via importador e blindar o Salvar contra duplicatas e double-submit.
+
+### Estado antes
+
+O botão Salvar só desabilitava após os uploads: duplo-clique executava o
+handler 2x com o mesmo `formEntryId` (2+ pushes idênticos). Sem checagem de
+duplicata no save; a pré-checagem do modal não pega variantes parentéticas
+("Desgaste de polietileno" × "... (Prótese de quadril)").
+
+### Arquivos modificados
+
+- `index.html` (trava formSaving + `findExactLesionMatch` +
+  `confirmDuplicateLesion` + busy no Criar)
+- `tests/external-import.test.js` (+8 testes dup-1..dup-8)
+- `tests/critical-flows.test.js` (âncora importHandler 11623)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- Trava `formSaving` com reset em todos os retornos e no finally.
+- Bloqueio exato (identidade ou URL) antes de uploads, só em lesão nova,
+  com modal de 3 vias + confirmação extra no forçar.
+- Nenhuma remoção/mesclagem automática dos 3 existentes (só relatório).
+
+### Segurança
+
+Edição existente intocada; forçar exige dupla confirmação; ownership/sync
+intocados.
+
+### Testes realizados
+
+- `node tests/external-import.test.js`: 55 PASS, 0 FAIL;
+- Suíte completa: 610 PASS (+6 do duplicate), 5 TODO, só o FAIL histórico;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Double-submit e recriação silenciosa bloqueados; duplicatas exigem decisão
+explícita. Consolidação dos 3 existentes pendente de relatório + aprovação.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+**Número da alteração:** 052
+**Data:** 21/09/2026
+
+### Objetivo
+
+Consolidar com segurança os 3 objetos de mesmo id
+(`u_1790002508376_8lr5c5`, "Desgaste de polietileno (Prótese de quadril)")
+em 1 lesão com as 3 imagens, sem perda.
+
+### Estado antes
+
+3 objetos distintos, mesmo id/nome/seção/sítio/tags/notes, cada um com 1
+imagem (assetIds ...610f6a, ...b2bfa, ...e929c); links [] e assignedAt null
+nos 3; trava formSaving e bloqueio já implementados (050).
+
+### Arquivos modificados
+
+- `index.html` (`consolidateSameIdDuplicates` + auto-stage da referência no
+  draft + rede anti-mesmo-id no save)
+- `tests/external-import.test.js` (+12 testes dup-9..dup-20)
+- `tests/critical-flows.test.js` (âncora importHandler 11659)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- Consolidação via console: snapshot (allowlist) → exige 3 ocorrências →
+  metadados iguais → 3 imagens distintas → principal = 1ª + união dedup
+  (imagens/tags/links; escalares "mais completo vence") → splice por índice
+  decrescente → pós-condição → saveData. SRS/revisões intocados.
+- Causa do links:[]: referência exigia clique manual; draft agora já a
+  encaminha (persiste só no Salvar).
+- Rede extra: id existente no save vira update, nunca push duplicado.
+
+### Segurança
+
+Aborts sem tocar no DATA (snapshot, contagem, metadados, imagens);
+restauração sempre manual; nada no Cloudinary; sem filter por id.
+
+### Testes realizados
+
+- `node tests/external-import.test.js`: 67 PASS, 0 FAIL;
+- Suíte completa: 628 PASS (+6 do duplicate), 5 TODO, só o FAIL histórico;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Função pronta e testada; EXECUÇÃO no localhost pendente (usuário roda no
+console com os 3 publicIds e relata o `report`).
+
+### Commit após aprovação
+
+Ainda não criado.
+
+**Número da alteração:** 049
+**Data:** 21/09/2026
+
+### Objetivo
+
+Métrica visual de produtividade de imagens (principal indicador de
+progresso da construção do Atlas): `assignedAt` + card hoje + gráfico
+semanal + totais no dashboard, com refresh ao vivo.
+
+### Estado antes
+
+Nenhum timestamp por imagem (só `_userUpdatedAt` da lesão); dashboard não
+mostrava trabalho de atribuição de imagens.
+
+### Arquivos modificados
+
+- `index.html` (helpers + carimbo nos 2 saves + oldest no merge + dashboard)
+- `tests/image-productivity.test.js` (novo, 20 testes)
+- `tests/critical-flows.test.js` (âncoras 6056/6066/8608/11602)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- `stampNewImagesAssignedAt` (Salvar do editor, Concluído do Quiz);
+  `adoptOldestAssignedAt` no `unionEntryImages`; contagem/série/SVG puros.
+- KPI `imagens hoje`, card semanal entre Evolução (metade) e Estado,
+  totais com `DATA.length`; refresh nos saves; CSS do grid in-place.
+
+### Segurança
+
+Sem invenção retroativa; ownership/dedup/SRS/quiz/sync intactos; remoção
+sem ledger (derivado do estado atual, documentado).
+
+### Testes realizados
+
+- `node tests/image-productivity.test.js`: 20 PASS, 0 FAIL;
+- Suíte completa: 602 PASS (+6 do duplicate), 5 TODO, só o FAIL histórico;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Cada imagem nova confirmada conta 1x no dia local; gráfico de 7 dias e
+totais atualizam sem F5; histórico antigo só no total geral.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+**Número da alteração:** 051
+**Data:** 21/09/2026
+
+### Objetivo
+
+Campo "Descrição geral do quadro" no construtor de quadros de imagens,
+como metadado `label` (sem queimar no PNG/JPEG).
+
+### Estado antes
+
+O quadro guardava só o join das sequências (ou 'Quadro multimodal'); sem
+lugar para explicar o que o conjunto demonstra.
+
+### Arquivos modificados
+
+- `index.html` (textarea + `resolveCollageLabel`/`collageInitialDesc` +
+  fiação no insert + `existingLabel` na reedição)
+- `tests/collage-desc.test.js` (novo, 15 testes)
+- `tests/quiz-images.test.js` (assinatura com 5º param opcional)
+- `tests/critical-flows.test.js` (âncora importHandler 11651)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- Textarea após Layout/Rótulos/Resolução, antes da prévia; leitura via
+  `.value`; cancel descarta.
+- Insert: descrição > join das seqs > 'Quadro multimodal'; canvas intocado.
+- Reedição passa `img.label` e pré-preenche (só se não for join automático).
+- Edição posterior pelo input de legenda existente; Quiz/detalhe iguais às
+  demais; 1 `assignedAt`; painéis-fonte nunca entram no DATA.
+
+### Segurança
+
+Texto via `.value`, renderizado com `esc()` existente; sem HTML executável.
+
+### Testes realizados
+
+- `node tests/collage-desc.test.js`: 15 PASS, 0 FAIL;
+- Suíte completa: 625 PASS (+6 do duplicate), 5 TODO, só o FAIL histórico;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Quadro com contexto próprio, fluindo para Quiz, detalhe, edição e
+produtividade sem regras especiais.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+**Número da alteração:** 053
+**Data:** 21/09/2026
+
+### Objetivo
+
+Contadores de imagem na sidebar (principal indicador de enriquecimento do
+acervo): por seção/site, `TOTAL · 🖼IMAGENS · X/Y` em linha única.
+
+### Estado antes
+
+A sidebar mostrava só o total de lesões; áreas pobres em imagem invisíveis.
+
+### Arquivos modificados
+
+- `index.html` (CSS + helpers puros + linhas do renderTree + renderAll no Quiz)
+- `tests/sidebar-image-stats.test.js` (novo, 20 testes)
+- `tests/critical-flows.test.js` (âncoras 6063/6073/8615/11670)
+- `tests/quiz-images.test.js` (callback com renderAll)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- `sectionStats`/`siteStats`/`buildSidebarImageStats` (1 passada/render,
+  mesmo conjunto do `structure()`); estoque atual, sem `assignedAt`.
+- Linha única com ellipsis, nowrap, tooltip; zeros sempre visíveis.
+- Refresh pelo `renderAll()` existente (incluído após concluir no Quiz).
+
+### Segurança
+
+Sem listeners/intervals; scope/ordenação/filtro/quiz/SRS/sync intactos;
+totais reconciliados de forma verificável (649 blocos, 663 PASS).
+
+### Testes realizados
+
+- `node tests/sidebar-image-stats.test.js`: 20 PASS, 0 FAIL;
+- Suíte completa: 663 PASS (+6 do duplicate), 5 TODO, só o FAIL histórico;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Sidebar mostra lesões, imagens e cobertura por seção/site, atualizando nos
+fluxos existentes.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+**Número da alteração:** 054
+**Data:** 21/09/2026
+
+### Objetivo
+
+Simplificar a sidebar: só cobertura `38/243` (estava poluído e comprimindo
+nomes).
+
+### Estado antes
+
+Linha `243 · 🖼126 · 38/243` por seção/site.
+
+### Arquivos modificados
+
+- `index.html` (formato `tree-cov`, CSS in-place, tooltip enxuto)
+- `tests/sidebar-image-stats.test.js` (+2 testes, total 22)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- `sidebarCoverageHtml()` (`cov-num` âmbar + `cov-den` discreto); cálculo
+  (`sectionStats`/`siteStats`) reutilizado; sem total/absoluto/🖼.
+- Lógica, navegação, scope, dashboard e produtividade intactos.
+
+### Segurança
+
+Números internos (sem HTML externo); sem mudança de dados.
+
+### Testes realizados
+
+- `node tests/sidebar-image-stats.test.js`: 22 PASS, 0 FAIL;
+- `local-scope-prefs`: 14 PASS; `critical-flows`: 20 PASS;
+- Suíte: 665 PASS (+6 do duplicate), 5 TODO, só o FAIL histórico;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Sidebar legível com nomes completos e cobertura compacta à direita.
+
+### Commit após aprovação
+
+Ainda não criado.
