@@ -5,6 +5,11 @@ Atlas de padrões radiológicos — um banco de lesões organizado por seção
 descrição do padrão radiológico, classificação de frequência e imagens
 associadas. Feito pra estudo/consulta rápida.
 
+Para o estado MAIS ATUAL do projeto (Git/publicação, arquitetura, arquivos
+protegidos, Central de Revisões/Soluções, fluxo de IA, testes e próximos
+passos), leia **`CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`**. Os detalhes
+históricos de cada alteração ficam em `AI.md` e `LOG_DESENVOLVIMENTO.md`.
+
 ## Como rodar
 
 É um único arquivo `index.html` autossuficiente. Não precisa de build,
@@ -562,3 +567,213 @@ controles de imagem (`← Imagem anterior` / `Próxima imagem →`) continuam
 separados, junto da mídia e no teclado ←/→.
 
 Testes: `tests/quiz-images.test.js` com **82 PASS**.
+
+### Snapshots de segurança e proteção de imagens (2026-09-20)
+
+O Atlas passa a criar **snapshots locais leves** automaticamente ANTES de
+operações de risco (importar backup, restaurar padrão, recuperar dados antigos,
+fundir duplicatas, reconciliar em massa). São guardados no IndexedDB, sem
+duplicar imagens do Cloudinary, no máximo 5 (o 6º apaga o mais antigo). Em
+"⚙️ ferramentas avançadas → ↶ restaurar snapshot de segurança" você vê data,
+motivo, nº de lesões, nº de imagens e tamanho, pode restaurar (sempre manual,
+com confirmação forte — e um snapshot do estado atual é criado antes) ou
+excluir. Edição comum, Quiz e marcar revisão NÃO criam snapshot.
+
+Também foi reforçada a **proteção de atribuição das imagens**: uma imagem já
+atribuída a uma lesão não pode mudar de dono por nenhum processo automático
+(importação, deduplicação, reconciliação, migração, IA). Só uma ação manual sua
+(remover/mover) altera isso; qualquer tentativa automática é bloqueada e o
+conflito é registrado.
+
+Testes: `tests/snapshots-ownership.test.js` com **18 PASS**.
+
+### Ferramentas reorganizadas (2026-09-20)
+
+A área de ferramentas ficou simples e segura. Na interface normal aparecem
+**somente**:
+
+- `🩺 diagnóstico do sistema` — gera um relatório para copiar e enviar; não altera nada.
+- `🔍 auditar vínculo de imagens` — confere se as imagens continuam associadas
+  às lesões corretas; não altera nada.
+
+As demais ferramentas (forçar envio deste dispositivo, exportar checkpoint V2,
+reconciliar catálogo V2, fundir duplicatas agora, procurar dados antigos/
+recuperar, restaurar padrão de fábrica e snapshots) foram **removidas da
+interface** — não há menu, seção recolhida nem botão escondido. A implementação
+interna continua no código para manutenção futura (podendo ser chamada
+tecnicamente pelo console), incluindo o factory reset (com confirmação em dois
+passos) e a infraestrutura de snapshots.
+
+A auditoria de vínculo de imagens é SOMENTE LEITURA: mostra os problemas, mas não
+move, não remove nem reassocia imagens. Os snapshots automáticos (até 5)
+continuam sendo criados antes de operações de risco. Os botões `Salvar backup` e
+`Importar backup` não foram alterados.
+
+Testes: `tests/tools-layout.test.js` com **8 PASS**.
+
+### Ponte segura para IA na Central de Revisões (2026-09-20)
+
+As revisões pendentes agora conseguem gerar propostas sem API e sem segredo.
+Em cada pedido (`pending` ou `rejected`), o botão `🤖 Preparar para IA` abre um
+painel com `📋 Copiar pedido para IA` (texto estruturado para colar em qualquer
+IA) e `📥 Colar solução da IA` (cola o JSON devolvido pela IA). Ao importar um
+JSON válido, a revisão vira `proposed`, sai do 🔔 e aparece imediatamente em
+💡 Soluções — sem alterar os dados da lesão. Ainda é preciso clicar
+`✓ autorizar correção` (e depois `✓ funcionou — manter` / `↩ não funcionou —
+desfazer`) para aplicar qualquer mudança. A IA nunca cria revisão, nunca
+autoriza e nunca mexe em imagens/ownership.
+
+Testes: `tests/lesion-review.test.js` com **61 PASS**.
+
+### Fluxo Revisão → Solução simplificado (2026-09-20)
+
+Importar a solução da IA agora **aplica a correção provisoriamente** na hora e
+abre a tela `🔎 Validar correção` (antes → depois + resumo). Não é mais preciso
+entrar em 💡 Soluções só para clicar "autorizar correção". A decisão final
+continua humana: `✓ Manter correção` (`accepted`) ou `↩ Desfazer correção`
+(rollback exato, volta para `rejected` e permite nova tentativa). A aplicação
+provisória cria um snapshot antes e só escreve os campos permitidos
+(`name`, `notes`, `classification`, `tags`, `enTerm`); imagens, ownership, IDs,
+SRS, REVIEW e progresso seguem intocados. Em 💡 Soluções, a aba principal passou
+a ser **Validar correções**.
+
+Testes: `tests/lesion-review.test.js` com **66 PASS**.
+
+### Respostas da IA sem campos aplicáveis (2026-09-20)
+
+Quando a IA responde `"proposedChanges": {}` (por exemplo, para um pedido de
+remoção de imagem que ela não pode executar), isso deixou de ser tratado como
+erro. Agora há três resultados: (1) proposta aplicável → aplica provisoriamente;
+(2) nenhuma alteração aplicável → apenas informa, sem alterar nada; (3) ação
+manual necessária (imagem/ownership/estrutura) → status
+`manual_action_required`, com uma tela mostrando o pedido, o resumo da IA e o
+motivo, e o botão `🖼 Abrir lesão para correção manual` (abre o editor; nada é
+removido automaticamente). As revisões que exigem ação manual aparecem na aba
+**Ação manual** do 💡 Soluções e podem voltar para a fila ou ser canceladas.
+Segurança mantida: `images`, ownership, IDs, SRS, REVIEW e progresso seguem
+proibidos.
+
+Testes: `tests/lesion-review.test.js` com **76 PASS**.
+
+### Fluxo em lote para revisões pendentes (2026-09-20)
+
+Na Central de Revisões, o botão `🤖 Analisar pendências com IA` abre a seleção
+múltipla das revisões pendentes. Em vez de preparar uma por uma, o usuário
+seleciona várias (ou todas), clica `📋 Copiar lote para IA`, cola o prompt numa
+IA externa e depois cola `📥 Colar respostas da IA` e `Processar lote`. A IA
+devolve um JSON com `results` para todas; cada revisão é processada
+isoladamente. Resultados `apply` aplicam provisoriamente (aparecem em 💡 Validar
+correções, com Manter/Desfazer item a item); `manual_action_required` vai para a
+fila **🛠 Ações manuais** (imagem/ownership/estrutura, sem alteração
+automática); `no_change` não altera nada. Um item com erro não bloqueia os
+outros. Reimportar o mesmo JSON não duplica aplicação. O fluxo individual
+continua disponível.
+
+Testes: `tests/lesion-review.test.js` com **93 PASS**.
+
+### Feedback humano nas próximas tentativas da IA (2026-09-20)
+
+Quando o usuário recusa uma proposta ou desfaz uma correção, o motivo escrito
+agora é salvo na revisão (`rejectionReason`/`rollbackReason`, `humanFeedback[]`,
+`lastHumanFeedback`) e sobrevive ao F5. O pacote enviado à IA passou a incluir
+`previousAttempts` (proposta, resultado e o feedback humano de cada tentativa),
+`latestHumanFeedback` e `previousOutcome`, e o prompt instrui a IA a não repetir
+soluções recusadas e a corrigir o motivo apontado. O fluxo em lote carrega esse
+histórico por revisão. Gerar pacote continua 100% somente-leitura.
+
+Testes: `tests/lesion-review.test.js` com **105 PASS**.
+
+### Consistência do latestHumanFeedback (2026-09-20)
+
+Em revisões históricas, o pacote da IA mostrava `latestHumanFeedback: null`
+mesmo com `previousAttempts[].humanFeedback` preenchido. Agora o pacote deriva o
+valor: usa o campo direto `lastHumanFeedback` quando existe; senão, o feedback
+não vazio da tentativa mais recente; senão `null`. É só leitura (nada é gravado
+de volta) e o lote herda automaticamente. Tentativas antigas sem
+`summary`/`reasoning` mantêm o `text` original disponível para a IA, sem
+fabricar campos.
+
+Testes: `tests/lesion-review.test.js` com **114 PASS**.
+
+### Localizações adicionais sugeridas pela IA (2026-09-20)
+
+Quando a IA conclui que uma lesão deve aparecer também em outra seção (ex.:
+Holoprosencefalia em Neurorradiologia), ela pode sugerir
+`additional_section_placement` com `{section, site}`. Na aba **🛠 Ações
+manuais** aparece `✓ Aplicar localização sugerida`, que pede confirmação e
+adiciona a localização ao `altPlacements` da MESMA lesão — sem mover imagem,
+sem trocar `lesionId`, sem duplicar registro, Quiz, busca ou contagem. A
+aplicação é provisória (`applied_pending_validation`) e o usuário decide
+`✓ Manter` ou `↩ Desfazer` (rollback exato). Seção/sítio inexistentes são
+rejeitados. O editor ganhou "Também aparece em" com `+ Adicionar localização`.
+Outros tipos (image_removal/ownership) continuam exigindo ação manual.
+
+Testes: `tests/lesion-review.test.js` com **127 PASS**.
+
+### Importador do lote mais robusto (2026-09-20)
+
+Ao colar respostas da IA no fluxo em lote, o Atlas agora tolera a moldura
+externa que as IAs costumam adicionar: BOM, caracteres invisíveis nas bordas e
+blocos ```json … ``` são removidos antes do parse. O conteúdo interno do JSON é
+preservado — não há correção de vírgula/aspas nem recorte "do primeiro `{` ao
+último `}`". Quando o JSON realmente não é válido, a mensagem informa a linha/
+coluna aproximada (sem mostrar o texto colado) e diz se parece vazio, incompleto
+ou com erro de sintaxe. A validação de segurança continua igual: campos
+proibidos, reviewId inválido e resultados desconhecidos seguem sendo rejeitados
+item a item.
+
+Testes: `tests/lesion-review.test.js` com **134 PASS**.
+
+### Layout da aba "Ações manuais" corrigido (2026-09-20)
+
+Na Central de Soluções, a aba **🛠 Ações manuais** tinha cards com layout
+quebrado: os botões (Abrir lesão para ajustar imagens / histórico / Voltar para
+revisões / Cancelar pedido) ultrapassavam a largura, aparecia barra de rolagem
+horizontal e o último botão ficava cortado. A linha de ações agora quebra
+(`flex-wrap`) e pode ir para várias linhas, o bloco de texto encolhe
+(`min-width:0`) e quebra palavras longas, e o modal não depende mais de scroll
+horizontal (`overflow-x:hidden`, scroll vertical normal). A correção é nas
+classes compartilhadas da Central de Soluções, então Revisões, Validar
+correções e o resultado do lote também se beneficiam. Nenhuma lógica, status ou
+dado foi alterado.
+
+Testes: `tests/lesion-review.test.js` com **138 PASS**.
+
+### Quadro de imagens do Quiz com preview local (2026-09-20)
+
+Um quadro criado no Quiz aparecia como "não enviada" com a miniatura quebrada e
+sem imagem ao ampliar, até o upload no "concluído". Causa: o quadro pending era
+devolvido sem o campo `data` (a blob URL local) que a miniatura e o lightbox
+leem. Agora o quadro pending carrega `data` = a mesma blob URL de `_objectUrl`,
+e o renderer do Quiz usa `img.data || img._objectUrl` tanto na miniatura quanto
+no ampliar. A regra de upload tardio continua igual: nada vai ao Cloudinary
+antes de "concluído"; cancelar não envia; remover revoga a URL local; falha de
+upload mantém o preview funcionando e não salva pela metade.
+
+Testes: `tests/quiz-images.test.js` com **98 PASS**.
+
+### Contador do carrossel do Quiz no canto superior esquerdo (2026-09-20)
+
+Quando a questão tem 2 ou mais imagens, o Quiz agora mostra um painel compacto
+`‹ 1 / 2 ›` no canto superior esquerdo da área da imagem — seta anterior, índice
+atual, total e seta próxima — com fundo semitransparente e sem estourar a
+largura. As setas laterais grandes continuam, e tanto elas quanto as setas do
+overlay usam o mesmo índice (navegação circular, teclado ←/→ preservado). O
+contador textual inferior foi removido para não duplicar a navegação. Com 0 ou 1
+imagem, nenhum controle é exibido.
+
+Testes: `tests/quiz-images.test.js` com **101 PASS**.
+
+### Sincronização localhost ↔ site publicado (2026-09-20)
+
+Localhost e GitHub Pages têm IndexedDB separados; o elo é o Firestore. O Atlas
+ganhou uma **auditoria read-only** local × nuvem (lesões, registros com imagens,
+total de imagens, altPlacements, SRS) e duas ações explícitas na barra lateral:
+`☁ sincronizar este dispositivo` (envia o estado local para a nuvem, com
+snapshot antes e sem puxar de volta) e `⬇ atualizar deste backup/nuvem` (traz da
+nuvem com confirmação e snapshot, merge não destrutivo). Nada é automático no
+boot. As imagens já estão no Cloudinary — só metadados/URLs são sincronizados,
+sem reenviar binários. Revisões são locais por dispositivo; para movê-las, use o
+backup (`Salvar backup` → `Importar backup`).
+
+Testes: `tests/snapshots-ownership.test.js` com **30 PASS**.

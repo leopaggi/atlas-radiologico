@@ -139,14 +139,6 @@ body{
 }
 .foot-btn:hover{color:var(--teal);}
 .foot-btn-sub{display:block;color:var(--muted-2);font-size:10.5px;font-weight:400;margin-top:2px;line-height:1.4;}
-.advanced-tools{margin-top:10px;border-top:1px solid var(--line);padding-top:8px;}
-.advanced-tools summary{
-  cursor:pointer;color:var(--muted);font-size:12px;list-style:none;padding:4px 0;user-select:none;
-}
-.advanced-tools summary::-webkit-details-marker{display:none;}
-.advanced-tools summary:hover{color:var(--teal);}
-.advanced-tools[open] summary{color:var(--text);margin-bottom:6px;}
-.advanced-tools-list{display:flex;flex-direction:column;gap:10px;padding-left:4px;}
 .backup-actions{
   display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:2px;
 }
@@ -424,47 +416,65 @@ body{
 
 /* ---------- Construtor de quadro de imagens ---------- */
 .collage-modal{max-width:980px;}
-.snapshot-picker-modal{max-width:640px;}
-.snapshot-list{display:flex;flex-direction:column;gap:8px;margin-top:14px;max-height:400px;overflow-y:auto;}
-.snapshot-row{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-  background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;
-}
-.snapshot-row-when{font-size:13px;font-weight:600;color:var(--text);}
-.snapshot-row-latest{font-size:10px;font-weight:600;color:var(--teal);background:var(--tag-bg-active);padding:2px 6px;border-radius:8px;margin-left:6px;}
-.snapshot-row-detail{font-size:11.5px;color:var(--muted-2);margin-top:3px;}
-.snapshot-row-restore{flex-shrink:0;}
 
 /* ---------- Central de Revisões + Soluções ---------- */
-.review-center-modal{max-width:640px;max-height:85vh;overflow-y:auto;}
-.review-history-modal{max-width:560px;max-height:85vh;overflow-y:auto;}
+.review-center-modal{max-width:640px;max-height:85vh;overflow-y:auto;overflow-x:hidden;}
+.review-history-modal{max-width:560px;max-height:85vh;overflow-y:auto;overflow-x:hidden;}
 .review-reject-modal{max-width:460px;}
 .review-center-list{display:flex;flex-direction:column;gap:10px;margin-top:14px;}
 .review-center-empty{color:var(--muted-2);font-size:12.5px;padding:10px 0;}
 .review-center-row{
   display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  width:100%;max-width:100%;min-width:0;box-sizing:border-box;
   background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;
 }
-.review-center-row-main{flex:1;min-width:220px;}
-.review-center-row-title{font-size:13.5px;font-weight:600;color:var(--text);}
-.review-center-row-meta{font-size:11px;color:var(--muted-2);margin-top:2px;font-family:'IBM Plex Mono',monospace;}
-.review-center-row-request{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.4;}
-.review-center-row-solution{font-size:12.5px;color:var(--teal);margin-top:6px;line-height:1.4;}
+.review-center-row-main{flex:1 1 240px;min-width:0;}
+.review-center-row-title{font-size:13.5px;font-weight:600;color:var(--text);min-width:0;overflow-wrap:anywhere;word-break:break-word;}
+.review-center-row-meta{font-size:11px;color:var(--muted-2);margin-top:2px;font-family:'IBM Plex Mono',monospace;min-width:0;overflow-wrap:anywhere;word-break:break-word;}
+.review-center-row-request{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.4;min-width:0;overflow-wrap:anywhere;word-break:break-word;}
+.review-center-row-solution{font-size:12.5px;color:var(--teal);margin-top:6px;line-height:1.4;min-width:0;overflow-wrap:anywhere;word-break:break-word;}
 .review-status-tag{font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;}
 .review-status-tag.pending{color:var(--muted);background:var(--panel);}
 .review-status-tag.rejected{color:var(--red);background:var(--amber-dim);}
-.review-center-row-actions{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;align-items:flex-start;}
+.review-center-row-actions{display:flex;gap:6px;flex:1 1 auto;min-width:0;flex-wrap:wrap;align-items:flex-start;}
+.review-center-row-actions .btn{max-width:100%;white-space:normal;overflow-wrap:anywhere;}
 .review-history-request{font-size:12.5px;color:var(--muted);margin:4px 0 14px;line-height:1.4;}
 .review-history-list{display:flex;flex-direction:column;gap:8px;}
 .review-history-item{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius);padding:9px 12px;}
 .review-history-item-top{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--text);}
 .review-history-item-top span{color:var(--muted-2);font-size:11px;font-family:'IBM Plex Mono',monospace;}
 .review-history-item-detail{font-size:12px;color:var(--muted);margin-top:4px;}
-.review-tabs{display:flex;gap:6px;margin:14px 0 4px;}
+.review-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 4px;}
 .review-tab-btn{background:none;border:1px solid var(--line);color:var(--muted);padding:7px 12px;border-radius:var(--radius);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;}
 .review-tab-btn.active{color:var(--teal);border-color:var(--teal-dim);background:var(--tag-bg-active);}
 .review-center-list[hidden]{display:none;}
 .review-cancel-modal{max-width:520px;}
+.review-ai-modal{max-width:680px;}
+.review-validation-caption{font-size:11px;color:var(--muted);margin:10px 0 4px;text-transform:uppercase;letter-spacing:.04em;}
+.review-manual-reason{font-size:12px;color:var(--text);background:rgba(255,193,7,.10);border:1px solid rgba(255,193,7,.35);border-radius:8px;padding:8px 10px;margin-top:10px;min-width:0;overflow-wrap:anywhere;word-break:break-word;}
+.review-batch-toolbar{margin:8px 0;}
+.review-batch-selectall{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer;}
+.review-batch-row{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0;cursor:pointer;}
+.review-batch-row input{margin-top:3px;}
+.review-batch-row-main{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.review-batch-row-main b{color:var(--text);font-size:13px;}
+.review-batch-row-main span{color:var(--muted);font-size:11px;}
+.review-batch-row-main em{color:var(--muted);font-size:12px;font-style:normal;min-width:0;overflow-wrap:anywhere;word-break:break-word;}
+.review-batch-summary{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:8px 0;}
+.review-batch-summary b{color:var(--text);}
+.sync-audit-table{border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:6px 0}
+.sync-audit-head,.sync-audit-row{display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:6px 10px;font-size:12px;border-bottom:1px solid var(--line);align-items:baseline}
+.sync-audit-head{background:var(--panel-2);color:var(--muted);font-weight:600}
+.sync-audit-row:last-child{border-bottom:none}
+.sync-audit-row span{color:var(--muted);min-width:0;overflow-wrap:anywhere}
+.sync-audit-row b{color:var(--text);text-align:right;font-family:'IBM Plex Mono',monospace}
+.sync-audit-head b{text-align:right}
+.sync-audit-note{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.4}
+.sync-audit-note.ok{color:var(--teal)}
+.sync-audit-note.warn{color:var(--amber)}
+.review-placement-suggestion{font-size:12.5px;color:var(--text);background:rgba(0,200,180,.08);border:1px solid var(--teal-dim,rgba(0,200,180,.35));border-radius:8px;padding:8px 10px;margin-top:10px;min-width:0;overflow-wrap:anywhere;word-break:break-word;}
+.alt-placement-row{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:8px;padding:4px 8px;margin:4px 0;font-size:12.5px;color:var(--text);min-width:0;box-sizing:border-box;}
+.alt-placement-row span{min-width:0;overflow-wrap:anywhere;word-break:break-word;}
 .review-cancel-lesion{font-size:13px;color:var(--text);margin:2px 0 0;line-height:1.4;}
 .review-cancelled-info{background:var(--panel-2);border:1px solid var(--line);border-left:3px solid var(--red);border-radius:var(--radius);padding:9px 12px;margin:0 0 14px;font-size:12.5px;color:var(--muted);line-height:1.5;}
 .review-cancelled-info b{color:var(--text);}
@@ -749,10 +759,11 @@ body{
 .quiz-carousel-arrow:hover{background:rgba(6,10,14,.85)}
 .quiz-carousel-prev{left:8px}
 .quiz-carousel-next{right:8px}
-.quiz-carousel-counter{text-align:center;font-size:12px;color:var(--muted);margin-top:6px;font-family:'IBM Plex Mono',monospace;letter-spacing:.03em}
-.quiz-carousel-controls{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:8px}
-.quiz-carousel-textnav{font-size:12.5px;white-space:nowrap}
-.quiz-carousel-textcount{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:.03em;white-space:nowrap}
+/* Overlay do contador no canto superior esquerdo da imagem: ‹ 1 / 2 › */
+.quiz-carousel-overlay{position:absolute;top:8px;left:8px;z-index:3;display:flex;align-items:center;gap:2px;background:rgba(6,10,14,.62);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:2px 4px;max-width:calc(100% - 16px);box-sizing:border-box}
+.quiz-carousel-ov-btn{flex:0 0 auto;width:26px;height:26px;border:none;border-radius:50%;background:none;color:#fff;font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.quiz-carousel-ov-btn:hover{background:rgba(255,255,255,.16)}
+.quiz-carousel-ov-count{flex:0 1 auto;min-width:0;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#fff;letter-spacing:.03em;white-space:nowrap;padding:0 4px;text-align:center}
 .quiz-answer-detail{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}
 .quiz-post-answer-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
 .quiz-add-img-action,.quiz-review-action{font-size:12.5px}
@@ -1631,20 +1642,12 @@ body{
         <button class="backup-btn" id="btn-export" title="Salvar lesões, progresso, quiz e ordem das seções">💾 Salvar<br>backup</button>
         <button class="backup-btn" id="btn-import" title="Restaurar um backup .json do Atlas">📂 Importar<br>backup</button>
       </div>
-      <button class="foot-btn" id="btn-force-cloud" title="Enviar o estado completo deste dispositivo para o Firebase, preservando e migrando imagens locais">☁↑ forçar envio deste dispositivo</button>
-      <details class="advanced-tools">
-        <summary>⚙️ ferramentas avançadas</summary>
-        <div class="advanced-tools-list">
-          <button class="foot-btn" id="btn-system-diagnostic" title="Gera um relatório de texto (armazenamento, duplicatas, imagens, sincronização) pra copiar e enviar se algo der errado">🩺 diagnóstico do sistema<br><span class="foot-btn-sub">gera um relatório pra copiar e enviar — não altera nada</span></button>
-          <button class="foot-btn" id="btn-audit-images" title="Verifica se cada imagem está anexada à lesão certa, usando a etiqueta guardada na própria imagem">🔍 auditar vínculo de imagens<br><span class="foot-btn-sub">usa isso depois de qualquer atualização, pra conferir se as imagens ficaram no lugar certo</span></button>
-          <button class="foot-btn" id="btn-reconcile-v2" title="Preview seguro em memória do reconciliador V2 por identidade semântica (name+seção+sítio); nada é alterado até você revisar e confirmar explicitamente">🧬 reconciliar catálogo V2<br><span class="foot-btn-sub">preview seguro — só aplica com sua confirmação, e baixa um backup automático antes de qualquer mudança</span></button>
-          <button class="foot-btn" id="btn-export-checkpoint-v2" title="Exporta um JSON local com DATA/REVIEW/SRS atuais e estatísticas de integridade — somente leitura, não altera nada, não sincroniza a nuvem">💾 Exportar checkpoint V2<br><span class="foot-btn-sub">somente leitura — congela o estado local atual num arquivo, com relatório de integridade antes de exportar</span></button>
-          <button class="foot-btn" id="btn-force-dedup" title="Funde agora mesmo qualquer lesão duplicada (mesmo nome/seção/sítio), preservando a melhor imagem e o melhor progresso de revisão entre as cópias">🔗 fundir duplicatas agora<br><span class="foot-btn-sub">usa se perceber a mesma lesão aparecendo duas vezes, ou progresso de revisão sumindo</span></button>
-          <button class="foot-btn" id="btn-recover-data" title="Procurar imagens e progresso em dados locais, snapshots e Firebase">🛟 procurar dados antigos / recuperar<br><span class="foot-btn-sub">último recurso: vasculha tudo que existe neste navegador atrás de algo perdido</span></button>
-          <button class="foot-btn" id="btn-restore-snapshot" title="Voltar ao último snapshot local criado automaticamente">↶ restaurar snapshot de segurança<br><span class="foot-btn-sub">volta pra um momento salvo automaticamente antes de uma ação arriscada</span></button>
-          <button class="foot-btn" id="btn-reset" style="color:var(--red);">⟲ restaurar padrão de fábrica<br><span class="foot-btn-sub">⚠ substitui TUDO pelo conteúdo do arquivo — só use como último recurso</span></button>
-        </div>
-      </details>
+      <div class="sidebar-separator"></div>
+      <button class="foot-btn" id="btn-sync-to-cloud" title="Compara este dispositivo com a nuvem e envia o estado DESTE dispositivo para o Firestore. Cria um snapshot antes e não traz nada de volta.">☁ sincronizar este dispositivo<br><span class="foot-btn-sub">envia o estado deste dispositivo para a nuvem — use quando este dispositivo contém a versão correta</span></button>
+      <button class="foot-btn" id="btn-sync-from-cloud" title="Traz o estado da nuvem para este dispositivo (merge não destrutivo, com confirmação e snapshot antes).">⬇ atualizar deste backup/nuvem<br><span class="foot-btn-sub">traz o estado da nuvem para este dispositivo — ação explícita, com confirmação</span></button>
+      <div class="sidebar-separator"></div>
+      <button class="foot-btn" id="btn-system-diagnostic" title="Gera um relatório de texto (armazenamento, duplicatas, imagens, sincronização) pra copiar e enviar se algo der errado">🩺 diagnóstico do sistema<br><span class="foot-btn-sub">gera um relatório para copiar e enviar — não altera nada</span></button>
+      <button class="foot-btn" id="btn-audit-images" title="Verifica se cada imagem está anexada à lesão certa, usando a etiqueta guardada na própria imagem">🔍 auditar vínculo de imagens<br><span class="foot-btn-sub">confere se as imagens continuam associadas às lesões corretas — não altera nada</span></button>
     </div>
   </div>
 
@@ -1886,17 +1889,70 @@ async function pushToFirebaseNow(){
   }
 }
 
-/* v193: ação manual para quando ESTE dispositivo contém o estado mais completo.
-   Primeiro migra eventuais imagens locais legadas para Cloudinary; depois grava
-   diretamente o estado atual no Firebase, sem fazer leitura/reconciliação remota antes. */
-async function forceThisDeviceToCloud(){
-  if(!fbDb){ toast('Firebase indisponível neste navegador.'); return; }
-  if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return; }
-  const ok=confirm('Forçar o envio do estado DESTE dispositivo para a nuvem agora?\n\nUse esta opção somente no dispositivo que contém as imagens/progresso mais completos. O Atlas fará um snapshot local antes do envio.');
-  if(!ok) return;
+/* ============================================================
+   AUDITORIA + SINCRONIZAÇÃO EXPLÍCITA LOCAL ↔ NUVEM
+   - buildSyncAudit() é 100% READ-ONLY (nunca grava local nem remoto).
+   - syncThisDeviceToCloud() envia o estado LOCAL para o Firestore (com
+     snapshot antes); NUNCA faz pull de volta.
+   - Atualizar da nuvem é ação EXPLÍCITA (com confirmação + snapshot) e reusa
+     o merge não destrutivo já existente. Nenhum pull automático no boot.
+   ============================================================ */
+/* Contadores puros (sem I/O) usados pela auditoria. Conta metadados/URLs —
+   nunca binários, nunca reenvia nada ao Cloudinary. */
+function syncAuditCounters(data, revisions, review, srs){
+  const d = Array.isArray(data) ? data : [];
+  let entriesWithImages = 0, totalImages = 0, altPlacements = 0;
+  for(const e of d){
+    if(!e) continue;
+    const arr = Array.isArray(e.images) ? e.images.length : 0;
+    if(arr > 0 || e.img || e.localImg) entriesWithImages += 1;
+    totalImages += arr + (e.img ? 1 : 0);
+    if(Array.isArray(e.altPlacements)) altPlacements += e.altPlacements.length;
+  }
+  return {
+    lesions: d.length,
+    entriesWithImages,
+    totalImages,
+    altPlacements,
+    revisions: revisions ? Object.keys(revisions).length : 0,
+    srs: srs ? Object.keys(srs).length : 0,
+    review: review ? Object.keys(review).length : 0
+  };
+}
+/* Comparação READ-ONLY entre este dispositivo e a nuvem. Não grava nada. */
+async function buildSyncAudit(){
+  const local = syncAuditCounters(DATA, LESION_REVISIONS, REVIEW, SRS);
+  let cloud = null, cloudError = null;
+  if(!fbDb){
+    cloudError = 'Firebase indisponível neste navegador.';
+  } else {
+    try{
+      const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'auditoria de sincronização');
+      if(remote){
+        const remoteData = (Array.isArray(remote.data) ? remote.data : [])
+          .filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+        cloud = syncAuditCounters(remoteData, null, remote.review, remote.srs);
+        cloud.storesRevisions = false; // Firestore não guarda LESION_REVISIONS (é local por dispositivo)
+      }
+    }catch(e){ cloudError = (e && e.message) || String(e); }
+  }
+  const divergent = !!cloud && (
+    cloud.lesions !== local.lesions ||
+    cloud.entriesWithImages !== local.entriesWithImages ||
+    cloud.totalImages !== local.totalImages ||
+    cloud.altPlacements !== local.altPlacements ||
+    cloud.srs !== local.srs
+  );
+  return { local, cloud, cloudError, divergent };
+}
+/* Envia o estado DESTE dispositivo para a nuvem. Confirmação/contexto ficam na
+   UI (modal). Cria snapshot ANTES; migra apenas imagens locais legadas; NUNCA
+   altera ownership (writeShardedState só serializa DATA/REVIEW/SRS/etc.). */
+async function syncThisDeviceToCloud(){
+  if(!fbDb){ toast('Firebase indisponível neste navegador.'); return false; }
+  if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return false; }
   try{
-    createSafetySnapshot('antes de forçar envio deste dispositivo para Firebase');
-    toast('Preparando imagens locais para envio…');
+    createSafetySnapshot('antes de sincronizar este dispositivo com a nuvem');
     const mig=await migrateLegacyLocalImagesToCloudinary();
     // Persiste qualquer migração no estado local antes do envio explícito.
     try{ await storage.set(STORAGE_KEY,JSON.stringify(DATA),false); }catch(_e){}
@@ -1909,18 +1965,138 @@ async function forceThisDeviceToCloud(){
     clearTimeout(fbPushTimer);
     const ok = await writeShardedStateSerialized(20000);
     if(!ok){
+      setSyncStatus(false, 'não deu pra enviar: algum pedaço dos dados ficou grande demais (imagem local sem Cloudinary).');
       toast('⚠ Não deu pra enviar: algum pedaço dos dados ficou grande demais pra nuvem (imagem local sem Cloudinary). Veja o aviso na barra lateral.');
-      return;
+      return false;
     }
     setSyncStatus(true);
-    createSafetySnapshot('após forçar envio deste dispositivo para Firebase');
+    createSafetySnapshot('após sincronizar este dispositivo com a nuvem');
     const extra=mig&&mig.migrated ? ` ${mig.migrated} imagem(ns) local(is) também foram enviada(s) ao Cloudinary.` : '';
-    toast('Envio deste dispositivo concluído.'+extra);
+    toast('Estado deste dispositivo enviado para a nuvem.'+extra);
+    return true;
   }catch(e){
-    console.error('Falha ao forçar envio deste dispositivo.',e);
-    setSyncStatus(false, 'falha ao forçar envio: ' + (e.message||e));
+    console.error('Falha ao sincronizar este dispositivo com a nuvem.',e);
+    setSyncStatus(false, 'falha ao sincronizar este dispositivo: ' + (e.message||e));
     toast('Falha no envio. Os dados locais foram preservados.');
+    return false;
   }
+}
+/* v193: ação manual (mantida para uso interno/console) para quando ESTE
+   dispositivo contém o estado mais completo. */
+async function forceThisDeviceToCloud(){
+  if(!fbDb){ toast('Firebase indisponível neste navegador.'); return; }
+  if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return; }
+  const ok=confirm('Forçar o envio do estado DESTE dispositivo para a nuvem agora?\n\nUse esta opção somente no dispositivo que contém as imagens/progresso mais completos. O Atlas fará um snapshot local antes do envio.');
+  if(!ok) return;
+  await syncThisDeviceToCloud();
+}
+/* Resumo visual da auditoria (mesmos contadores dos dois lados). */
+function renderSyncAuditHtml(audit, direction){
+  const l = audit.local || {}, c = audit.cloud;
+  const cell = v => (v===null || v===undefined) ? '—' : String(v);
+  const row = (label, lv, cv) => `<div class="sync-audit-row"><span>${label}</span><b>${cell(lv)}</b><b>${cell(cv)}</b></div>`;
+  let cloudNote;
+  if(audit.cloudError) cloudNote = `<div class="sync-audit-note warn">Nuvem indisponível: ${escAttr(audit.cloudError)}</div>`;
+  else if(audit.divergent) cloudNote = `<div class="sync-audit-note warn">Há diferença entre este dispositivo e a nuvem.</div>`;
+  else cloudNote = `<div class="sync-audit-note ok">Este dispositivo e a nuvem estão com os mesmos contadores.</div>`;
+  const cta = direction==='toCloud'
+    ? '<div class="sync-audit-note">Envia o estado DESTE dispositivo para a nuvem. Use quando este dispositivo contém a versão correta. Um snapshot é criado antes e nada é trazido de volta.</div>'
+    : '<div class="sync-audit-note warn">Traz o estado da NUVEM para este dispositivo (merge não destrutivo por id, com snapshot antes). Revisões locais NÃO são substituídas. Use quando a nuvem contém a versão correta.</div>';
+  return `
+    <div class="sync-audit-table">
+      <div class="sync-audit-head"><span>Contador</span><b>Este dispositivo</b><b>Nuvem</b></div>
+      ${row('Lesões', l.lesions, c && c.lesions)}
+      ${row('Registros com imagens', l.entriesWithImages, c && c.entriesWithImages)}
+      ${row('Total de imagens', l.totalImages, c && c.totalImages)}
+      ${row('altPlacements', l.altPlacements, c && c.altPlacements)}
+      ${row('SRS', l.srs, c && c.srs)}
+      ${row('Revisões (local por dispositivo)', l.revisions, '—')}
+    </div>
+    ${cloudNote}
+    <div class="sync-audit-note">As imagens já estão no Cloudinary — a sincronização envia só metadados/URLs, sem reenviar binários.</div>
+    ${cta}`;
+}
+async function openSyncDeviceToCloudModal(){
+  if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return; }
+  if(!fbDb){ toast('Firebase indisponível neste navegador.'); return; }
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected){ ov.remove(); document.removeEventListener('keydown', closeOnEsc); } };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = `<div class="modal review-ai-modal">
+    <h2>☁ Sincronizar este dispositivo com a nuvem</h2>
+    <div class="modal-sub">envia o estado deste dispositivo para a nuvem — use quando este dispositivo contém a versão correta</div>
+    <div id="sync-audit-box"><div class="sync-audit-note">Comparando com a nuvem…</div></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="sync-cancel">cancelar</button>
+      <button class="btn btn-primary" id="sync-confirm" disabled>☁ Enviar este dispositivo para a nuvem</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  const close = ()=>{ if(ov.isConnected) ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+  ov.querySelector('#sync-cancel').onclick = close;
+  const box = ov.querySelector('#sync-audit-box');
+  const confirmBtn = ov.querySelector('#sync-confirm');
+  try{
+    const audit = await buildSyncAudit();
+    box.innerHTML = renderSyncAuditHtml(audit, 'toCloud');
+    confirmBtn.disabled = false;
+  }catch(e){
+    box.innerHTML = `<div class="sync-audit-note warn">Não foi possível comparar agora: ${escAttr((e&&e.message)||e)}</div>`;
+  }
+  confirmBtn.onclick = async ()=>{
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = '⏳ Enviando…';
+    const ok = await syncThisDeviceToCloud();
+    close();
+    if(!ok) toast('Nada foi enviado — o estado local foi preservado.');
+  };
+}
+async function openUpdateFromCloudModal(){
+  if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return; }
+  if(!fbDb){ toast('Firebase indisponível neste navegador.'); return; }
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected){ ov.remove(); document.removeEventListener('keydown', closeOnEsc); } };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = `<div class="modal review-ai-modal">
+    <h2>⬇ Atualizar deste backup/nuvem</h2>
+    <div class="modal-sub">traz o estado da nuvem para este dispositivo — ação explícita, com confirmação e snapshot</div>
+    <div id="sync-audit-box"><div class="sync-audit-note">Comparando com a nuvem…</div></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="sync-cancel">cancelar</button>
+      <button class="btn btn-primary" id="sync-confirm" disabled>⬇ Trazer da nuvem</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  const close = ()=>{ if(ov.isConnected) ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+  ov.querySelector('#sync-cancel').onclick = close;
+  const box = ov.querySelector('#sync-audit-box');
+  const confirmBtn = ov.querySelector('#sync-confirm');
+  try{
+    const audit = await buildSyncAudit();
+    box.innerHTML = renderSyncAuditHtml(audit, 'fromCloud');
+    confirmBtn.disabled = false;
+  }catch(e){
+    box.innerHTML = `<div class="sync-audit-note warn">Não foi possível comparar agora: ${escAttr((e&&e.message)||e)}</div>`;
+  }
+  confirmBtn.onclick = async ()=>{
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = '⏳ Atualizando…';
+    try{
+      createSafetySnapshot('antes de atualizar deste backup/nuvem');
+      await syncFromFirebase();
+      close();
+      toast('Atualização da nuvem concluída (merge não destrutivo). Revisões locais foram preservadas.');
+    }catch(e){
+      console.error('Falha ao atualizar da nuvem.', e);
+      toast('Não foi possível atualizar da nuvem. O estado local foi preservado.');
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = '⬇ Trazer da nuvem';
+    }
+  };
 }
 
 /* reconciliação não destrutiva entre estado local e nuvem */
@@ -1979,6 +2155,103 @@ function stableImageKeyV208(img){
   if(img.data) return 'data:'+clean(img.data);
   if(img.thumb) return 'thumb:'+clean(img.thumb);
   return '';
+}
+
+/* ============================================================
+   PROTEÇÃO DE ATRIBUIÇÃO (OWNERSHIP) DE IMAGENS
+   Regra permanente: uma imagem já atribuída a uma lesão NÃO pode perder essa
+   atribuição por nenhum fluxo AUTOMÁTICO (importação, reconciliação,
+   deduplicação, migração, recuperação, IA futura, etc.). Só ação MANUAL
+   explícita do usuário — contexto { manual:true } — pode remover/mover/trocar
+   ownership. Conflitos são registrados (nunca resolvidos em silêncio).
+   ============================================================ */
+const IMAGE_OWNERSHIP_MANUAL = { manual:true };
+const IMAGE_OWNERSHIP_CONFLICTS = []; // registros de conflitos detectados/bloqueados (sessão)
+function imageOwnerIdV1(img){ return String((img && img.lesionId) || ''); }
+// Pura: só permite trocar o dono quando o contexto é explicitamente manual
+// (ou quando o dono não muda). Não confia em nome de função — confia no contexto.
+function canChangeImageOwnership(image, newLesionId, context){
+  if(!image) return false;
+  const current = imageOwnerIdV1(image);
+  const next = String(newLesionId || '');
+  if(current === next) return true;
+  return !!(context && context.manual === true);
+}
+function registerImageOwnershipConflict(entry){
+  try{
+    IMAGE_OWNERSHIP_CONFLICTS.push({ at: Date.now(), ...(entry||{}) });
+    if(IMAGE_OWNERSHIP_CONFLICTS.length > 200) IMAGE_OWNERSHIP_CONFLICTS.shift();
+  }catch(_e){}
+  return entry;
+}
+function getImageOwnershipConflicts(){ return IMAGE_OWNERSHIP_CONFLICTS.slice(); }
+function clearImageOwnershipConflicts(){ IMAGE_OWNERSHIP_CONFLICTS.length = 0; }
+/* Devolve a imagem INALTERADA (ownership preservado) e registra o conflito
+   quando uma mudança AUTOMÁTICA de dono é tentada. */
+function assertManualImageOwnershipChange(image, newLesionId, context){
+  if(canChangeImageOwnership(image, newLesionId, context)) return { ok:true, image };
+  const conflict = registerImageOwnershipConflict({
+    kind:'automatic_ownership_change_blocked',
+    stableKey: stableImageKeyV208(image),
+    fromLesionId: imageOwnerIdV1(image),
+    toLesionId: String(newLesionId||'')
+  });
+  return { ok:false, reason:'automatic_ownership_change_blocked', image, conflict };
+}
+/* Detecção READ-ONLY de conflitos de atribuição no catálogo informado:
+   mesmo asset em 2+ lesões e imagem cujo lesionId/lesionName diverge da lesão
+   que a contém. NÃO corrige nada. */
+function detectImageOwnershipConflicts(data){
+  const owners = new Map(); // stableKey -> Set(lesionId)
+  const mismatches = [];
+  for(const e of (Array.isArray(data)?data:[])){
+    if(!e || !e.id) continue;
+    for(const img of (Array.isArray(e.images)?e.images:[])){
+      const k = stableImageKeyV208(img); if(!k) continue;
+      if(!owners.has(k)) owners.set(k, new Set());
+      owners.get(k).add(e.id);
+      const owner = imageOwnerIdV1(img);
+      if(owner && owner !== e.id){
+        mismatches.push({ kind:'image_owner_mismatch', stableKey:k, lesionId:e.id, imageOwnerId:owner, lesionName:e.name, imageLesionName:img.lesionName||'' });
+      }
+    }
+  }
+  const shared = [];
+  for(const [k, set] of owners){ if(set.size>1) shared.push({ kind:'asset_in_multiple_lesions', stableKey:k, lesionIds:[...set] }); }
+  return [...shared, ...mismatches];
+}
+/* Importação: preserva a atribuição LOCAL existente. Uma imagem que já estava
+   atribuída a uma lesão local NÃO tem o ownership trocado silenciosamente pelo
+   backup — ela é mantida com a lesão local (quando essa lesão ainda existe no
+   backup importado) e o conflito é registrado. Devolve os conflitos. */
+function preserveLocalImageOwnershipOnImport(importedData, localData){
+  const localOwnerByKey = new Map();
+  for(const e of (Array.isArray(localData)?localData:[])){
+    for(const img of (Array.isArray(e.images)?e.images:[])){
+      const k = stableImageKeyV208(img); if(k) localOwnerByKey.set(k, { id:e.id, name:e.name });
+    }
+  }
+  const importedById = new Map((Array.isArray(importedData)?importedData:[]).map(e=>[e && e.id, e]));
+  const conflicts = [];
+  for(const e of (Array.isArray(importedData)?importedData:[])){
+    if(!e || !Array.isArray(e.images)) continue;
+    const keep = [];
+    for(const img of e.images){
+      const k = stableImageKeyV208(img);
+      const local = k ? localOwnerByKey.get(k) : null;
+      if(!local || local.id === e.id || !importedById.has(local.id)){ keep.push(img); continue; }
+      const owner = importedById.get(local.id);
+      owner.images = Array.isArray(owner.images) ? owner.images : [];
+      const rewritten = { ...img, lesionId: local.id, lesionName: local.name };
+      if(rewritten.cloudinaryContext && rewritten.cloudinaryContext.custom){
+        rewritten.cloudinaryContext = { ...rewritten.cloudinaryContext, custom: { ...rewritten.cloudinaryContext.custom, lesion_id: local.id, lesion_name: local.name } };
+      }
+      if(!owner.images.some(x=>stableImageKeyV208(x)===k)) owner.images.push(rewritten);
+      conflicts.push(registerImageOwnershipConflict({ kind:'import_ownership_preserved', stableKey:k, fromLesionId:e.id, preservedLesionId:local.id }));
+    }
+    e.images = keep;
+  }
+  return conflicts;
 }
 
 let canonicalImageOwnersV208 = null;
@@ -2760,6 +3033,91 @@ function pushLesionReviewHistory(review, action, details){
   review.history = Array.isArray(review.history) ? review.history : [];
   review.history.push({ timestamp: Date.now(), action, details: details || null });
 }
+/* Feedback humano explícito (motivo de recusa/desfazer/devolução manual).
+   Persistido dentro da revisão (sobrevive a F5) e incluído no próximo pacote
+   da IA. Texto vazio NÃO é registrado. */
+function pushHumanFeedback(review, kind, text, attemptId){
+  const t = (text||'').trim();
+  if(!t) return;
+  review.humanFeedback = Array.isArray(review.humanFeedback) ? review.humanFeedback : [];
+  review.humanFeedback.push({ kind, text: t, at: Date.now(), attemptId: attemptId||null });
+  review.lastHumanFeedback = t;
+}
+/* Normalização READ-ONLY do feedback humano mais recente para o pacote da IA.
+   Prioridade: (1) feedback explícito salvo direto na revisão
+   (lastHumanFeedback); (2) o humanFeedback NÃO VAZIO da tentativa mais recente
+   que tiver um; (3) null. Não escreve de volta no IndexedDB. */
+function resolveLatestHumanFeedback(review, attempts){
+  const direct = (review && review.lastHumanFeedback) ? String(review.lastHumanFeedback).trim() : '';
+  if(direct) return direct;
+  const list = Array.isArray(attempts) ? attempts : [];
+  for(let i=list.length-1; i>=0; i--){
+    const t = (list[i] && list[i].humanFeedback) ? String(list[i].humanFeedback).trim() : '';
+    if(t) return t;
+  }
+  return null;
+}
+/* Reconstrói, em ordem, as tentativas anteriores de uma revisão a partir do
+   histórico (read-only, NUNCA cria/duplica entradas). Cada tentativa traz
+   summary/reasoning/proposedChanges/outcome e o feedback humano associado.
+   `text` preserva o texto legado da proposta (quando summary/reasoning não
+   existem em registros antigos) — NUNCA fabrica summary/reasoning. */
+function buildReviewAiAttempts(review){
+  const history = (Array.isArray(review && review.history) ? review.history : [])
+    .slice().sort((a,b)=>(a.timestamp||0)-(b.timestamp||0));
+  const attempts = [];
+  let current = null;
+  const ensure = ()=>{
+    if(!current){
+      current = { summary:'', reasoning:'', text:'', proposedChanges:{}, proposedAt:null, appliedAt:null, decidedAt:null, outcome:'pending', humanFeedback:null };
+      attempts.push(current);
+    }
+    return current;
+  };
+  for(const h of history){
+    const d = h.details || {};
+    if(h.action==='solution_proposed'){
+      current = { summary:'', reasoning:'', text:'', proposedChanges:{}, proposedAt:h.timestamp||null, appliedAt:null, decidedAt:null, outcome:'pending', humanFeedback:null };
+      if(d.solution){
+        current.summary = d.solution.summary || '';
+        current.reasoning = d.solution.reasoning || '';
+        current.text = d.solution.text || '';
+        current.proposedChanges = d.solution.proposedChanges || {};
+        current.proposedAt = d.solution.createdAt || h.timestamp || null;
+      }
+      attempts.push(current);
+    } else if(h.action==='changes_applied'){
+      const c = ensure();
+      c.outcome = 'applied_pending_validation';
+      c.appliedAt = h.timestamp || null;
+      c.proposedChanges = d.changes || c.proposedChanges;
+    } else if(h.action==='application_approved'){
+      const c = ensure();
+      c.outcome = 'accepted';
+      c.decidedAt = h.timestamp || null;
+    } else if(h.action==='application_rejected'){
+      const c = ensure();
+      c.outcome = 'rolledback';
+      c.humanFeedback = d.reason || c.humanFeedback;
+      c.decidedAt = h.timestamp || null;
+    } else if(h.action==='rollback_completed'){
+      const c = ensure();
+      c.outcome = 'rolledback';
+      c.decidedAt = c.decidedAt || h.timestamp || null;
+    } else if(h.action==='proposal_rejected'){
+      const c = ensure();
+      c.outcome = 'rejected';
+      c.humanFeedback = d.reason || c.humanFeedback;
+      c.decidedAt = h.timestamp || null;
+    } else if(h.action==='manual_action_required'){
+      const c = ensure();
+      c.outcome = 'manual_action_required';
+      c.humanFeedback = d.reason || c.humanFeedback;
+      c.decidedAt = h.timestamp || null;
+    }
+  }
+  return attempts.map((a,i)=>Object.assign({ attempt:i+1 }, a));
+}
 
 /* Cria uma revisão vinculada a uma lesão a partir de um pedido escrito
    livremente pelo usuário. Evita duplicar acidentalmente a mesma revisão
@@ -2783,6 +3141,7 @@ function createLesionReview(lesionId, requestText){
     requestText: text,
     solution: null,
     attempts: [],
+    humanFeedback: [],
     history: []
   };
   pushLesionReviewHistory(review, 'created', { requestText: text });
@@ -2800,8 +3159,11 @@ function getPendingReviews(){
     .filter(r=>r.status==='pending' || r.status==='rejected')
     .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
 }
-/* Propostas que a IA/alguém já preparou, mas que AINDA NÃO tocaram DATA —
-   aguardam o 1º aceite (autorizar) ou a recusa. */
+/* Compatibilidade/legado: propostas que AINDA NÃO tocaram DATA. O fluxo atual
+   (importar solução da IA) NÃO passa mais por aqui — ele aplica direto em
+   modo provisório ('applied_pending_validation'). Esta fila só existe para
+   propostas antigas gravadas antes da simplificação (ou chamadas manuais de
+   setReviewSolution no console), que ainda podem ser autorizadas/recusadas. */
 function getProposedSolutions(){
   return Object.values(LESION_REVISIONS)
     .filter(r=>r.status==='proposed')
@@ -2814,12 +3176,21 @@ function getAppliedSolutionsAwaitingValidation(){
     .filter(r=>r.status==='applied_pending_validation')
     .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
 }
+/* Revisões que a IA NÃO consegue resolver pelos campos permitidos (ex.: remover
+   uma imagem, mexer em ownership ou em campo estrutural). NÃO alteram DATA e
+   saem da fila de pendentes para não ficarem "travadas"; aguardam ação manual
+   do usuário no editor da lesão (ou podem voltar para a fila). */
+function getManualActionSolutions(){
+  return Object.values(LESION_REVISIONS)
+    .filter(r=>r.status==='manual_action_required')
+    .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+}
 /* Compatibilidade: mantido com o mesmo nome/uso de antes (badge 💡 e painel
-   "Soluções disponíveis") — agora representa TUDO que aguarda alguma
-   decisão humana no 💡, ou seja, a união de propostas + correções aplicadas
-   aguardando validação. */
+   "Soluções disponíveis") — representa TUDO que aguarda alguma decisão/ação
+   humana no 💡: propostas legadas + correções aplicadas aguardando validação
+   + revisões que exigem ação manual. */
 function getReadySolutions(){
-  return [...getProposedSolutions(), ...getAppliedSolutionsAwaitingValidation()]
+  return [...getProposedSolutions(), ...getAppliedSolutionsAwaitingValidation(), ...getManualActionSolutions()]
     .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
 }
 function getReviewHistory(reviewId){
@@ -2871,7 +3242,7 @@ function validateProposedChanges(proposedChanges){
    chamada futuramente por uma IA que processe getPendingReviews()
    diariamente — e SÓ ISSO: a IA para por aqui, nunca autoriza/aprova a
    própria proposta (ver comentário no topo do módulo). */
-function setReviewSolution(reviewId, solutionText, proposedChanges){
+function setReviewSolution(reviewId, solutionText, proposedChanges, meta){
   const review = LESION_REVISIONS[reviewId];
   if(!review) return { ok:false, reason:'not_found', review:null };
   if(review.status==='applied_pending_validation'){
@@ -2881,10 +3252,15 @@ function setReviewSolution(reviewId, solutionText, proposedChanges){
   if(!check.valid) return { ok:false, reason:check.reason, review:null };
   const wasRejected = review.status === 'rejected';
   if(wasRejected) pushLesionReviewHistory(review, 'reopened', null);
+  const m = (meta && typeof meta==='object') ? meta : {};
   const solution = {
     text: (solutionText||'').trim(),
     proposedChanges: check.changes,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    // summary/reasoning separados (quando a solução veio da IA) — usados para
+    // reconstruir as tentativas anteriores no pacote da próxima IA.
+    summary: typeof m.summary==='string' ? m.summary : '',
+    reasoning: typeof m.reasoning==='string' ? m.reasoning : ''
   };
   review.solution = solution;
   review.status = 'proposed';
@@ -2897,13 +3273,18 @@ function setReviewSolution(reviewId, solutionText, proposedChanges){
 
 /* PRIMEIRO ACEITE — negado: recusa a proposta antes de qualquer mudança em
    DATA. Mantém a proposta e o histórico (nada é apagado) e devolve a
-   revisão para a fila de pendentes automaticamente. */
+   revisão para a fila de pendentes automaticamente. O motivo escrito pelo
+   usuário é PERSISTIDO como feedback humano explícito (rejectionReason +
+   humanFeedback[]) para entrar no próximo pacote da IA. */
 function rejectProposedReviewSolution(reviewId, reasonText){
   const review = LESION_REVISIONS[reviewId];
   if(!review || review.status!=='proposed') return { ok:false, reason:'not_proposed', review:review||null };
+  const reason = (reasonText||'').trim() || null;
   review.status = 'rejected';
   review.updatedAt = Date.now();
-  pushLesionReviewHistory(review, 'proposal_rejected', { reason:(reasonText||'').trim()||null, solution: review.solution });
+  review.rejectionReason = reason;
+  pushHumanFeedback(review, 'proposal_rejected', reason, null);
+  pushLesionReviewHistory(review, 'proposal_rejected', { reason, solution: review.solution });
   saveLesionRevisions();
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
@@ -2917,7 +3298,7 @@ function rejectProposedReviewSolution(reviewId, reasonText){
    próprio snapshot (nunca reaproveita o snapshot de uma tentativa anterior
    da mesma revisão). Ainda NÃO é definitivo: fica "applied_pending_validation"
    até o 2º aceite (approveAppliedReviewSolution/rollbackAppliedReviewSolution). */
-function authorizeAndApplyReviewSolution(reviewId){
+function authorizeAndApplyReviewSolution(reviewId, opts){
   const review = LESION_REVISIONS[reviewId];
   if(!review || review.status!=='proposed') return { ok:false, reason:'not_proposed', review:review||null };
   if(!review.solution || !review.solution.proposedChanges) return { ok:false, reason:'no_changes', review };
@@ -2926,16 +3307,23 @@ function authorizeAndApplyReviewSolution(reviewId){
   const lesion = DATA.find(e=>e && e.id===review.lesionId);
   if(!lesion) return { ok:false, reason:'lesion_not_found', review };
 
-  pushLesionReviewHistory(review, 'application_authorized', null);
+  // `opts.origin === 'import'` registra que a aplicação provisória veio de uma
+  // ação humana explícita de colar/importar o JSON da IA (não de um 2º clique
+  // de autorização). O comportamento em si é idêntico.
+  const origin = (opts && opts.origin) || 'authorization';
+  pushLesionReviewHistory(review, 'application_authorized', origin==='import' ? { origin:'import', via:'importReviewAiSolution' } : null);
 
   const beforeSnapshot = JSON.parse(JSON.stringify(lesion));
   const attempt = {
     id: genLesionReviewAttemptId(),
     beforeSnapshot,
     proposedChanges: check.changes,
+    summary: (review.solution && review.solution.summary) || '',
+    reasoning: (review.solution && review.solution.reasoning) || '',
     appliedAt: Date.now(),
     approvedAt: null,
-    rolledBackAt: null
+    rolledBackAt: null,
+    rollbackReason: null
   };
   pushLesionReviewHistory(review, 'before_snapshot_created', { attemptId: attempt.id });
 
@@ -2982,13 +3370,17 @@ function rollbackAppliedReviewSolution(reviewId, reasonText){
   const idx = DATA.findIndex(e=>e && e.id===review.lesionId);
   if(idx===-1) return { ok:false, reason:'lesion_not_found', review };
 
-  pushLesionReviewHistory(review, 'application_rejected', { attemptId: attempt.id, reason:(reasonText||'').trim()||null });
+  const reason = (reasonText||'').trim() || null;
+  pushLesionReviewHistory(review, 'application_rejected', { attemptId: attempt.id, reason });
 
   DATA[idx] = JSON.parse(JSON.stringify(attempt.beforeSnapshot));
   attempt.rolledBackAt = Date.now();
+  attempt.rollbackReason = reason;
 
   review.status = 'rejected';
   review.updatedAt = Date.now();
+  review.rollbackReason = reason;
+  pushHumanFeedback(review, 'rollback', reason, attempt.id);
   pushLesionReviewHistory(review, 'rollback_completed', { attemptId: attempt.id });
 
   saveLesionRevisions();
@@ -3007,7 +3399,7 @@ function rollbackAppliedReviewSolution(reviewId, reasonText){
    cancelável por aqui; 'accepted' já terminou; 'cancelled' não pode ser
    cancelada de novo. NUNCA toca DATA, nunca aplica proposedChanges, nunca faz
    rollback, nunca mexe em SRS/REVIEW/imagens/ownership — só o estado do pedido. */
-const CANCELLABLE_REVIEW_STATUSES = ['pending', 'proposed', 'rejected'];
+const CANCELLABLE_REVIEW_STATUSES = ['pending', 'proposed', 'rejected', 'manual_action_required'];
 function cancelLesionReview(reviewId, reason){
   const review = LESION_REVISIONS[reviewId];
   if(!review) return { ok:false, reason:'not_found', review:null };
@@ -3027,6 +3419,500 @@ function cancelLesionReview(reviewId, reason){
   return { ok:true, reason:null, review };
 }
 
+/* AÇÃO MANUAL NECESSÁRIA — a IA devolveu proposedChanges vazio (ou só campos
+   fora da allowlist) e o pedido envolve algo que ela não pode resolver (ex.:
+   remover/mover imagem, ownership, campo estrutural). NÃO toca DATA: só marca
+   a revisão como 'manual_action_required', guarda o resumo da IA e o motivo, e
+   tira o item da fila de pendentes (para não parecer "travado"). O usuário
+   resolve manualmente no editor e pode devolver a revisão à fila. */
+function flagManualActionRequired(reviewId, solutionText, reason, manualAction){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return { ok:false, reason:'not_found', review:null };
+  if(!reviewAcceptsAiProposal(review)) return { ok:false, reason:'not_proposable', status:review.status, review };
+  const ma = (manualAction && typeof manualAction==='object') ? {
+    type: String(manualAction.type||'').trim() || null,
+    description: String(manualAction.description||'').trim() || null,
+    suggestedPlacement: (manualAction.suggestedPlacement && typeof manualAction.suggestedPlacement==='object') ? {
+      section: String(manualAction.suggestedPlacement.section || manualAction.suggestedPlacement.s || '').trim() || null,
+      site: (manualAction.suggestedPlacement.site===undefined || manualAction.suggestedPlacement.site===null) ? null : String(manualAction.suggestedPlacement.site).trim()
+    } : null
+  } : null;
+  review.manualAction = ma;
+  review.solution = {
+    text: (solutionText||'').trim(),
+    proposedChanges: {},
+    createdAt: Date.now(),
+    manualActionRequired: true,
+    reason: (reason||'').trim() || null
+  };
+  review.manualActionReason = (reason||'').trim() || null;
+  review.status = 'manual_action_required';
+  review.updatedAt = Date.now();
+  pushLesionReviewHistory(review, 'solution_proposed', { solution: review.solution });
+  pushLesionReviewHistory(review, 'manual_action_required', { reason: review.manualActionReason, manualAction: ma });
+  saveLesionRevisions();
+  updateReviewCenterBadges();
+  return { ok:true, reason:null, review };
+}
+
+/* Devolve uma revisão de 'manual_action_required' para a fila normal (pending),
+   permitindo nova tentativa com IA. NUNCA toca DATA. Um motivo opcional vira
+   feedback humano para a próxima IA. */
+function reopenManualActionReview(reviewId, reasonText){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review || review.status!=='manual_action_required') return { ok:false, reason:'not_manual_action', review:review||null };
+  review.status = 'pending';
+  review.updatedAt = Date.now();
+  const reason = (reasonText||'').trim() || null;
+  pushHumanFeedback(review, 'manual_return', reason, null);
+  pushLesionReviewHistory(review, 'manual_action_reopened', reason ? { reason } : null);
+  saveLesionRevisions();
+  updateReviewCenterBadges();
+  return { ok:true, reason:null, review };
+}
+
+/* ---------- LOCALIZAÇÃO ADICIONAL sugerida pela IA (altPlacements) ----------
+   Só para manualAction.type === 'additional_section_placement'. Reutiliza o
+   campo altPlacements já existente (nada de estrutura paralela). NUNCA move
+   imagem, nunca troca lesionId/lesionName/ownership, nunca duplica registro:
+   só acrescenta uma associação {s, site} à MESMA lesão, com snapshot antes e
+   rollback exato. */
+function reviewAiKnownSections(){
+  const map = {};
+  for(const e of (Array.isArray(DATA)?DATA:[])){
+    if(!e) continue;
+    if(e.s){ map[e.s] = map[e.s] || {}; if(e.site) map[e.s][e.site] = true; }
+    (Array.isArray(e.altPlacements)?e.altPlacements:[]).forEach(p=>{
+      if(p && p.s){ map[p.s] = map[p.s] || {}; if(p.site) map[p.s][p.site] = true; }
+    });
+  }
+  return map;
+}
+function reviewAiPlacementCatalog(){
+  const map = reviewAiKnownSections();
+  return Object.keys(map).sort().map(section=>({ section, sites: Object.keys(map[section]).sort() }));
+}
+// Valida uma sugestão { section, site? } contra as seções/sítios que EXISTEM.
+// site pode ser null/ausente (aplicação pedirá o sítio na confirmação).
+function validateReviewAiPlacement(suggested){
+  if(!suggested || typeof suggested!=='object' || Array.isArray(suggested)) return { valid:false, reason:'invalid_placement' };
+  const section = String(suggested.section || suggested.s || '').trim();
+  const rawSite = (suggested.site===undefined || suggested.site===null) ? '' : String(suggested.site).trim();
+  if(!section) return { valid:false, reason:'missing_section' };
+  const map = reviewAiKnownSections();
+  if(!map[section]) return { valid:false, reason:'unknown_section' };
+  if(rawSite && !map[section][rawSite]) return { valid:false, reason:'unknown_site' };
+  return { valid:true, reason:null, placement:{ s: section, site: rawSite } };
+}
+function normalizeReviewAltPlacementKey(section, site){
+  const clean = (v)=> typeof v==='string' ? v.normalize('NFC').trim().toLowerCase().replace(/\s+/g,' ') : '';
+  return clean(section)+'|||'+clean(site);
+}
+/* Aplica (com confirmação humana já feita na UI) a localização adicional
+   sugerida. `siteOverride` cobre o caso da sugestão sem sítio. Cria snapshot
+   ANTES de escrever; status vai para 'applied_pending_validation' (a decisão
+   final Manter/Desfazer continua humana — NUNCA accepted automático). */
+function applyReviewAiSuggestedPlacement(reviewId, siteOverride){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return { ok:false, reason:'not_found' };
+  if(review.status!=='manual_action_required') return { ok:false, reason:'not_manual_action' };
+  const ma = review.manualAction || {};
+  if(ma.type!=='additional_section_placement') return { ok:false, reason:'not_placement_action' };
+  const suggested = ma.suggestedPlacement || {};
+  const section = String(suggested.section || suggested.s || '').trim();
+  const site = (siteOverride!==undefined && siteOverride!==null && String(siteOverride).trim())
+    ? String(siteOverride).trim()
+    : ((suggested.site===undefined || suggested.site===null) ? '' : String(suggested.site).trim());
+  if(!section) return { ok:false, reason:'missing_section' };
+  const check = validateReviewAiPlacement({ section, site });
+  if(!check.valid) return { ok:false, reason:check.reason };
+  if(!site) return { ok:false, reason:'missing_site' };
+  const lesion = DATA.find(e=>e && e.id===review.lesionId);
+  if(!lesion) return { ok:false, reason:'lesion_not_found' };
+  const targetKey = normalizeReviewAltPlacementKey(section, site);
+  if(targetKey===normalizeReviewAltPlacementKey(lesion.s, lesion.site)) return { ok:false, reason:'already_primary' };
+  const existing = Array.isArray(lesion.altPlacements) ? lesion.altPlacements : [];
+  if(existing.some(p=>normalizeReviewAltPlacementKey(p && p.s, p && p.site)===targetKey)) return { ok:false, reason:'already_placed' };
+
+  const beforeSnapshot = JSON.parse(JSON.stringify(lesion));
+  const beforeAltPlacements = JSON.parse(JSON.stringify(existing));
+  const placement = { s: section, site };
+  const attempt = {
+    id: genLesionReviewAttemptId(),
+    kind: 'alt_placement',
+    beforeSnapshot,
+    beforeAltPlacements,
+    proposedChanges: {},
+    placement,
+    appliedAt: Date.now(),
+    approvedAt: null,
+    rolledBackAt: null,
+    rollbackReason: null
+  };
+  pushLesionReviewHistory(review, 'before_snapshot_created', { attemptId: attempt.id });
+  lesion.altPlacements = existing.concat([placement]);
+  lesion._userUpdatedAt = Date.now();
+  review.attempts = Array.isArray(review.attempts) ? review.attempts : [];
+  review.attempts.push(attempt);
+  review.status = 'applied_pending_validation';
+  review.updatedAt = Date.now();
+  review.manualActionApplied = true;
+  pushLesionReviewHistory(review, 'placement_applied', { attemptId: attempt.id, placement });
+  pushLesionReviewHistory(review, 'changes_applied', { attemptId: attempt.id, placement });
+  saveLesionRevisions();
+  saveData();
+  updateReviewCenterBadges();
+  return { ok:true, reason:null, review, attempt, placement };
+}
+
+/* ============================================================
+   PONTE SEGURA PARA IA (manual-assistida) — SEM API, SEM SEGREDO
+   O usuário cria a revisão manualmente; a IA apenas recebe um pacote
+   estruturado daquela revisão e devolve uma PROPOSTA. Importar o JSON
+   válido é a AÇÃO HUMANA EXPLÍCITA que aplica a correção
+   PROVISORIAMENTE (snapshot antes + status 'applied_pending_validation'),
+   exatamente como o antigo "autorizar correção" — mas sem exigir esse
+   clique extra. Nada é definitivo: o usuário ainda escolhe Manter
+   (accepted) ou Desfazer (rollback). A IA nunca cria revisão, nunca
+   marca accepted, nunca desfaz, nunca mexe em imagens/ownership.
+   ============================================================ */
+const REVIEW_AI_ALLOWED_FIELDS = ['name','notes','classification','tags','enTerm'];
+const REVIEW_AI_FORBIDDEN_FIELDS = ['id','lesionId','lesionName','images','img','localImg','links','s','site','altPlacements','_userUpdatedAt','REVIEW','SRS','LESION_REVISIONS','sessionLog','sectionOrder','siteOrder'];
+// Só pending/rejected podem receber proposta. proposed já tem uma (não duplica);
+// applied_pending_validation/accepted/cancelled ficam bloqueados.
+function reviewAcceptsAiProposal(review){
+  return !!review && (review.status==='pending' || review.status==='rejected');
+}
+function buildReviewAiPacket(reviewId){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return { ok:false, reason:'not_found' };
+  if(!reviewAcceptsAiProposal(review)) return { ok:false, reason:'not_proposable', status:review.status };
+  const lesion = DATA.find(e=>e && e.id===review.lesionId) || null;
+  // Metadados de imagem apenas (nunca blobs/binários).
+  const images = (lesion && Array.isArray(lesion.images) ? lesion.images : []).map(img=>({
+    label: img.label||'', source: img.source||'', publicId: img.publicId||'', assetId: img.assetId||'',
+    originalUrl: img.originalUrl||'', sourcePage: img.sourcePage||'', sourceSite: img.sourceSite||'',
+    license: img.license||'', artist: img.artist||'', attribution: img.attribution||'',
+    lesionId: img.lesionId||'', lesionName: img.lesionName||''
+  }));
+  const attempts = buildReviewAiAttempts(review);
+  return {
+    ok:true,
+    packet:{
+      reviewId: review.id,
+      lesionId: review.lesionId,
+      lesionName: lesion ? lesion.name : review.lesionId,
+      section: lesion ? lesion.s : '',
+      site: lesion ? lesion.site : '',
+      requestText: review.requestText || '',
+      currentFields:{
+        name: lesion ? lesion.name : '',
+        notes: lesion ? (lesion.notes||'') : '',
+        classification: lesion ? (lesion.classification||null) : null,
+        tags: lesion ? (Array.isArray(lesion.tags)?[...lesion.tags]:[]) : [],
+        enTerm: lesion ? (lesion.enTerm||'') : ''
+      },
+      images,
+      previousAttempts: attempts,
+      previousSolution: review.solution ? {
+        text: review.solution.text||'',
+        summary: review.solution.summary||'',
+        reasoning: review.solution.reasoning||'',
+        proposedChanges: review.solution.proposedChanges||{},
+        createdAt: review.solution.createdAt||null
+      } : null,
+      latestHumanFeedback: resolveLatestHumanFeedback(review, attempts),
+      previousOutcome: attempts.length ? attempts[attempts.length-1].outcome : null,
+      rejectionReason: review.rejectionReason || null,
+      rollbackReason: review.rollbackReason || null,
+      allowedFields: [...REVIEW_AI_ALLOWED_FIELDS],
+      forbiddenFields: [...REVIEW_AI_FORBIDDEN_FIELDS]
+    }
+  };
+}
+// Texto pronto para colar numa IA (OpenCode/Claude/DeepSeek). Só lê; não altera nada.
+function buildReviewAiPrompt(reviewId){
+  const built = buildReviewAiPacket(reviewId);
+  if(!built.ok) return built;
+  const p = built.packet;
+  const lines = [
+    'Você é uma IA assistente do Atlas Radiológico. Esta é uma PONTE MANUAL: a revisão abaixo foi criada por uma PESSOA.',
+    'Sua tarefa: propor uma correção SOMENTE para os campos permitidos. NÃO aplique nada, NÃO crie revisão, NÃO altere ownership de imagens, NÃO mexa em imagens/IDs/progresso.',
+    '',
+    'Retorne SOMENTE um JSON válido (sem texto fora dele), neste formato:',
+    '{"reviewId":"'+p.reviewId+'","summary":"...","reasoning":"...","proposedChanges":{"name":"...","notes":"...","classification":"...","tags":["..."],"enTerm":"..."}}',
+    '',
+    'proposedChanges aceita SOMENTE: ' + REVIEW_AI_ALLOWED_FIELDS.join(', ') + '.',
+    'Inclua apenas os campos que realmente precisam mudar.',
+    'NÃO inclua: ' + REVIEW_AI_FORBIDDEN_FIELDS.join(', ') + '.'
+  ];
+  const hasPrevious = Array.isArray(p.previousAttempts) && p.previousAttempts.length > 0;
+  if(hasPrevious){
+    lines.push(
+      '',
+      'ATENÇÃO — ESTA REVISÃO JÁ TEVE TENTATIVA(S) ANTERIOR(ES). Leia "previousAttempts" (proposta, resultado e o feedback humano em "humanFeedback"/"latestHumanFeedback").',
+      'NÃO repita uma solução que já foi recusada (rejected/rolledback).',
+      'Corrija ESPECIFICAMENTE o problema apontado pelo feedback humano do usuário.',
+      'Se o que falta corrigir estiver FORA da allowlist, responda com "proposedChanges": {} para o Atlas tratar como ação manual/sem alteração — nunca force uma mudança proibida.'
+    );
+  }
+  lines.push(
+    '',
+    'Se a correção exigir ADICIONAR a lesão a outra seção/localização, NÃO altere campos: responda com "proposedChanges": {} e inclua:',
+    '"manualAction":{"type":"additional_section_placement","description":"...","suggestedPlacement":{"section":"<seção existente>","site":"<sítio existente ou null>"}}',
+    'Use SOMENTE seções/sítios desta lista (o Atlas rejeita o que não existir):',
+    JSON.stringify(reviewAiPlacementCatalog())
+  );
+  lines.push('', '=== PACOTE DA REVISÃO (JSON) ===', JSON.stringify(p, null, 2));
+  return { ok:true, reviewId, text: lines.join('\n'), packet:p };
+}
+// Heurística para classificar uma resposta SEM campos aplicáveis: se o pedido
+// (ou o resumo/motivo da IA) menciona imagem/ownership/estrutura, a revisão
+// exige ação manual; caso contrário, não há alteração aplicável.
+const REVIEW_AI_MANUAL_ACTION_RE = /(imagem|imagens|image|images|foto|figura|ownership|propriet[áa]rio|lesionId|lesionName|v[íi]nculo|estrutural|estrutura|identificador|altplacements|sessionlog)/i;
+function reviewAiManualActionReason(requestText, summary, reasoning){
+  for(const text of [requestText||'', summary||'', reasoning||'']){
+    const m = String(text).match(REVIEW_AI_MANUAL_ACTION_RE);
+    if(m) return m[1].toLowerCase();
+  }
+  return null;
+}
+// Importa o JSON devolvido pela IA: valida tudo ANTES de qualquer mudança.
+// Aceita 3 resultados válidos:
+//   1) proposedChanges com campos permitidos -> aplica PROVISORIAMENTE
+//      (snapshot antes + 'applied_pending_validation') reusando
+//      authorizeAndApplyReviewSolution() — NUNCA marca accepted nem desfaz.
+//   2) proposedChanges = {} e nada que exija ação manual -> não altera DATA
+//      nem status (outcome 'no_applicable_changes').
+//   3) proposedChanges = {} e o pedido envolve imagem/ownership/estrutura ->
+//      marca 'manual_action_required' (outcome 'manual_action_required'),
+//      SEM tocar DATA.
+// Campo FORA da allowlist continua sendo rejeitado; JSON inválido também.
+function importReviewAiSolution(reviewId, rawText){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return { ok:false, reason:'not_found' };
+  if(!reviewAcceptsAiProposal(review)) return { ok:false, reason:'not_proposable', status:review.status };
+  let parsed;
+  try{ parsed = JSON.parse(String(rawText||'').trim()); }
+  catch(_e){ return { ok:false, reason:'invalid_json' }; }
+  if(!parsed || typeof parsed!=='object' || Array.isArray(parsed)) return { ok:false, reason:'invalid_shape' };
+  if(String(parsed.reviewId||'') !== String(reviewId)) return { ok:false, reason:'review_id_mismatch' };
+  const rawChanges = (parsed.proposedChanges===undefined || parsed.proposedChanges===null) ? {} : parsed.proposedChanges;
+  if(typeof rawChanges!=='object' || Array.isArray(rawChanges)) return { ok:false, reason:'invalid_shape' };
+  const keys = Object.keys(rawChanges);
+  const forbidden = keys.filter(k=>!LESION_REVIEW_EDITABLE_FIELDS.includes(k));
+  if(forbidden.length) return { ok:false, reason:'invalid_changes', detail:'forbidden_field:'+forbidden[0] };
+  const summary = String(parsed.summary||'').trim();
+  const reasoning = String(parsed.reasoning||'').trim();
+  const solutionText = [summary, reasoning].filter(Boolean).join('\n\n') || 'Proposta importada da IA.';
+  // 2/3) Nenhum campo aplicável — não altera nada.
+  if(keys.length===0){
+    const manual = (parsed.manualAction && typeof parsed.manualAction==='object') ? parsed.manualAction : null;
+    const actionType = manual ? String(manual.type||'').trim() : '';
+    if(actionType==='additional_section_placement'){
+      const v = validateReviewAiPlacement(manual.suggestedPlacement);
+      if(!v.valid) return { ok:false, reason:'invalid_placement', detail:v.reason };
+      const description = String(manual.description||'').trim() || null;
+      const reason = description || actionType;
+      const flagged = flagManualActionRequired(reviewId, solutionText, reason, { type:actionType, description, suggestedPlacement:{ section:v.placement.s, site:v.placement.site||null } });
+      if(!flagged.ok) return { ok:false, reason:flagged.reason };
+      return { ok:true, applied:false, outcome:'manual_action_required', manualReason:reason, review: flagged.review };
+    }
+    const manualReason = reviewAiManualActionReason(review.requestText, summary, reasoning);
+    if(manualReason){
+      const flagged = flagManualActionRequired(reviewId, solutionText, manualReason);
+      if(!flagged.ok) return { ok:false, reason:flagged.reason };
+      return { ok:true, applied:false, outcome:'manual_action_required', manualReason, review: flagged.review };
+    }
+    return { ok:true, applied:false, outcome:'no_applicable_changes', review };
+  }
+  // 1) Proposta aplicável — valida tipos e aplica provisoriamente.
+  const check = validateProposedChanges(rawChanges);
+  if(!check.valid) return { ok:false, reason:'invalid_changes', detail:check.reason };
+  const proposed = setReviewSolution(reviewId, solutionText, check.changes, { summary, reasoning });
+  if(!proposed.ok) return { ok:false, reason:proposed.reason };
+  // Aplicação PROVISÓRIA: só chega aqui após a ação humana de colar/importar.
+  const applied = authorizeAndApplyReviewSolution(reviewId, { origin:'import' });
+  if(!applied.ok) return { ok:false, reason:applied.reason, review: proposed.review };
+  return { ok:true, review: applied.review, attempt: applied.attempt, applied:true };
+}
+
+/* ============================================================
+   FLUXO EM LOTE — várias revisões em UM prompt e UM JSON.
+   Cada revisão é processada ISOLADAMENTE (um item inválido não
+   impede os demais) e preserva seu próprio beforeSnapshot,
+   histórico, status e rollback. Sem API, sem segredo, sem
+   autoaceite: apply só aplica PROVISORIAMENTE.
+   ============================================================ */
+const REVIEW_AI_BATCH_RESULTS = ['apply', 'manual_action_required', 'no_change'];
+// Elegíveis para o lote: exatamente as revisões pendentes (pending + rejected).
+function getBatchEligibleReviews(){
+  return getPendingReviews();
+}
+function buildReviewAiBatchPacket(reviewIds){
+  const ids = Array.isArray(reviewIds) ? reviewIds : [];
+  const reviews = [];
+  for(const id of ids){
+    const review = LESION_REVISIONS[id];
+    if(!review || !reviewAcceptsAiProposal(review)) continue;
+    const built = buildReviewAiPacket(id);
+    if(built.ok) reviews.push(built.packet);
+  }
+  if(reviews.length===0) return { ok:false, reason:'no_eligible_reviews' };
+  return { ok:true, packet:{ generatedAt: Date.now(), count: reviews.length, reviews } };
+}
+function buildReviewAiBatchPrompt(reviewIds){
+  const built = buildReviewAiBatchPacket(reviewIds);
+  if(!built.ok) return built;
+  const p = built.packet;
+  const text = [
+    'Você é uma IA assistente do Atlas Radiológico. Todas as revisões abaixo foram criadas MANUALMENTE por uma pessoa.',
+    'Analise CADA revisão SEPARADAMENTE e não invente mudanças.',
+    '',
+    'Para cada revisão, escolha exatamente um "result":',
+    '- "apply": só quando houver mudança REAL nos campos permitidos (' + REVIEW_AI_ALLOWED_FIELDS.join(', ') + ').',
+    '- "manual_action_required": quando o pedido exigir algo fora da allowlist (imagem, ownership, remover/mover imagem, site/seção, altPlacements, IDs, mudança estrutural).',
+    '- "no_change": quando nenhuma correção for necessária.',
+    '',
+    'Regras:',
+    '- Retorne TODOS os reviewIds recebidos, sem criar reviewId novo.',
+    '- Em "apply", proposedChanges aceita SOMENTE: ' + REVIEW_AI_ALLOWED_FIELDS.join(', ') + '.',
+    '- NUNCA inclua: ' + REVIEW_AI_FORBIDDEN_FIELDS.join(', ') + '.',
+    '- "proposedChanges" é sempre um objeto (pode ser {}).',
+    '- Para revisões com tentativas anteriores (previousAttempts), use OBRIGATORIAMENTE o feedback humano (humanFeedback/latestHumanFeedback). Não repita uma solução já recusada (rejected/rolledback) sem corrigir o motivo indicado.',
+    '- Se a correção exigir ADICIONAR a lesão a outra seção/localização, use result "manual_action_required" com manualAction.type "additional_section_placement" e suggestedPlacement {section, site} usando SOMENTE seções/sítios da lista abaixo.',
+    '- Responda SOMENTE com JSON válido, sem nenhum texto fora dele.',
+    '',
+    'Formato exato:',
+    '{"results":[{"reviewId":"...","result":"apply","summary":"...","reasoning":"...","proposedChanges":{"notes":"...","tags":["..."]}},{"reviewId":"...","result":"manual_action_required","summary":"...","reasoning":"...","manualAction":{"type":"additional_section_placement","description":"...","suggestedPlacement":{"section":"Neurorradiologia","site":null}},"proposedChanges":{}},{"reviewId":"...","result":"no_change","summary":"...","reasoning":"...","proposedChanges":{}}]}',
+    '',
+    '=== SEÇÕES E SÍTIOS VÁLIDOS (para suggestedPlacement) ===',
+    JSON.stringify(reviewAiPlacementCatalog()),
+    '',
+    '=== PACOTE DAS REVISÕES (JSON) ===',
+    JSON.stringify(p, null, 2)
+  ].join('\n');
+  return { ok:true, text, packet:p };
+}
+// Processa UM item do lote de forma independente. Nunca lança.
+function processReviewAiBatchItem(raw, seen){
+  const reviewId = (raw && typeof raw==='object') ? String(raw.reviewId||'') : '';
+  if(!reviewId) return { reviewId:'', status:'failed', reason:'missing_review_id' };
+  if(seen && seen[reviewId]) return { reviewId, status:'failed', reason:'duplicate_review_id' };
+  if(seen) seen[reviewId] = true;
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return { reviewId, status:'failed', reason:'not_found' };
+  if(!reviewAcceptsAiProposal(review)) return { reviewId, status:'failed', reason:'not_proposable', detail:review.status };
+  const result = String(raw.result||'').trim();
+  if(!REVIEW_AI_BATCH_RESULTS.includes(result)) return { reviewId, status:'failed', reason:'invalid_result', detail:result||null };
+  const summary = String(raw.summary||'').trim();
+  const reasoning = String(raw.reasoning||'').trim();
+  const solutionText = [summary, reasoning].filter(Boolean).join('\n\n') || 'Análise importada da IA (lote).';
+  if(result==='manual_action_required'){
+    const manual = (raw.manualAction && typeof raw.manualAction==='object') ? raw.manualAction : {};
+    const actionType = String(manual.type||'').trim() || null;
+    let suggestedPlacement = null;
+    if(actionType==='additional_section_placement'){
+      const v = validateReviewAiPlacement(manual.suggestedPlacement);
+      if(!v.valid) return { reviewId, status:'failed', reason:'invalid_placement', detail:v.reason };
+      suggestedPlacement = { section: v.placement.s, site: v.placement.site || null };
+    }
+    const description = String(manual.description||'').trim() || null;
+    const reason = description || actionType || reviewAiManualActionReason(review.requestText, summary, reasoning) || 'manual_action_required';
+    const flagged = flagManualActionRequired(reviewId, solutionText, reason, { type:actionType, description, suggestedPlacement });
+    if(!flagged.ok) return { reviewId, status:'failed', reason:flagged.reason };
+    return { reviewId, status:'manual_action_required', review:flagged.review, actionType, reason, suggestedPlacement };
+  }
+  if(result==='no_change'){
+    review.lastAiAnalysis = { result:'no_change', summary, reasoning, at: Date.now() };
+    review.updatedAt = Date.now();
+    saveLesionRevisions();
+    updateReviewCenterBadges();
+    return { reviewId, status:'no_change', review };
+  }
+  // apply — valida allowlist e aplica PROVISORIAMENTE (snapshot próprio).
+  const rawChanges = (raw.proposedChanges===undefined || raw.proposedChanges===null) ? {} : raw.proposedChanges;
+  if(typeof rawChanges!=='object' || Array.isArray(rawChanges)) return { reviewId, status:'failed', reason:'invalid_changes', detail:'changes_not_object' };
+  const keys = Object.keys(rawChanges);
+  const forbidden = keys.filter(k=>!LESION_REVIEW_EDITABLE_FIELDS.includes(k));
+  if(forbidden.length) return { reviewId, status:'failed', reason:'invalid_changes', detail:'forbidden_field:'+forbidden[0] };
+  if(keys.length===0) return { reviewId, status:'failed', reason:'invalid_changes', detail:'empty_changes' };
+  const check = validateProposedChanges(rawChanges);
+  if(!check.valid) return { reviewId, status:'failed', reason:'invalid_changes', detail:check.reason };
+  const proposed = setReviewSolution(reviewId, solutionText, check.changes, { summary, reasoning });
+  if(!proposed.ok) return { reviewId, status:'failed', reason:proposed.reason };
+  const applied = authorizeAndApplyReviewSolution(reviewId, { origin:'import' });
+  if(!applied.ok) return { reviewId, status:'failed', reason:applied.reason };
+  return { reviewId, status:'applied', review: applied.review, attempt: applied.attempt };
+}
+/* Normaliza SOMENTE a moldura do texto colado. Não corrige vírgulas/aspas,
+   não recorta do primeiro { ao último }, não remove invisíveis internos e
+   não completa documentos truncados. JSON.parse continua sendo o parser. */
+function normalizeReviewAiBatchJson(rawText){
+  const trimEdges = text=>text.replace(/^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g, '');
+  let text = trimEdges(String(rawText == null ? '' : rawText).trim());
+  const opening = /^```(?:json)?[ \t]*(?:\r\n|\n|\r)/i.exec(text);
+  const closing = /(?:\r\n|\n|\r)[ \t]*```$/.exec(text);
+  if(opening && closing && closing.index >= opening[0].length){
+    text = trimEdges(text.slice(opening[0].length, closing.index));
+  }
+  return text;
+}
+function parseReviewAiBatchJson(rawText){
+  const text = normalizeReviewAiBatchJson(rawText);
+  try{ return { ok:true, value:JSON.parse(text) }; }
+  catch(error){
+    // error.message pode conter trechos do documento. Só extraímos posição
+    // e categoria; nunca registramos/devolvemos a mensagem bruta ou o texto.
+    const message = String(error.message || '');
+    const at = /\bposition (\d+)(?: \(line \d+ column \d+\))?$/.exec(message);
+    const lc = /\bline (\d+) column (\d+)(?:\)| of the JSON data)?$/.exec(message);
+    let position = at ? Number(at[1]) : null;
+    if(position===null && /^(?:Unexpected end of JSON input|Unterminated string in JSON)/i.test(message)) position = text.length;
+    let line = lc ? Number(lc[1]) : null;
+    let column = lc ? Number(lc[2]) : null;
+    if(position!==null){
+      const lines = text.slice(0, position).split(/\r\n|\n|\r/);
+      line = lines.length;
+      column = lines[lines.length-1].length + 1;
+    }
+    const kind = !text ? 'empty' : text.startsWith('```') ? 'invalid_fence'
+      : position===text.length ? 'incomplete' : 'syntax';
+    return { ok:false, reason:'invalid_json', parseError:{ kind, position, line, column } };
+  }
+}
+function formatReviewAiBatchParseError(info){
+  const hints = {
+    empty:'Cole a resposta completa antes de processar.',
+    invalid_fence:'Use um único bloco completo ```json ou ``` com fechamento, sem texto ao redor.',
+    incomplete:'O documento parece incompleto. Copie a resposta inteira, incluindo o final.',
+    syntax:'Confira aspas, vírgulas, escapes e caracteres extras no ponto indicado.'
+  };
+  const where = info && info.line!==null && info.column!==null
+    ? ' Linha '+info.line+', coluna '+info.column+' do JSON após remover a moldura externa.' : '';
+  return 'Não foi possível interpretar o JSON.'+where+' '+(hints[info && info.kind] || hints.syntax)+' Nenhuma revisão foi processada.';
+}
+// Importa o JSON em lote. Um item inválido NÃO bloqueia os demais.
+function importReviewAiBatch(rawText){
+  const decoded = parseReviewAiBatchJson(rawText);
+  if(!decoded.ok) return decoded;
+  const parsed = decoded.value;
+  if(!parsed || typeof parsed!=='object' || Array.isArray(parsed)) return { ok:false, reason:'invalid_shape' };
+  if(!Array.isArray(parsed.results)) return { ok:false, reason:'invalid_shape', detail:'results_not_array' };
+  const items = [];
+  const summary = { processed:0, applied:0, manual:0, noChange:0, failed:0 };
+  const seen = {};
+  for(const raw of parsed.results){
+    const item = processReviewAiBatchItem(raw, seen);
+    items.push(item);
+    summary.processed += 1;
+    if(item.status==='applied') summary.applied += 1;
+    else if(item.status==='manual_action_required') summary.manual += 1;
+    else if(item.status==='no_change') summary.noChange += 1;
+    else summary.failed += 1;
+  }
+  return { ok:true, summary, items };
+}
 function countPendingLesionReviews(){ return getPendingReviews().length; }
 function countReadyLesionSolutions(){ return getReadySolutions().length; }
 
@@ -4698,100 +5584,129 @@ function getActiveCanonicalSeed(){ return SEED.filter(e=>e && !SUPPRESSED_DUPLIC
 // Nome antigo mantido como alias (chamado em mais 4 pontos do arquivo).
 function activeCanonicalSeedV172(){ return getActiveCanonicalSeed(); }
 
-const SAFETY_SNAPSHOTS_KEY = LOCAL_PREFIX+'safety_snapshots_v190';
-const SAFETY_SNAPSHOT_LIMIT = 6;
+/* ============================================================
+   SNAPSHOTS LOCAIS LEVES (IndexedDB) — proteção antes de operações de RISCO
+   Guarda o estado ESTRUTURADO (DATA + metadados de imagem + REVIEW + SRS +
+   LESION_REVISIONS + ordens), NUNCA binários remotos do Cloudinary. Criado
+   SOMENTE antes de operações de risco (importar/restaurar/reconciliar/
+   deduplicar/migrar em massa) — NÃO a cada edição comum. Retenção: 5.
+   Restauração é SEMPRE manual e cria um snapshot do estado atual antes.
+   ============================================================ */
+const SAFETY_SNAPSHOT_PREFIX = 'atlas:safetySnapshot:';
+const SAFETY_SNAPSHOT_INDEX_KEY = 'atlas:safetySnapshotIndex';
+const SAFETY_SNAPSHOT_LIMIT = 5;
+const SAFETY_SNAPSHOT_SCHEMA = 2;
+// Motivos (operações de RISCO) que realmente criam snapshot. Qualquer outro
+// motivo é ignorado — evita snapshot a cada clique/edição comum.
+const SAFETY_SNAPSHOT_RISK_REASONS = [
+  'antes de importar backup',
+  'antes de restaurar padrão de fábrica',
+  'antes da recuperação de dados antigos',
+  'antes de forçar fusão de duplicatas',
+  'antes de aplicar reconciliação V2',
+  'antes de restaurar snapshot de segurança',
+  'antes de operação em massa de ownership'
+];
+function isRiskSnapshotReason(reason){ return SAFETY_SNAPSHOT_RISK_REASONS.includes(reason); }
 
+// Clona o estado estruturado necessário para restauração. Sem binários remotos:
+// imagens do Cloudinary ficam só como URL/metadados (nunca o arquivo).
 function buildSafetySnapshot(reason){
-  const imageState = {};
-  const modifiedEntries = {};
-  const customEntries = [];
-
-  for(const e of (Array.isArray(DATA)?DATA:[])){
-    if(!e || !e.id) continue;
-    const hasImgs = (Array.isArray(e.images) && e.images.length) || e.img || e.localImg;
-    if(hasImgs){
-      imageState[e.id] = {
-        images:Array.isArray(e.images) ? e.images : [],
-        img:e.img||'',
-        localImg:!!e.localImg
-      };
-    }
-
-    if(!isSeedLikeId(e.id)){
-      customEntries.push(e);
-    }else if(Number(e._userUpdatedAt)||0){
-      // Guarda a versão completa apenas de registros seed realmente editados pelo usuário.
-      modifiedEntries[e.id] = e;
-    }
-  }
-
+  const data = JSON.parse(JSON.stringify(Array.isArray(DATA)?DATA:[]));
+  let imageCount = 0;
+  for(const e of data){ if(Array.isArray(e.images)) imageCount += e.images.length; }
   return {
-    snapshotVersion:1,
-    createdAt:new Date().toISOString(),
-    reason:reason||'automático',
-    images:imageState,
-    modifiedEntries,
-    customEntries,
-    review:{...(REVIEW||{})},
-    srs:{...(SRS||{})},
-    sessionLog:{...(SESSIONLOG||{})},
-    sectionOrder:Array.isArray(sectionOrder)?[...sectionOrder]:[]
+    snapshotVersion: SAFETY_SNAPSHOT_SCHEMA,
+    id: 'snap_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8),
+    createdAt: new Date().toISOString(),
+    reason: reason || 'automático',
+    lesionCount: data.length,
+    imageCount,
+    data,
+    review: JSON.parse(JSON.stringify(REVIEW||{})),
+    srs: JSON.parse(JSON.stringify(SRS||{})),
+    sessionLog: JSON.parse(JSON.stringify(SESSIONLOG||{})),
+    lesionRevisions: JSON.parse(JSON.stringify(LESION_REVISIONS||{})),
+    sectionOrder: Array.isArray(sectionOrder) ? [...sectionOrder] : [],
+    siteOrder: JSON.parse(JSON.stringify(siteOrder||{}))
   };
 }
 
-function loadSafetySnapshots(){
+async function loadSafetySnapshotIndex(){
   try{
-    const raw = localStorage.getItem(SAFETY_SNAPSHOTS_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
+    const r = await storage.get(SAFETY_SNAPSHOT_INDEX_KEY, false);
+    const arr = JSON.parse(r.value);
     return Array.isArray(arr) ? arr : [];
   }catch(_e){ return []; }
 }
-
-// Desligado desde a v194: o snapshot completo estourava a cota do localStorage
-// (QuotaExceededError) em bases grandes. O corpo antigo (que montava e
-// gravava o snapshot) foi removido nesta auditoria em vez de mantido morto
-// e inalcançável — ver histórico do repositório para a versão anterior.
-function createSafetySnapshot(_reason){
-  return null;
+// Lista (metadados) dos snapshots, mais recentes primeiro.
+async function loadSafetySnapshots(){ return await loadSafetySnapshotIndex(); }
+async function loadSafetySnapshot(id){
+  try{
+    const r = await storage.get(SAFETY_SNAPSHOT_PREFIX+id, false);
+    const snap = JSON.parse(r.value);
+    return snap && typeof snap==='object' ? snap : null;
+  }catch(_e){ return null; }
 }
-
-async function restoreSafetySnapshot(snapshot){
-  if(!snapshot) throw new Error('snapshot ausente');
-
-  const byId = new Map((Array.isArray(DATA)?DATA:[]).filter(Boolean).map(e=>[e.id,e]));
-
-  // Restaura registros seed editados.
-  for(const [id, saved] of Object.entries(snapshot.modifiedEntries||{})){
-    const cur = byId.get(id);
-    byId.set(id, cur ? mergeEntryNonDestructive(cur, saved) : saved);
-  }
-
-  // Restaura/une imagens mesmo de registros sem outras edições.
-  for(const [id, im] of Object.entries(snapshot.images||{})){
-    const cur = byId.get(id);
-    if(!cur) continue;
-    byId.set(id, mergeEntryNonDestructive(cur, {
-      id,
-      images:Array.isArray(im.images)?im.images:[],
-      img:im.img||'',
-      localImg:!!im.localImg
-    }));
-  }
-
-  // Restaura lesões personalizadas.
-  for(const e of (snapshot.customEntries||[])){
-    if(!e || !e.id) continue;
-    const cur = byId.get(e.id);
-    byId.set(e.id, cur ? mergeEntryNonDestructive(cur,e) : e);
-  }
-
-  DATA = [...byId.values()].filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
-  REVIEW = mergeReviewPreservingProgress(REVIEW, snapshot.review);
-  SRS = mergeSRSPreservingNewest(SRS, snapshot.srs);
-  SESSIONLOG = mergeSessionLogPreservingProgress(SESSIONLOG, snapshot.sessionLog);
-  if(Array.isArray(snapshot.sectionOrder) && snapshot.sectionOrder.length) sectionOrder = snapshot.sectionOrder;
-
-  // Grava tudo localmente como uma transação lógica antes de tocar na nuvem.
+// Escrita serializada: evita corrida quando vários snapshots são criados em
+// sequência (cada um lê o índice e regrava; sem a fila, o último sobrescreveria).
+let safetySnapshotWriteChain = Promise.resolve();
+function storeSafetySnapshot(snapshot, payload){
+  const run = ()=> doStoreSafetySnapshot(snapshot, payload);
+  safetySnapshotWriteChain = safetySnapshotWriteChain.then(run, run);
+  return safetySnapshotWriteChain;
+}
+async function doStoreSafetySnapshot(snapshot, payload){
+  try{
+    await storage.set(SAFETY_SNAPSHOT_PREFIX+snapshot.id, payload, false);
+    const index = await loadSafetySnapshotIndex();
+    const meta = {
+      id: snapshot.id,
+      createdAt: snapshot.createdAt,
+      reason: snapshot.reason,
+      lesionCount: snapshot.lesionCount,
+      imageCount: snapshot.imageCount,
+      size: payload.length,
+      snapshotVersion: snapshot.snapshotVersion
+    };
+    const next = [meta, ...index.filter(m=>m && m.id!==meta.id)];
+    const keep = next.slice(0, SAFETY_SNAPSHOT_LIMIT);
+    for(const m of next.slice(SAFETY_SNAPSHOT_LIMIT)){
+      try{ await storage.delete(SAFETY_SNAPSHOT_PREFIX+m.id, false); }catch(_e){}
+    }
+    await storage.set(SAFETY_SNAPSHOT_INDEX_KEY, JSON.stringify(keep), false);
+  }catch(e){ console.error('Falha ao gravar snapshot de segurança', e); }
+}
+// SÍNCRONO: captura o estado AGORA (o JSON.stringify roda antes de qualquer
+// await) e grava em background. Só age para motivos de RISCO.
+function createSafetySnapshot(reason){
+  if(!isRiskSnapshotReason(reason)) return null;
+  try{
+    const snapshot = buildSafetySnapshot(reason);
+    const payload = JSON.stringify(snapshot);
+    storeSafetySnapshot(snapshot, payload);
+    return snapshot;
+  }catch(e){ console.error('Falha ao criar snapshot de segurança', e); return null; }
+}
+async function deleteSafetySnapshot(id){
+  try{ await storage.delete(SAFETY_SNAPSHOT_PREFIX+id, false); }catch(_e){}
+  const index = await loadSafetySnapshotIndex();
+  await storage.set(SAFETY_SNAPSHOT_INDEX_KEY, JSON.stringify(index.filter(m=>m && m.id!==id)), false);
+}
+// Restauração MANUAL: substitui o estado pelo snapshot e grava localmente.
+// SEM sincronização automática com a nuvem; cria um snapshot do estado ATUAL
+// antes, para sempre existir caminho de volta.
+async function restoreSafetySnapshot(id){
+  const snapshot = await loadSafetySnapshot(id);
+  if(!snapshot || !Array.isArray(snapshot.data)) throw new Error('snapshot inválido');
+  createSafetySnapshot('antes de restaurar snapshot de segurança'); // captura o estado atual
+  DATA = JSON.parse(JSON.stringify(snapshot.data));
+  REVIEW = JSON.parse(JSON.stringify(snapshot.review||{}));
+  SRS = JSON.parse(JSON.stringify(snapshot.srs||{}));
+  SESSIONLOG = JSON.parse(JSON.stringify(snapshot.sessionLog||{}));
+  LESION_REVISIONS = JSON.parse(JSON.stringify(snapshot.lesionRevisions||{}));
+  if(Array.isArray(snapshot.sectionOrder) && snapshot.sectionOrder.length) sectionOrder = [...snapshot.sectionOrder];
+  if(snapshot.siteOrder && typeof snapshot.siteOrder==='object') siteOrder = JSON.parse(JSON.stringify(snapshot.siteOrder));
   const wasSyncing = fbSyncing;
   fbSyncing = true;
   await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
@@ -4799,13 +5714,11 @@ async function restoreSafetySnapshot(snapshot){
   await storage.set(SRS_KEY, JSON.stringify(SRS), false);
   await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
   await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
+  await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false);
+  await saveLesionRevisions();
   fbSyncing = wasSyncing;
-
-  createSafetySnapshot('após restauração de segurança');
   renderAll();
-  await pushToFirebaseNow();
 }
-
 function isSeedLikeId(id){
   return /^seed_/.test(String(id||''));
 }
@@ -6614,6 +7527,9 @@ async function applyReconcileV2(options){
   const backup = buildPreMigrationBackupV2();
   downloadFn(backup);
 
+  // Snapshot local leve antes da operação de risco (reconciliação em massa).
+  try{ createSafetySnapshot('antes de aplicar reconciliação V2'); }catch(_e){}
+
   DATA = preview.state.data;
   REVIEW = preview.state.review;
   SRS = preview.state.srs;
@@ -7887,10 +8803,19 @@ function openForm(id, opts){
       </div>
 
       <div class="field">
+        <label>Também aparece em (opcional)</label>
+        <div id="alt-placements-list"></div>
+        <div class="field-row" style="margin-top:6px;margin-bottom:0;">
+          <div class="field" style="flex:1.2;"><input id="f-alt-section" list="section-list" placeholder="seção (ex: Neurorradiologia)"></div>
+          <div class="field" style="flex:1.2;"><input id="f-alt-site" placeholder="sítio/órgão (ex: Encéfalo)"></div>
+          <button type="button" class="btn btn-ghost" id="f-alt-add" style="height:38px;align-self:flex-start;">+ Adicionar localização</button>
+        </div>
+      </div>
+
+      <div class="field">
         <label>Incidência (dentro deste sítio)</label>
         <select id="f-inc">
-          <option value="1" ${existing&&existing.inc===1?'selected':''}>Muito comum</option>
-          <option value="2" ${(!existing || existing.inc===2 || !existing.inc)?'selected':''}>Comum</option>
+          <option value="1" ${existing&&existing.inc===1?'selected':''}>Muito comum</option>          <option value="2" ${(!existing || existing.inc===2 || !existing.inc)?'selected':''}>Comum</option>
           <option value="3" ${existing&&existing.inc===3?'selected':''}>Incomum</option>
           <option value="4" ${existing&&existing.inc===4?'selected':''}>Raro</option>
         </select>
@@ -8007,6 +8932,39 @@ function openForm(id, opts){
 
   let tags = existing ? [...existing.tags] : [];
   let links = existing ? [...ensureLinks(existing)] : [];
+  // "Também aparece em" — reaproveita o campo altPlacements já existente.
+  let altPlacementsDraft = (existing && Array.isArray(existing.altPlacements)) ? JSON.parse(JSON.stringify(existing.altPlacements)) : [];
+  function renderAltPlacements(){
+    const box = document.getElementById('alt-placements-list');
+    if(!box) return;
+    if(altPlacementsDraft.length===0){
+      box.innerHTML = '<div style="color:var(--muted-2);font-size:12px;padding:2px 0 4px 0;">nenhuma localização adicional</div>';
+      return;
+    }
+    box.innerHTML = '';
+    altPlacementsDraft.forEach((p, i)=>{
+      const row = document.createElement('div');
+      row.className = 'alt-placement-row';
+      row.innerHTML = `<span>${escAttr(p.site ? (p.s+' > '+p.site) : p.s)}</span><button type="button" class="btn btn-ghost" title="remover" style="height:26px;padding:0 8px;">✕</button>`;
+      row.querySelector('button').onclick = ()=>{ altPlacementsDraft.splice(i,1); renderAltPlacements(); };
+      box.appendChild(row);
+    });
+  }
+  renderAltPlacements();
+  const altAddBtn = document.getElementById('f-alt-add');
+  if(altAddBtn) altAddBtn.onclick = ()=>{
+    const secEl = document.getElementById('f-alt-section');
+    const siteEl = document.getElementById('f-alt-site');
+    const s = (secEl.value||'').trim();
+    const st = (siteEl.value||'').trim();
+    if(!s || !st){ toast('Informe a seção e o sítio da localização adicional.'); return; }
+    const key = normalizeReviewAltPlacementKey(s, st);
+    if(key===normalizeReviewAltPlacementKey(document.getElementById('f-section').value, document.getElementById('f-site').value)){ toast('Essa já é a localização principal.'); return; }
+    if(altPlacementsDraft.some(p=>normalizeReviewAltPlacementKey(p.s,p.site)===key)){ toast('Essa localização já foi adicionada.'); return; }
+    altPlacementsDraft.push({ s, site: st });
+    secEl.value=''; siteEl.value='';
+    renderAltPlacements();
+  };
 
   let editingLinkIdx = null;
   function renderLinks(){
@@ -8336,8 +9294,11 @@ function openForm(id, opts){
     }
     if(existing){
       existing.name=name; existing.s=sec; existing.site=site; existing.tags=tags; existing.img=img; existing.notes=notes; existing.links=links; existing.enTerm=enTerm; existing.inc=inc; existing.localImg=localImgFlag; existing.images=remoteImgs; existing.classification=classification; existing._userUpdatedAt=Date.now();
+      if(altPlacementsDraft.length) existing.altPlacements = JSON.parse(JSON.stringify(altPlacementsDraft)); else delete existing.altPlacements;
     } else {
-      DATA.push({id:entryId, name, s:sec, site, tags, img, notes, links, enTerm, inc, localImg:localImgFlag, images:remoteImgs, classification, _userUpdatedAt:Date.now()});
+      const newEntry = {id:entryId, name, s:sec, site, tags, img, notes, links, enTerm, inc, localImg:localImgFlag, images:remoteImgs, classification, _userUpdatedAt:Date.now()};
+      if(altPlacementsDraft.length) newEntry.altPlacements = JSON.parse(JSON.stringify(altPlacementsDraft));
+      DATA.push(newEntry);
     }
 
     // Central de revisões: marcar para revisão é independente do salvamento
@@ -8531,7 +9492,10 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
       // no cleanup) e devolve como imagem pendente para subir só no Salvar.
       const file=new File([finalBlob],'quadro-imagens-'+Date.now()+'.jpg',{type:'image/jpeg'});
       const objectUrl=URL.createObjectURL(file);
-      onCollageReady({label, panels, source:'pending', _file:file, _objectUrl:objectUrl});
+      // `data` = MESMA blob URL local, exatamente como buildPendingImage/Commons
+      // fazem. É o que o renderer da miniatura e o lightbox leem enquanto o
+      // quadro é pending; sem isso o preview fica quebrado até o upload.
+      onCollageReady({label, panels, data:objectUrl, source:'pending', _file:file, _objectUrl:objectUrl});
       cleanup();
       toast(isEditMode?'Quadro atualizado (será enviado ao salvar).':'Quadro adicionado (será enviado ao salvar).');
       return;
@@ -8692,7 +9656,11 @@ const REVIEW_HISTORY_ACTION_LABELS = {
   application_rejected:'correção não aprovada (2º aceite negado)',
   rollback_completed:'lesão restaurada ao estado anterior (rollback)',
   reopened:'reaberta',
-  cancelled:'cancelado pelo usuário'
+  cancelled:'cancelado pelo usuário',
+  manual_action_required:'exige ação manual',
+  manual_action_reopened:'devolvida à fila de pendentes',
+  ai_analysis_no_change:'análise da IA: sem alteração',
+  placement_applied:'localização adicional aplicada (provisória)'
 };
 
 const LESION_REVIEW_FIELD_LABELS = { name:'nome', notes:'descrição', classification:'classificação', tags:'tags', enTerm:'termo em inglês' };
@@ -8840,6 +9808,427 @@ function openCancelReviewModal(reviewId, onCancelled){
   };
 }
 
+/* Ponte manual-assistida para IA: monta o pacote da revisão, permite copiar o
+   pedido e importar a solução JSON devolvida pela IA. NÃO chama API, NÃO usa
+   segredo. O JSON importado pode resultar em: aplicação provisória
+   ('applied_pending_validation'), nenhuma alteração aplicável, ou
+   'manual_action_required' (imagem/ownership/estrutura) — sempre SEM alterar
+   os dados fora dos campos permitidos. */
+function copyTextToClipboard(text){
+  try{
+    if(navigator && navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text); return true; }
+  }catch(_e){}
+  try{
+    const ta=document.createElement('textarea');
+    ta.value=text; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    const ok=document.execCommand('copy'); ta.remove(); return ok;
+  }catch(_e){ return false; }
+}
+function openReviewAiBridgeModal(reviewId, onImported){
+  const built = buildReviewAiPrompt(reviewId);
+  if(!built.ok){ toast('Não é possível preparar esta revisão ('+(built.reason||'erro')+').'); return; }
+  const meta = reviewCenterLesionMeta(built.packet.lesionId);
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected){ ov.remove(); document.removeEventListener('keydown', closeOnEsc); } };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = `<div class="modal review-ai-modal">
+    <h2>🤖 Preparar para IA</h2>
+    <div class="modal-sub">${meta.name}${meta.sub?' · '+meta.sub:''} — ponte manual: a correção é aplicada provisoriamente e você decide manter/desfazer.</div>
+    <div class="review-center-row-request"><b>Pedido:</b> ${(built.packet.requestText||'').replace(/</g,'&lt;')}</div>
+    <div class="field"><label>1) Copie este pedido e cole numa IA (OpenCode/Claude/DeepSeek)</label>
+      <textarea id="review-ai-prompt" readonly style="min-height:180px;font-family:'IBM Plex Mono',monospace;font-size:11px;">${escAttr(built.text)}</textarea></div>
+    <div class="modal-actions" style="justify-content:space-between;">
+      <button type="button" class="btn btn-ghost" id="review-ai-copy">📋 Copiar pedido para IA</button>
+      <button type="button" class="btn btn-primary" id="review-ai-open-import">📥 Colar solução da IA</button>
+    </div>
+    <div class="field" id="review-ai-import-box" style="display:none;margin-top:12px;">
+      <label>2) Cole aqui o JSON devolvido pela IA</label>
+      <textarea id="review-ai-json" placeholder='{"reviewId":"...","summary":"...","reasoning":"...","proposedChanges":{...}}' style="min-height:120px;font-family:'IBM Plex Mono',monospace;font-size:11px;"></textarea>
+      <div id="review-ai-error" style="color:var(--red);font-size:12px;margin-top:6px;min-height:14px;"></div>
+      <button type="button" class="btn btn-primary" id="review-ai-import" style="margin-top:6px;">Importar e aplicar correção</button>
+    </div>
+    <div class="modal-actions"><button type="button" class="btn btn-ghost" id="review-ai-close">fechar</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const close = ()=>{ ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+  ov.querySelector('#review-ai-close').onclick = close;
+  ov.querySelector('#review-ai-copy').onclick = ()=>{
+    toast(copyTextToClipboard(built.text) ? 'Pedido copiado para a área de transferência.' : 'Não foi possível copiar — selecione o texto manualmente.');
+  };
+  ov.querySelector('#review-ai-open-import').onclick = ()=>{ ov.querySelector('#review-ai-import-box').style.display='block'; ov.querySelector('#review-ai-json').focus(); };
+  ov.querySelector('#review-ai-import').onclick = async ()=>{
+    const importBtn = ov.querySelector('#review-ai-import');
+    const res = importReviewAiSolution(reviewId, ov.querySelector('#review-ai-json').value);
+    const errEl = ov.querySelector('#review-ai-error');
+    if(!res.ok){
+      errEl.style.color = 'var(--red)';
+      const msgs = {
+        invalid_json:'JSON inválido — confira o texto colado.',
+        invalid_shape:'JSON inválido — esperado um objeto {reviewId, summary, reasoning, proposedChanges}.',
+        review_id_mismatch:'O reviewId do JSON não corresponde a esta revisão.',
+        not_proposable:'Esta revisão não aceita mais proposta.',
+        not_found:'Revisão não encontrada.',
+        invalid_changes:'Campos inválidos: só ' + REVIEW_AI_ALLOWED_FIELDS.join(', ') + ' são aceitos.'
+      };
+      errEl.textContent = msgs[res.reason] || ('Não foi possível importar (' + (res.reason||'erro') + (res.detail?': '+res.detail:'') + ').');
+      return;
+    }
+    // Resultado 2: nenhuma alteração aplicável — não altera os dados nem o status.
+    if(res.outcome==='no_applicable_changes'){
+      errEl.style.color = 'var(--muted)';
+      errEl.textContent = 'Esta revisão não possui alteração aplicável nos campos permitidos.';
+      return;
+    }
+    importBtn.disabled = true;
+    await saveLesionRevisions();
+    // Resultado 3: exige ação manual (imagem/ownership/estrutura) — não altera os dados.
+    if(res.outcome==='manual_action_required'){
+      toast('Esta revisão exige ação manual.');
+      close();
+      if(typeof onImported==='function') onImported();
+      openManualActionModal(reviewId, { onReopened: ()=>{ if(typeof onImported==='function') onImported(); } });
+      return;
+    }
+    // Resultado 1: aplicação provisória.
+    toast('Correção aplicada provisoriamente. Confira o resultado e escolha Manter ou Desfazer.');
+    close();
+    if(typeof onImported==='function') onImported();
+    openReviewValidationModal(reviewId, { onDecided: ()=>{ if(typeof onImported==='function') onImported(); } });
+  };
+}
+
+/* Revisão que a IA NÃO consegue resolver pelos campos permitidos (imagem,
+   ownership, estrutura). Mostra o pedido, o resumo da IA e o motivo, e oferece
+   o botão para abrir o editor da lesão — a remoção/movimentação de imagem
+   continua dependendo de ação manual explícita do usuário. Não altera os dados. */
+/* Sugestão de localização adicional da IA (somente leitura). */
+function reviewPlacementSuggestion(review){
+  const ma = review && review.manualAction;
+  if(!ma || ma.type!=='additional_section_placement' || !ma.suggestedPlacement) return { applicable:false };
+  const section = String(ma.suggestedPlacement.section||'').trim();
+  const site = ma.suggestedPlacement.site ? String(ma.suggestedPlacement.site).trim() : '';
+  if(!section) return { applicable:false };
+  const check = validateReviewAiPlacement({ section, site });
+  if(!check.valid) return { applicable:false, invalid:check.reason };
+  return { applicable:true, section, site, label: site ? (section+' > '+site) : section, needsSite: !site };
+}
+function renderPlacementChangeHtml(attempt){
+  if(!attempt || attempt.kind!=='alt_placement' || !attempt.placement) return '';
+  const p = attempt.placement;
+  const label = p.site ? (p.s+' > '+p.site) : p.s;
+  return `<div class="review-fields-diff"><div class="review-fields-diff-row"><b>Também aparece em:</b> <span class="review-fields-diff-to">${escAttr(label)}</span> (adicionado)</div></div>`;
+}
+/* Confirmação humana ANTES de aplicar a localização sugerida. */
+function openApplyPlacementConfirmModal(reviewId, onApplied){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review){ toast('Revisão não encontrada.'); return; }
+  const meta = reviewCenterLesionMeta(review.lesionId);
+  const sug = reviewPlacementSuggestion(review);
+  if(!sug.applicable){ toast('Não há localização sugerida válida para aplicar.'); return; }
+  const sitesMap = reviewAiKnownSections()[sug.section] || {};
+  const sitesForSection = Object.keys(sitesMap).sort();
+  const primary = meta.lesion ? (meta.lesion.s+' > '+meta.lesion.site) : '—';
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected){ ov.remove(); document.removeEventListener('keydown', closeOnEsc); } };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = `
+    <div class="modal review-ai-modal">
+      <h2>✓ Aplicar localização sugerida</h2>
+      <div class="modal-sub">${escAttr(meta.name)} — a localização principal será preservada.</div>
+      <div class="review-placement-suggestion">
+        <div><b>Principal:</b> ${escAttr(primary)}</div>
+        <div>→ também em <b>${escAttr(sug.label)}</b></div>
+      </div>
+      ${sug.needsSite ? `<div class="field"><label>A IA não indicou o sítio — escolha um sítio de ${escAttr(sug.section)}</label><select id="placement-site-select">${sitesForSection.map(s=>`<option value="${escAttr(s)}">${escAttr(s)}</option>`).join('')}</select></div>` : ''}
+      <div class="review-manual-reason">Adicionar esta lesão também em <b>${escAttr(sug.label)}</b>? A localização principal será preservada. Nenhuma imagem, lesionId ou ownership é alterado.</div>
+      <div class="modal-actions"><button class="btn btn-ghost" id="placement-cancel">cancelar</button><button class="btn btn-primary" id="placement-confirm">✓ Adicionar localização</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = ()=>{ ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+  ov.querySelector('#placement-cancel').onclick = close;
+  ov.querySelector('#placement-confirm').onclick = async ()=>{
+    const sel = ov.querySelector('#placement-site-select');
+    const siteOverride = sug.needsSite ? (sel ? sel.value : '') : undefined;
+    const res = applyReviewAiSuggestedPlacement(reviewId, siteOverride);
+    if(!res.ok){
+      const msgs = { already_primary:'Esta já é a localização principal.', already_placed:'Esta lesão já aparece nesse local.', missing_site:'Escolha um sítio.', unknown_site:'Sítio inexistente.', unknown_section:'Seção inexistente.' };
+      toast(msgs[res.reason] || ('Não foi possível aplicar (' + (res.reason||'erro') + ').'));
+      return;
+    }
+    await saveLesionRevisions();
+    if(typeof renderAll==='function') renderAll();
+    toast('Localização adicionada provisoriamente. Confira e escolha Manter ou Desfazer.');
+    close();
+    if(typeof onApplied==='function') onApplied();
+    openReviewValidationModal(reviewId);
+  };
+}
+function openManualActionModal(reviewId, opts){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review){ toast('Revisão não encontrada.'); return; }
+  if(review.status!=='manual_action_required'){ toast('Esta revisão não está marcada como ação manual.'); return; }
+  const cfg = opts || {};
+  const meta = reviewCenterLesionMeta(review.lesionId);
+  const reason = review.manualActionReason || (review.solution && review.solution.reason) || '';
+  const isImage = /imagem|imagens|image|images|foto|figura/i.test(reason);
+  const sug = reviewPlacementSuggestion(review);
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected){ ov.remove(); document.removeEventListener('keydown', closeOnEsc); } };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = `
+    <div class="modal review-ai-modal review-manual-modal">
+      <h2>⚠ Esta revisão exige ação manual</h2>
+      <div class="modal-sub">${meta.name}${meta.sub?' · '+meta.sub:''} — a IA não pode resolver isto pelos campos permitidos.</div>
+      <div class="review-center-row-request"><b>Pedido original:</b> ${(review.requestText||'').replace(/</g,'&lt;')}</div>
+      ${review.solution && review.solution.text ? `<div class="review-center-row-solution"><b>Resumo da IA:</b> ${String(review.solution.text).replace(/</g,'&lt;')}</div>` : ''}
+      ${sug.applicable ? `<div class="review-placement-suggestion"><div><b>Sugestão da IA:</b> ${escAttr(meta.lesion ? (meta.lesion.s) : '')}</div><div>→ também em <b>${escAttr(sug.label)}</b></div></div>` : ''}
+      <div class="review-manual-reason"><b>Motivo:</b> envolve ${reason ? String(reason).replace(/</g,'&lt;') : 'algo fora dos campos permitidos'} — remoção/movimentação de imagem, ownership ou alteração estrutural dependem de ação manual. Nada foi alterado.</div>
+      <div class="modal-actions" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <span style="display:flex;gap:8px;flex-wrap:wrap;">
+          ${sug.applicable?'<button type="button" class="btn btn-primary" id="review-manual-apply-placement">✓ Aplicar localização sugerida</button>':''}
+          ${meta.found?`<button type="button" class="btn btn-ghost" id="review-manual-open-lesion">${isImage?'🖼 Abrir lesão para ajustar imagens':'✏ Abrir lesão'}</button>`:''}
+        </span>
+        <span style="display:flex;gap:8px;">
+          <button type="button" class="btn btn-ghost" id="review-manual-reopen">↩ Voltar para revisões</button>
+          <button type="button" class="btn btn-ghost" id="review-manual-close">fechar</button>
+        </span>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = ()=>{ ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+  ov.querySelector('#review-manual-close').onclick = close;
+  const applyBtn = ov.querySelector('#review-manual-apply-placement');
+  if(applyBtn) applyBtn.onclick = ()=>{ close(); openApplyPlacementConfirmModal(reviewId, ()=>{ if(typeof cfg.onReopened==='function') cfg.onReopened(); }); };
+  const openLesionBtn = ov.querySelector('#review-manual-open-lesion');
+  if(openLesionBtn) openLesionBtn.onclick = ()=>{ close(); openDetail(meta.lesion.id); };
+  ov.querySelector('#review-manual-reopen').onclick = ()=>{
+    openReasonPromptModal(reviewId, async (reason)=>{
+      const res = reopenManualActionReview(reviewId, reason);
+      if(!res.ok){ toast('Não foi possível devolver a revisão (' + (res.reason||'erro') + ').'); return; }
+      await saveLesionRevisions();
+      toast('Revisão voltou para a fila de pendentes.');
+      close();
+      if(typeof cfg.onReopened==='function') cfg.onReopened();
+    }, {
+      title: '↩ Devolver para revisões',
+      subtitle: 'Algo a orientar a próxima tentativa da IA? (opcional) — fica salvo como feedback humano.',
+      confirmLabel: '↩ devolver'
+    });
+  };
+}
+
+/* Tela de VALIDAÇÃO da correção aplicada PROVISORIAMENTE. É aberta logo após
+   importar a solução da IA e mostra o resumo da solução + o antes → depois
+   dos campos alterados. A decisão final é SEMPRE humana: Manter (accepted)
+   ou Desfazer (rollback exato + rejected). NÃO existe mais o clique
+   intermediário de "autorizar correção". */
+function openReviewValidationModal(reviewId, opts){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review){ toast('Revisão não encontrada.'); return; }
+  if(review.status!=='applied_pending_validation'){ toast('Esta revisão não está aguardando validação.'); return; }
+  const cfg = opts || {};
+  const meta = reviewCenterLesionMeta(review.lesionId);
+  const attempt = review.attempts && review.attempts[review.attempts.length-1];
+  const isPlacement = !!(attempt && attempt.kind==='alt_placement');
+  const changes = (attempt && attempt.proposedChanges) || (review.solution && review.solution.proposedChanges) || {};
+  const diffRows = attempt ? describeLesionReviewFieldChanges(attempt.beforeSnapshot, meta.lesion, Object.keys(changes)) : [];
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected){ ov.remove(); document.removeEventListener('keydown', closeOnEsc); } };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = `
+    <div class="modal review-ai-modal review-validation-modal">
+      <h2>🔎 Validar correção</h2>
+      <div class="modal-sub">${meta.name}${meta.sub?' · '+meta.sub:''} — correção aplicada PROVISORIAMENTE. Nada é definitivo até você decidir.</div>
+      <div class="review-center-row-request"><b>Pedido original:</b> ${(review.requestText||'').replace(/</g,'&lt;')}</div>
+      ${review.solution && review.solution.text ? `<div class="review-center-row-solution"><b>Resumo da solução:</b> ${String(review.solution.text).replace(/</g,'&lt;')}</div>` : ''}
+      <div class="review-validation-caption">${isPlacement ? 'Localização adicional (antes → depois):' : 'Campos alterados (antes → depois):'}</div>
+      ${isPlacement ? renderPlacementChangeHtml(attempt) : (renderFieldChangesHtml(diffRows) || '<div class="review-center-empty">Nenhum campo alterado.</div>')}
+      <div class="modal-actions" style="justify-content:space-between;">
+        ${meta.found?'<button type="button" class="btn btn-ghost" id="review-validate-open-lesion">👁 ver lesão</button>':'<span></span>'}
+        <span style="display:flex;gap:8px;">
+          <button type="button" class="btn btn-ghost" id="review-validate-rollback">↩ Desfazer correção</button>
+          <button type="button" class="btn btn-primary" id="review-validate-approve">✓ Manter correção</button>
+        </span>
+      </div>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" id="review-validate-close">fechar</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = ()=>{ ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+  ov.querySelector('#review-validate-close').onclick = close;
+  const openLesionBtn = ov.querySelector('#review-validate-open-lesion');
+  if(openLesionBtn) openLesionBtn.onclick = ()=>{ close(); openDetail(meta.lesion.id); };
+  ov.querySelector('#review-validate-approve').onclick = async ()=>{
+    const res = approveAppliedReviewSolution(reviewId);
+    if(!res.ok){ toast('Não foi possível manter a correção (' + (res.reason||'erro') + ').'); return; }
+    await saveLesionRevisions();
+    toast('Correção mantida.');
+    close();
+    if(typeof cfg.onDecided==='function') cfg.onDecided('approved');
+  };
+  ov.querySelector('#review-validate-rollback').onclick = ()=>{
+    openReasonPromptModal(reviewId, async (reason)=>{
+      const res = rollbackAppliedReviewSolution(reviewId, reason);
+      if(!res.ok){ toast('Não foi possível desfazer a correção (' + (res.reason||'erro') + ').'); return; }
+      await saveLesionRevisions();
+      if(typeof renderAll==='function') renderAll();
+      toast('Alteração desfeita — a lesão voltou ao estado anterior. Revisão reaberta.');
+      close();
+      if(typeof cfg.onDecided==='function') cfg.onDecided('rolledback');
+    }, {
+      title: '↩ Desfazer correção',
+      subtitle: 'Por que esta correção não funcionou? (opcional) — a lesão será restaurada exatamente ao estado anterior.',
+      confirmLabel: '↩ desfazer'
+    });
+  };
+}
+
+/* ============================================================
+   FLUXO EM LOTE — UI: seleção múltipla, UM prompt, UM JSON.
+   ============================================================ */
+function openReviewAiBatchModal(onProcessed){
+  const eligible = getBatchEligibleReviews();
+  if(eligible.length===0){ toast('Nenhuma revisão pendente para analisar.'); return; }
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected){ ov.remove(); document.removeEventListener('keydown', closeOnEsc); } };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = `
+    <div class="modal review-ai-modal review-batch-modal">
+      <h2>🤖 Analisar pendências com IA</h2>
+      <div class="modal-sub">${eligible.length} revisão(ões) elegível(is) — gere UM prompt, use a IA externa e cole UM JSON de volta.</div>
+      <div class="review-batch-toolbar">
+        <label class="review-batch-selectall"><input type="checkbox" id="batch-select-all" checked> Selecionar todas (<span id="batch-selected-count">${eligible.length}</span>)</label>
+      </div>
+      <div class="review-center-list" id="batch-list"></div>
+      <div class="modal-actions" style="justify-content:space-between;">
+        <button type="button" class="btn btn-ghost" id="batch-copy">📋 Copiar lote para IA</button>
+        <button type="button" class="btn btn-primary" id="batch-open-import">📥 Colar respostas da IA</button>
+      </div>
+      <div class="field" id="batch-import-box" style="display:none;margin-top:12px;">
+        <label>Cole aqui o JSON com "results" devolvido pela IA</label>
+        <textarea id="batch-json" placeholder='{"results":[{"reviewId":"...","result":"apply","summary":"...","reasoning":"...","proposedChanges":{...}}]}' style="min-height:140px;font-family:'IBM Plex Mono',monospace;font-size:11px;"></textarea>
+        <div id="batch-error" style="color:var(--red);font-size:12px;margin-top:6px;min-height:14px;"></div>
+        <button type="button" class="btn btn-primary" id="batch-process" style="margin-top:6px;">Processar lote</button>
+      </div>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" id="batch-close">fechar</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const listEl = ov.querySelector('#batch-list');
+  listEl.innerHTML = eligible.map(r=>{
+    const meta = reviewCenterLesionMeta(r.lesionId);
+    return `<label class="review-batch-row">
+      <input type="checkbox" class="batch-check" data-id="${escAttr(r.id)}" checked>
+      <span class="review-batch-row-main"><b>${escAttr(meta.name)}</b><span>${meta.sub?escAttr(meta.sub):''}</span><em>${escAttr((r.requestText||'').slice(0,160))}</em></span>
+    </label>`;
+  }).join('');
+  const close = ()=>{ ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+  const boxes = ()=> Array.from(ov.querySelectorAll('.batch-check'));
+  const selectedIds = ()=> boxes().filter(b=>b.checked).map(b=>b.dataset.id);
+  const updateCount = ()=>{ ov.querySelector('#batch-selected-count').textContent = String(selectedIds().length); };
+  ov.querySelector('#batch-select-all').onchange = (e)=>{ boxes().forEach(b=>{ b.checked = e.target.checked; }); updateCount(); };
+  listEl.onchange = (e)=>{ if(e.target && e.target.classList.contains('batch-check')) updateCount(); };
+  ov.querySelector('#batch-close').onclick = close;
+  ov.querySelector('#batch-copy').onclick = ()=>{
+    const ids = selectedIds();
+    if(ids.length===0){ toast('Selecione ao menos uma revisão.'); return; }
+    const built = buildReviewAiBatchPrompt(ids);
+    if(!built.ok){ toast('Não foi possível gerar o lote (' + (built.reason||'erro') + ').'); return; }
+    toast(copyTextToClipboard(built.text) ? ('Lote com ' + ids.length + ' revisão(ões) copiado.') : 'Não foi possível copiar — selecione o texto manualmente.');
+  };
+  ov.querySelector('#batch-open-import').onclick = ()=>{ ov.querySelector('#batch-import-box').style.display='block'; ov.querySelector('#batch-json').focus(); };
+  ov.querySelector('#batch-process').onclick = async ()=>{
+    const btn = ov.querySelector('#batch-process');
+    const errEl = ov.querySelector('#batch-error');
+    const res = importReviewAiBatch(ov.querySelector('#batch-json').value);
+    if(!res.ok){
+      errEl.textContent = res.reason==='invalid_json' ? formatReviewAiBatchParseError(res.parseError) : 'JSON lido, mas o formato do lote é inválido — esperado um objeto { "results": [ ... ] }. Nenhuma revisão foi processada.';
+      return;
+    }
+    btn.disabled = true;
+    await saveLesionRevisions();
+    if(typeof renderAll==='function') renderAll();
+    close();
+    if(typeof onProcessed==='function') onProcessed();
+    openReviewAiBatchResultModal(res);
+  };
+}
+
+function openReviewAiBatchResultModal(result){
+  const s = result.summary;
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected){ ov.remove(); document.removeEventListener('keydown', closeOnEsc); } };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = `
+    <div class="modal review-ai-modal review-batch-modal">
+      <h2>✅ Lote processado</h2>
+      <div class="modal-sub">cada revisão foi processada individualmente — nada foi aceito definitivamente.</div>
+      <div class="review-batch-summary">
+        <span>Processadas: <b>${s.processed}</b></span>
+        <span>Aplicadas provisoriamente: <b>${s.applied}</b></span>
+        <span>Ações manuais: <b>${s.manual}</b></span>
+        <span>Sem alteração: <b>${s.noChange}</b></span>
+        <span>Falharam: <b>${s.failed}</b></span>
+      </div>
+      <div class="review-center-list" id="batch-result-list"></div>
+      <div class="modal-actions"><button class="btn btn-ghost" id="batch-result-close">fechar</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = ()=>{ ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+  ov.querySelector('#batch-result-close').onclick = close;
+  const listEl = ov.querySelector('#batch-result-list');
+  const labels = { applied:'aplicada provisoriamente', manual_action_required:'exige ação manual', no_change:'sem alteração', failed:'falhou' };
+  listEl.innerHTML = result.items.map((it, idx)=>{
+    const review = LESION_REVISIONS[it.reviewId] || null;
+    const meta = reviewCenterLesionMeta(review ? review.lesionId : '');
+    const name = review ? meta.name : '(revisão não encontrada)';
+    const reason = it.reason ? escAttr(it.reason) + (it.detail ? ' (' + escAttr(it.detail) + ')' : '') : '';
+    let actions = '';
+    if(it.status==='applied') actions = '<button type="button" class="btn btn-primary batch-result-validate">🔎 Validar</button>';
+    else if(it.status==='manual_action_required'){
+      const isImage = /imagem|imagens|image|images|foto|figura/i.test(it.actionType||'') || /imagem|imagens|image|images|foto|figura/i.test(it.reason||'');
+      const sug = it.suggestedPlacement ? `<button type="button" class="btn btn-primary batch-result-apply-placement">✓ Aplicar localização sugerida</button>` : '';
+      actions = sug + `<button type="button" class="btn btn-ghost batch-result-manual">${isImage?'🖼':'✏'} Abrir lesão</button>`;
+    } else if(it.status==='no_change'){
+      actions = '<button type="button" class="btn btn-ghost batch-result-keep">manter pendente</button><button type="button" class="btn btn-ghost batch-result-cancel">✕ Encerrar revisão</button>';
+    }
+    const extra = (it.status==='manual_action_required' || it.status==='no_change') ? '<button type="button" class="btn btn-ghost batch-result-history">histórico</button>' : '';
+    return `<div class="review-center-row" data-idx="${idx}">
+      <div class="review-center-row-main">
+        <div class="review-center-row-title">${escAttr(name)}</div>
+        <div class="review-center-row-meta">${labels[it.status]||it.status}${reason?' · '+reason:''}</div>
+      </div>
+      <div class="review-center-row-actions">${actions}${extra}</div>
+    </div>`;
+  }).join('') || '<div class="review-center-empty">Nenhum resultado.</div>';
+  Array.from(listEl.querySelectorAll('.review-center-row')).forEach(row=>{
+    const it = result.items[Number(row.dataset.idx)];
+    const v = row.querySelector('.batch-result-validate');
+    if(v) v.onclick = ()=>{ close(); openReviewValidationModal(it.reviewId); };
+    const m = row.querySelector('.batch-result-manual');
+    if(m) m.onclick = ()=>{ close(); openManualActionModal(it.reviewId); };
+    const ap = row.querySelector('.batch-result-apply-placement');
+    if(ap) ap.onclick = ()=>{ close(); openApplyPlacementConfirmModal(it.reviewId); };
+    const k = row.querySelector('.batch-result-keep');
+    if(k) k.onclick = ()=>{ toast('Revisão mantida pendente.'); };
+    const c = row.querySelector('.batch-result-cancel');
+    if(c) c.onclick = ()=>{ openCancelReviewModal(it.reviewId, ()=>{}); };
+    const h = row.querySelector('.batch-result-history');
+    if(h) h.onclick = ()=> openReviewHistoryModal(it.reviewId);
+  });
+}
+
 function openPendingReviewsModal(){
   const ov = document.createElement('div');
   ov.className = 'overlay';
@@ -8850,6 +10239,9 @@ function openPendingReviewsModal(){
     <div class="modal review-center-modal">
       <h2>🔔 Revisões pendentes</h2>
       <div class="modal-sub">pedidos de revisão aguardando uma solução — mais recentes primeiro</div>
+      <div class="modal-actions" style="justify-content:flex-start;">
+        <button type="button" class="btn btn-primary" id="pending-reviews-batch-ai">🤖 Analisar pendências com IA</button>
+      </div>
       <div class="review-center-list" id="pending-reviews-list"></div>
       <div class="modal-actions"><button class="btn btn-ghost" id="pending-reviews-close">fechar</button></div>
     </div>`;
@@ -8879,6 +10271,7 @@ function openPendingReviewsModal(){
         </div>
         <div class="review-center-row-actions">
           ${meta.found?'<button type="button" class="btn btn-ghost review-open-lesion">ver lesão</button>':''}
+          ${reviewAcceptsAiProposal(r)?'<button type="button" class="btn btn-ghost review-ai-prepare">🤖 Preparar para IA</button>':''}
           <button type="button" class="btn btn-ghost review-open-history">histórico</button>
           ${cancellable?'<button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>':''}
         </div>`;
@@ -8886,18 +10279,26 @@ function openPendingReviewsModal(){
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
       const cancelBtn = row.querySelector('.review-cancel-request');
       if(cancelBtn) cancelBtn.onclick = ()=> openCancelReviewModal(r.id, renderList);
+      const aiBtn = row.querySelector('.review-ai-prepare');
+      if(aiBtn) aiBtn.onclick = ()=> openReviewAiBridgeModal(r.id, renderList);
       list.appendChild(row);
     });
   };
   renderList();
+  const batchBtn = ov.querySelector('#pending-reviews-batch-ai');
+  if(batchBtn){
+    batchBtn.hidden = getBatchEligibleReviews().length===0;
+    batchBtn.onclick = ()=> openReviewAiBatchModal(renderList);
+  }
   ov.querySelector('#pending-reviews-close').onclick = ()=>{ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); };
 }
 
-/* 💡 Soluções disponíveis tem DUAS abas, uma por aceite humano pendente:
-   PROPOSTAS (status "proposed" — ainda NADA foi alterado em DATA; decisão:
-   autorizar correção ou recusar a proposta) e VALIDAR CORREÇÕES (status
-   "applied_pending_validation" — a correção JÁ foi escrita em DATA depois
-   de autorizada; decisão: manter ou desfazer/rollback). */
+/* 💡 Soluções disponíveis prioriza VALIDAR CORREÇÕES (status
+   "applied_pending_validation" — a correção já foi aplicada provisoriamente
+   em DATA e aguarda a decisão humana: manter ou desfazer/rollback). A aba
+   "Ação manual" (status "manual_action_required") mostra revisões que a IA não
+   pode resolver (imagem/ownership/estrutura). A aba "Propostas" (status
+   "proposed") só aparece se houver propostas LEGADAS. */
 function openReadySolutionsModal(){
   const ov = document.createElement('div');
   ov.className = 'overlay';
@@ -8907,28 +10308,35 @@ function openReadySolutionsModal(){
   ov.innerHTML = `
     <div class="modal review-center-modal">
       <h2>💡 Soluções disponíveis</h2>
-      <div class="modal-sub">duas decisões humanas antes de qualquer mudança definitiva na lesão</div>
+      <div class="modal-sub">correções aplicadas provisoriamente e revisões que exigem ação manual aguardando você</div>
       <div class="review-tabs">
-        <button type="button" class="review-tab-btn active" id="tab-btn-proposed">Propostas (<span id="tab-count-proposed">0</span>)</button>
-        <button type="button" class="review-tab-btn" id="tab-btn-applied">Validar correções (<span id="tab-count-applied">0</span>)</button>
+        <button type="button" class="review-tab-btn active" id="tab-btn-applied">Validar correções (<span id="tab-count-applied">0</span>)</button>
+        <button type="button" class="review-tab-btn" id="tab-btn-manual" hidden>🛠 Ações manuais (<span id="tab-count-manual">0</span>)</button>
+        <button type="button" class="review-tab-btn" id="tab-btn-proposed" hidden>Propostas (<span id="tab-count-proposed">0</span>)</button>
       </div>
-      <div class="review-center-list" id="proposed-list"></div>
-      <div class="review-center-list" id="applied-list" hidden></div>
+      <div class="review-center-list" id="proposed-list" hidden></div>
+      <div class="review-center-list" id="manual-list" hidden></div>
+      <div class="review-center-list" id="applied-list"></div>
       <div class="modal-actions"><button class="btn btn-ghost" id="ready-solutions-close">fechar</button></div>
     </div>`;
   document.body.appendChild(ov);
   const proposedList = ov.querySelector('#proposed-list');
+  const manualList = ov.querySelector('#manual-list');
   const appliedList = ov.querySelector('#applied-list');
   const tabBtnProposed = ov.querySelector('#tab-btn-proposed');
+  const tabBtnManual = ov.querySelector('#tab-btn-manual');
   const tabBtnApplied = ov.querySelector('#tab-btn-applied');
 
   const showTab = (which)=>{
     proposedList.hidden = which!=='proposed';
+    manualList.hidden = which!=='manual';
     appliedList.hidden = which!=='applied';
     tabBtnProposed.classList.toggle('active', which==='proposed');
+    tabBtnManual.classList.toggle('active', which==='manual');
     tabBtnApplied.classList.toggle('active', which==='applied');
   };
   tabBtnProposed.onclick = ()=> showTab('proposed');
+  tabBtnManual.onclick = ()=> showTab('manual');
   tabBtnApplied.onclick = ()=> showTab('applied');
 
   const closeAllAndCleanup = ()=>{ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); };
@@ -8936,6 +10344,7 @@ function openReadySolutionsModal(){
   const renderProposedList = ()=>{
     const reviews = getProposedSolutions();
     ov.querySelector('#tab-count-proposed').textContent = String(reviews.length);
+    tabBtnProposed.hidden = reviews.length===0;
     proposedList.innerHTML = '';
     if(reviews.length===0){
       proposedList.innerHTML = '<div class="review-center-empty">Nenhuma proposta aguardando decisão.</div>';
@@ -9012,7 +10421,7 @@ function openReadySolutionsModal(){
           <div class="review-center-row-title">${meta.name}</div>
           <div class="review-center-row-meta">${meta.sub?meta.sub+' · ':''}aplicada em ${when}</div>
           <div class="review-center-row-request"><b>Pedido original:</b> ${(r.requestText||'').replace(/</g,'&lt;')}</div>
-          ${renderFieldChangesHtml(diffRows)}
+          ${(attempt && attempt.kind==='alt_placement') ? renderPlacementChangeHtml(attempt) : renderFieldChangesHtml(diffRows)}
         </div>
         <div class="review-center-row-actions">
           ${meta.found?'<button type="button" class="btn btn-ghost review-open-lesion">👁 ver lesão corrigida</button>':''}
@@ -9046,8 +10455,64 @@ function openReadySolutionsModal(){
     });
   };
 
-  function renderBothLists(){ renderProposedList(); renderAppliedList(); }
+  const renderManualList = ()=>{
+    const reviews = getManualActionSolutions();
+    ov.querySelector('#tab-count-manual').textContent = String(reviews.length);
+    tabBtnManual.hidden = reviews.length===0;
+    manualList.innerHTML = '';
+    if(reviews.length===0){
+      manualList.innerHTML = '<div class="review-center-empty">Nenhuma revisão exigindo ação manual.</div>';
+      return;
+    }
+    reviews.forEach(r=>{
+      const meta = reviewCenterLesionMeta(r.lesionId);
+      const reason = r.manualActionReason || (r.solution && r.solution.reason) || '';
+      const isImage = /imagem|imagens|image|images|foto|figura/i.test(reason);
+      const sug = reviewPlacementSuggestion(r);
+      const row = document.createElement('div');
+      row.className = 'review-center-row';
+      row.innerHTML = `
+        <div class="review-center-row-main">
+          <div class="review-center-row-title">${meta.name}</div>
+          <div class="review-center-row-meta">${meta.sub?meta.sub+' · ':''}exige ação manual${reason?' · '+String(reason).replace(/</g,'&lt;'):''}</div>
+          <div class="review-center-row-request"><b>Pedido:</b> ${(r.requestText||'').replace(/</g,'&lt;')}</div>
+          ${r.solution && r.solution.text ? `<div class="review-center-row-solution"><b>Resumo da IA:</b> ${String(r.solution.text).replace(/</g,'&lt;')}</div>` : ''}
+          ${sug.applicable ? `<div class="review-placement-suggestion"><div><b>Sugestão da IA:</b> ${escAttr(meta.lesion?meta.lesion.s:'')}</div><div>→ também em <b>${escAttr(sug.label)}</b></div></div>` : ''}
+        </div>
+        <div class="review-center-row-actions">
+          ${sug.applicable?`<button type="button" class="btn btn-primary review-manual-apply-placement">✓ Aplicar localização sugerida</button>`:''}
+          ${meta.found?`<button type="button" class="btn btn-ghost review-manual-open">${isImage?'🖼 Abrir lesão para ajustar imagens':'✏ Abrir lesão'}</button>`:''}
+          <button type="button" class="btn btn-ghost review-open-history">histórico</button>
+          <button type="button" class="btn btn-ghost review-manual-reopen">↩ Voltar para revisões</button>
+          <button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>
+        </div>`;
+      const applyBtn = row.querySelector('.review-manual-apply-placement');
+      if(applyBtn) applyBtn.onclick = ()=> openApplyPlacementConfirmModal(r.id, ()=>{ renderBothLists(); showTab('applied'); });
+      const openBtn = row.querySelector('.review-manual-open');
+      if(openBtn) openBtn.onclick = ()=> openManualActionModal(r.id, { onReopened: renderBothLists });
+      row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
+      row.querySelector('.review-manual-reopen').onclick = ()=>{
+        openReasonPromptModal(r.id, async (reason)=>{
+          const res = reopenManualActionReview(r.id, reason);
+          if(res.ok){ await saveLesionRevisions(); toast('Revisão voltou para a fila de pendentes.'); renderBothLists(); showTab('applied'); }
+        }, {
+          title: '↩ Devolver para revisões',
+          subtitle: 'Algo a orientar a próxima tentativa da IA? (opcional) — fica salvo como feedback humano.',
+          confirmLabel: '↩ devolver'
+        });
+      };
+      row.querySelector('.review-cancel-request').onclick = ()=> openCancelReviewModal(r.id, renderBothLists);
+      manualList.appendChild(row);
+    });
+  };
+
+  function renderBothLists(){ renderProposedList(); renderManualList(); renderAppliedList(); }
   renderBothLists();
+  // Aba principal é "Validar correções"; cai em "Ação manual"/"Propostas"
+  // apenas quando não há correção aplicada aguardando validação.
+  showTab(getAppliedSolutionsAwaitingValidation().length>0 ? 'applied'
+    : getManualActionSolutions().length>0 ? 'manual'
+    : getProposedSolutions().length>0 ? 'proposed' : 'applied');
   ov.querySelector('#ready-solutions-close').onclick = closeAllAndCleanup;
 }
 
@@ -9129,7 +10594,7 @@ async function collectRecoverySources(){
     for(let i=0;i<localStorage.length;i++){
       const key=localStorage.key(i)||'';
       if(!/atlas/i.test(key)) continue;
-      if(key===SAFETY_SNAPSHOTS_KEY || key===CLOUDINARY_CONFIG_LOCAL) continue;
+      if(key===LOCAL_PREFIX+'safety_snapshots_v190' || key===LOCAL_PREFIX+'safety_snapshots_v191' || key===CLOUDINARY_CONFIG_LOCAL) continue;
       const raw=localStorage.getItem(key);
       if(!raw || raw.length<2) continue;
       try{
@@ -9417,6 +10882,9 @@ function openImageAuditModal(){
   const report = auditImageOwnership();
   const cov = document.createElement('div');
   cov.className = 'overlay';
+  // SOMENTE LEITURA: a auditoria apenas mostra o que encontrou. Não move,
+  // não remove nem reassocia imagem (ownership só muda por ação manual no
+  // editor da lesão). Não há botão de correção automática.
   const rows = report.mismatches.map((m,idx)=>{
     const correctLabel = m.correctEntry
       ? `<b>${m.correctEntry.s} › ${m.correctEntry.site} › ${m.correctEntry.name}</b>`
@@ -9427,7 +10895,7 @@ function openImageAuditModal(){
         <div class="audit-row-current">está em: <b>${m.entry.s} › ${m.entry.site} › ${m.entry.name}</b></div>
         <div class="audit-row-correct">etiqueta diz: ${correctLabel}</div>
       </div>
-      ${m.correctEntry ? '<button type="button" class="btn btn-primary audit-fix-btn" data-idx="'+idx+'">mover pra lesão certa</button>' : '<span class="audit-orphan-tag">órfã</span>'}
+      <span class="audit-orphan-tag">${m.correctEntry ? 'fora do lugar' : 'órfã'}</span>
     </div>`;
   }).join('');
 
@@ -9439,57 +10907,32 @@ function openImageAuditModal(){
         ? '<br><span style="color:var(--green,#4E9A6A);font-weight:600;">✓ Tudo certo — nenhuma imagem fora do lugar.</span>'
         : `<br><span style="color:var(--red);font-weight:600;">⚠ ${report.mismatches.length} imagem(ns) fora do lugar encontrada(s).</span>`}
       ${report.untagged.length ? `<br><span style="color:var(--muted-2);">${report.untagged.length} imagem(ns) antiga(s) sem etiqueta — não é possível verificar essas automaticamente.</span>` : ''}
+      <br><span style="color:var(--muted-2);">Esta auditoria é SOMENTE LEITURA — não move, não remove nem reassocia imagens. Corrija manualmente pelo editor da lesão.</span>
     </div>
     <div class="audit-list">${rows}</div>
     <div class="modal-actions">
-      ${report.mismatches.some(m=>m.correctEntry) ? '<button class="btn btn-primary" id="audit-fix-all">corrigir todas automaticamente</button>' : ''}
       <button class="btn btn-ghost" id="audit-close">fechar</button>
     </div>
   </div>`;
   document.body.appendChild(cov);
   cov.onclick = e=>{ if(e.target===cov) cov.remove(); };
   cov.querySelector('#audit-close').onclick = ()=> cov.remove();
-  cov.querySelectorAll('.audit-thumb').forEach((thumb,idx)=>{
+  cov.querySelectorAll('.audit-thumb').forEach((thumb)=>{
     thumb.onclick = (e)=>{ e.stopPropagation(); openImageLightbox(thumb.src); };
   });
-
-  async function applyFix(idx){
-    const m = report.mismatches[idx];
-    if(!m || !m.correctEntry) return;
-    // move a imagem da lesão errada pra lesão certa (a que a etiqueta indica)
-    m.entry.images = (m.entry.images||[]).filter(x=>x!==m.img);
-    m.correctEntry.images = [...(m.correctEntry.images||[]), m.img];
-    m.entry._userUpdatedAt = Date.now();
-    m.correctEntry._userUpdatedAt = Date.now();
-  }
-
-  cov.querySelectorAll('.audit-fix-btn').forEach(btn=>{
-    btn.onclick = async ()=>{
-      await applyFix(Number(btn.dataset.idx));
-      await saveData();
-      toast('Imagem movida pra lesão certa.');
-      cov.remove();
-      openImageAuditModal(); // reabre já atualizado
-    };
-  });
-  const fixAllBtn = cov.querySelector('#audit-fix-all');
-  if(fixAllBtn){
-    fixAllBtn.onclick = async ()=>{
-      for(let i=0;i<report.mismatches.length;i++){
-        if(report.mismatches[i].correctEntry) await applyFix(i);
-      }
-      await saveData();
-      toast('Imagens corrigidas automaticamente.');
-      cov.remove();
-      openImageAuditModal();
-    };
-  }
 }
 document.getElementById('btn-system-diagnostic').onclick = openSystemDiagnosticModal;
 document.getElementById('btn-audit-images').onclick = openImageAuditModal;
-document.getElementById('btn-reconcile-v2').onclick = openReconcileV2Modal;
-document.getElementById('btn-export-checkpoint-v2').onclick = openExportCheckpointV2Modal;
-document.getElementById('btn-force-dedup').onclick = async ()=>{
+document.getElementById('btn-sync-to-cloud').onclick = openSyncDeviceToCloudModal;
+document.getElementById('btn-sync-from-cloud').onclick = openUpdateFromCloudModal;
+// As ferramentas técnicas (forçar envio, exportar checkpoint, reconciliar V2,
+// fundir duplicatas, recuperar dados antigos, restaurar padrão e snapshots)
+// foram RETIRADAS da interface — não aparecem em lugar nenhum da UI. A
+// implementação interna continua no código para manutenção futura:
+// forceThisDeviceToCloud, openExportCheckpointV2Modal, openReconcileV2Modal,
+// openRecoveryInspector, forceDuplicateCleanupNow, restoreFactoryDefault,
+// createSafetySnapshot/restoreSafetySnapshot, além do índice de snapshots.
+async function forceDuplicateCleanupNow(){
   if(!confirm('Isso funde qualquer lesão duplicada (mesmo nome/seção/sítio) agora mesmo, mantendo a imagem e o progresso de revisão mais completos entre as cópias. Continuar?')) return;
   try{ createSafetySnapshot('antes de forçar fusão de duplicatas'); }catch(_e){}
   const result = runDuplicateCleanup();
@@ -9501,9 +10944,7 @@ document.getElementById('btn-force-dedup').onclick = async ()=>{
   }else{
     toast('Duplicatas fundidas com sucesso.');
   }
-};
-document.getElementById('btn-recover-data').onclick = openRecoveryInspector;
-document.getElementById('btn-force-cloud').onclick = forceThisDeviceToCloud;
+}
 document.getElementById('search').addEventListener('input', (e)=>{ searchTerm = e.target.value; renderResults(); });
 
 document.getElementById('btn-export').onclick = async ()=>{
@@ -9581,7 +11022,9 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
         return;
       }
       try{ createSafetySnapshot('antes de importar backup'); }catch(_e){}
+      const localDataBeforeImport = DATA; // estado local atual, antes de substituir
       DATA = parsed;
+      preserveLocalImageOwnershipOnImport(DATA, localDataBeforeImport);
       await saveData();
       await deduplicateV171();
       DATA = DATA.filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
@@ -9603,6 +11046,7 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
     }
 
     try{ createSafetySnapshot('antes de importar backup'); }catch(_e){}
+    const localDataBeforeImport = DATA; // estado local atual, antes de substituir
     DATA = parsed.data;
     REVIEW = (parsed.review && typeof parsed.review==='object') ? parsed.review : {};
     SRS = (parsed.srs && typeof parsed.srs==='object') ? parsed.srs : {};
@@ -9612,6 +11056,10 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
       : [...DEFAULT_SECTION_ORDER];
     siteOrder = (parsed.siteOrder && typeof parsed.siteOrder==='object') ? parsed.siteOrder : {};
     LESION_REVISIONS = (parsed.lesionRevisions && typeof parsed.lesionRevisions==='object' && !Array.isArray(parsed.lesionRevisions)) ? parsed.lesionRevisions : {};
+
+    // Proteção de ownership: imagem que já existia localmente NÃO troca de dono
+    // silenciosamente pelo backup (conflito é registrado, não resolvido sozinho).
+    const ownershipConflicts = preserveLocalImageOwnershipOnImport(DATA, localDataBeforeImport);
 
     await deduplicateV171();
     DATA = DATA.filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
@@ -9631,72 +11079,39 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
     document.getElementById('search').value='';
     renderAll();
     await pushToFirebaseNow();
-    toast('Backup completo restaurado com sucesso.');
+    if(ownershipConflicts.length){
+      toast(`Backup importado. ${ownershipConflicts.length} imagem(ns) mantiveram a atribuição local (conflito de ownership registrado).`);
+    } else {
+      toast('Backup completo restaurado com sucesso.');
+    }
   }catch(e){
     console.error('Falha ao importar backup:', e);
     toast('Backup inválido ou incompatível.');
   }
   ev.target.value='';
 });
-document.getElementById('btn-restore-snapshot').onclick = async ()=>{
-  const snaps = loadSafetySnapshots();
-  if(!snaps.length){
-    toast('Nenhum snapshot de segurança disponível neste navegador.');
-    return;
-  }
-  const cov = document.createElement('div');
-  cov.className = 'overlay';
-  cov.innerHTML = `<div class="modal snapshot-picker-modal">
-    <h2>↶ Restaurar snapshot de segurança</h2>
-    <div class="modal-sub">Escolha qual momento restaurar — o mais recente nem sempre é o melhor (pode já refletir uma perda). A restauração funde com o estado atual e não apaga imagens/progresso mais avançados.</div>
-    <div class="snapshot-list"></div>
-    <div class="modal-actions"><button class="btn btn-ghost" id="snapshot-picker-cancel">cancelar</button></div>
-  </div>`;
-  document.body.appendChild(cov);
-  cov.onclick = e=>{ if(e.target===cov) cov.remove(); };
-  cov.querySelector('#snapshot-picker-cancel').onclick = ()=> cov.remove();
-  const list = cov.querySelector('.snapshot-list');
-  snaps.forEach((snap, idx)=>{
-    const when = snap.createdAt ? new Date(snap.createdAt).toLocaleString('pt-BR') : 'data desconhecida';
-    const imgCount = Object.keys(snap.images||{}).length;
-    const row = document.createElement('div');
-    row.className = 'snapshot-row';
-    row.innerHTML = `
-      <div class="snapshot-row-info">
-        <div class="snapshot-row-when">${when}${idx===0?' <span class="snapshot-row-latest">mais recente</span>':''}</div>
-        <div class="snapshot-row-detail">${snap.reason||'automático'} · 📷 ${imgCount} lesão(ões) com imagem</div>
-      </div>
-      <button type="button" class="btn btn-ghost snapshot-row-restore">restaurar este</button>`;
-    row.querySelector('.snapshot-row-restore').onclick = async ()=>{
-      if(!confirm(`Restaurar o snapshot de ${when}?\n\nMotivo: ${snap.reason||'automático'}\nImagens: ${imgCount} lesão(ões)\n\nIsso funde com o estado atual, sem apagar nada mais avançado que já exista.`)) return;
-      try{
-        await restoreSafetySnapshot(snap);
-        toast('Snapshot restaurado com sucesso.');
-        cov.remove();
-      }catch(e){
-        console.error(e);
-        toast('Não foi possível restaurar este snapshot.');
-      }
-    };
-    list.appendChild(row);
-  });
-};
-
-document.getElementById('btn-reset').onclick = async ()=>{
-  if(confirm('Isso substitui TODO o seu banco atual pelo conjunto padrão de exemplo. Um snapshot de segurança será criado antes. Continuar?')){
-    // Mesma correção do botão de exportar: sincroniza com a nuvem ANTES de
-    // tirar o snapshot de segurança, pra ele capturar o estado mais real
-    // possível, não uma cópia desatualizada desta aba especificamente.
-    try{ if(fbDb) await syncFromFirebase(); }catch(_e){}
-    try{ createSafetySnapshot('antes de restaurar padrão de fábrica'); }catch(_e){}
-    DATA = JSON.parse(JSON.stringify(activeCanonicalSeedV172()));
-    await saveData();
-    try{ await storage.set(RECOVERY_KEY,RECOVERY_VERSION,false); }catch(_e){}
-    scope={section:null,site:null}; activeTags.clear(); searchTerm=''; document.getElementById('search').value='';
-    renderAll();
-    toast('Banco restaurado ao padrão.');
-  }
-};
+// "Restaurar snapshot de segurança" foi retirado da interface (não aparece em
+// lugar nenhum). A infraestrutura de snapshots (createSafetySnapshot/
+// restoreSafetySnapshot/índice/retenção 5) continua no código para manutenção
+// futura.
+// Restaurar padrão de fábrica — implementação interna preservada (o botão saiu
+// da interface). AÇÃO DESTRUTIVA: confirmação forte em DOIS passos; cria um
+// snapshot de segurança antes de substituir o estado.
+async function restoreFactoryDefault(){
+  if(!confirm('Restaurar o padrão de fábrica?\n\nIsto substitui TODO o seu banco atual pelo conjunto padrão de exemplo. Um snapshot de segurança será criado antes.')) return;
+  if(!confirm('⚠ TEM CERTEZA?\n\nEsta ação é DESTRUTIVA: apaga o estado local do acervo e volta ao conjunto inicial.\n\nClique OK somente se tiver certeza absoluta.')) return;
+  // Mesma correção do botão de exportar: sincroniza com a nuvem ANTES de
+  // tirar o snapshot de segurança, pra ele capturar o estado mais real
+  // possível, não uma cópia desatualizada desta aba especificamente.
+  try{ if(fbDb) await syncFromFirebase(); }catch(_e){}
+  try{ createSafetySnapshot('antes de restaurar padrão de fábrica'); }catch(_e){}
+  DATA = JSON.parse(JSON.stringify(activeCanonicalSeedV172()));
+  await saveData();
+  try{ await storage.set(RECOVERY_KEY,RECOVERY_VERSION,false); }catch(_e){}
+  scope={section:null,site:null}; activeTags.clear(); searchTerm=''; document.getElementById('search').value='';
+  renderAll();
+  toast('Banco restaurado ao padrão.');
+}
 
 /* ============================================================
    PREVIEW DE IMAGEM AO PASSAR O MOUSE
@@ -10098,8 +11513,11 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
       const item = document.createElement('div');
       item.className = 'img-gallery-item';
       const badge = img.source==='pending' ? '⏳ não enviada' : (img.source==='url' ? '🔗 URL' : '☁ Cloudinary');
+      // Enquanto pending, o preview é LOCAL: prioriza a blob URL (_objectUrl),
+      // nunca uma URL remota inexistente. Miniatura e lightbox usam a MESMA src.
+      const src = img.data || img._objectUrl || '';
       item.innerHTML = `<span class="img-source-badge">${badge}</span>
-        <img src="${img.data}" class="img-gallery-thumb" title="clique pra ampliar">
+        <img src="${src}" class="img-gallery-thumb" title="clique pra ampliar">
         <div class="quiz-img-current-label" title="${escAttr(img.label||'')}">${esc(img.label||'Sem legenda')}</div>
         <div class="img-gallery-actions">
           <button type="button" class="img-gallery-swap quiz-img-edit">✏ Editar</button>
@@ -10110,7 +11528,7 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
           <button type="button" class="btn btn-primary quiz-img-edit-save">salvar</button>
           <button type="button" class="btn btn-ghost quiz-img-edit-cancel">cancelar</button>
         </div>`;
-      item.querySelector('.img-gallery-thumb').onclick = ()=> openImageLightbox(img.data);
+      item.querySelector('.img-gallery-thumb').onclick = ()=> openImageLightbox(src);
       const editBox = item.querySelector('.quiz-img-edit-box');
       const labelInput = item.querySelector('.img-gallery-label');
       item.querySelector('.quiz-img-edit').onclick = ()=>{ editBox.hidden=false; labelInput.focus(); labelInput.select(); };
@@ -10338,24 +11756,24 @@ function renderQuizCardIntegrated(host){
         ${hasMultiple?'<button type="button" class="quiz-carousel-arrow quiz-carousel-prev" aria-label="imagem anterior">‹</button>':''}
         <img src="${cur.data}">
         ${hasMultiple?'<button type="button" class="quiz-carousel-arrow quiz-carousel-next" aria-label="imagem seguinte">›</button>':''}
+        ${hasMultiple?`<div class="quiz-carousel-overlay" role="group" aria-label="Navegação de imagens">
+          <button type="button" class="quiz-carousel-ov-btn quiz-carousel-ov-prev" aria-label="Imagem anterior">‹</button>
+          <span class="quiz-carousel-ov-count" aria-live="polite" aria-label="Imagem ${quizImgIdx+1} de ${quizImgs.length}">${quizImgIdx+1} / ${quizImgs.length}</span>
+          <button type="button" class="quiz-carousel-ov-btn quiz-carousel-ov-next" aria-label="Próxima imagem">›</button>
+        </div>`:''}
       </div>
-      ${hasMultiple?`<div class="quiz-carousel-controls">
-        <button type="button" class="btn btn-ghost quiz-carousel-textnav quiz-carousel-textprev" aria-label="Imagem anterior">← Imagem anterior</button>
-        <span class="quiz-carousel-counter quiz-carousel-textcount" aria-live="polite">Imagem ${quizImgIdx+1} de ${quizImgs.length}</span>
-        <button type="button" class="btn btn-ghost quiz-carousel-textnav quiz-carousel-textnext" aria-label="Próxima imagem">Próxima imagem →</button>
-      </div>`:''}
       ${cur.label?`<div class="quiz-img-label">${esc(cur.label)}</div>`:''}`;
     const im=media.querySelector('img'); if(im) im.onclick=()=>openImageLightbox(cur.data);
     if(hasMultiple){
-      // As setas laterais e os botões textuais controlam o MESMO quizImgIdx —
+      // Setas laterais e setas do overlay superior controlam o MESMO quizImgIdx —
       // um único estado de carrossel. Navegação circular (o wrap acontece no
-      // início do próximo renderMedia()).
+      // início do próximo renderMedia()). Nenhuma lógica de navegação duplicada.
       const goPrev=()=>{ quizImgIdx--; renderMedia(); };
       const goNext=()=>{ quizImgIdx++; renderMedia(); };
       media.querySelector('.quiz-carousel-prev').onclick=goPrev;
       media.querySelector('.quiz-carousel-next').onclick=goNext;
-      media.querySelector('.quiz-carousel-textprev').onclick=goPrev;
-      media.querySelector('.quiz-carousel-textnext').onclick=goNext;
+      media.querySelector('.quiz-carousel-ov-prev').onclick=goPrev;
+      media.querySelector('.quiz-carousel-ov-next').onclick=goNext;
     }
   }
   // jumpToLast: vai para a última imagem (após adicionar imagem).

@@ -184,10 +184,10 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // cancelLesionReview()/CANCELLABLE_REVIEW_STATUSES no módulo
   // LESION_REVISIONS (antes das âncoras) e o CSS do modal de cancelamento no
   // <style> do topo. As quatro âncoras deslocam igualmente.
-  assert.equal(recovery.line, 4822);
-  assert.equal(brokenArtifacts.line, 4812);
-  assert.equal(loadData.line, 7122);
-  assert.equal(importHandler.line, 9558);
+  assert.equal(recovery.line, 5735);
+  assert.equal(brokenArtifacts.line, 5725);
+  assert.equal(loadData.line, 8038);
+  assert.equal(importHandler.line, 10999);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -283,15 +283,15 @@ test('ALTERACAO 008: syncFromFirebase() continua definida, intacta, e disponivel
   assert.match(fn.source, /readShardedState/, 'precisa continuar lendo o estado remoto de verdade');
   assert.match(fn.source, /mergeEntryNonDestructive/, 'precisa continuar com a logica de merge original, intocada');
 
-  // Continua alcancavel: os 2 call sites manuais pre-existentes (botao de
-  // exportar backup e botao de restaurar padrao de fabrica) nao foram
-  // tocados por esta alteracao — syncFromFirebase() nao ficou orfa.
+  // Continua alcancavel apenas por ACOES EXPLICITAS do usuario: exportar backup,
+  // restaurar padrao de fabrica e o novo "Atualizar deste backup/nuvem". Nenhuma
+  // delas e automatica no boot/F5/login (os testes acima garantem isso).
   // Exclui mencoes DENTRO do proprio corpo da funcao (o rotulo de string
   // "syncFromFirebase (leitura)" usado em withFirebaseTimeout, linha 2013,
   // bate no regex ingenuo de invocationLocations mas nao e uma chamada).
   const allCalls = activeCallLocations(html, 'syncFromFirebase')
     .filter((m) => m.index < fn.index || m.index >= fn.index + fn.source.length);
-  assert.equal(allCalls.length, 2, 'syncFromFirebase() precisa continuar chamada exatamente pelos 2 botoes manuais pre-existentes (exportar backup, restaurar padrao de fabrica) — nenhum a mais, nenhum a menos');
+  assert.equal(allCalls.length, 3, 'syncFromFirebase() so pode ser chamada por acoes EXPLICITAS: exportar backup, restaurar padrao de fabrica e "Atualizar deste backup/nuvem" — nenhum call site automatico');
 });
 
 test('F5 preserva as 1213 identidades ao executar o loadData real', async () => {
@@ -512,6 +512,7 @@ async function runImportScenario(raw, { confirmResult = true } = {}) {
     STORAGE_KEY: 'data',
     REVIEW_KEY: 'review',
     createSafetySnapshot: () => null,
+    preserveLocalImageOwnershipOnImport: () => [],
     confirm: () => {
       confirmations += 1;
       return confirmResult;

@@ -1457,3 +1457,805 @@ respondida (com ou sem grade) avança; não respondida na fronteira mostra o avi
 e não avança; Anterior/Próxima percorrem a trilha sem duplicar o histórico.
 Resultado: **86 PASS, 0 FAIL**. Âncoras de `tests/critical-flows.test.js` para
 4822/4812/7122/9558.
+
+## ALTERAÇÃO 021 — Snapshots locais leves e proteção forte de ownership
+
+**Número da alteração:** 021
+**Data:** 20/09/2026
+
+### Objetivo
+
+1. Proteger o estado local antes de operações de risco, sem sobrecarregar o
+   IndexedDB (snapshots leves, no máximo 5, sem duplicar binários remotos).
+2. Impedir que qualquer fluxo AUTOMÁTICO altere a atribuição (ownership) de uma
+   imagem já vinculada a uma lesão.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/snapshots-ownership.test.js` (novo)
+- `tests/critical-flows.test.js` (âncoras + stub)
+- `AGENTS.md`, `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+- `createSafetySnapshot(motivo)` voltou a funcionar (IndexedDB), mas só para
+  motivos de RISCO; edição comum/Quiz/marcar revisão/sync NÃO geram snapshot.
+- Snapshot guarda DATA + metadados de imagem + REVIEW + SRS + LESION_REVISIONS +
+  ordens; nunca binários do Cloudinary; retenção de 5 (escrita serializada).
+- Painel "Snapshots de segurança": resumo, restauração manual com confirmação
+  forte (criando snapshot do estado atual antes) e exclusão.
+- Funções centrais de ownership: `canChangeImageOwnership`,
+  `assertManualImageOwnershipChange`, `registerImageOwnershipConflict`,
+  `detectImageOwnershipConflicts`, `preserveLocalImageOwnershipOnImport`.
+- Importação preserva a atribuição local existente e registra conflitos.
+- Regra permanente documentada em `AGENTS.md`/`AI.md`.
+
+### Testes realizados
+
+- `node --test tests/snapshots-ownership.test.js`: 18 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 86 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 51 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Operações de risco passam a ter ponto de retorno local e a atribuição das
+imagens fica protegida contra automação. `SEED`, `REVIEW`, `SRS`, `SESSIONLOG`,
+a reconciliação V2 e os dados atuais não foram alterados.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 022 — Área de ferramentas simplificada (Manutenção técnica)
+
+**Número da alteração:** 022
+**Data:** 20/09/2026
+
+### Objetivo
+
+Deixar a interface normal simples e segura, escondendo ferramentas técnicas/
+destrutivas numa seção recolhida, sem remover funcionalidades internas.
+
+### O que foi alterado
+
+- Interface normal agora mostra só `🩺 diagnóstico do sistema` e `🔍 auditar
+  vínculo de imagens` (ambos somente leitura).
+- Criada `⚙ Manutenção técnica` (`<details>`, recolhida por padrão) contendo:
+  forçar envio deste dispositivo, exportar checkpoint V2, reconciliar catálogo
+  V2, fundir duplicatas agora, procurar dados antigos/recuperar e restaurar
+  padrão de fábrica (separado por um divisor e marcado como destrutivo).
+- `restaurar padrão de fábrica`: confirmação forte em DOIS passos; não executa ao
+  abrir a seção; lógica de reset inalterada.
+- `auditar vínculo de imagens` virou SOMENTE LEITURA — removidos os botões
+  "mover pra lesão certa" e "corrigir todas automaticamente".
+- Botão "restaurar snapshot de segurança" removido da interface (não aparece na
+  normal nem na Manutenção técnica). A infraestrutura (createSafetySnapshot,
+  restoreSafetySnapshot, índice, retenção 5, criação automática antes de risco)
+  permanece no código. CSS morto da UI de snapshot removido.
+- IDs/handlers existentes reutilizados; nenhuma função duplicada.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/tools-layout.test.js` (novo)
+- `tests/snapshots-ownership.test.js`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### Testes realizados
+
+- `node --test tests/tools-layout.test.js`: 13 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 18 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 86 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 51 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Interface normal limpa; ferramentas técnicas escondidas por padrão; auditoria de
+imagens somente leitura; snapshots automáticos e retenção de 5 preservados.
+`SEED`, `DATA`, ownership, Quiz e Revisões não foram alterados.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+### Revisão da ALTERAÇÃO 022 — controles técnicos removidos da UI
+
+O usuário não queria uma seção expansível: as ferramentas técnicas **não devem
+aparecer na interface**. A `⚙ Manutenção técnica` (details/summary) foi REMOVIDA
+do HTML, junto com os botões forçar envio, exportar checkpoint V2, reconciliar
+catálogo V2, fundir duplicatas agora, procurar dados antigos/recuperar e
+restaurar padrão de fábrica. Também foi removido o CSS morto.
+
+A interface normal agora mostra **somente** `🩺 diagnóstico do sistema` e
+`🔍 auditar vínculo de imagens` (ambos somente leitura), além dos botões normais
+`Salvar backup`/`Importar backup` (inalterados).
+
+A implementação interna continua no código para manutenção futura: as lógicas
+inline de deduplicação e de factory reset viraram funções nomeadas
+(`forceDuplicateCleanupNow()` e `restoreFactoryDefault()`), e permanecem
+`forceThisDeviceToCloud`, `openExportCheckpointV2Modal`, `openReconcileV2Modal`,
+`openRecoveryInspector`, `runDuplicateCleanup`, `reconcileCatalogByIdentityV2`,
+`createSafetySnapshot`/`restoreSafetySnapshot` e o índice de snapshots
+(retenção 5, criação automática antes de risco). A proteção de ownership não foi
+alterada.
+
+Testes: `tests/tools-layout.test.js` reescrito (**8 PASS**). Âncoras de
+`tests/critical-flows.test.js` para 4917/4907/7220/9630.
+
+## ALTERAÇÃO 023 — Ponte segura para IA (manual-assistida)
+
+**Número da alteração:** 023
+**Data:** 20/09/2026
+
+### Objetivo
+
+Tirar as revisões do estado paralisado: permitir que um pedido já criado pelo
+usuário gere uma proposta (via IA externa, colando/colando texto), sem API paga,
+sem segredo no frontend e sem autoaplicar.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/lesion-review.test.js`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+- Botão `🤖 Preparar para IA` em cada revisão `pending`/`rejected`, abrindo um
+  painel com `📋 Copiar pedido para IA` e `📥 Colar solução da IA`.
+- `buildReviewAiPacket`/`buildReviewAiPrompt` montam o pacote (só metadados de
+  imagem, sem blob) e o texto de instrução; não alteram `DATA` nem status.
+- `importReviewAiSolution` valida JSON/reviewId/status/allowlist e, se válido,
+  chama `setReviewSolution` (status `proposed`, `DATA` intocada); se inválido,
+  não altera nada e mostra erro.
+- Nenhuma chave de API, nenhum backend, nenhuma chamada de rede.
+
+### Testes realizados
+
+- `node --test tests/lesion-review.test.js`: 61 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 18 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 86 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 8 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Uma revisão pendente pode gerar uma proposta e aparecer em 💡 Soluções
+imediatamente, mantendo `DATA` intocada até a autorização manual do usuário. A
+IA continua sem qualquer caminho para criar revisão, autorizar ou alterar
+ownership.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 024 — Simplificação do fluxo Revisão → Solução
+
+**Número da alteração:** 024
+**Data:** 20/09/2026
+
+### Objetivo
+
+Eliminar o clique intermediário "✓ autorizar correção": ao importar a solução
+da IA, a correção é aplicada provisoriamente e o usuário só decide entre
+Manter e Desfazer.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/lesion-review.test.js`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+- Importar o JSON válido aplica PROVISORIAMENTE (snapshot antes +
+  `applied_pending_validation`), reusando a função auditada de aplicação.
+- Nova tela `🔎 Validar correção` com antes/depois, resumo e botões
+  `👁 ver lesão`, `✓ Manter correção`, `↩ Desfazer correção`.
+- 💡 Soluções passa a priorizar a aba "Validar correções"; a aba "Propostas" só
+  aparece para itens legados.
+- Removido o clique obrigatório de autorização da UX; a função interna continua
+  existindo (e é reusada na importação), com o histórico marcando
+  `origin: 'import'`.
+- Sem API, sem segredo, sem backend.
+
+### Testes realizados
+
+- `node --test tests/lesion-review.test.js`: 66 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 18 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 86 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 8 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+O usuário vê o resultado da correção imediatamente após colar o JSON da IA e
+decide Manter ou Desfazer uma única vez. `DATA` só muda após a ação humana de
+importar; rollback é exato e reabre a revisão para nova tentativa.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 025 — Respostas da IA sem campos aplicáveis ({} e ação manual)
+
+**Número da alteração:** 025
+**Data:** 20/09/2026
+
+### Objetivo
+
+Corrigir a UX da ponte de IA: uma resposta legítima com `proposedChanges = {}`
+(normal em pedidos que a IA não pode executar, como remover imagem) era
+rejeitada como "campos inválidos". Agora ela é tratada corretamente.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/lesion-review.test.js`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+- Importação aceita `{}` (e ausente/nulo) sem erro, sem alterar dados.
+- Novo status `manual_action_required` para pedidos de imagem/ownership/
+  estrutura, que não altera dados, sai da fila de pendentes e fica visível na
+  aba "Ação manual" do 💡 Soluções.
+- Nova tela de ação manual com pedido, resumo da IA, motivo e botão
+  `Abrir lesão para correção manual` (abre o editor; nada é removido sozinho).
+- `reopenManualActionReview` devolve a revisão para a fila; cancelamento também
+  funciona nesse status.
+- Campo fora da allowlist continua rejeitado; segurança não foi afrouxada.
+
+### Testes realizados
+
+- `node --test tests/lesion-review.test.js`: 76 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 18 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 86 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 8 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Pedidos que a IA não pode resolver deixam de parecer erro ou ficar travados:
+viram uma tarefa manual clara, com botão para abrir a lesão, sem qualquer
+alteração automática de imagem ou ownership.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 026 — Fluxo em lote para revisões pendentes com IA
+
+**Número da alteração:** 026
+**Data:** 20/09/2026
+
+### Objetivo
+
+Substituir o processamento revisão-a-revisão por um fluxo em lote: selecionar
+várias revisões pendentes, gerar UM prompt, colar UMA vez o JSON de volta e
+validar os resultados.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/lesion-review.test.js`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+- Botão `🤖 Analisar pendências com IA` na Central de Revisões.
+- Tela de seleção múltipla (checkbox + "Selecionar todas") com
+  `📋 Copiar lote para IA` e `📥 Colar respostas da IA` + `Processar lote`.
+- Funções novas: `getBatchEligibleReviews`, `buildReviewAiBatchPacket`,
+  `buildReviewAiBatchPrompt`, `processReviewAiBatchItem`, `importReviewAiBatch`.
+- Resultados aceitos: `apply`, `manual_action_required`, `no_change`.
+- Resumo final (processadas/aplicadas/ações manuais/sem alteração/falharam) e
+  lista de falhas individuais.
+- Aba do 💡 Soluções renomeada para **🛠 Ações manuais**.
+
+### Segurança
+
+- Sem API direta e sem segredo no frontend; continua manual (copiar/colar).
+- `apply` só aplica provisoriamente, com `beforeSnapshot` por revisão; nada vira
+  `accepted` automaticamente e não há "Aceitar tudo".
+- `manual_action_required` e `no_change` não alteram `DATA`.
+- Imagens, ownership, IDs, SRS, REVIEW e progresso seguem proibidos.
+- Falha parcial isolada: um item inválido não corrompe os válidos.
+- Reimportar o mesmo JSON não duplica aplicação.
+
+### Testes realizados
+
+- `node --test tests/lesion-review.test.js`: 93 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 18 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 86 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 8 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Processar muitas revisões de uma vez, com validação individual dos resultados e
+proteção total de dados, imagens e ownership.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 027 — Feedback humano nas próximas tentativas da IA
+
+**Número da alteração:** 027
+**Data:** 20/09/2026
+
+### Objetivo
+
+Fazer o motivo escrito pelo usuário (ao recusar/desfazer) chegar à próxima
+tentativa da IA, para ela não repetir a mesma solução errada.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/lesion-review.test.js`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+- Persistência do motivo: `rejectionReason`, `rollbackReason`, `humanFeedback[]`,
+  `lastHumanFeedback`, `attempt.rollbackReason`.
+- `reopenManualActionReview(reviewId, reason)` com motivo opcional (UI pergunta).
+- `buildReviewAiPacket` com `previousAttempts` (summary/reasoning/proposedChanges/
+  outcome/humanFeedback), `latestHumanFeedback`, `previousOutcome` — sem
+  `beforeSnapshot`.
+- `buildReviewAiPrompt` com instrução de ler o feedback e não repetir solução
+  recusada.
+- Prompt em lote com instrução global sobre tentativas anteriores.
+- `setReviewSolution` guarda `summary`/`reasoning` da solução.
+
+### Testes realizados
+
+- `node --test tests/lesion-review.test.js`: 105 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 18 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 86 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 8 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+O feedback humano é preservado, aparece no histórico e entra no pacote/prompt da
+IA (individual e em lote). Gerar pacote é read-only. Nada de imagens/ownership
+foi afetado.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 028 — Consistência do latestHumanFeedback (histórico)
+
+**Número da alteração:** 028
+**Data:** 20/09/2026
+
+### Objetivo
+
+Corrigir `latestHumanFeedback: null` em revisões históricas que já tinham
+`previousAttempts[].humanFeedback` (casos reais de recusa e rollback).
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/lesion-review.test.js`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+- `resolveLatestHumanFeedback(review, attempts)` (read-only): prioriza
+  `lastHumanFeedback`, depois o feedback não vazio da tentativa mais recente,
+  depois `null`.
+- `buildReviewAiPacket` usa a normalização; o lote herda.
+- `buildReviewAiAttempts` preserva `text` legado sem fabricar
+  summary/reasoning.
+
+### Segurança
+
+Somente leitura: não escreve no IndexedDB, não cria histórico, não muda status
+nem UX. Fluxo em lote, ponte de IA e status permanecem como estavam.
+
+### Testes realizados
+
+- `node --test tests/lesion-review.test.js`: 114 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+O feedback humano histórico volta a aparecer em `latestHumanFeedback` no pacote
+individual e no lote, sem alterar dados.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 029 — Fluxo híbrido de localizações adicionais (altPlacements)
+
+**Número da alteração:** 029
+**Data:** 20/09/2026
+
+### Objetivo
+
+Permitir que a IA sugira uma localização adicional (ex.: "também em
+Neurorradiologia") e o usuário aplique com 1 clique + confirmação, sem abrir o
+editor para montar tudo manualmente.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/lesion-review.test.js`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+- `manualAction.type = additional_section_placement` com `suggestedPlacement`.
+- Validação de seção/sítio existentes (`validateReviewAiPlacement`), lote e
+  individual.
+- `applyReviewAiSuggestedPlacement` (snapshot antes, altPlacements, provisório).
+- UI: botão `✓ Aplicar localização sugerida` + confirmação; seletor de sítio
+  quando a sugestão não traz um.
+- Editor: "Também aparece em" com `+ Adicionar localização`.
+- Prompts (individual/lote) com a lista de seções/sítios válidos.
+
+### Segurança
+
+Sem API/segredo; nada aplicado automaticamente (exige confirmação humana);
+`accepted` só por decisão do usuário; rollback exato via `beforeSnapshot`;
+imagens/ownership/IDs intactos; só `additional_section_placement` tem o atalho.
+
+### Testes realizados
+
+- `node --test tests/lesion-review.test.js`: 127 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 18 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 86 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 8 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Revisões de localização adicional deixam de ficar presas: a sugestão vira uma
+ação de 1 clique com confirmação, provisória e reversível, preservando todo o
+resto da lesão.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 030 — Robustez do importador do lote (JSON da IA)
+
+**Número da alteração:** 030
+**Data:** 20/09/2026
+
+### Objetivo
+
+Tornar "📥 Colar respostas da IA" resistente a respostas JSON válidas de
+ChatGPT/Claude/DeepSeek, sem afrouxar a validação de segurança.
+
+### Estado antes
+
+O lote fazia apenas `JSON.parse(String(rawText||'').trim())` e, em falha,
+mostrava "JSON inválido" descartando o erro. Respostas em bloco Markdown ou com
+BOM/caracteres invisíveis nas bordas eram recusadas sem explicação.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/lesion-review.test.js`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+- `normalizeReviewAiBatchJson`: String → trim → remove BOM/zero-width só nas
+  bordas → aceita um bloco ```json … ``` (ou ``` … ```).
+- `parseReviewAiBatchJson`: usa a normalização e devolve `parseError`
+  (`kind`/`position`/`line`/`column`) sem expor o conteúdo colado.
+- `formatReviewAiBatchParseError`: mensagem com orientação (vazio/incompleto/
+  cerca inválida/sintaxe), dizendo que nada foi processado.
+- A UI separa "não foi possível interpretar o JSON" de "formato do lote
+  inválido".
+
+### Segurança
+
+Nenhuma mudança na validação semântica: campos proibidos, `result`
+desconhecido, reviewId inexistente/duplicado e `proposedChanges` inválido
+continuam rejeitados, item a item. Sem API, sem segredo, sem rede. O parser
+continua sendo o `JSON.parse` nativo — sem correção de conteúdo nem recorte
+"do primeiro `{` ao último `}`".
+
+### Observação
+
+A solicitação chegou truncada no trecho de normalização; foram implementados os
+passos visíveis (String, trim, BOM, zero-width nas bordas, code fence). Passos
+adicionais devem ser confirmados antes de ampliar.
+
+### Testes realizados
+
+- `node --test tests/lesion-review.test.js`: 134 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 18 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 86 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 8 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+A moldura externa deixou de derrubar o parse e, quando o JSON é realmente
+inválido, o usuário recebe uma dica de onde está o problema — sem que o
+conteúdo colado seja registrado ou exibido.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 031 — Correção visual da linha de ações da Central de Soluções
+
+**Número da alteração:** 031
+**Data:** 20/09/2026
+
+### Objetivo
+
+Corrigir SOMENTE o layout responsivo do card da aba **🛠 Ações manuais** (e das
+demais telas que usam as mesmas classes), eliminando o overflow horizontal e o
+botão cortado.
+
+### Estado antes
+
+`.review-center-row-actions` usava `flex-shrink:0` (bloco de botões não
+encolhia) e `.review-center-row-main` usava `min-width:220px` (texto não
+encolhia). Em modal estreito, os botões ultrapassavam a largura e o
+`.review-center-modal` exibia scroll horizontal.
+
+### Arquivos modificados
+
+- `index.html` (apenas CSS)
+- `tests/lesion-review.test.js` (4 testes estáticos de layout)
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### O que foi alterado
+
+- `.review-center-row`: `width/max-width:100%`, `min-width:0`,
+  `box-sizing:border-box`.
+- `.review-center-row-main`: `flex:1 1 240px; min-width:0`.
+- `title`/`meta`/`request`/`solution`: `overflow-wrap:anywhere; word-break:break-word`.
+- `.review-center-row-actions`: `flex:1 1 auto; min-width:0; flex-wrap:wrap`
+  (sem `flex-shrink:0`, sem `nowrap`).
+- `.review-center-row-actions .btn`: `max-width:100%; white-space:normal; overflow-wrap:anywhere`.
+- `.review-center-modal`/`.review-history-modal`: `overflow-x:hidden` (mantendo `overflow-y:auto`).
+- `.review-tabs`: `flex-wrap:wrap`.
+
+### O que NÃO mudou
+
+Lógica de revisão, status, `manual_action_required`, botão de abrir lesão,
+cancelamento, histórico, `altPlacements`, ownership, `DATA` e snapshots — nada
+disso foi tocado.
+
+### Testes realizados
+
+- `node --test tests/lesion-review.test.js`: 138 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 18 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 86 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 8 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Os cards respeitam a largura do modal, os botões quebram para novas linhas e
+não há mais scroll horizontal. Sem suíte de layout visual no projeto, a
+confirmação estética final depende de reteste manual no navegador.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 032 — Preview local do quadro de imagens no Quiz (pending)
+
+**Número da alteração:** 032
+**Data:** 20/09/2026
+
+### Objetivo
+
+Corrigir o preview quebrado de um quadro de imagens criado no Quiz antes de
+"concluído" (miniatura vazia e "Clique para ampliar" sem imagem), sem permitir
+upload antecipado.
+
+### Estado antes
+
+O quadro pending (`openCollageBuilder`, `deferUpload=true`) era devolvido sem o
+campo `data`; a galeria do Quiz e o `openImageLightbox` leem `img.data`, então o
+`src` ficava `undefined`. O editor tinha o mesmo defeito latente.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/quiz-images.test.js`
+- `tests/critical-flows.test.js` (âncora do handler de importação)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- O ramo `deferUpload` do `openCollageBuilder` agora devolve
+  `data:objectUrl` (mesma blob URL de `_objectUrl`), como `buildPendingImage`.
+- O renderer do modal do Quiz usa `img.data || img._objectUrl` na miniatura e no
+  ampliar (`openImageLightbox(src)`).
+
+### O que NÃO mudou
+
+Política de upload tardio (zero Cloudinary antes de "concluído"), ownership,
+Revisões/Soluções, `altPlacements`, snapshots, parser JSON e os demais fluxos do
+Quiz — nada disso foi tocado.
+
+### Testes realizados
+
+- `node --test tests/quiz-images.test.js`: 98 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 138 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 18 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 8 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+O quadro pending mostra a miniatura e amplia usando o preview LOCAL, sem nenhum
+upload antes de "concluído". A proteção contra upload antecipado permanece
+intacta.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 033 — Contador + navegação no canto superior esquerdo do carrossel do Quiz
+
+**Número da alteração:** 033
+**Data:** 20/09/2026
+
+### Objetivo
+
+Deixar claro, com 2+ imagens, quantas existem e qual está sendo exibida, com um
+overlay `‹ n / total ›` no canto superior esquerdo da imagem.
+
+### Estado antes
+
+Havia setas laterais e um bloco textual inferior (`← Imagem anterior` /
+`Imagem X de Y` / `Próxima imagem →`), mas o estado do carrossel não ficava
+imediatamente claro.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/quiz-images.test.js`
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- Overlay `.quiz-carousel-overlay` (absoluto, canto superior esquerdo) com seta
+  anterior, contador `n / total` e seta próxima, gated por `hasMultiple`.
+- Setas do overlay usam as MESMAS `goPrev`/`goNext` e o mesmo `quizImgIdx` das
+  setas laterais; navegação circular e teclado preservados.
+- Removido o contador/controles textuais inferiores (sem tripla navegação) e o
+  CSS morto correspondente.
+- `aria-label` nas setas e `aria-live`/`aria-label` no contador.
+
+### O que NÃO mudou
+
+Lógica de questões, score, SRS, SESSIONLOG, Anterior/Próxima questão, Pular,
+edição da lesão, upload Cloudinary, Revisões/Soluções, snapshots, ownership e
+`altPlacements`.
+
+### Testes realizados
+
+- `node --test tests/quiz-images.test.js`: 101 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 138 PASS, 0 FAIL;
+- `node --test tests/snapshots-ownership.test.js`: 18 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 8 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Com 2+ imagens, o carrossel mostra `‹ n / total ›` no canto superior esquerdo,
+sempre em sincronia com as setas laterais e o teclado. Sem suíte de layout
+visual no projeto, a confirmação estética final depende de reteste manual.
+
+### Commit após aprovação
+
+Ainda não criado.
+
+## ALTERAÇÃO 034 — Auditoria + sincronização explícita localhost ↔ site publicado
+
+**Número da alteração:** 034
+**Data:** 20/09/2026
+
+### Objetivo
+
+Permitir que o estado correto do localhost vire o estado usado pelo site
+publicado, com auditoria, confirmação e snapshot — sem reativar sincronização
+automática destrutiva.
+
+### Estado antes
+
+O localhost já enviava para o Firestore via `saveData`/`pushToFirebaseNow`, mas
+o site publicado não recebia automaticamente (pull no boot desativado na
+Alteração 008) e não havia uma ação explícita de sincronização na interface.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/snapshots-ownership.test.js`
+- `tests/critical-flows.test.js` (âncoras + call sites explícitos)
+- `tests/tools-layout.test.js` (inalterado no comportamento; só presença)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- `syncAuditCounters` (puro) + `buildSyncAudit` (read-only) comparando local × nuvem.
+- `syncThisDeviceToCloud` (snapshot antes; push; sem pull; sem ownership) e
+  `forceThisDeviceToCloud` reutilizando-a.
+- Botões `☁ sincronizar este dispositivo` e `⬇ atualizar deste backup/nuvem`,
+  com modais de auditoria + confirmação.
+- `openUpdateFromCloudModal` chama `syncFromFirebase()` como AÇÃO EXPLÍCITA.
+
+### Segurança
+
+- Auditoria não grava nada.
+- Push cria snapshot antes e não toca ownership/imagens.
+- Pull só por clique consciente (snapshot antes), nunca automático.
+- Cloudinary não recebe reenvio (só imagens locais legadas migram).
+- Backup continua como fallback oficial (inclui revisões).
+
+### Testes realizados
+
+- `node --test tests/snapshots-ownership.test.js`: 30 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 101 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 138 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 8 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+O usuário consegue auditar (sem alterar nada), enviar o estado do localhost para
+a nuvem com confirmação/snapshot, e trazer da nuvem para o site publicado de
+forma explícita — sem sobrescrita silenciosa e sem reativar o pull automático.
+
+### Commit após aprovação
+
+Ainda não criado.

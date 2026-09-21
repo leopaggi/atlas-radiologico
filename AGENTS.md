@@ -2,6 +2,7 @@
 
 Este arquivo define as regras de trabalho para qualquer agente de IA que atue no Atlas Radiologico. Antes de propor ou aplicar mudancas, leia integralmente:
 
+- `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` (estado atual do projeto)
 - `AI.md`
 - `README.md`
 - `LOG_DESENVOLVIMENTO.md`
@@ -86,6 +87,8 @@ Nessas areas:
 - Antes de alterar upload, exclusao, migracao ou associacao de imagens, avalie referencias no `SEED`, IndexedDB, Firestore e Cloudinary.
 - Uma imagem removida diretamente do Cloudinary pode deixar uma referencia quebrada; corrija somente a referencia confirmada e autorizada.
 - Nao exclua assets remotos nem faca limpeza em lote sem confirmacao explicita.
+- **OWNERSHIP PROTEGIDO:** uma imagem ja atribuida a uma lesao NUNCA pode perder essa atribuicao, trocar `lesionId`/`lesionName` ou ser movida para outra lesao por nenhum fluxo AUTOMATICO (importacao, reconciliacao, deduplicacao, migracao, recuperacao, sincronizacao ou IA futura). Somente acao MANUAL explicita do usuario pode alterar ownership — a funcao central e `canChangeImageOwnership(image, newLesionId, context)`, que so libera quando `context.manual === true` (ver `IMAGE_OWNERSHIP_MANUAL`); quem tenta mudar sem contexto manual e bloqueado por `assertManualImageOwnershipChange` e o conflito e REGISTRADO (`registerImageOwnershipConflict`), nunca resolvido em silencio.
+- **SNAPSHOT ANTES DE RISCO:** antes de operacao de risco que altere muitas lesoes/imagens (importar backup, restaurar padrao, recuperar dados antigos, reconciliar em massa, deduplicar, migrar, operacao em massa de ownership) criar um snapshot local leve via `createSafetySnapshot(motivo)` (ate 5, no IndexedDB; sem duplicar binarios do Cloudinary). Restauracao e SEMPRE manual e cria um snapshot do estado atual antes. NAO criar snapshot em edicao comum/Quiz/marcar revisao.
 
 ## Quiz, progresso e interface
 
@@ -128,7 +131,33 @@ Nessas areas:
 
 ## Notificacao de conclusao
 
-Ao terminar qualquer tarefa solicitada neste projeto — depois de testes, validacoes e relatorio final — a ULTIMA acao operacional deve ser enviar uma notificacao ntfy para `https://ntfy.sh/acervo-leo-7k29-radiologia`.
+**NTFY — REGRA ESTRITA:**
+A notificacao ntfy deve ser a ULTIMA acao operacional de toda tarefa.
+So enviar depois de concluir codigo, inspecoes, testes e verificacoes.
+Antes de chamar ntfy, preparar a resposta final completa.
+Depois de enviar ntfy, nao executar nenhuma ferramenta, shell, teste, edicao, comando git ou outra acao operacional.
+A unica coisa permitida apos ntfy e entregar ao usuario a resposta final ja preparada.
+
+Ordem obrigatoria:
+
+1. terminar todas as alteracoes de codigo;
+2. terminar todos os testes;
+3. terminar git diff/status/checks necessarios;
+4. preparar internamente a resposta final completa;
+5. somente entao enviar ntfy;
+6. depois do ntfy, NAO executar mais nenhum comando, teste, edicao, git, shell ou qualquer outra acao operacional;
+7. responder ao usuario com o resumo final ja preparado.
+
+O ntfy NAO deve ser enviado:
+
+- ao comecar a tarefa;
+- durante a implementacao;
+- antes dos testes;
+- antes do git diff/status;
+- antes de terminar a inspecao;
+- antes de preparar o resultado final.
+
+Destino: `https://ntfy.sh/acervo-leo-7k29-radiologia`.
 
 Comando padrao no Windows:
 
@@ -136,10 +165,8 @@ Comando padrao no Windows:
 powershell.exe -NoProfile -Command "Invoke-RestMethod -Method Post -Uri 'https://ntfy.sh/acervo-leo-7k29-radiologia' -Body 'Acervo Radiologico: tarefa concluida. Verifique o terminal para o resultado.'"
 ```
 
-Regras:
+Complementos:
 
-- a notificacao deve ser a ULTIMA acao operacional da tarefa;
-- envie somente depois que a tarefa realmente tiver terminado;
 - se houver erro ou bloqueio que exija intervencao do usuario, notifique tambem, deixando isso claro na mensagem;
 - nao remova nem altere esta regra em tarefas futuras;
 - nao inclua segredos ou dados sensiveis na mensagem;

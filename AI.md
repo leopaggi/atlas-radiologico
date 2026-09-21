@@ -1275,3 +1275,878 @@ pular NÃO aumenta o percentual. O resumo continua aparecendo só quando
 `tests/quiz-images.test.js` ganhou 9 cenários de navegação. Resultado:
 **82 PASS, 0 FAIL**. Âncoras de `tests/critical-flows.test.js` para
 4821/4811/7121/9557.
+
+## Alteração 021 — Snapshots locais leves e proteção forte de ownership
+
+### Snapshots locais leves (IndexedDB)
+
+`createSafetySnapshot(motivo)` agora grava de verdade — mas SOMENTE para
+motivos de RISCO (`SAFETY_SNAPSHOT_RISK_REASONS`): importar backup, restaurar
+padrão de fábrica, recuperar dados antigos, fundir duplicatas, aplicar
+reconciliação V2, restaurar snapshot e operação em massa de ownership. Qualquer
+outro motivo (edição comum, Quiz, marcar revisão, abertura do Atlas, sync) é
+IGNORADO — nenhum snapshot a cada clique.
+
+- Guarda o estado ESTRUTURADO: `data` (catálogo + metadados de imagem, com
+  `publicId`/`assetId`/`label`/`source`/`sourcePage`/`sourceSite`/`license`/
+  `artist`/`attribution`/`originalUrl`/`lesionId`/`lesionName`), `review`, `srs`,
+  `sessionLog`, `lesionRevisions`, `sectionOrder`, `siteOrder` e contagens.
+- NUNCA copia binários remotos do Cloudinary — a imagem fica só como URL.
+- Retenção de **5**: ao criar o 6º, o mais antigo é apagado (escrita
+  serializada para evitar corrida).
+- Cada snapshot tem `id`, `createdAt`, `reason`, `lesionCount`, `imageCount`,
+  tamanho aproximado e `snapshotVersion` (schema 2).
+- A lista mostra data/hora, motivo, lesões, imagens, tamanho e schema.
+- **Restauração SEMPRE manual** (botão "Snapshots de segurança" nas ferramentas
+  avançadas): abre o resumo, exige confirmação forte e, ANTES de sobrescrever,
+  cria um snapshot do estado ATUAL (`antes de restaurar snapshot de segurança`).
+  Pode excluir um snapshot manualmente. Não sincroniza a nuvem.
+
+### Proteção forte de ownership de imagens
+
+Regra permanente: uma imagem já atribuída a uma lesão NÃO pode perder essa
+atribuição por nenhum fluxo AUTOMÁTICO.
+
+- `canChangeImageOwnership(image, newLesionId, context)` — só permite trocar o
+  dono quando o dono não muda ou quando `context.manual === true`.
+- `assertManualImageOwnershipChange(...)` — bloqueia a mudança automática e
+  REGISTRA o conflito (`registerImageOwnershipConflict`), devolvendo a imagem
+  inalterada. Nunca resolve em silêncio.
+- `detectImageOwnershipConflicts(data)` (read-only) — acha o mesmo asset em 2+
+  lesões e imagem cujo `lesionId`/`lesionName` diverge da lesão que a contém.
+- **Importação:** `preserveLocalImageOwnershipOnImport(imported, local)` — uma
+  imagem que já existia localmente mantém a atribuição local (a lesão dona ainda
+  existindo no backup); o conflito é registrado e avisado por toast. O backup
+  pode adicionar metadados/imagens novas, mas NÃO troca ownership sozinho.
+- Deduplicação/reconciliação só consolidam a MESMA identidade semântica; mover
+  imagem para lesão diferente exige ação manual (contexto manual).
+- IA futura: pode detectar atribuição possivelmente errada e propor via
+  `setReviewSolution`; NÃO pode criar revisão, mover/remover imagem, trocar
+  ownership nem aplicar correção automaticamente.
+
+Testes: `tests/snapshots-ownership.test.js` (18 cenários). Resultado:
+**18 PASS, 0 FAIL**. Âncoras de `tests/critical-flows.test.js` para
+4946/4936/7249/9685.
+
+## Alteração 023 — Ponte segura para IA (manual-assistida) na Central de Revisões
+
+Motivo: os pedidos da Central de Revisões ficavam parados porque não havia um
+fluxo prático que produzisse propostas para `setReviewSolution()`. O usuário
+criava revisões (status `pending`), mas nada aparecia em 💡 Soluções.
+
+### O que foi implementado (SEM API, SEM segredo, SEM backend)
+
+Na Central de Revisões, cada revisão `pending`/`rejected` ganhou
+`🤖 Preparar para IA`, que abre um painel com:
+
+- `📋 Copiar pedido para IA` — gera um texto estruturado (pacote da revisão +
+  instruções) para colar em qualquer IA (OpenCode/Claude/DeepSeek).
+- `📥 Colar solução da IA` — campo para colar o JSON devolvido pela IA; valida e
+  importa como proposta.
+
+Funções (no módulo `LESION_REVISIONS`):
+
+- `buildReviewAiPacket(reviewId)` — pacote SOMENTE daquela revisão: `reviewId`,
+  `lesionId`, nome/seção/sítio, `requestText`, campos atuais (`name`, `notes`,
+  `classification`, `tags`, `enTerm`), metadados de imagem (SEM blob/binário),
+  tentativas anteriores e a allowlist/proibidos. Não altera `DATA` nem status.
+- `buildReviewAiPrompt(reviewId)` — texto pronto para a IA, explicando que é uma
+  revisão criada manualmente, o problema, os campos permitidos e que ela deve
+  devolver SOMENTE o JSON `{reviewId, summary, reasoning, proposedChanges}` e
+  não aplicar nada.
+- `importReviewAiSolution(reviewId, rawText)` — valida JSON, `reviewId`,
+  existência, status que aceita proposta e `proposedChanges` pela allowlist
+  existente (`validateProposedChanges`); em sucesso chama `setReviewSolution`
+  (status `proposed`, `DATA` intocada); em falha não altera nada.
+
+### Regras de status
+
+- `pending` → pode preparar/importar;
+- `rejected` → pode preparar/importar NOVA tentativa (histórico preservado);
+- `proposed` → já tem proposta (não duplica);
+- `applied_pending_validation`, `accepted`, `cancelled` → bloqueiam.
+
+### Regra permanente da IA (inalterada)
+
+A IA NUNCA cria revisão, marca lesão, aplica correção, autoriza a própria
+solução, remove/move imagem, altera ownership nem modifica `DATA`. Ela só recebe
+uma revisão JÁ EXISTENTE e devolve uma PROPOSTA; importar a proposta NÃO é
+autorizar — o usuário ainda precisa clicar `✓ autorizar correção` e depois
+`✓ funcionou — manter` / `↩ não funcionou — desfazer`.
+
+> **SUPERSEDIDO pela Alteração 024:** o clique intermediário
+> `✓ autorizar correção` foi REMOVIDO da UX. Importar a solução da IA já aplica
+> PROVISORIAMENTE e abre a tela `🔎 Validar correção`, onde o usuário decide
+> `✓ Manter correção` (`accepted`) ou `↩ Desfazer correção` (rollback exato).
+> A regra permanente acima continua valendo; só a etapa visual de autorização
+> deixou de existir.
+
+### Testes
+
+`tests/lesion-review.test.js` ganhou 10 cenários (pacote correto/sem alterar
+DATA/sem blob; prompt; import válido → `proposed` e 💡; proibidos `images`/
+`lesionId`/reviewId errado; JSON inválido; `proposed` sem duplicata; `rejected`
+nova tentativa; bloqueios; e a regra estática de que a ponte não cria revisão
+nem mexe em ownership/imagens). Resultado: **61 PASS, 0 FAIL**. Âncoras de
+`tests/critical-flows.test.js` para 5014/5004/7317/9800.
+
+## Alteração 024 — Simplificação: importar já aplica provisoriamente (sem "autorizar correção")
+
+Motivo: o fluxo tinha burocracia dupla — importar a proposta **e depois** clicar
+`✓ autorizar correção` em 💡 Soluções só para ver o resultado. A decisão humana
+importante é **manter** ou **desfazer**, não autorizar duas vezes.
+
+### Novo fluxo (o anterior tinha um clique a mais)
+
+revisão `pending`/`rejected` → `🤖 Preparar para IA` → `📋 Copiar pedido` →
+IA devolve JSON → `📥 Colar solução da IA` → `Importar e aplicar correção` →
+**aplica PROVISORIAMENTE** (snapshot antes + `applied_pending_validation`) →
+abre a tela `🔎 Validar correção` (antes → depois + resumo) →
+`✓ Manter correção` (`accepted`) **ou** `↩ Desfazer correção` (rollback exato +
+`rejected`, permitindo nova tentativa).
+
+### O que mudou no código
+
+- `importReviewAiSolution()`: após validar tudo (JSON, `reviewId`, status,
+  allowlist), chama `setReviewSolution()` e, em seguida,
+  `authorizeAndApplyReviewSolution(reviewId, { origin:'import' })` — reusa a
+  função auditada que cria o `beforeSnapshot` e escreve só os campos
+  permitidos. Em qualquer falha, **nada** é alterado.
+- `authorizeAndApplyReviewSolution(reviewId, opts)`: ganhou o parâmetro opcional
+  `opts.origin`; com `'import'` registra no histórico que a aplicação provisória
+  veio da importação humana (ação explícita de colar/importar). Sem `opts`, o
+  comportamento é **idêntico** ao anterior (autorização por clique, mantida para
+  o legado).
+- Nova `openReviewValidationModal(reviewId, opts)`: tela de validação com
+  `👁 ver lesão`, `✓ Manter correção` e `↩ Desfazer correção`; aberta
+  automaticamente logo após importar.
+- 💡 Soluções: aba principal agora é **Validar correções**
+  (`applied_pending_validation`). A aba **Propostas** (`proposed`) só aparece se
+  houver propostas LEGADAS — o fluxo atual não deixa nada parado em `proposed`.
+- O status `proposed` e `setReviewSolution()` continuam existindo internamente
+  (compatibilidade com dados antigos e com o console), mas **não** são mais uma
+  etapa visual obrigatória.
+
+### Segurança (preservada)
+
+- Aplicação provisória só ocorre após ação humana explícita de colar/importar o
+  JSON **daquela** revisão; a IA nunca cria revisão, nunca marca `accepted`,
+  nunca desfaz, nunca toca imagens/ownership.
+- `beforeSnapshot` é criado ANTES de qualquer escrita; rollback restaura
+  EXATAMENTE o snapshot e volta a `rejected` (nova tentativa permitida).
+- Allowlist inalterada: `name`, `notes`, `classification`, `tags`, `enTerm`.
+  Proibidos: `images`, ownership (`lesionId`/`lesionName`), IDs, `SRS`,
+  `REVIEW`, progresso e campos estruturais.
+
+### Contadores
+
+`🔔` diminui ao importar; `💡` passa a representar a correção aguardando
+validação. Não há contador separado para proposta que precise de autorização.
+
+### Testes
+
+`tests/lesion-review.test.js` atualizado (import aplica direto; ausência da
+etapa intermediária; snapshot antes; manter → `accepted`; desfazer → rollback
+exato + `rejected`; nova tentativa; JSON inválido/campo proibido sem alterar
+DATA; images/ownership bloqueados; IA não cria revisão nem marca accepted;
+contadores; sem duplicar tentativa). Resultado: **66 PASS, 0 FAIL**.
+Âncoras de `tests/critical-flows.test.js`: 5030/5020/7333/9891.
+
+## Alteração 025 — Respostas da IA sem campos aplicáveis: `{}` e ação manual
+
+Motivo: um pedido real de **remoção de imagem** fazia a IA responder
+corretamente `"proposedChanges": {}` (porque `images`/ownership são proibidos),
+mas o importador rejeitava com "Campos inválidos: só name, notes, classification,
+tags, enTerm são aceitos". Isso tratava uma resposta legítima como erro.
+
+### Três resultados válidos da importação
+
+1. **Proposta aplicável** — `proposedChanges` com ao menos um campo permitido →
+   aplica PROVISORIAMENTE (`applied_pending_validation`) e abre `🔎 Validar
+   correção` (Manter / Desfazer). Sem mudança.
+2. **Nenhuma alteração aplicável** — `proposedChanges = {}` e o texto não
+   menciona imagem/ownership/estrutura → **não** é erro, **não** altera dados,
+   **não** aplica, **não** marca `accepted`. Mostra: "Esta revisão não possui
+   alteração aplicável nos campos permitidos." (outcome `no_applicable_changes`).
+3. **Ação manual necessária** — `proposedChanges = {}` e o pedido/resumo
+   menciona imagem, ownership ou estrutura (ex.: "remover imagem", "mover
+   imagem", `lesionId`, "alteração estrutural") → status
+   `manual_action_required` (outcome `manual_action_required`). **Não** altera
+   dados nem ownership.
+
+### Status `manual_action_required`
+
+- Não conta como `accepted` nem como `applied_pending_validation`;
+- não altera `DATA`; permanece no histórico;
+- sai da fila de pendentes (não fica "travado") e aparece na aba **Ação manual**
+  do 💡 Soluções (que entra no contador 💡);
+- pode voltar para a fila normal (`reopenManualActionReview` → `pending`) e
+  também pode ser cancelado;
+- estados existentes (`pending`, `rejected`, `proposed`,
+  `applied_pending_validation`, `accepted`, `cancelled`) preservados.
+
+### Ação manual na UI
+
+Modal/tela com **pedido original**, **resumo da IA**, **motivo** e o botão
+`🖼 Abrir lesão para correção manual` (ou `✏` quando não é imagem), que abre o
+editor normal da lesão (`openDetail`). **Nada é removido automaticamente** — a
+remoção/movimentação de imagem continua dependendo de ação explícita do usuário.
+
+### Importador
+
+`importReviewAiSolution()` agora:
+- aceita `proposedChanges = {}` (e `missing`/`null` como vazio);
+- valida que é objeto;
+- rejeita SOMENTE campo fora da allowlist (ou tipo inválido);
+- não rejeita mais objeto vazio como "campos inválidos".
+
+### Segurança (não afrouxada)
+
+Continua proibido: `images`, `lesionId`, `lesionName` estrutural, ownership,
+IDs, `SRS`, `REVIEW`, progresso e qualquer campo estrutural. A IA nunca cria
+revisão, nunca marca `accepted`, nunca desfaz e nunca toca `DATA` diretamente.
+
+### Testes
+
+`tests/lesion-review.test.js` ganhou cenários para: `{}` aceito sem alterar
+DATA; `{}` não vira `applied_pending_validation`; remoção de imagem vira
+`manual_action_required`; botão de abrir lesão existe e não remove imagem;
+images/ownership ainda proibidos; proposta normal (`notes`/`tags`) continua
+aplicando; campo proibido ainda rejeitado; reabrir e cancelar ação manual.
+Resultado: **76 PASS, 0 FAIL**. Âncoras de `tests/critical-flows.test.js`:
+5113/5103/7416/10088.
+
+## Alteração 026 — Fluxo EM LOTE para revisões pendentes com IA
+
+Motivo: processar revisão por revisão (preparar → copiar → colar → validar) era
+trabalhoso. Agora o fluxo principal é em lote: **UM prompt** para várias
+revisões e **UM JSON** de volta.
+
+### Fluxo em lote
+
+1 clique `🤖 Analisar pendências com IA` (na Central de Revisões) → seleção
+múltipla (checkbox por revisão + "Selecionar todas") → 1 clique
+`📋 Copiar lote para IA` → IA externa → 1 clique `📥 Colar respostas da IA` →
+1 confirmação `Processar lote`.
+
+### Elegíveis
+
+Somente `pending` e `rejected`. NÃO entram `applied_pending_validation`,
+`accepted`, `cancelled` (nem `manual_action_required`). Gerar/copiar o lote
+**não** altera status.
+
+### Pacote e prompt
+
+- `getBatchEligibleReviews()` — as pendentes elegíveis.
+- `buildReviewAiBatchPacket(reviewIds)` — UM objeto com `reviews[]` (cada item
+  igual ao pacote individual: `reviewId`, `lesionId`, `lesionName`, `section`,
+  `site`, `requestText`, `currentFields`, metadados de imagem SEM blob,
+  `previousAttempts`, `previousSolution`, `allowedFields`, `forbiddenFields`).
+- `buildReviewAiBatchPrompt(reviewIds)` — texto único explicando que as revisões
+  foram criadas manualmente, que deve analisar cada uma separadamente, não
+  inventar mudanças, usar `apply` só nos campos permitidos,
+  `manual_action_required` para o que é proibido/estrutural, `no_change` quando
+  não houver correção, devolver TODOS os `reviewId` recebidos e responder
+  SOMENTE com JSON. Inclui o formato exato e o pacote.
+
+### Tipos de resultado (só estes)
+
+- **apply** — `proposedChanges` só com a allowlist (`name`, `notes`,
+  `classification`, `tags`, `enTerm`); válido → cria `beforeSnapshot` próprio,
+  aplica PROVISORIAMENTE (`applied_pending_validation`) e aparece em
+  💡 Validar correções. NUNCA `accepted`.
+- **manual_action_required** — fora da allowlist (imagem, ownership, mover/
+  remover imagem, site/seção, `altPlacements`, IDs, estrutural). Não altera
+  dados; status `manual_action_required`; vai para a fila **🛠 Ações manuais**.
+- **no_change** — nenhuma correção. Não altera dados nem status; guarda
+  `lastAiAnalysis` para o usuário decidir (manter pendente / encerrar / cancelar).
+
+### Importação do lote
+
+`importReviewAiBatch(rawText)` valida o JSON geral e `results` (array) e
+**processa cada item isoladamente** (`processReviewAiBatchItem`). Um item
+inválido (reviewId inexistente, status não elegível, `result` desconhecido,
+campo proibido, tipo inválido, reviewId duplicado no mesmo lote) falha **apenas
+naquele item** — os válidos continuam. Retorna
+`{ ok, summary:{processed, applied, manual, noChange, failed}, items[] }`.
+A UI mostra o resumo e permite, por item: `🔎 Validar`, `✏/🖼 Abrir lesão para
+correção manual`, `manter pendente`, `✕ Encerrar revisão`, `histórico`.
+
+### Segurança transacional
+
+Cada revisão preserva seu próprio `beforeSnapshot`, histórico, status e
+rollback. Não há operação cega no lote. Reimportar o mesmo JSON **não duplica**
+aplicação: como o status saiu de `pending/rejected`, o item vira
+`not_proposable` e nada é reaplicado; `reviewId` repetido no mesmo lote é
+bloqueado por `duplicate_review_id`. A validação final continua item a item
+(`✓ Manter correção` / `↩ Desfazer correção`); **não** existe "Aceitar tudo".
+
+### Ações manuais
+
+A aba do 💡 Soluções foi renomeada para **🛠 Ações manuais** (entra no contador
+💡). Mostra lesão, pedido original, resumo da IA, motivo e tipo da ação, com
+botão `✏ Abrir lesão` / `🖼 Abrir lesão para ajustar imagens` e `↩ Voltar para
+revisões`. Nada estrutural é feito automaticamente.
+
+### Compatibilidade
+
+O fluxo individual (`🤖 Preparar para IA`, importação individual, histórico)
+continua disponível como fallback.
+
+### Segurança (inalterada)
+
+`images`, `lesionId`, `lesionName` estrutural, ownership, IDs, `SRS`, `REVIEW`,
+progresso e campos estruturais continuam proibidos. O lote/IA nunca remove ou
+move imagem, nunca troca ownership e nunca toca `DATA` fora da allowlist.
+
+### Testes
+
+`tests/lesion-review.test.js` ganhou 18 cenários do lote (elegíveis, seleção
+parcial, pacote múltiplo, prompt, importação múltipla, apply provisório com
+snapshot próprio, manual/no_change sem alterar DATA, falha parcial isolada,
+reviewId inexistente, campo proibido, images/ownership, reimportação sem
+duplicar, duplicado no lote, result inválido, fila de ações manuais, apply
+vazio, sem elegíveis, fallback individual). Resultado: **93 PASS, 0 FAIL**.
+Âncoras de `tests/critical-flows.test.js`: 5240/5230/7543/10361.
+
+## Alteração 027 — Feedback humano nas próximas tentativas da IA
+
+Motivo: quando o usuário recusava/desfazia uma solução e escrevia o motivo, a
+próxima tentativa da IA recebia um pacote praticamente igual ao anterior — sem
+o comentário humano — e a IA repetia a mesma solução errada.
+
+### Feedback persistido
+
+`rejectProposedReviewSolution` e `rollbackAppliedReviewSolution` passaram a
+guardar o motivo explicitamente na revisão:
+
+- `review.rejectionReason` / `review.rollbackReason`;
+- `review.humanFeedback[]` (`{ kind, text, at, attemptId }`, kinds
+  `proposal_rejected`, `rollback`, `manual_return`);
+- `review.lastHumanFeedback`;
+- `attempt.rollbackReason` na tentativa desfeita.
+
+`reopenManualActionReview(reviewId, reasonText)` agora aceita um motivo opcional
+(a UI `↩ Devolver para revisões` pergunta) e o registra como feedback. Motivo
+vazio NÃO cria entrada. Tudo é salvo via `saveLesionRevisions()` (sobrevive a F5)
+e aparece no histórico.
+
+### Pacote individual
+
+`buildReviewAiPacket()` agora inclui:
+
+- `previousAttempts[]` reconstruído por `buildReviewAiAttempts(review)` (read-only)
+  a partir do histórico: `attempt`, `summary`, `reasoning`, `proposedChanges`,
+  `outcome` (`rejected`/`rolledback`/`accepted`/`applied_pending_validation`/
+  `manual_action_required`), `humanFeedback`, `proposedAt`, `appliedAt`,
+  `decidedAt`. **Não inclui mais `beforeSnapshot`** (evita enviar cópia da lesão);
+- `previousSolution` com `summary`/`reasoning` separados;
+- `latestHumanFeedback`, `previousOutcome`, `rejectionReason`, `rollbackReason`.
+
+`setReviewSolution(..., meta)` guarda `summary`/`reasoning` da solução da IA
+(usados para reconstruir as tentativas).
+
+### Prompt individual
+
+`buildReviewAiPrompt()` passou a instruir: leia `previousAttempts` e o feedback
+humano; NÃO repita solução recusada (`rejected`/`rolledback`); corrija
+especificamente o problema apontado; se o que falta estiver fora da allowlist,
+responda `proposedChanges: {}` para o Atlas tratar como ação manual/sem alteração.
+
+### Fluxo em lote
+
+Cada item do pacote em lote já carrega `previousAttempts`,
+`latestHumanFeedback`, `previousSolution`, `previousOutcome` (por revisão), e o
+prompt global ganhou a instrução: "Para revisões com tentativas anteriores, use
+OBRIGATORIAMENTE o feedback humano. Não repita uma solução já recusada sem
+corrigir o motivo indicado."
+
+### Sem duplicar histórico
+
+Gerar pacote/prompt é 100% read-only: não cria tentativa, não adiciona
+histórico, não altera status. Testes garantem isso.
+
+### Segurança (inalterada)
+
+`accepted`/`cancelled` não entram em nova tentativa (pacote bloqueado e fora do
+lote). Imagens, ownership, IDs, `SRS`, `REVIEW` e progresso seguem proibidos.
+
+### Testes
+
+`tests/lesion-review.test.js` ganhou 12 cenários (motivo de recusa/rollback
+persistido, sobrevive a F5, pacote com humanFeedback/latestHumanFeedback/
+previousOutcome, prompt com feedback e "não repetir", previousAttempts em ordem,
+gerar pacote read-only, rejected com contexto, lote com feedback por revisão e
+instrução global, accepted/cancelled fora, summary/reasoning da importação).
+Resultado: **105 PASS, 0 FAIL**. Âncoras de `tests/critical-flows.test.js`:
+5346/5336/7649/10479.
+
+## Alteração 028 — Consistência do `latestHumanFeedback` (registros históricos)
+
+Motivo: em revisões históricas (criadas antes do campo direto), o pacote mostrava
+`latestHumanFeedback: null` mesmo com `previousAttempts[].humanFeedback`
+preenchido (casos reais de recusa e de rollback).
+
+### Correção (somente leitura/normalização)
+
+`buildReviewAiPacket()` passou a derivar `latestHumanFeedback` por
+`resolveLatestHumanFeedback(review, attempts)` com prioridade:
+
+1. `review.lastHumanFeedback` (feedback explícito salvo na revisão);
+2. o `humanFeedback` **não vazio** da tentativa mais recente que tiver um
+   (varre `previousAttempts` de trás para frente);
+3. `null` se não houver nada.
+
+Nada é escrito de volta no IndexedDB; a normalização é apenas de leitura. Como
+`buildReviewAiBatchPacket()` usa `buildReviewAiPacket()`, o lote herda o mesmo
+valor automaticamente.
+
+### Texto legado
+
+`buildReviewAiAttempts()` agora preserva `text` (o texto original da proposta)
+em cada tentativa. Registros antigos com `summary`/`reasoning` vazios continuam
+com eles vazios — **não se fabrica** summary/reasoning — mas a IA ainda recebe o
+texto da tentativa anterior (`previousAttempts[].text` e `previousSolution.text`).
+
+### Testes
+
+`tests/lesion-review.test.js` ganhou 9 cenários (derivação com campo direto
+ausente, rollback histórico, múltiplas tentativas, tentativa recente sem
+feedback caindo no anterior, prioridade do campo direto, nenhuma informação →
+`null`, lote herdando, read-only sem gravar, e texto legado preservado sem
+inventar summary). Resultado: **114 PASS, 0 FAIL**. Âncoras de
+`tests/critical-flows.test.js`: 5364/5354/7667/10497.
+
+## Alteração 029 — Fluxo híbrido para localizações adicionais sugeridas pela IA
+
+Motivo: revisões como "também deve aparecer em Neurorradiologia"
+(Holoprosencefalia, Agenesia do corpo caloso) ficavam em `manual_action_required`
+sem um caminho prático — o usuário teria que abrir o editor e montar tudo à mão.
+
+### Sugestão estruturada da IA
+
+Para `manual_action_required` de localização adicional, a IA pode responder:
+
+```json
+{
+  "reviewId": "...", "result": "manual_action_required",
+  "summary": "...", "reasoning": "...",
+  "manualAction": {
+    "type": "additional_section_placement",
+    "description": "...",
+    "suggestedPlacement": { "section": "Neurorradiologia", "site": null }
+  },
+  "proposedChanges": {}
+}
+```
+
+`site` pode ser `null` (a aplicação pede o sítio na confirmação).
+
+### Validação (sem alterar DATA)
+
+`validateReviewAiPlacement()` confere contra as seções/sítios que EXISTEM no
+Atlas (derivados do próprio `DATA`, incluindo altPlacements): seção inexistente
+→ `unknown_section`; sítio informado inexistente → `unknown_site`. A sugestão é
+guardada em `review.manualAction` e nada em `DATA` muda. Vale para o fluxo em
+lote e para o individual.
+
+### Aplicar com 1 clique + confirmação humana
+
+Na aba **🛠 Ações manuais** (e no modal de ação manual), quando o tipo é
+`additional_section_placement`:
+
+- mostra "Sugestão da IA: {principal} → também em {section}";
+- botão principal `✓ Aplicar localização sugerida`;
+- botão secundário `✏ Abrir lesão` (ou `🖼 Abrir lesão para ajustar imagens`).
+
+O botão abre uma confirmação ("Adicionar esta lesão também em X? A localização
+principal será preservada."). Só após confirmar, `applyReviewAiSuggestedPlacement()`
+roda. Se a sugestão não tiver sítio, a confirmação inclui um seletor de sítio.
+
+### O que a aplicação faz
+
+- guarda `beforeSnapshot`/`beforeAltPlacements` ANTES de escrever;
+- acrescenta `{ s, site }` ao `altPlacements` da MESMA lesão (campo existente —
+  sem estrutura paralela);
+- preserva `s`/`site` principal, `id`, `lesionId`, imagens e ownership;
+- não cria novo registro (contagem global/Quiz/busca inalterados);
+- `saveData()` + `saveLesionRevisions()`;
+- status vai para `applied_pending_validation` (NUNCA `accepted` automático) e a
+  lesão aparece em 💡 Validar correções com `✓ Manter correção` /
+  `↩ Desfazer correção`.
+
+### Rollback / manter
+
+`↩ Desfazer correção` restaura EXATAMENTE o `beforeSnapshot` (altPlacements
+anteriores), sem afetar seção principal, imagens, ownership, notes/tags, SRS ou
+REVIEW, e volta a `rejected` (permite nova tentativa). `✓ Manter correção` →
+`accepted` e registra no histórico (`placement_applied`).
+
+### Editor manual
+
+O editor ganhou **"Também aparece em"** com `[+ Adicionar localização]`
+(seção + sítio, com dedupe), para correções manuais futuras. Para revisões com
+sugestão, o usuário NÃO precisa usá-lo.
+
+### Outros tipos de ação manual
+
+O botão de 1 clique vale SOMENTE para `additional_section_placement`. Para
+`image_removal`, ownership e outras mudanças estruturais, continua exigindo
+editor/ação manual normal (testado: `applyReviewAiSuggestedPlacement` recusa com
+`not_placement_action`).
+
+### Testes
+
+`tests/lesion-review.test.js` ganhou 13 cenários (sugestão armazenada sem alterar
+DATA, site null, seção/sítio inexistentes rejeitados, fluxo individual, aplicar
+cria altPlacement sem duplicar id/imagem/ownership/contagem, image_removal sem
+autoaplicação, already_placed/already_primary, rollback exato, manter → accepted
++ F5, e UI do botão/confirmação/editor). Resultado: **127 PASS, 0 FAIL**.
+Âncoras de `tests/critical-flows.test.js`: 5498/5488/7801/10757.
+
+## Alteração 030 — Robustez do importador do lote (normalização da moldura + diagnóstico)
+
+Motivo: no reteste, a resposta da IA começava com `{"results":[` e mesmo assim
+aparecia "JSON inválido — confira o texto colado". A causa não pôde ser
+confirmada porque o conteúdo completo não estava disponível (a solicitação veio
+truncada), então o foco foi eliminar as fragilidades reais do caminho de parse,
+sem afrouxar a validação semântica.
+
+### O que foi inspecionado
+
+Handler de `📥 Colar respostas da IA`, a textarea `#batch-json`,
+`importReviewAiBatch(rawText)`, o `JSON.parse`, o `trim`, o `copyTextToClipboard`
+e a mensagem de erro. O botão de colar apenas revela a textarea e dá foco — não
+lê o clipboard nem valida enquanto digita; a validação acontece só em
+`Processar lote`.
+
+### Normalização segura (somente a moldura)
+
+`normalizeReviewAiBatchJson(rawText)`:
+1. `String(rawText == null ? '' : rawText)`;
+2. `trim()`;
+3. remove BOM (`\uFEFF`) e zero-width (`\u200B`–`\u200D`, `\u2060`) **somente nas
+   bordas**;
+4. aceita resposta envolvida em code fence ```json … ``` (ou ``` … ```), com ou
+   sem `\r`.
+
+`parseReviewAiBatchJson(rawText)` usa essa normalização e então `JSON.parse`.
+**NÃO** faz correção de vírgula/aspas, **NÃO** recorta "do primeiro `{` ao último
+`}`", **NÃO** completa documento truncado e **NÃO** remove invisíveis internos —
+o conteúdo interno é preservado byte a byte.
+
+### Diagnóstico sem vazar conteúdo
+
+Em falha, o retorno é `{ ok:false, reason:'invalid_json', parseError:{ kind,
+position, line, column } }`, derivado apenas de `error.message` (posição/linha/
+coluna) — a mensagem bruta e o texto colado **nunca** são registrados nem
+devolvidos. `formatReviewAiBatchParseError` produz uma orientação genérica
+(`empty`, `invalid_fence`, `incomplete`, `syntax`). A UI passou a distinguir
+"não foi possível interpretar o JSON" de "JSON lido, mas o formato do lote é
+inválido".
+
+### Validação semântica intacta
+
+Nada foi afrouxado: campos proibidos, `result` desconhecido, reviewId
+inexistente/duplicado e `proposedChanges` inválido continuam falhando — por item,
+sem bloquear os demais. Nenhuma API, segredo ou caminho de rede foi adicionado.
+
+### Testes
+
+`tests/lesion-review.test.js` ganhou 7 cenários: moldura com BOM/zero-width/code
+fence (inclusive `\r` e invisíveis ao redor), diagnóstico de posição sem expor o
+conteúdo, truncado/vazio, conteúdo interno preservado, ausência de recorte "do
+primeiro `{` ao último `}`", campo proibido ainda rejeitado dentro da moldura e
+lote válido em fence processado normalmente. Resultado: **134 PASS, 0 FAIL**.
+Âncoras de `tests/critical-flows.test.js`: 5545/5535/7848/10804.
+
+> Observação: a solicitação chegou truncada no item de normalização; foram
+> implementados os passos visíveis (String, trim, BOM, zero-width nas bordas,
+> code fence). Se houver etapas adicionais pretendidas (ex.: outros invólucros
+> de markdown), confirmar antes de ampliar.
+
+## Alteração 031 — Correção visual da linha de ações da Central de Soluções
+
+Motivo: no reteste real, o card da aba **🛠 Ações manuais** (ex.: "Teratoma
+cístico maduro") quebrava o layout: os botões `Abrir lesão para ajustar
+imagens` / `histórico` / `Voltar para revisões` / `Cancelar pedido`
+ultrapassavam a largura, aparecia scrollbar horizontal e o último botão ficava
+cortado.
+
+### Causa visual
+
+- `.review-center-row-actions` tinha `flex-shrink:0` — o bloco de botões não
+  encolhia e podia exceder a largura do card/modal.
+- `.review-center-row-main` tinha `min-width:220px` — o bloco de texto não
+  encolhia abaixo disso, somando-se ao problema em modal estreito.
+- Textos (`title`, `meta`, `request`, `solution`) sem `overflow-wrap`, e o
+  `.review-center-modal` sem controle de overflow horizontal.
+
+### Card
+
+`.review-center-row` ganhou `width:100%; max-width:100%; min-width:0;
+box-sizing:border-box` (o `box-sizing` já era global, mantido explícito).
+`.review-center-row-main` passou a `flex:1 1 240px; min-width:0` — o texto pode
+encolher e quebrar. `title`, `meta`, `request` e `solution` receberam
+`overflow-wrap:anywhere; word-break:break-word` (a `meta` é monoespaçada e
+tinha risco de string longa sem quebra).
+
+### Botões
+
+`.review-center-row-actions` virou `flex:1 1 auto; min-width:0; flex-wrap:wrap`
+(sem `flex-shrink:0`, sem `nowrap`). `.review-center-row-actions .btn` recebeu
+`max-width:100%; white-space:normal; overflow-wrap:anywhere` — o botão longo
+(`Abrir lesão para ajustar imagens`) pode ir para linha própria e quebrar; os
+demais quebram para as linhas seguintes, sem cortar `Cancelar pedido`,
+`Voltar para revisões` ou `histórico`.
+
+### Overflow horizontal
+
+Corrigido primeiro nos filhos; depois `.review-center-modal` (e
+`.review-history-modal`) receberam `overflow-x:hidden`, mantendo
+`overflow-y:auto` (scroll vertical normal).
+
+### Outras telas
+
+A correção é nas classes COMPARTILHADAS `.review-center-row*`, usadas por
+Revisões, Validar correções, Ações manuais, resultado do lote e histórico —
+todas se beneficiam sem redesenho. `.review-tabs` ganhou `flex-wrap:wrap` (as
+3 abas podem quebrar em tela estreita). Nenhuma lógica, status,
+`manual_action_required`, `altPlacements`, ownership, `DATA` ou snapshot foi
+alterado.
+
+### Testes
+
+`tests/lesion-review.test.js` ganhou 4 testes estáticos de layout (card com
+`max-width:100%`/`min-width:0`/`flex-wrap`; ações com `flex-wrap` e sem
+`flex-shrink:0`/`nowrap`; botões com `max-width:100%`/`white-space:normal`;
+textos com `overflow-wrap:anywhere`; modal com `overflow-x:hidden` e
+`overflow-y:auto`; abas com wrap; e presença dos botões). Resultado:
+**138 PASS, 0 FAIL**. Âncoras de `tests/critical-flows.test.js`:
+5548/5538/7851/10807.
+
+> Sem suíte de layout visual no projeto (sem jsdom); a confirmação de que o
+> card ficou bem em telas largas/estreitas depende de reteste manual no
+> navegador.
+
+## Alteração 032 — Preview local do quadro de imagens no Quiz (pending)
+
+Motivo: no reteste, um quadro criado no Quiz aparecia como "⏳ não enviada", mas
+a miniatura ficava vazia, o "Clique para ampliar" não mostrava nada e só depois
+de "concluído" (upload) a imagem funcionava — parecendo que a criação falhou.
+
+### Causa real
+
+O produtor do quadro (`openCollageBuilder`, ramo `deferUpload=true`) devolvia
+`{label, panels, source:'pending', _file, _objectUrl}` — **sem `data`**. Todos os
+outros produtores pending (`buildPendingImage` para Ctrl+V/arquivo, e o Commons
+com `deferUpload`) devolvem `data` = a mesma blob URL. Como o renderer da
+galeria e o `openImageLightbox` leem `img.data`, o quadro pending caía em
+`src="undefined"` (miniatura quebrada e lightbox vazio). O editor tinha o mesmo
+defeito latente no "criar quadro".
+
+### Correção (sem upload antecipado)
+
+- `openCollageBuilder` (ramo `deferUpload`): o objeto devolvido agora inclui
+  `data:objectUrl` (a MESMA blob URL de `_objectUrl`) — mesmo padrão funcional
+  de `buildPendingImage`. `_file` continua sendo o File local para o upload no
+  "concluído".
+- Renderer do modal do Quiz: `const src = img.data || img._objectUrl || ''`,
+  usada tanto na miniatura quanto no `openImageLightbox(src)`. Enquanto pending,
+  o preview é LOCAL; nunca se tenta URL remota/`publicId` inexistente.
+
+### Ciclo de vida do object URL (inalterado e preservado)
+
+- Não é revogado ao salvar o quadro, ao fechar só o construtor, ao rerenderizar
+  a galeria, ao editar a legenda nem ao navegar entre previews.
+- É revogado ao remover o item pending, ao cancelar/fechar o modal, e só DEPOIS
+  do upload dar certo no "concluído" (substituindo o pending pelo remoto).
+
+### Regra de upload tardio (NÃO regrediu)
+
+Quadro no Quiz permanece local/pending; **zero upload ao Cloudinary** antes de
+"concluído"; cancelar = zero upload; só as pendings ainda presentes ao
+"concluído" sobem, uma vez cada; falha de upload mantém o modal aberto com o
+preview local funcionando e não persiste a lesão parcialmente. `DATA` só muda no
+"concluído".
+
+### Testes
+
+`tests/quiz-images.test.js` ganhou 12 testes (quadro pending com `data` local;
+miniatura usando `data || _objectUrl`; lightbox com a mesma src; callback sem
+upload; rerender não revoga; editar legenda não revoga/upload; remover revoga
+sem upload; concluído faz upload→revoga→substitui; falha mantém preview e não
+persiste; `DATA` só muda no concluído; cancelar revoga sem persistir; Ctrl+V
+segue usando o mesmo pending). Resultado: **98 PASS, 0 FAIL**. Âncoras de
+`tests/critical-flows.test.js`: 5548/5538/7851/10810.
+
+## Alteração 033 — Contador + navegação no canto superior esquerdo do carrossel do Quiz
+
+Motivo: com 2+ imagens, o usuário via só as setas laterais e precisava deduzir
+quantas imagens havia e qual estava vendo.
+
+### Overlay superior
+
+Quando a questão tem 2+ imagens, aparece sobre a área da imagem (canto superior
+esquerdo) um painel compacto:
+
+```
+‹  1 / 2  ›
+```
+
+- seta anterior (`‹`), índice atual, total, seta próxima (`›`);
+- fundo semitransparente compatível com o tema, texto legível, compacto;
+- `position:absolute` dentro de `.quiz-carousel` (que já é `position:relative`),
+  `top:8px;left:8px`, `max-width:calc(100% - 16px);box-sizing:border-box` — não
+  estoura a largura nem cria scrollbar horizontal.
+
+### Regras visuais
+
+- 0 imagens → continua CASO TEÓRICO, sem controle.
+- 1 imagem → sem contador e sem setas do overlay.
+- 2+ imagens → overlay `‹ n / total ›`.
+
+### Um único estado (sem duplicar navegação)
+
+As setas do overlay usam EXATAMENTE o mesmo `quizImgIdx` e chamam as MESMAS
+funções `goPrev`/`goNext` das setas laterais — nenhuma lógica nova de navegação,
+navegação circular preservada (o wrap acontece no início do próximo
+`renderMedia()`). As setas laterais grandes continuam (alvos grandes de clique).
+
+O contador inferior textual antigo (`quiz-carousel-controls` com
+`← Imagem anterior` / `Imagem X de Y` / `Próxima imagem →`) foi REMOVIDO para
+não haver três conjuntos de navegação; o contador principal agora é o overlay
+superior. O CSS morto correspondente foi removido.
+
+### Teclado
+
+`ArrowLeft`/`ArrowRight` continuam controlando `quizImgIdx` e continuam sendo
+ignorados com editor de lesão, modal de imagem, lightbox ou
+input/textarea/contenteditable ativos.
+
+### Atualização / refresh
+
+Como o overlay é reconstruído a cada `renderMedia()` a partir de
+`quizImgIdx`/`quizImgs`, ele atualiza imediatamente em qualquer troca (seta
+superior, seta lateral, teclado, voltar para questão respondida, edição da
+lesão, refresh das imagens). `refreshQuizImgs(..., keepIndex)` preserva o índice
+quando possível e normaliza (`Math.min(Math.max(keepIdx,0), all.length-1)`)
+quando o total muda (ex.: 2 → 3 imagens vira 1/3, 2/3…).
+
+### Acessibilidade
+
+`aria-label="Imagem anterior"` / `aria-label="Próxima imagem"` nas setas do
+overlay; o contador tem `aria-live="polite"` e
+`aria-label="Imagem N de total"`.
+
+### Não alterado
+
+Lógica de questões, score, SRS, SESSIONLOG, Anterior/Próxima questão, Pular,
+edição da lesão, upload Cloudinary, Revisões/Soluções, snapshots, ownership e
+`altPlacements` — nada disso foi tocado.
+
+### Testes
+
+`tests/quiz-images.test.js` atualizado/adicionado: 2+ mostra o overlay com
+`‹ n / total ›`; 0/1 imagem sem overlay; contador dinâmico e índice único;
+setas laterais e do overlay no mesmo `quizImgIdx`; navegação circular; teclado;
+refresh normaliza o índice; aria-labels; CSS absoluto no canto superior esquerdo
+sem estourar largura; ausência do contador inferior antigo. Resultado:
+**101 PASS, 0 FAIL**. Âncoras de `tests/critical-flows.test.js`:
+5549/5539/7852/10811.
+
+## Alteração 034 — Auditoria + sincronização explícita localhost ↔ site publicado
+
+Motivo: o localhost tinha mais imagens/associações do que o site publicado, e
+era preciso sincronizar com segurança. Localhost e GitHub Pages têm **origens
+diferentes**, logo **IndexedDB separados**; o elo entre eles é o **Firestore**
+(mesmo projeto `atlas-radiologico`).
+
+### Auditoria do fluxo atual (o que já existia)
+
+- **Envio local → nuvem:** `saveData()` (chamado por edições, import e
+  migrações) → `pushToFirebaseNow()` → `writeShardedStateSerialized()` →
+  `writeShardedState()` grava `DATA` em pedaços + `REVIEW`/`SRS`/`SESSIONLOG`/
+  `sectionOrder`/`siteOrder` no documento principal. Havia também
+  `forceThisDeviceToCloud()` (envio manual completo), mas o botão tinha sido
+  removido da UI.
+- **Recebimento nuvem → local:** `syncFromFirebase()` faz merge **não
+  destrutivo por id** (`mergeEntryNonDestructive`, `mergeReviewPreservingProgress`,
+  `mergeSRSPreservingNewest`), cria snapshots antes/depois e persiste. Mas a
+  chamada **automática no boot foi DESATIVADA de propósito** (Alteração 008) —
+  ela reintroduzia registros que a reconciliação V2 já havia consolidado. Hoje
+  `syncFromFirebase()` só roda em ações EXPLÍCITAS (exportar backup e restaurar
+  padrão de fábrica).
+- **Consequência:** o site publicado **não** recebe mudanças do localhost
+  automaticamente; só veria via uma ação explícita de pull ou via backup.
+- **Cloudinary:** as imagens já estão na nuvem; a sincronização só precisa de
+  metadados/URLs. Nenhum binário é reenviado (só imagens locais legadas
+  `data:image/` sob `atlas:img:` são migradas, por `migrateLegacyLocalImagesToCloudinary`).
+- **`LESION_REVISIONS` (revisões) é LOCAL por dispositivo** — não é gravada no
+  Firestore. Para movê-la entre dispositivos, o caminho é o **backup**.
+
+### O que foi implementado
+
+1. `syncAuditCounters(data, revisions, review, srs)` — contadores puros (lesões,
+   registros com imagens, total de imagens, `altPlacements`, SRS, revisões).
+2. `buildSyncAudit()` — comparação **100% read-only** local × nuvem (nunca
+   grava local nem remoto), com `divergent` e `cloudError`.
+3. `syncThisDeviceToCloud()` — envia o estado DESTE dispositivo para a nuvem:
+   cria snapshot ANTES, migra só imagens locais legadas, persiste local e chama
+   `writeShardedStateSerialized`. **Nunca** faz pull de volta e **não toca
+   ownership**. `forceThisDeviceToCloud()` (interno/console) agora só confirma e
+   chama essa função.
+4. Botões explícitos na barra lateral:
+   - `☁ sincronizar este dispositivo` → modal com a auditoria + confirmação →
+     snapshot → push → sucesso. Descrição: "envia o estado deste dispositivo
+     para a nuvem — use quando este dispositivo contém a versão correta".
+   - `⬇ atualizar deste backup/nuvem` → modal com a auditoria + confirmação →
+     snapshot → `syncFromFirebase()` (merge não destrutivo). **Ação explícita**,
+     nunca automática no boot/F5/login.
+5. `openUpdateFromCloudModal()` NÃO reativa o comportamento antigo automático —
+   é um clique consciente do usuário.
+
+### Respostas às perguntas da auditoria
+
+1. **Como o localhost envia para o Firestore?** Via `saveData`/`pushToFirebaseNow`
+   (automático a cada edição) e, agora, pelo botão explícito de sincronização.
+2. **Como o site publicado recebe?** Hoje NÃO recebe automaticamente; passa a
+   poder receber pelo botão `⬇ atualizar deste backup/nuvem` (explícito) ou pelo
+   backup.
+3. **O site publica faz pull automático?** Não — desativado no boot (Alteração 008).
+4. **Risco de estado antigo sobrescrever novo?** Sim, no push automático de um
+   dispositivo desatualizado. Mitigado por: snapshot antes do push explícito,
+   confirmação humana e a auditoria que mostra os contadores. Não houve mudança
+   na política de push automático do dia a dia.
+5. **Cloudinary precisa de upload?** Não — só metadados/URLs. Sem reenvio de
+   binários (exceto imagens locais legadas).
+6. **Método mais seguro hoje?** (a) backup export/import entre origens; (b) botão
+   explícito `☁ sincronizar este dispositivo` (local→nuvem, com snapshot) e, no
+   outro dispositivo, `⬇ atualizar deste backup/nuvem` (nuvem→local, explícito).
+
+### Backup como fallback oficial
+
+`Salvar backup` (localhost) → `Importar backup` (site publicado). O backup
+inclui `data` (DATA com metadados/URLs de imagem), `review`, `srs`, `sessionLog`,
+`sectionOrder`, `siteOrder` e `lesionRevisions`; a importação cria snapshot,
+preserva ownership local e não embute binários do Cloudinary. É o caminho mais
+seguro para mover também as **revisões**.
+
+### Não alterado
+
+Ownership, snapshots, Revisões/Soluções, `altPlacements`, parser JSON e a
+política de push automático existente. Nenhum pull automático foi reativado.
+
+### Testes
+
+`tests/snapshots-ownership.test.js` ganhou 12 testes (contadores puros;
+`buildSyncAudit` read-only; divergência detectada dinamicamente; sem divergência
+quando iguais; Firebase indisponível; snapshot antes do push; push não altera
+ownership nem puxa de volta; `writeShardedState` envia DATA sem upload;
+Cloudinary não reenvia existentes; UI dos dois botões; pull explícito com
+snapshot; boot sem sync automático; backup com as estruturas e sem binários).
+Resultado: **30 PASS, 0 FAIL**. `tests/critical-flows.test.js` atualizado: o
+teste da Alteração 008 agora aceita 3 call sites EXPLÍCITOS de
+`syncFromFirebase()` (export, factory reset, "atualizar deste backup/nuvem"),
+continuando a proibir qualquer chamada automática no boot. Âncoras:
+5735/5725/8038/10999.

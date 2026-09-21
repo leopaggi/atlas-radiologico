@@ -412,8 +412,8 @@ test('QUADRO (Editar): aberto com deferUpload=true e NÃO envia painéis ao Clou
   assert.match(openCollageBuilderFn.source, /if\(deferUpload\)\{ item\.durableUrl = item\.url; return; \}/);
 });
 
-test('QUADRO (Editar): o resultado entra como imagem pendente/temporária (source pending + File + blob URL)', () => {
-  assert.match(openCollageBuilderFn.source, /onCollageReady\(\{label, panels, source:'pending', _file:file, _objectUrl:objectUrl\}\)/);
+test('QUADRO (Editar): o resultado entra como imagem pendente/temporária (source pending + File + blob URL + data local)', () => {
+  assert.match(openCollageBuilderFn.source, /onCollageReady\(\{label, panels, data:objectUrl, source:'pending', _file:file, _objectUrl:objectUrl\}\)/);
   assert.match(openFormSlice(), /collage\.source==='pending' && collage\._objectUrl\) pendingObjectUrls\.add\(collage\._objectUrl\)/);
 });
 
@@ -442,6 +442,113 @@ test('QUADRO (Editar): Salvar faz o upload do quadro exatamente uma vez (pipelin
 
 test('QUADRO (Quiz): agora usa upload diferido (deferUpload=true), igual ao Editar', () => {
   assert.match(openQuizAddImageModalFn.source, /openCollageBuilder\(\{id: lesion\.id, name: lesion\.name\},[\s\S]*?\},\s*null,\s*true\)/);
+});
+
+// -----------------------------------------------------------------------
+// QUADRO (Quiz) — PREVIEW LOCAL enquanto pending (bug real: miniatura
+// quebrada e "clique para ampliar" sem imagem antes do "concluído").
+// -----------------------------------------------------------------------
+test('PREVIEW QUADRO: o quadro pending carrega `data` = blob URL local (mesmo padrão de buildPendingImage)', () => {
+  // O produtor do quadro precisa entregar `data` (não só `_objectUrl`), senão
+  // a miniatura e o lightbox — que leem `data` — ficam quebrados.
+  assert.match(openCollageBuilderFn.source, /const objectUrl=URL\.createObjectURL\(file\);/);
+  assert.match(openCollageBuilderFn.source, /onCollageReady\(\{label, panels, data:objectUrl, source:'pending', _file:file, _objectUrl:objectUrl\}\)/);
+});
+
+test('PREVIEW QUADRO: a miniatura do Quiz usa a blob URL local enquanto pending (data || _objectUrl)', () => {
+  const src = openQuizAddImageModalFn.source;
+  assert.match(src, /const src = img\.data \|\| img\._objectUrl \|\| '';/);
+  assert.match(src, /<img src="\$\{src\}" class="img-gallery-thumb"/);
+  // Nunca monta a miniatura a partir de publicId/URL remota inexistente.
+  assert.doesNotMatch(src, /src="\$\{img\.publicId/);
+});
+
+test('PREVIEW QUADRO: ampliar/lightbox recebe a MESMA src local do pending', () => {
+  const src = openQuizAddImageModalFn.source;
+  assert.match(src, /item\.querySelector\('\.img-gallery-thumb'\)\.onclick = \(\)=> openImageLightbox\(src\);/);
+  assert.match(html, /function openImageLightbox\(src\)\{/);
+});
+
+test('PREVIEW QUADRO: callback do Quiz registra a blob URL do quadro e NÃO faz upload', () => {
+  const src = openQuizAddImageModalFn.source;
+  const start = src.indexOf("openCollageBuilder({id: lesion.id, name: lesion.name}, collage=>{");
+  assert.notEqual(start, -1);
+  const end = src.indexOf('}, null, true);', start);
+  const callback = src.slice(start, end);
+  assert.match(callback, /collage\.source==='pending' && collage\._objectUrl\) draftObjectUrls\.add\(collage\._objectUrl\)/);
+  assert.match(callback, /addDraftImages\(\[collage\]\)/);
+  assert.doesNotMatch(callback, /uploadPendingImage|uploadToCloudinary|saveData|lesion\.images/);
+});
+
+test('PREVIEW QUADRO: rerenderizar a galeria NÃO revoga a blob URL (só o Remover revoga)', () => {
+  const src = openQuizAddImageModalFn.source;
+  const start = src.indexOf('function renderGallery(){');
+  const end = src.indexOf('\n  }', start);
+  const body = src.slice(start, end);
+  // O único revoke permitido dentro de renderGallery é o do botão Remover.
+  assert.equal((body.match(/revokeDraftObjectUrl/g) || []).length, 1, 'renderGallery só revoga no Remover');
+  assert.doesNotMatch(body, /releaseDraftObjectUrls/);
+  const rerenderIdx = body.indexOf("galleryEl.innerHTML = '';");
+  const revokeIdx = body.indexOf('revokeDraftObjectUrl');
+  assert.ok(rerenderIdx !== -1 && revokeIdx > rerenderIdx, 'o rerender em si não revoga');
+});
+
+test('PREVIEW QUADRO: editar legenda apenas muda o label e rerenderiza (não revoga/upload)', () => {
+  const src = openQuizAddImageModalFn.source;
+  const idx = src.indexOf('draftImgs[idx].label = labelInput.value;');
+  assert.notEqual(idx, -1);
+  const slice = src.slice(idx, idx + 90);
+  assert.match(slice, /renderGallery\(\)/);
+  assert.doesNotMatch(slice, /revoke|upload|saveData/);
+});
+
+test('PREVIEW QUADRO: remover pending revoga a blob URL e não faz upload', () => {
+  const src = openQuizAddImageModalFn.source;
+  const idx = src.indexOf('draftImgs.splice(idx,1)');
+  assert.notEqual(idx, -1);
+  const slice = src.slice(idx, idx + 180);
+  assert.match(slice, /removed\.source==='pending'\) revokeDraftObjectUrl\(removed\._objectUrl\)/);
+  assert.doesNotMatch(slice, /uploadPendingImage|uploadToCloudinary|saveData/);
+});
+
+test('PREVIEW QUADRO: Concluído substitui pending pelo remoto e revoga a URL local só depois do upload', () => {
+  const src = openQuizAddImageModalFn.source;
+  const upIdx = src.indexOf('const remote = await uploadPendingImage(img');
+  const revokeIdx = src.indexOf('revokeDraftObjectUrl(img._objectUrl);', upIdx);
+  const replaceIdx = src.indexOf('draftImgs[i] = remote;', upIdx);
+  assert.ok(upIdx !== -1 && revokeIdx !== -1 && replaceIdx !== -1, 'upload -> revoke -> substituir');
+  assert.ok(upIdx < revokeIdx && revokeIdx < replaceIdx, 'só revoga/substitui DEPOIS do upload dar certo');
+});
+
+test('PREVIEW QUADRO: falha no upload mantém o preview local e NÃO persiste a lesão', () => {
+  const src = openQuizAddImageModalFn.source;
+  const catchIdx = src.indexOf("console.error('Cloudinary upload (quiz concluir)', err);");
+  assert.notEqual(catchIdx, -1);
+  const slice = src.slice(catchIdx, catchIdx + 320);
+  assert.match(slice, /renderGallery\(\)/, 'preview local continua sendo renderizado');
+  assert.match(slice, /return;/, 'não segue para a persistência');
+  assert.doesNotMatch(slice, /lesion\.images =|saveData\(\)/);
+});
+
+test('PREVIEW QUADRO: DATA só muda no "concluído" (nenhum caminho de preview grava na lesão)', () => {
+  const src = openQuizAddImageModalFn.source;
+  assert.equal((src.match(/lesion\.images\s*=/g) || []).length, 1, 'só o concluído aplica o rascunho à lesão');
+  assert.equal((src.match(/saveData\(\)/g) || []).length, 1, 'só o concluído persiste');
+});
+
+test('PREVIEW QUADRO: cancelar/fechar revoga as URLs locais e não persiste nem envia', () => {
+  const src = openQuizAddImageModalFn.source;
+  assert.match(src, /function releaseDraftObjectUrls\(\)\{[\s\S]*?draftObjectUrls\.clear\(\);/);
+  const idx = src.indexOf('const close = ()=>');
+  const slice = src.slice(idx, idx + 160);
+  assert.match(slice, /releaseDraftObjectUrls\(\)/);
+  assert.doesNotMatch(slice, /saveData|uploadPendingImage|lesion\.images/);
+});
+
+test('PREVIEW QUADRO: Ctrl+V/arquivo continuam usando o mesmo pending com data local', () => {
+  const src = openQuizAddImageModalFn.source;
+  assert.match(src, /addDraftImages\(\[buildPendingImage\(file, trackDraftObjectUrl\)\]\)/);
+  assert.match(html, /return \{ label:'', data:objectUrl, source:'pending', _file:file, _objectUrl:objectUrl \};/);
 });
 
 // -----------------------------------------------------------------------
@@ -623,33 +730,35 @@ test('PULAR: re-renderiza trocando o handler do carrossel (nunca acumula listene
 });
 
 // -----------------------------------------------------------------------
-// CARROSSEL: controles textuais (← Imagem anterior / contador / Próxima →)
+// CARROSSEL: overlay superior ‹ 1 / 2 › (contador + setas)
 // -----------------------------------------------------------------------
-test('CARROSSEL: 2+ imagens mostram os controles textuais (← anterior / contador / próxima →)', () => {
+test('CARROSSEL: 2+ imagens mostram o overlay superior com contador ‹ n / total ›', () => {
   const src = renderQuizCardIntegratedFn.source;
   assert.match(src, /const cur=quizImgs\[quizImgIdx\], hasMultiple=quizImgs\.length>1;/);
-  assert.match(src, /hasMultiple\?`<div class="quiz-carousel-controls">/);
-  assert.match(src, /quiz-carousel-textprev" aria-label="Imagem anterior">← Imagem anterior</);
-  assert.match(src, /quiz-carousel-textnext" aria-label="Próxima imagem">Próxima imagem →</);
-  assert.match(src, /quiz-carousel-textcount" aria-live="polite">Imagem \$\{quizImgIdx\+1\} de \$\{quizImgs\.length\}</);
+  assert.match(src, /hasMultiple\?`<div class="quiz-carousel-overlay"/);
+  assert.match(src, /quiz-carousel-ov-prev" aria-label="Imagem anterior">‹</);
+  assert.match(src, /quiz-carousel-ov-next" aria-label="Próxima imagem">›</);
+  assert.match(src, /quiz-carousel-ov-count" aria-live="polite" aria-label="Imagem \$\{quizImgIdx\+1\} de \$\{quizImgs\.length\}">\$\{quizImgIdx\+1\} \/ \$\{quizImgs\.length\}</);
 });
 
-test('CARROSSEL: 0 imagem mantém CASO TEÓRICO e 1 imagem não mostra controles (só hasMultiple)', () => {
+test('CARROSSEL: 0 imagem mantém CASO TEÓRICO e 1 imagem não mostra overlay (só hasMultiple)', () => {
   const src = renderQuizCardIntegratedFn.source;
   assert.match(src, /if\(!quizImgs\.length\)[\s\S]*?CASO TEÓRICO/);
-  // os controles existem num único ponto, gated por hasMultiple
-  assert.equal((src.match(/quiz-carousel-controls/g) || []).length, 1);
-  assert.match(src, /hasMultiple\?`<div class="quiz-carousel-controls">[\s\S]*?<\/div>`:''\}/);
+  // o overlay existe num único ponto, gated por hasMultiple
+  assert.equal((src.match(/quiz-carousel-overlay/g) || []).length, 1);
+  assert.match(src, /hasMultiple\?`<div class="quiz-carousel-overlay"[\s\S]*?<\/div>`:''\}/);
+  // o contador inferior antigo foi removido (sem tripla navegação)
+  assert.doesNotMatch(src, /quiz-carousel-controls|quiz-carousel-textprev|quiz-carousel-textnext|quiz-carousel-textcount|quiz-carousel-counter/);
 });
 
-test('CARROSSEL: setas laterais e botões textuais controlam o MESMO quizImgIdx (um só estado)', () => {
+test('CARROSSEL: setas laterais e setas do overlay controlam o MESMO quizImgIdx (um só estado)', () => {
   const src = renderQuizCardIntegratedFn.source;
   assert.match(src, /const goPrev=\(\)=>\{ quizImgIdx--; renderMedia\(\); \};/);
   assert.match(src, /const goNext=\(\)=>\{ quizImgIdx\+\+; renderMedia\(\); \};/);
   assert.match(src, /media\.querySelector\('\.quiz-carousel-prev'\)\.onclick=goPrev;/);
   assert.match(src, /media\.querySelector\('\.quiz-carousel-next'\)\.onclick=goNext;/);
-  assert.match(src, /media\.querySelector\('\.quiz-carousel-textprev'\)\.onclick=goPrev;/);
-  assert.match(src, /media\.querySelector\('\.quiz-carousel-textnext'\)\.onclick=goNext;/);
+  assert.match(src, /media\.querySelector\('\.quiz-carousel-ov-prev'\)\.onclick=goPrev;/);
+  assert.match(src, /media\.querySelector\('\.quiz-carousel-ov-next'\)\.onclick=goNext;/);
 });
 
 test('CARROSSEL: navegação circular e índice sempre dentro dos limites', () => {
@@ -661,8 +770,35 @@ test('CARROSSEL: navegação circular e índice sempre dentro dos limites', () =
 test('CARROSSEL: clicar nos controles NÃO abre o lightbox (lightbox só no clique da imagem)', () => {
   const src = renderQuizCardIntegratedFn.source;
   assert.match(src, /const im=media\.querySelector\('img'\); if\(im\) im\.onclick=\(\)=>openImageLightbox\(cur\.data\);/);
-  const controlsBlock = src.slice(src.indexOf('quiz-carousel-controls'), src.indexOf('const im=media.querySelector'));
+  const controlsBlock = src.slice(src.indexOf('quiz-carousel-overlay'), src.indexOf('const im=media.querySelector'));
   assert.doesNotMatch(controlsBlock, /openImageLightbox/);
+});
+
+test('CARROSSEL: contador do overlay é dinâmico (quizImgIdx+1 / total) e o índice é único', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  // Sem segundo índice: o overlay lê o MESMO quizImgIdx e o MESMO quizImgs.
+  assert.match(src, /\$\{quizImgIdx\+1\} \/ \$\{quizImgs\.length\}/);
+  assert.equal((src.match(/let quizImgIdx/g) || []).length, 1, 'só existe um índice de imagem');
+  assert.doesNotMatch(src, /overlayIdx|carouselIdx/);
+});
+
+test('CARROSSEL: overlay tem aria-labels (anterior/próxima) e o contador é aria-live', () => {
+  const src = renderQuizCardIntegratedFn.source;
+  assert.match(src, /quiz-carousel-ov-prev" aria-label="Imagem anterior"/);
+  assert.match(src, /quiz-carousel-ov-next" aria-label="Próxima imagem"/);
+  assert.match(src, /quiz-carousel-ov-count" aria-live="polite" aria-label="Imagem \$\{quizImgIdx\+1\} de \$\{quizImgs\.length\}"/);
+});
+
+test('CARROSSEL: CSS do overlay é absoluto no canto superior esquerdo e não estoura a largura', () => {
+  const css = (sel)=>{ const m = new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\{([^}]*)\\}').exec(html); return m ? m[1] : ''; };
+  const carousel = css('.quiz-study-media .quiz-carousel');
+  assert.match(carousel, /position:relative/, 'o container da imagem precisa ser a referência do overlay');
+  const ov = css('.quiz-carousel-overlay');
+  assert.match(ov, /position:absolute/);
+  assert.match(ov, /top:8px/);
+  assert.match(ov, /left:8px/);
+  assert.match(ov, /max-width:calc\(100% - 16px\)/);
+  assert.match(ov, /box-sizing:border-box/);
 });
 
 test('CARROSSEL: teclado ←/→ usa o mesmo quizImgIdx e respeita formulário/modais/inputs', () => {
@@ -767,8 +903,8 @@ test('NAV QUESTÕES: índice do carrossel restaurado por questão e sem conflito
   assert.match(src, /refreshQuizImgs\(false, true\);/);
   assert.match(src, /id="quiz-prev-btn"/);
   assert.match(src, /id="quiz-next-btn"/);
-  assert.match(src, /quiz-carousel-textprev/);
-  assert.match(src, /quiz-carousel-textnext/);
+  assert.match(src, /quiz-carousel-ov-prev/);
+  assert.match(src, /quiz-carousel-ov-next/);
 });
 
 // -----------------------------------------------------------------------
