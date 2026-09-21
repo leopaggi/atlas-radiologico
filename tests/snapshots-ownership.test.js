@@ -429,7 +429,7 @@ test('SYNC CLOUDINARY: só imagens locais legadas são enviadas; Cloudinary exis
 });
 
 test('SYNC UI: "sincronizar este dispositivo" é explícito (confirmação no modal) e não puxa de volta', () => {
-  assert.match(openSyncToCloudFn.body, /syncThisDeviceToCloud\(\)/);
+  assert.match(openSyncToCloudFn.body, /syncThisDeviceToCloud\(\{ onStep/);
   assert.match(openSyncToCloudFn.body, /buildSyncAudit\(\)/, 'mostra a auditoria antes de enviar');
   assert.doesNotMatch(openSyncToCloudFn.body, /syncFromFirebase/, 'o envio não puxa da nuvem');
   assert.match(html, /id="btn-sync-to-cloud"/);
@@ -460,4 +460,90 @@ test('SYNC BACKUP FALLBACK: backup completo inclui DATA/imagens/revisões/SRS e 
   assert.match(exportHandler, /review: REVIEW/);
   assert.doesNotMatch(exportHandler, /uploadToCloudinary/, 'backup não envia binários');
   assert.doesNotMatch(exportHandler, /readAsDataURL|toDataURL/, 'backup não embute base64 das imagens');
+});
+
+
+// ===========================================================================
+// VERIFICAÇÃO PÓS-PUSH (o push só confirma se o servidor corresponder)
+// ===========================================================================
+
+const syncCountersMatchFn = extractFunction(html, 'syncCountersMatch');
+const readCloudAuditFromServerFn = extractFunction(html, 'readCloudAuditFromServer');
+const writeShardedStateFullFn = extractFunction(html, 'writeShardedState');
+const readShardedStateFn = extractFunction(html, 'readShardedState');
+
+function runSyncCountersMatch(local, server){
+  const ctx = { Object, Array };
+  vm.createContext(ctx);
+  vm.runInContext(syncCountersMatchFn.source, ctx, { filename: 'sync-match.js' });
+  return ctx.syncCountersMatch(local, server);
+}
+
+test('SYNC PUSH: aguarda writeShardedStateSerialized e DEPOIS relê o servidor', () => {
+  const body = syncThisDeviceToCloudFn.body;
+  const writeIdx = body.indexOf('await writeShardedStateSerialized');
+  const verifyIdx = body.indexOf('readCloudAuditFromServer');
+  assert.ok(writeIdx !== -1, 'precisa aguardar a escrita');
+  assert.ok(verifyIdx !== -1 && verifyIdx > writeIdx, 'precisa verificar o servidor DEPOIS da escrita');
+  assert.match(body, /await readCloudAuditFromServer\(\)/, 'a verificação é awaited');
+});
+
+test('SYNC PUSH: erro de escrita NÃO vira sucesso', () => {
+  const body = syncThisDeviceToCloudFn.body;
+  // o ramo de escrita recusada retorna ok:false ANTES de qualquer sucesso
+  const refuseIdx = body.indexOf("reason:'write_refused'");
+  const successIdx = body.indexOf('ok:true');
+  assert.ok(refuseIdx !== -1 && successIdx !== -1 && refuseIdx < successIdx);
+  assert.match(body, /catch\(e\)\{[\s\S]*?return \{ ok:false/, 'exceção vira ok:false');
+});
+
+test('SYNC PUSH: só confirma se local == servidor (syncCountersMatch)', () => {
+  const body = syncThisDeviceToCloudFn.body;
+  assert.match(body, /syncCountersMatch\(localCounters, serverCounters\)/);
+  const mismatchIdx = body.indexOf("reason:'verification_mismatch'");
+  const successIdx = body.indexOf('ok:true');
+  assert.ok(mismatchIdx !== -1 && mismatchIdx < successIdx, 'mismatch retorna antes do sucesso');
+  assert.match(body, /Envio concluído, mas a verificação do servidor não corresponde ao estado local/);
+});
+
+test('SYNC MATCH (dinâmico): compara lesões/imagens/altPlacements/SRS e detecta divergência', () => {
+  const base = { lesions:1213, entriesWithImages:53, totalImages:66, altPlacements:11, srs:40 };
+  assert.equal(runSyncCountersMatch(base, Object.assign({}, base)), true);
+  assert.equal(runSyncCountersMatch(base, Object.assign({}, base, { entriesWithImages:51 })), false);
+  assert.equal(runSyncCountersMatch(base, Object.assign({}, base, { totalImages:61 })), false);
+  assert.equal(runSyncCountersMatch(base, Object.assign({}, base, { srs:31 })), false);
+  assert.equal(runSyncCountersMatch(base, Object.assign({}, base, { lesions:1212 })), false);
+  assert.equal(runSyncCountersMatch(base, null), false, 'sem leitura do servidor não confirma');
+});
+
+test('SYNC PUSH: NÃO puxa da nuvem, NÃO altera ownership e NÃO reenvia imagens remotas', () => {
+  const body = syncThisDeviceToCloudFn.body;
+  assert.doesNotMatch(body, /syncFromFirebase/, 'nunca puxa de volta');
+  assert.doesNotMatch(body, /canChangeImageOwnership|assertManualImageOwnershipChange|registerImageOwnershipConflict|lesionId\s*=|lesionName\s*=/, 'não altera ownership');
+  // a única migração de imagem é a de imagens locais legadas
+  assert.match(body, /migrateLegacyLocalImagesToCloudinary\(\)/);
+});
+
+test('SYNC VERIFY: a leitura pós-envio força SERVIDOR (nunca cache)', () => {
+  assert.match(readCloudAuditFromServerFn.body, /readShardedState\(/);
+  assert.match(readShardedStateFn.body, /get\(\{source:'server'\}\)/, 'a leitura de meta força servidor');
+  assert.match(readShardedStateFn.body, /get\(\{source:'server'\}\)/, 'os pedaços também vêm do servidor');
+});
+
+test('SYNC UI: a auditoria pode reler o servidor sem reutilizar o resultado anterior', () => {
+  assert.match(openSyncToCloudFn.body, /id="sync-refresh"/);
+  assert.match(openSyncToCloudFn.body, /const refreshAudit = async \(\)=>\{/);
+  // a cada refresh, chama buildSyncAudit() de novo (nova leitura), não reusa variável antiga
+  assert.match(openSyncToCloudFn.body, /await refreshAudit\(\)/);
+  assert.match(openSyncToCloudFn.body, /await refreshAudit\(\); \/\/ atualiza a coluna Nuvem com a leitura pós-escrita/);
+  assert.match(openUpdateFromCloudFn.body, /id="sync-refresh"/);
+});
+
+test('SYNC PATHS: escrita e leitura usam os MESMOS caminhos (atlas_state/main + data_chunk_i)', () => {
+  assert.match(writeShardedStateFullFn.body, /FB_META_REF\(\)\.set/);
+  assert.match(writeShardedStateFullFn.body, /FB_CHUNK_REF\(i\)\.set/);
+  assert.match(readShardedStateFn.body, /FB_META_REF\(\)\.get/);
+  assert.match(readShardedStateFn.body, /FB_CHUNK_REF\(i\)\.get/);
+  assert.match(html, /const FB_META_REF = \(\) => fbDb\.collection\('atlas_state'\)\.doc\('main'\);/);
+  assert.match(html, /const FB_CHUNK_REF = \(i\) => fbDb\.collection\('atlas_state'\)\.doc\('data_chunk_'\+i\);/);
 });

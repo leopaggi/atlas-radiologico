@@ -2150,3 +2150,62 @@ teste da Alteração 008 agora aceita 3 call sites EXPLÍCITOS de
 `syncFromFirebase()` (export, factory reset, "atualizar deste backup/nuvem"),
 continuando a proibir qualquer chamada automática no boot. Âncoras:
 5735/5725/8038/10999.
+
+## Alteração 035 — Push local→nuvem agora VERIFICA o servidor (pós-envio)
+
+Motivo: no reteste, o usuário clicou em "Enviar este dispositivo para a nuvem" e
+a nuvem continuou com contadores antigos (imagens 51/61 e SRS 31, enquanto o
+local tinha 53/66 e SRS 40). O SRS divergir mostra que **não é um problema de
+Cloudinary/imagens** — o estado remoto inteiro não estava sendo confirmado.
+
+### Causa real
+
+O push (`syncThisDeviceToCloud`) confiava apenas na promessa de
+`writeShardedStateSerialized` para declarar sucesso e **não relia o servidor**
+depois. A auditoria também carregava os contadores da nuvem **uma vez** (ao
+abrir o modal) e não os atualizava após o envio. Assim, qualquer falha de
+gravação/ack (regras, rede, timeout) ou uma leitura antiga podia deixar a
+impressão de "sincronizado" mesmo com o servidor diferente. O site publicado,
+além disso, não faz pull automático (Alteração 008) — então continuar mostrando
+os números antigos é esperado até um pull explícito.
+
+### Correção
+
+- `readCloudAuditFromServer()`: lê a nuvem **direto do servidor**
+  (`readShardedState` já usa `get({source:'server'})`) e calcula os mesmos
+  contadores da auditoria.
+- `syncCountersMatch(local, server)`: compara lesões, registros com imagens,
+  total de imagens, `altPlacements` e SRS.
+- `syncThisDeviceToCloud(opts)` agora: cria snapshot → prepara estado → envia →
+  **relê o servidor** → **só retorna `ok:true` se os contadores baterem**. Em
+  divergência, retorna `{ ok:false, reason:'verification_mismatch', local,
+  server }` e mostra: "Envio concluído, mas a verificação do servidor não
+  corresponde ao estado local." — **sem** pull e **sem** alterar o local. A UI
+  exibe a tabela Local enviado × Servidor.
+- `openSyncDeviceToCloudModal()` mostra as 5 etapas reais (1 criando snapshot,
+  2 preparando estado, 3 enviando, 4 verificando no servidor, 5 confirmada),
+  ganhou `🔄 ler servidor de novo` e, ao confirmar, atualiza a coluna Nuvem com
+  a leitura pós-escrita (não reutiliza os números antigos).
+- `openUpdateFromCloudModal()` também ganhou `🔄 ler servidor de novo`.
+
+### Paths (write = read)
+
+`writeShardedState` e `readShardedState` usam os MESMOS caminhos:
+`atlas_state/main` (meta: review/srs/sessionLog/sectionOrder/siteOrder +
+`chunkCount`) e `atlas_state/data_chunk_<i>` (pedaços). O meta é escrito antes
+dos pedaços e a leitura usa `meta.chunkCount`. Sem namespace divergente.
+
+### Segurança (inalterada)
+
+Nenhum pull automático (boot continua sem `syncFromFirebase`); nenhum ownership
+alterado; Cloudinary só recebe imagens locais legadas (sem reenvio de imagens já
+remotas); `LESION_REVISIONS` continua local por dispositivo.
+
+### Testes
+
+`tests/snapshots-ownership.test.js` ganhou 8 cenários (push aguarda a escrita e
+relê o servidor; erro de escrita não vira sucesso; só confirma se local ==
+servidor; `syncCountersMatch` dinâmico detecta divergência de imagens/SRS/
+lesões; push não puxa/ownership; leitura pós-envio força servidor; auditoria
+relê sem reutilizar; paths de write/read coerentes). Resultado: **38 PASS,
+0 FAIL**. Âncoras de `tests/critical-flows.test.js`: 5824/5814/8127/11088.

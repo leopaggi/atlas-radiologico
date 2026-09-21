@@ -2259,3 +2259,62 @@ forma explícita — sem sobrescrita silenciosa e sem reativar o pull automátic
 ### Commit após aprovação
 
 Ainda não criado.
+
+## ALTERAÇÃO 035 — Verificação pós-envio no push local→nuvem
+
+**Número da alteração:** 035
+**Data:** 20/09/2026
+
+### Objetivo
+
+Descobrir por que o push explícito aparentava concluir mas a nuvem continuava
+antiga, e corrigir a causa real (não criar recurso novo).
+
+### Estado antes
+
+`syncThisDeviceToCloud` só aguardava `writeShardedStateSerialized` e declarava
+sucesso; a auditoria lia a nuvem uma vez e não atualizava após o envio.
+
+### Causa real
+
+Falta de verificação do servidor após a escrita + auditoria sem re-leitura. Não
+era bug de Cloudinary/imagens (o SRS também divergia).
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/snapshots-ownership.test.js`
+- `tests/critical-flows.test.js` (âncoras)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- `readCloudAuditFromServer` (leitura forçada do servidor) e `syncCountersMatch`.
+- `syncThisDeviceToCloud` relê o servidor e só confirma se os contadores baterem;
+  em divergência retorna `verification_mismatch` com local × servidor.
+- Modal com 5 etapas, `🔄 ler servidor de novo` e atualização da coluna Nuvem.
+- `openUpdateFromCloudModal` também ganhou o botão de releitura.
+
+### Segurança
+
+Sem pull automático; sem alteração de ownership; Cloudinary sem reenvio; local
+preservado em qualquer falha.
+
+### Testes realizados
+
+- `node --test tests/snapshots-ownership.test.js`: 38 PASS, 0 FAIL;
+- `node --test tests/critical-flows.test.js`: 20 PASS, 0 FAIL;
+- `node --test tests/quiz-images.test.js`: 101 PASS, 0 FAIL;
+- `node --test tests/lesion-review.test.js`: 138 PASS, 0 FAIL;
+- `node --test tests/tools-layout.test.js`: 8 PASS, 0 FAIL;
+- `node --test tests/legacy-id-migration.test.js`: 156 PASS, 5 TODO, 0 FAIL;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Sucesso só é mostrado quando o servidor confirma o estado; falha é explícita e
+o local permanece intacto.
+
+### Commit após aprovação
+
+Ainda não criado (aguardando reteste).

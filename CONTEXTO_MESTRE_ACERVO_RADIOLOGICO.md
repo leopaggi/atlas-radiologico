@@ -31,9 +31,21 @@ uma cópia antiga e o repositório, o repositório e o código valem.
   pull nuvem→local NÃO é automático no boot (desativado na Alteração 008) e só
   roda em ações explícitas. Localhost e GitHub Pages têm IndexedDB separados —
   o elo é o Firestore. Há auditoria read-only local × nuvem e botões explícitos
-  `☁ sincronizar este dispositivo` (push com snapshot, sem pull) e
-  `⬇ atualizar deste backup/nuvem` (pull com confirmação/snapshot). Revisões são
-  locais por dispositivo; para movê-las, use o backup (Salvar → Importar).
+  `☁ sincronizar este dispositivo` (push com snapshot, **verificação pós-envio
+  lendo o servidor**, sem pull) e `⬇ atualizar deste backup/nuvem` (pull com
+  confirmação/snapshot). Só mostra sucesso se os contadores do servidor baterem
+  com o local. Revisões são locais por dispositivo; para movê-las, use o backup
+  (Salvar → Importar).
+  - **Bug corrigido (sucesso falso):** antes o push declarava sucesso sem reler o
+    servidor e a auditoria não se atualizava após o envio.
+  - **Leitura server-only:** `readShardedState` usa `get({source:'server'})` no
+    meta e nos pedaços; a verificação pós-push usa `readCloudAuditFromServer()`.
+  - **Verificação local × servidor:** `syncCountersMatch` compara lesões,
+    registros com imagens, total de imagens, `altPlacements` e SRS; sucesso
+    somente quando batem.
+  - **Reteste real APROVADO (2026-09-20):** localhost e site publicado com
+    1213/1213 lesões, **53/53 registros com imagens**, **66/66 imagens**,
+    **11/11 altPlacements**, 44/44 SRS. **Sincronização considerada validada.**
 - **Imagens:** Cloudinary (`res.cloudinary.com/soegtip6/.../atlas-radiologico/`).
 - **Backup/export:** botões `Salvar backup` / `Importar backup` (inalterados).
 - **UI de ferramentas (normal):** só `🩺 diagnóstico do sistema` e
@@ -195,12 +207,12 @@ Destino: `https://ntfy.sh/acervo-leo-7k29-radiologia`. Detalhes em `AGENTS.md`.
 | Arquivo | Resultado |
 |---|---|
 | `tests/lesion-review.test.js` | **138 PASS**, 0 FAIL |
-| `tests/snapshots-ownership.test.js` | **30 PASS**, 0 FAIL |
+| `tests/snapshots-ownership.test.js` | **38 PASS**, 0 FAIL |
 | `tests/quiz-images.test.js` | **101 PASS**, 0 FAIL |
 | `tests/critical-flows.test.js` | 20 PASS, 0 FAIL |
 | `tests/tools-layout.test.js` | 8 PASS, 0 FAIL |
 | `tests/legacy-id-migration.test.js` | 156 PASS, 5 TODO, 0 FAIL |
-| Total (suíte completa) | **458 testes, 453 PASS, 5 TODO, 0 FAIL** |
+| Total (suíte completa) | **466 testes, 461 PASS, 5 TODO, 0 FAIL** |
 
 - `tests/duplicate-detection.test.js` tem 1 FAIL **histórico e fora de escopo**
   (`DUPLICATE_PAIRS_V171`, 28 entradas malformadas). Não corrigir sem pedido.
@@ -226,11 +238,9 @@ auditoria + sincronização explícita localhost ↔ nuvem.
 
 ## 13. Próximos passos pendentes
 
-1. **Validar o site publicado após o deploy** (`https://leopaggi.github.io/atlas-radiologico/`):
-   conferir o preview local dos quadros pending, o overlay `‹ n / total ›` do
-   carrossel do Quiz e os botões de sincronização explícita; se o site estiver
-   desatualizado em dados, usar `☁ sincronizar este dispositivo` no localhost e
-   `⬇ atualizar deste backup/nuvem` no site (ou o backup).
+1. **Sincronização validada** (2026-09-20) — localhost e site publicado
+   conferidos com os mesmos contadores (53 registros com imagens, 66 imagens,
+   11 altPlacements, 44 SRS). Nenhuma ação pendente aqui.
 2. **Persistir a última seção/posição escolhida no Quiz e na sidebar** (reabrir
    no mesmo ponto após F5).
 3. **Eventuais refinamentos do fluxo de IA** (sem API/segredo; sempre com

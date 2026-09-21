@@ -777,3 +777,16 @@ sem reenviar binários. Revisões são locais por dispositivo; para movê-las, u
 backup (`Salvar backup` → `Importar backup`).
 
 Testes: `tests/snapshots-ownership.test.js` com **30 PASS**.
+
+### Push local→nuvem verificado no servidor (2026-09-20)
+
+O botão `☁ sincronizar este dispositivo` deixou de confiar só na escrita: após
+enviar, ele **relê o servidor** e compara os contadores (lesões, imagens,
+altPlacements, SRS). Só mostra sucesso quando a nuvem corresponde ao local; se
+não corresponder, mostra "Envio concluído, mas a verificação do servidor não
+corresponde ao estado local", com a tabela Local × Servidor, sem puxar nada e
+sem alterar o dispositivo. O modal mostra as 5 etapas reais e tem
+`🔄 ler servidor de novo`. A auditoria atualiza a coluna Nuvem com a leitura
+pós-escrita.
+
+Testes: `tests/snapshots-ownership.test.js` com **38 PASS**.

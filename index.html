@@ -1945,14 +1945,39 @@ async function buildSyncAudit(){
   );
   return { local, cloud, cloudError, divergent };
 }
+/* Lê o estado da nuvem DIRETO DO SERVIDOR (nunca de cache) e devolve os
+   mesmos contadores da auditoria. Usado na verificação pós-envio. */
+async function readCloudAuditFromServer(){
+  if(!fbDb) throw new Error('Firebase indisponível neste navegador.');
+  const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'verificação pós-envio (servidor)');
+  if(!remote) return null;
+  const remoteData = (Array.isArray(remote.data) ? remote.data : [])
+    .filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+  const counters = syncAuditCounters(remoteData, null, remote.review, remote.srs);
+  counters.storesRevisions = false;
+  return counters;
+}
+/* Só considera "sincronizado" quando os contadores relevantes batem. */
+function syncCountersMatch(local, server){
+  if(!local || !server) return false;
+  return local.lesions === server.lesions &&
+    local.entriesWithImages === server.entriesWithImages &&
+    local.totalImages === server.totalImages &&
+    local.altPlacements === server.altPlacements &&
+    local.srs === server.srs;
+}
 /* Envia o estado DESTE dispositivo para a nuvem. Confirmação/contexto ficam na
    UI (modal). Cria snapshot ANTES; migra apenas imagens locais legadas; NUNCA
-   altera ownership (writeShardedState só serializa DATA/REVIEW/SRS/etc.). */
-async function syncThisDeviceToCloud(){
-  if(!fbDb){ toast('Firebase indisponível neste navegador.'); return false; }
-  if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return false; }
+   altera ownership (writeShardedState só serializa DATA/REVIEW/SRS/etc.).
+   Depois de escrever, LÊ O SERVIDOR DE VOLTA e só confirma se bater. */
+async function syncThisDeviceToCloud(opts){
+  const onStep = (opts && typeof opts.onStep==='function') ? opts.onStep : ()=>{};
+  if(!fbDb){ toast('Firebase indisponível neste navegador.'); return { ok:false, reason:'no_firebase' }; }
+  if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return { ok:false, reason:'not_ready' }; }
   try{
+    onStep(1, 'criando snapshot');
     createSafetySnapshot('antes de sincronizar este dispositivo com a nuvem');
+    onStep(2, 'preparando estado');
     const mig=await migrateLegacyLocalImagesToCloudinary();
     // Persiste qualquer migração no estado local antes do envio explícito.
     try{ await storage.set(STORAGE_KEY,JSON.stringify(DATA),false); }catch(_e){}
@@ -1963,22 +1988,36 @@ async function syncThisDeviceToCloud(){
     try{ await storage.set(SITEORDER_KEY,JSON.stringify(siteOrder),false); }catch(_e){}
 
     clearTimeout(fbPushTimer);
+    onStep(3, 'enviando para Firestore');
     const ok = await writeShardedStateSerialized(20000);
     if(!ok){
       setSyncStatus(false, 'não deu pra enviar: algum pedaço dos dados ficou grande demais (imagem local sem Cloudinary).');
       toast('⚠ Não deu pra enviar: algum pedaço dos dados ficou grande demais pra nuvem (imagem local sem Cloudinary). Veja o aviso na barra lateral.');
-      return false;
+      return { ok:false, reason:'write_refused' };
     }
+    // Verificação OBRIGATÓRIA: relê do servidor e compara com o local.
+    onStep(4, 'verificando diretamente no servidor');
+    const localCounters = syncAuditCounters(DATA, LESION_REVISIONS, REVIEW, SRS);
+    let serverCounters = null, verifyError = null;
+    try{ serverCounters = await readCloudAuditFromServer(); }
+    catch(e){ verifyError = (e && e.message) || String(e); }
+    if(verifyError || !syncCountersMatch(localCounters, serverCounters)){
+      const msg = 'Envio concluído, mas a verificação do servidor não corresponde ao estado local.';
+      setSyncStatus(false, msg);
+      toast('⚠ ' + msg);
+      return { ok:false, reason:'verification_mismatch', verifyError, local:localCounters, server:serverCounters };
+    }
+    onStep(5, 'sincronização confirmada');
     setSyncStatus(true);
     createSafetySnapshot('após sincronizar este dispositivo com a nuvem');
     const extra=mig&&mig.migrated ? ` ${mig.migrated} imagem(ns) local(is) também foram enviada(s) ao Cloudinary.` : '';
-    toast('Estado deste dispositivo enviado para a nuvem.'+extra);
-    return true;
+    toast('Sincronização confirmada: a nuvem corresponde a este dispositivo.'+extra);
+    return { ok:true, local:localCounters, server:serverCounters };
   }catch(e){
     console.error('Falha ao sincronizar este dispositivo com a nuvem.',e);
     setSyncStatus(false, 'falha ao sincronizar este dispositivo: ' + (e.message||e));
     toast('Falha no envio. Os dados locais foram preservados.');
-    return false;
+    return { ok:false, reason:'error', error:(e && e.message) || String(e) };
   }
 }
 /* v193: ação manual (mantida para uso interno/console) para quando ESTE
@@ -1990,11 +2029,22 @@ async function forceThisDeviceToCloud(){
   if(!ok) return;
   await syncThisDeviceToCloud();
 }
+/* Linhas da tabela de contadores (reaproveitadas no resumo e no erro pós-envio). */
+function syncAuditRowsHtml(l, c){
+  const cell = v => (v===null || v===undefined) ? '—' : String(v);
+  const row = (label, lv, cv) => `<div class="sync-audit-row"><span>${label}</span><b>${cell(lv)}</b><b>${cell(cv)}</b></div>`;
+  return [
+    row('Lesões', l && l.lesions, c && c.lesions),
+    row('Registros com imagens', l && l.entriesWithImages, c && c.entriesWithImages),
+    row('Total de imagens', l && l.totalImages, c && c.totalImages),
+    row('altPlacements', l && l.altPlacements, c && c.altPlacements),
+    row('SRS', l && l.srs, c && c.srs),
+    row('Revisões (local por dispositivo)', l && l.revisions, '—')
+  ].join('');
+}
 /* Resumo visual da auditoria (mesmos contadores dos dois lados). */
 function renderSyncAuditHtml(audit, direction){
   const l = audit.local || {}, c = audit.cloud;
-  const cell = v => (v===null || v===undefined) ? '—' : String(v);
-  const row = (label, lv, cv) => `<div class="sync-audit-row"><span>${label}</span><b>${cell(lv)}</b><b>${cell(cv)}</b></div>`;
   let cloudNote;
   if(audit.cloudError) cloudNote = `<div class="sync-audit-note warn">Nuvem indisponível: ${escAttr(audit.cloudError)}</div>`;
   else if(audit.divergent) cloudNote = `<div class="sync-audit-note warn">Há diferença entre este dispositivo e a nuvem.</div>`;
@@ -2004,13 +2054,8 @@ function renderSyncAuditHtml(audit, direction){
     : '<div class="sync-audit-note warn">Traz o estado da NUVEM para este dispositivo (merge não destrutivo por id, com snapshot antes). Revisões locais NÃO são substituídas. Use quando a nuvem contém a versão correta.</div>';
   return `
     <div class="sync-audit-table">
-      <div class="sync-audit-head"><span>Contador</span><b>Este dispositivo</b><b>Nuvem</b></div>
-      ${row('Lesões', l.lesions, c && c.lesions)}
-      ${row('Registros com imagens', l.entriesWithImages, c && c.entriesWithImages)}
-      ${row('Total de imagens', l.totalImages, c && c.totalImages)}
-      ${row('altPlacements', l.altPlacements, c && c.altPlacements)}
-      ${row('SRS', l.srs, c && c.srs)}
-      ${row('Revisões (local por dispositivo)', l.revisions, '—')}
+      <div class="sync-audit-head"><span>Contador</span><b>Este dispositivo</b><b>Nuvem (servidor)</b></div>
+      ${syncAuditRowsHtml(l, c)}
     </div>
     ${cloudNote}
     <div class="sync-audit-note">As imagens já estão no Cloudinary — a sincronização envia só metadados/URLs, sem reenviar binários.</div>
@@ -2028,29 +2073,65 @@ async function openSyncDeviceToCloudModal(){
     <h2>☁ Sincronizar este dispositivo com a nuvem</h2>
     <div class="modal-sub">envia o estado deste dispositivo para a nuvem — use quando este dispositivo contém a versão correta</div>
     <div id="sync-audit-box"><div class="sync-audit-note">Comparando com a nuvem…</div></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="sync-cancel">cancelar</button>
-      <button class="btn btn-primary" id="sync-confirm" disabled>☁ Enviar este dispositivo para a nuvem</button>
+    <div id="sync-step" class="sync-audit-note"></div>
+    <div class="modal-actions" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <button class="btn btn-ghost" id="sync-refresh">🔄 ler servidor de novo</button>
+      <span style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" id="sync-cancel">cancelar</button>
+        <button class="btn btn-primary" id="sync-confirm" disabled>☁ Enviar este dispositivo para a nuvem</button>
+      </span>
     </div>
   </div>`;
   document.body.appendChild(ov);
   const close = ()=>{ if(ov.isConnected) ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
   ov.querySelector('#sync-cancel').onclick = close;
   const box = ov.querySelector('#sync-audit-box');
+  const stepEl = ov.querySelector('#sync-step');
   const confirmBtn = ov.querySelector('#sync-confirm');
-  try{
-    const audit = await buildSyncAudit();
-    box.innerHTML = renderSyncAuditHtml(audit, 'toCloud');
-    confirmBtn.disabled = false;
-  }catch(e){
-    box.innerHTML = `<div class="sync-audit-note warn">Não foi possível comparar agora: ${escAttr((e&&e.message)||e)}</div>`;
-  }
+  const refreshAudit = async ()=>{
+    box.innerHTML = '<div class="sync-audit-note">Lendo do servidor…</div>';
+    try{
+      const audit = await buildSyncAudit(); // sempre nova leitura do servidor
+      box.innerHTML = renderSyncAuditHtml(audit, 'toCloud');
+      confirmBtn.disabled = false;
+    }catch(e){
+      box.innerHTML = `<div class="sync-audit-note warn">Não foi possível comparar agora: ${escAttr((e&&e.message)||e)}</div>`;
+    }
+  };
+  await refreshAudit();
+  ov.querySelector('#sync-refresh').onclick = refreshAudit;
   confirmBtn.onclick = async ()=>{
     confirmBtn.disabled = true;
     confirmBtn.textContent = '⏳ Enviando…';
-    const ok = await syncThisDeviceToCloud();
-    close();
-    if(!ok) toast('Nada foi enviado — o estado local foi preservado.');
+    stepEl.className = 'sync-audit-note';
+    stepEl.textContent = '1/5 · criando snapshot…';
+    const res = await syncThisDeviceToCloud({ onStep:(n, label)=>{ stepEl.textContent = n+'/5 · '+label+'…'; } });
+    if(res.ok){
+      stepEl.className = 'sync-audit-note ok';
+      stepEl.textContent = '5/5 · sincronização confirmada (nuvem = este dispositivo).';
+      confirmBtn.textContent = '✓ Sincronizado';
+      await refreshAudit(); // atualiza a coluna Nuvem com a leitura pós-escrita
+      toast('Sincronização confirmada.');
+      return;
+    }
+    // Falha: mantém o modal aberto, NÃO puxa nada e NÃO altera o local.
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = '☁ Tentar novamente';
+    if(res.reason==='verification_mismatch'){
+      stepEl.className = 'sync-audit-note warn';
+      stepEl.textContent = 'Envio concluído, mas a verificação do servidor não corresponde ao estado local.';
+      const l = res.local || {}, s = res.server;
+      box.innerHTML = `
+        <div class="sync-audit-note warn">Envio concluído, mas a verificação do servidor não corresponde ao estado local.</div>
+        <div class="sync-audit-table">
+          <div class="sync-audit-head"><span>Contador</span><b>Local enviado</b><b>Servidor</b></div>
+          ${syncAuditRowsHtml(l, s)}
+        </div>
+        <div class="sync-audit-note">Nada foi alterado neste dispositivo e nada foi trazido da nuvem.</div>`;
+    } else {
+      stepEl.className = 'sync-audit-note warn';
+      stepEl.textContent = 'Não foi possível concluir o envio. O estado local foi preservado.';
+    }
   };
 }
 async function openUpdateFromCloudModal(){
@@ -2065,9 +2146,12 @@ async function openUpdateFromCloudModal(){
     <h2>⬇ Atualizar deste backup/nuvem</h2>
     <div class="modal-sub">traz o estado da nuvem para este dispositivo — ação explícita, com confirmação e snapshot</div>
     <div id="sync-audit-box"><div class="sync-audit-note">Comparando com a nuvem…</div></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="sync-cancel">cancelar</button>
-      <button class="btn btn-primary" id="sync-confirm" disabled>⬇ Trazer da nuvem</button>
+    <div class="modal-actions" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <button class="btn btn-ghost" id="sync-refresh">🔄 ler servidor de novo</button>
+      <span style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" id="sync-cancel">cancelar</button>
+        <button class="btn btn-primary" id="sync-confirm" disabled>⬇ Trazer da nuvem</button>
+      </span>
     </div>
   </div>`;
   document.body.appendChild(ov);
@@ -2075,13 +2159,18 @@ async function openUpdateFromCloudModal(){
   ov.querySelector('#sync-cancel').onclick = close;
   const box = ov.querySelector('#sync-audit-box');
   const confirmBtn = ov.querySelector('#sync-confirm');
-  try{
-    const audit = await buildSyncAudit();
-    box.innerHTML = renderSyncAuditHtml(audit, 'fromCloud');
-    confirmBtn.disabled = false;
-  }catch(e){
-    box.innerHTML = `<div class="sync-audit-note warn">Não foi possível comparar agora: ${escAttr((e&&e.message)||e)}</div>`;
-  }
+  const refreshAudit = async ()=>{
+    box.innerHTML = '<div class="sync-audit-note">Lendo do servidor…</div>';
+    try{
+      const audit = await buildSyncAudit(); // sempre nova leitura do servidor
+      box.innerHTML = renderSyncAuditHtml(audit, 'fromCloud');
+      confirmBtn.disabled = false;
+    }catch(e){
+      box.innerHTML = `<div class="sync-audit-note warn">Não foi possível comparar agora: ${escAttr((e&&e.message)||e)}</div>`;
+    }
+  };
+  await refreshAudit();
+  ov.querySelector('#sync-refresh').onclick = refreshAudit;
   confirmBtn.onclick = async ()=>{
     confirmBtn.disabled = true;
     confirmBtn.textContent = '⏳ Atualizando…';
