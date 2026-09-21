@@ -3318,3 +3318,369 @@ Sidebar legível com nomes completos e cobertura compacta à direita.
 ### Commit após aprovação
 
 Ainda não criado.
+
+**Número da alteração:** 055
+**Data:** 21/09/2026
+
+### Objetivo
+
+Corrigir o "Atlas abre zerado em outro computador": um dispositivo novo (sem
+catálogo local ainda) empurrava sozinho um catálogo vazio (sem imagens/SRS/
+progresso) por cima do estado real da nuvem, ao abrir a página pela primeira
+vez num computador diferente.
+
+### Estado antes
+
+Em `loadData()`, quando o IndexedDB local ainda não tinha o catálogo salvo
+(sempre verdadeiro na primeira abertura num navegador/computador novo), o
+código entrava no `catch` e usava o `SEED` cru (sem imagens, sem progresso)
+como base. Mais adiante, no MESMO carregamento, havia uma chamada
+incondicional a `pushToFirebaseNow()` que enviava esse catálogo zerado para o
+Firestore. Como o envio é um `.set()` (substituição total, não uma mescla), a
+nuvem real — que já tinha imagens, revisões e SRS de outros dispositivos —
+era sobrescrita pelo catálogo vazio. Foi exatamente isso que aconteceu ao
+abrir o site publicado num computador do hospital: os contadores apareceram
+zerados ali, e a nuvem também ficou zerada para todo mundo depois.
+
+Antes de corrigir, foi confirmado com o usuário que o computador principal
+ainda tinha o estado correto no IndexedDB local (nunca é sobrescrito pela
+nuvem, porque o pull automático no boot já estava desativado desde a
+Alteração 008) e que a auditoria (`☁ sincronizar este dispositivo`) mostrou
+nuvem íntegra (1213/1213 lesões, 65/65 registros com imagem, 89/89 imagens,
+11/11 altPlacements, 49/49 SRS) — ou seja, não foi necessária nenhuma
+recuperação manual antes desta correção.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/critical-flows.test.js` (âncoras + 2 testes novos)
+- `tests/device-bootstrap.test.js` (novo arquivo, 32 testes)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- `deviceBootstrapPending` (flag global, perto de `appStateReady`): enquanto
+  `true`, `writeShardedState()` recusa QUALQUER envio (automático, debounced
+  ou pelo botão "☁ sincronizar este dispositivo"/"🔀 mesclar imagens") —
+  mesmo sinal já usado para "pedaço grande demais", que todo chamador já
+  trata sem quebrar.
+- `loadData()`: o `catch` de dispositivo novo não persiste nem envia mais
+  nada sozinho — só marca `isNewLocalDevice`/`deviceBootstrapPending` e usa o
+  `SEED` como base de trabalho EM MEMÓRIA. Depois de REVIEW/SRS/SESSIONLOG/
+  LESION_REVISIONS carregados (vazios, de fato, num dispositivo novo), e
+  ANTES de qualquer limpeza de duplicatas/push/`renderAll()`, chama
+  `runNewDeviceBootstrapFlow()`.
+- `checkCloudForBootstrapV1()`: consulta a nuvem SERVER-ONLY (reaproveita
+  `readCloudAuditFromServer()`, a mesma função da verificação pós-envio).
+  Nunca confunde "não consegui verificar" (offline/erro) com "a nuvem está
+  vazia" — só considera vazio o caso em que NENHUM dispositivo jamais
+  sincronizou o projeto (nenhum documento em `atlas_state/main`).
+- `openNewDeviceBootstrapModal()`: modal único, sem fechar por clique
+  fora/ESC (força uma decisão explícita). Mostra "🔎 Verificando…", depois
+  um de três estados: nuvem com dados (tabela de auditoria + `⬇ Carregar
+  meus dados da nuvem` ou `usar este dispositivo vazio mesmo assim`, este
+  último com um `confirm()` explicando que vai sobrescrever a nuvem na
+  próxima sincronização), nuvem nunca inicializada (resolve sozinho, sem
+  perguntar nada) ou falha de verificação (`🔄 tentar novamente` + a mesma
+  opção de continuar vazio, com aviso).
+- `applyNewDeviceBootstrapChoice(choice)`: só "load" chama `syncFromFirebase()`
+  — o MESMO merge não destrutivo já usado por "⬇ atualizar deste backup/
+  nuvem" (nenhuma lógica de reconciliação paralela foi criada). "skip"/
+  "empty" apenas liberam o dispositivo (`deviceBootstrapPending = false`) e
+  marcam o marcador local.
+- `DEVICE_INITIALIZED_KEY` (`atlas:v1:deviceInitialized`, `localStorage`,
+  mesmo padrão das preferências de escopo): marcador estritamente LOCAL, não
+  sincronizado, não incluído no backup — só evita reabrir a pergunta à toa;
+  quem decide se o dispositivo é novo continua sendo a ausência do próprio
+  catálogo (`STORAGE_KEY`).
+- Guardas adicionais (mensagem específica) em `syncThisDeviceToCloud()` e
+  `mergeThisDeviceImagesToCloud()`: "Este dispositivo ainda não foi
+  inicializado com os dados da nuvem." — mesmo que alguém consiga clicar
+  nesses botões antes do modal aparecer.
+
+### Segurança
+
+- Nenhum push acontece enquanto `deviceBootstrapPending` for `true` — nem o
+  automático de `loadData()`, nem os botões explícitos.
+- Reaproveita 100% da lógica de merge existente (`syncFromFirebase`,
+  `mergeEntryNonDestructive`, `unionEntryImages`) — sem reconciliação
+  paralela. Isso já garante, sem código novo, que o bootstrap preserva
+  imagens (união aditiva, sem duplicar), `assignedAt` (o mais antigo válido
+  vence), SRS mais novo, REVIEW/SESSIONLOG (máximo preservado) e ownership
+  (conflito automático é bloqueado e registrado, nunca resolvido em
+  silêncio).
+- Um dispositivo que JÁ tinha catálogo local (`STORAGE_KEY` presente) não
+  passa por nenhum destes caminhos novos — comportamento idêntico ao de
+  antes desta alteração.
+- Continuar "vazio mesmo assim" exige confirmação explícita com aviso do que
+  vai acontecer; não há bootstrap automático silencioso.
+- Offline/erro ao verificar a nuvem nunca é tratado como "nuvem vazia".
+
+### Testes realizados
+
+- `node tests/device-bootstrap.test.js` (novo): 32 PASS, 0 FAIL — detecção
+  server-only, bloqueio de push em todos os call sites, decisão pura
+  (load/skip/empty), wiring do modal (estático), marcador local, ordem real
+  de `loadData()` (dispositivo novo aciona o bootstrap antes de
+  `renderAll()`; dispositivo já inicializado não é afetado; reload seguinte
+  não repete o fluxo), e o merge do bootstrap preservando imagens/
+  assignedAt/SRS/REVIEW/SESSIONLOG/ownership (reaproveitando as funções
+  reais de `syncFromFirebase`).
+- `node tests/critical-flows.test.js`: 21 PASS, 0 FAIL (âncoras atualizadas
+  6221/6231/8773/11853; nova checagem de que a chamada a `syncFromFirebase()`
+  do bootstrap só existe dentro de `applyNewDeviceBootstrapChoice()`, gated
+  pela escolha do usuário no modal — nunca em `loadData()` diretamente).
+- Suíte completa: 698 PASS, 5 TODO, só o FAIL histórico (28 entradas
+  malformadas de `DUPLICATE_PAIRS_V171`, fora de escopo).
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Um computador novo, ao abrir o Atlas, nunca mais sobrescreve a nuvem
+sozinho: primeiro verifica (server-only), mostra o que encontrou, e só age
+depois de uma decisão explícita — carregando os dados reais, ou confirmando
+(com aviso) que quer mesmo começar vazio. Um computador que já tinha
+catálogo local continua funcionando exatamente como antes.
+
+### Validação
+
+**Aprovada em teste manual pelo usuário em 21/09/2026** — testes visuais e
+funcionais realizados, resultado correto. Considerada BASELINE ESTÁVEL do
+projeto junto com as Alterações 056 e 057.
+
+### Commit após aprovação
+
+Aprovada; commit/publicação ainda não criados (aguardando pedido explícito
+do usuário).
+
+**Número da alteração:** 056
+**Data:** 21/09/2026
+
+### Objetivo
+
+Descrição persistente para imagens e quadros (multilinha, textos longos),
+visível de forma consistente na edição, no detalhe da lesão, no Quiz
+(oculta durante a pergunta, visível após responder) e ao maximizar
+(lightbox) — sem criar nenhum campo novo.
+
+### Estado antes
+
+O campo canônico `label` já existia e já era exibido no detalhe da lesão e
+no Quiz pós-resposta (`quizImageDescHtml`). Mas dois dos três lugares onde
+`label` era escrito usavam `<input>` de uma linha (galeria do editor e caixa
+de edição do modal "Adicionar imagem" do Quiz) — só o construtor de quadro
+já usava `<textarea>`. E o lightbox (zoom) não mostrava descrição nenhuma,
+em lugar nenhum, mesmo quando a imagem tinha `label`.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/quiz-images.test.js` (2 testes ajustados pra nova assinatura do
+  lightbox + 1 teste novo)
+- `tests/image-description.test.js` (novo arquivo, 21 testes)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- Galeria de imagens do editor (`openForm`) e caixa de edição do modal
+  "🖼 Adicionar imagem" do Quiz: `<input class="img-gallery-label">` virou
+  `<textarea class="img-gallery-label" rows="3">` — mesmo campo `label`,
+  mesma lógica de salvar/chips de sequência, sem `maxlength` (sem limite
+  artificial de tamanho). CSS de `.img-gallery-label` ganhou
+  `resize:vertical` e `min-height`, pra caber textos mais longos.
+- Construtor de quadro (`openCollageBuilder`): `#collage-desc` já era
+  `<textarea>`; só aumentou de `rows="2"` para `rows="3"` (continua
+  `resize:vertical`, sem limite).
+- `openImageLightbox(src, description)`: nova assinatura, com `description`
+  opcional. Sem descrição, comportamento idêntico ao de sempre (só a
+  imagem). Com descrição, aparece **abaixo** da imagem, num bloco próprio
+  (`.lightbox-content` em coluna + `.lightbox-desc`), nunca sobreposta,
+  escapada com `esc()`, com espaço pra texto longo (a caixa do lightbox
+  ganha scroll interno se precisar). Clicar no texto da descrição não fecha
+  o lightbox (`stopPropagation`); clicar na imagem ou fora continua
+  fechando, como sempre.
+- 5 pontos onde o lightbox já era aberto, revisados individualmente:
+  detalhe da lesão e galeria do editor e do modal do Quiz agora passam a
+  descrição sempre (não é contexto de "spoiler"); o Quiz durante a pergunta
+  **nunca** passa (`st.answered ? cur.label : ''` — mesmo gate que já
+  protegia o bloco acima da imagem); a ferramenta técnica de auditoria de
+  vínculo de imagens continua exatamente como estava (fora do pedido).
+- Detalhe da lesão (`openDetail`): passou a usar `esc()` (escapa `&` também)
+  em vez do `.replace(/</g,...)` manual que só escapava `<`; `.detail-img-label`
+  ganhou estilo de texto corrido (esquerda, fonte normal, `white-space:pre-wrap`)
+  em vez de monoespaçado centralizado — mais legível para descrições longas.
+- **Nenhum campo novo**: `label` continua o único campo canônico de descrição
+  (`description`/`collageDescription`/`boardDescription` continuam
+  inexistentes como propriedade de imagem — regra mantida).
+
+### Segurança
+
+- `label` já viajava por `spread` (`{...x}`) em todo o caminho de
+  salvar/upload/sync/backup — nenhuma mudança de persistência foi
+  necessária; textos longos e com quebra de linha já passavam por esse
+  caminho sem truncar.
+- Limitação preexistente **registrada, não alterada nesta tarefa**: o merge
+  aditivo (`unionEntryImages`/`mergeEntryNonDestructive`) não faz
+  reconciliação campo a campo — se a MESMA imagem tiver `label` diferente em
+  dois dispositivos, o merge mantém a versão do lado processado como base.
+  Isso já valia pra qualquer campo de imagem antes desta entrega; não foi
+  criada nem alterada nenhuma lógica de resolução de conflito.
+- Compatibilidade com imagens antigas sem `label` preservada (`label||''`
+  em toda leitura, como já era).
+- **Alteração 055 (bootstrap seguro em dispositivo novo) permanece
+  totalmente intacta** — nenhuma função/linha daquela entrega foi tocada
+  nesta tarefa; confirmado por `git diff` (todas as ocorrências dos
+  identificadores daquela alteração aparecem só como adições da própria
+  Alteração 055, nenhuma como remoção/edição nesta) e pela suíte
+  `tests/device-bootstrap.test.js` continuando 32 PASS / 0 FAIL sem
+  nenhuma alteração no arquivo de teste.
+
+### Testes realizados
+
+- `node tests/image-description.test.js` (novo): **21 PASS**, 0 FAIL —
+  campo único (sem campo novo), textarea nos 3 locais sem `maxlength`,
+  lightbox com/sem descrição (dinâmico, DOM falsa mínima), descrição sempre
+  abaixo da imagem via CSS, gate do Quiz (`st.answered`) também no lightbox,
+  detalhe da lesão com `esc()`, e confirmação de que a lógica de merge não
+  foi tocada.
+- `node tests/quiz-images.test.js`: **102 PASS**, 0 FAIL (2 testes
+  atualizados pra nova assinatura do lightbox + 1 teste novo sobre o gate).
+- `node tests/critical-flows.test.js`: **21 PASS**, 0 FAIL (âncoras
+  atualizadas para 6236/6246/8788/11868).
+- `node tests/device-bootstrap.test.js`: **32 PASS**, 0 FAIL, sem alteração
+  no arquivo — confirma a Alteração 055 intacta.
+- `node tests/collage-desc.test.js`, `tests/quiz-image-desc.test.js`: **15
+  PASS** / **8 PASS**, sem alterações necessárias.
+- Suíte completa: **720 PASS, 5 TODO**, só o FAIL histórico
+  (`DUPLICATE_PAIRS_V171`, fora de escopo).
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Qualquer imagem ou quadro pode ter uma descrição longa e multilinha,
+escrita/editada nos 3 lugares onde isso já fazia sentido, sempre visível
+onde já devia aparecer (detalhe, editor, modal do Quiz) e — a novidade —
+também ao maximizar, com a regra de sigilo do Quiz preservada à risca
+(nunca antes de responder).
+
+### Validação
+
+**Aprovada em teste manual pelo usuário em 21/09/2026** — testes visuais e
+funcionais realizados, resultado correto. Considerada BASELINE ESTÁVEL do
+projeto junto com as Alterações 055 e 057.
+
+### Commit após aprovação
+
+Aprovada; commit/publicação ainda não criados (aguardando pedido explícito
+do usuário).
+
+**Número da alteração:** 057
+**Data:** 21/09/2026
+
+### Objetivo
+
+Ajuste VISUAL da Alteração 056, aprovado pelo usuário após teste real: a
+lógica (gate do Quiz, persistência, sync) ficou correta e não foi tocada —
+só a apresentação precisava de polimento.
+
+### Estado antes
+
+No detalhe da lesão, uma descrição longa ocupava espaço demais e poluía o
+layout, sem forma de recolher. No lightbox, a descrição ficava presa à
+largura que a IMAGEM ocupava (uma imagem estreita/retrato forçava o texto a
+quebrar em muitas linhas à toa), com padding/line-height maiores que o
+necessário.
+
+### O que foi alterado (só CSS + 1 wiring de clique, sem tocar lógica)
+
+- `.detail-img-label`: clamp visual de 2 linhas (`-webkit-line-clamp:2`) +
+  classe `.expanded` que remove o clamp. Clique alterna a classe
+  (`labelEl.classList.toggle('expanded')`) — não toca `img.label`/`DATA`; o
+  texto completo (`esc(img.label)`) sempre esteve e continua no DOM, só a
+  apresentação corta visualmente.
+- `.lightbox-content`: ganhou `width:min(1200px,94vw)` — a coluna da
+  descrição agora escala com a TELA, não com o tamanho renderizado da
+  imagem. `.lightbox-desc` perdeu o teto fixo de `720px`, ganhou
+  `padding:8px 18px` (era `12px 14px`) e `line-height:1.4` (era `1.55`).
+  `.lightbox-img` (tamanho/posição) não foi tocado.
+- `quizImageDescHtml`: mesmo ajuste de respiro (`padding`/`line-height`
+  reduzidos, `text-align:left` explícito, `white-space:pre-wrap` pra
+  parágrafos ficarem consistentes com detalhe/lightbox) — **sem** nenhum
+  truncamento; depois de responder, a descrição continua aparecendo
+  inteira, como sempre.
+
+### Segurança / não regressão
+
+- Nenhuma mudança em `label`, IndexedDB, Firebase, sync, merge, ownership,
+  dedup, backup/restore, importação/exportação.
+- Gate do Quiz (nada antes de responder, tudo depois) intocado — confirmado
+  por teste dedicado.
+- **Alteração 055 confirmada intacta** (nenhuma linha removida/editada nos
+  identificadores do bootstrap; `tests/device-bootstrap.test.js` continua
+  32 PASS sem alteração no arquivo).
+
+### Testes realizados
+
+- `tests/image-description.test.js`: **31 PASS** (+10 testes novos: clamp
+  de 2 linhas via CSS, texto íntegro no DOM, toggle de expandir/recolher
+  sem mutar dado, regressão do Quiz sem truncamento, regressão do gate do
+  lightbox, largura independente da imagem, padding/line-height compactos
+  sem reduzir fonte, imagem como elemento prioritário intocado).
+- `tests/critical-flows.test.js`: **21 PASS** (âncoras 6247/6257/8799/11884).
+- `tests/device-bootstrap.test.js`: **32 PASS**, sem alteração.
+- Suíte completa: **730 PASS, 5 TODO**, só o FAIL histórico.
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Detalhe da lesão compacto por padrão (2 linhas + expandir/recolher sob
+clique); lightbox com a descrição usando muito mais largura horizontal,
+mais compacta verticalmente, sempre abaixo da imagem e nunca sobreposta;
+Quiz pós-resposta com o mesmo respiro, sem truncar.
+
+### Validação
+
+**Aprovada em teste manual pelo usuário em 21/09/2026** — testes visuais e
+funcionais realizados, resultado correto ("a apresentação ficou
+excelente"). Considerada BASELINE ESTÁVEL do projeto junto com as
+Alterações 055 e 056.
+
+### Commit após aprovação
+
+Aprovada; commit/publicação ainda não criados (aguardando pedido explícito
+do usuário).
+
+**Número da alteração:** 058
+**Data:** 21/09/2026
+
+### Objetivo
+
+Registrar formalmente a validação manual das Alterações 055, 056 e 057
+(nenhuma alteração de código funcional — só documentação).
+
+### O que foi feito
+
+Nenhum código foi alterado nesta entrada. Atualização de
+`LOG_DESENVOLVIMENTO.md`, `AI.md` e `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+para registrar que o usuário testou manualmente (funcional e visualmente) e
+aprovou as três entregas anteriores, marcando-as como **baseline estável
+do projeto**:
+
+- **Alteração 055** — bootstrap seguro em dispositivo novo.
+- **Alteração 056** — descrição persistente de imagens e quadros.
+- **Alteração 057** — refinamento visual das descrições.
+
+### Estado após esta entrada
+
+- Nenhum commit foi criado; nada foi publicado. `git status` continua
+  mostrando as mesmas alterações não commitadas de `index.html` e dos
+  arquivos de teste/documentação das três entregas anteriores.
+- Suíte completa validada pela última vez nesta sessão: **730 PASS, 5
+  TODO, 1 FAIL histórico** (`duplicate-detection.test.js`,
+  `DUPLICATE_PAIRS_V171`, fora de escopo). `git diff --check` sem erros.
+- Publicação/commit permanecem pendentes de pedido explícito do usuário.
+
+### Commit após aprovação
+
+Ainda não criado (aguardando pedido explícito do usuário para commitar
+e/ou publicar).

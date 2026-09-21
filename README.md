@@ -1006,3 +1006,45 @@ pré-checagem de novo e alerta sobre lesão já existente. O botão
 5. Para testar em desenvolvimento, troque `ATLAS_URL` no topo do script
    para `http://localhost:3000/` (produção: URL do GitHub Pages).
 6. Abra um caso do Radiopaedia e clique em **📥 Enviar ao Atlas**.
+
+### Bootstrap seguro em dispositivo novo (2026-09-21)
+
+Corrigido o bug do "Atlas abre zerado em outro computador": um dispositivo
+sem catálogo local ainda não sobrescreve mais a nuvem sozinho. Agora, ao
+detectar que o navegador não tem uma cópia local, o Atlas verifica a nuvem
+(direto do servidor, nunca do cache) antes de mostrar qualquer número, e
+mostra um aviso — "Dados encontrados na nuvem" com a contagem real — pedindo
+uma decisão explícita: carregar esses dados (reaproveita o mesmo mecanismo
+seguro de "atualizar deste backup/nuvem") ou confirmar (com aviso claro) que
+quer mesmo começar vazio. Enquanto essa decisão não é tomada, nenhum envio
+para a nuvem acontece — nem o automático, nem os botões manuais de
+sincronizar. Um computador que já tinha o Atlas configurado não muda em
+nada. Ver `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` e `AI.md` para os
+detalhes técnicos completos.
+
+Testes: `tests/device-bootstrap.test.js` (32 PASS).
+
+### Descrição persistente de imagens e quadros (2026-09-21)
+
+Qualquer imagem ou quadro pode ter uma descrição longa e multilinha — o
+campo continua sendo o mesmo `label` de sempre (nenhum campo novo). Agora
+dá pra escrever/editar esse texto com espaço de verdade (`<textarea>`, sem
+limite artificial) tanto no editor quanto no modal "🖼 Adicionar imagem" do
+Quiz e no construtor de quadro. A descrição aparece no detalhe da lesão, e
+no Quiz continua **invisível durante a pergunta** e some assim que você
+responde — aí fica visível ao lado da imagem, e também **ao maximizar**
+(lightbox), sempre abaixo da imagem, sem cobrir nada. Se não houver
+descrição, nenhuma caixa aparece.
+
+Testes: `tests/image-description.test.js` (21 PASS).
+
+Ajuste visual (mesmo dia, após teste real): no detalhe da lesão, a
+descrição aparece compacta em até 2 linhas (com "..." quando maior) e pode
+ser expandida/recolhida com um clique — o texto completo continua salvo
+integralmente, só a apresentação é limitada. No lightbox, a descrição
+passou a usar bem mais largura horizontal (independente do tamanho da
+imagem) e ficou mais compacta na vertical, sem diminuir a fonte. No Quiz
+pós-resposta, mesmo respiro visual — sem nenhum truncamento aí, porque faz
+parte do estudo ver o texto inteiro.
+
+Testes: `tests/image-description.test.js` (31 PASS).

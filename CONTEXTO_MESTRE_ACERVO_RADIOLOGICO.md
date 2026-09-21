@@ -6,7 +6,15 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## 1. Estado do Git / publicação
 
-- Último commit publicado antes deste bloco (confirmado): **`038f4be`** —
+- **Nota (2026-09-21):** HEAD local e `origin/main` publicados coincidem em
+  `c628d09` ("Melhora importacao imagens quiz e cobertura do acervo"). As
+  Alterações 055, 056, 057 (seções 17/19) estão implementadas, testadas e
+  **validadas manualmente pelo usuário** (ver seção 21), mas **ainda não
+  commitadas nem publicadas** — `git status` mostra os arquivos alterados
+  como working tree sujo sobre esse mesmo HEAD. Commit/push seguem
+  dependendo de pedido explícito.
+- Último commit publicado antes deste bloco (confirmado, texto histórico
+  original desta seção — desatualizado, ver nota acima): **`038f4be`** —
   "Melhora revisoes classificacoes e ferramentas".
 - Branch local: **`master`**. Remoto: `origin` =
   `https://github.com/leopaggi/atlas-radiologico.git`; branch publicada
@@ -46,6 +54,22 @@ uma cópia antiga e o repositório, o repositório e o código valem.
   confirmação/snapshot). Só mostra sucesso se os contadores do servidor baterem
   com o local. Revisões são locais por dispositivo; para movê-las, use o backup
   (Salvar → Importar).
+  - **Exceção — dispositivo novo sem catálogo local (Alteração 055,
+    2026-09-21):** `writeShardedState()` (o único ponto que escreve no
+    Firestore) recusa QUALQUER envio enquanto `deviceBootstrapPending` for
+    `true`. Essa flag liga quando `loadData()` detecta que o IndexedDB local
+    ainda não tem o catálogo (`STORAGE_KEY` ausente) — nesse caso, ANTES de
+    qualquer push automático e ANTES de `renderAll()`, a nuvem é consultada
+    SERVER-ONLY e um modal mostra o que foi encontrado, pedindo uma decisão
+    explícita: carregar (reaproveita `syncFromFirebase()`, o mesmo pull não
+    destrutivo de "atualizar deste backup/nuvem") ou confirmar (com aviso)
+    que quer mesmo começar vazio. Um dispositivo que já tem catálogo local
+    não passa por nada disso — comportamento idêntico ao de antes. Ver seção
+    17 para os detalhes completos. **Motivação:** sem isso, um computador
+    novo abrindo o site publicado usava o `SEED` cru como catálogo e, no
+    mesmo carregamento, um `pushToFirebaseNow()` incondicional sobrescrevia
+    (overwrite total, não é merge) o estado real da nuvem — foi isso que
+    zerou o Atlas ao abrir num segundo computador do hospital.
   - **Bug corrigido (sucesso falso):** antes o push declarava sucesso sem reler o
     servidor e a auditoria não se atualizava após o envio.
   - **Leitura server-only:** `readShardedState` usa `get({source:'server'})` no
@@ -279,11 +303,11 @@ Destino: `https://ntfy.sh/acervo-leo-7k29-radiologia`. Detalhes em `AGENTS.md`.
 |---|---|
 | `tests/lesion-review.test.js` | **138 PASS**, 0 FAIL |
 | `tests/snapshots-ownership.test.js` | **46 PASS**, 0 FAIL |
-| `tests/quiz-images.test.js` | **101 PASS**, 0 FAIL |
+| `tests/quiz-images.test.js` | **102 PASS**, 0 FAIL |
 | `tests/local-scope-prefs.test.js` | **14 PASS**, 0 FAIL |
 | `tests/classification-integrity.test.js` | **24 PASS**, 0 FAIL |
 | `tests/srs-dashboard.test.js` | **17 PASS**, 0 FAIL |
-| `tests/critical-flows.test.js` | 20 PASS, 0 FAIL |
+| `tests/critical-flows.test.js` | 21 PASS, 0 FAIL |
 | `tests/tools-layout.test.js` | **11 PASS**, 0 FAIL |
 | `tests/legacy-id-migration.test.js` | 156 PASS, 5 TODO, 0 FAIL |
 | `tests/external-import.test.js` | **67 PASS**, 0 FAIL |
@@ -291,13 +315,18 @@ Destino: `https://ntfy.sh/acervo-leo-7k29-radiologia`. Detalhes em `AGENTS.md`.
 | `tests/image-productivity.test.js` | **20 PASS**, 0 FAIL |
 | `tests/collage-desc.test.js` | **15 PASS**, 0 FAIL |
 | `tests/sidebar-image-stats.test.js` | **22 PASS**, 0 FAIL |
-| Total (suíte completa) | **671 testes, 665 PASS, 5 TODO, 0 FAIL** |
+| `tests/device-bootstrap.test.js` | **32 PASS**, 0 FAIL |
+| `tests/image-description.test.js` | **31 PASS**, 0 FAIL |
+| Total (suíte completa) | **736 testes, 730 PASS, 5 TODO, 0 FAIL** |
 
 - `tests/duplicate-detection.test.js` tem 1 FAIL **histórico e fora de escopo**
   (`DUPLICATE_PAIRS_V171`, 28 entradas malformadas). Não corrigir sem pedido.
+  (Não entra na tabela acima nem no total, por ter esse FAIL conhecido — ver
+  `README.md`.)
 - `tests/critical-flows.test.js` usa âncoras de linha exatas; após edições antes
-  das âncoras, atualizar via script. Valores atuais:
-  **6061/6051/8603/11592**.
+  das âncoras, atualizar via script. Valores atuais (Alteração 057):
+  **6247/6257/8799/11884** (`brokenArtifacts`/`recovery`/`loadData`/
+  `importHandler`, respectivamente).
 - `git diff --check`: sem erros de espaço em branco.
 
 ## 12. Entrega da Alteração 044
@@ -435,15 +464,155 @@ pull, a proteção de ownership e a verificação server-only.
   após concluir). Sem listeners/intervals; scope/ordenação/filtro intactos.
 - Testes: `tests/sidebar-image-stats.test.js`, **20 PASS**.
 
-## 17. Próximos passos pendentes
+## 17. Bootstrap seguro em dispositivo novo (Alteração 055, 2026-09-21)
 
-1. **Merge aditivo e sincronização validados** (2026-09-21) — servidor/site
+**Causa do "Atlas abre zerado em outro computador", corrigida.** Um
+dispositivo/navegador sem catálogo local ainda (`STORAGE_KEY` ausente no
+IndexedDB — sempre verdadeiro na primeira abertura num computador novo)
+fazia `loadData()` usar o `SEED` cru (sem imagens/SRS/progresso). Mais
+adiante, no MESMO carregamento, um `pushToFirebaseNow()` incondicional
+enviava esse catálogo vazio para o Firestore — como `writeShardedState()`
+faz `.set()` (substituição total, não mescla), isso sobrescrevia o estado
+real que já existia na nuvem. **Confirmado antes de corrigir:** o computador
+principal tinha IndexedDB local intacto e a nuvem estava íntegra (1213/1213
+lesões, 65/65 registros com imagem, 89/89 imagens, 11/11 altPlacements,
+49/49 SRS) — nenhuma recuperação manual foi necessária.
+
+- **Bloqueio central:** `deviceBootstrapPending` (flag global) faz
+  `writeShardedState()` — o único ponto que escreve no Firestore — recusar
+  QUALQUER envio (automático ou pelos botões explícitos) enquanto `true`.
+- **Detecção:** liga em `loadData()` quando `STORAGE_KEY` está ausente/não
+  parseia (mesmo sinal que já existia; não inventa heurística nova).
+- **Verificação server-only:** `checkCloudForBootstrapV1()` reaproveita
+  `readCloudAuditFromServer()`. Só é "vazio legítimo" quando NENHUM
+  documento existe em `atlas_state/main` (nunca sincronizado por ninguém);
+  offline/erro nunca vira "vazio" — bloqueia e oferece tentar de novo.
+- **Decisão explícita:** `openNewDeviceBootstrapModal()` (sem fechar por
+  clique fora/ESC) mostra o que a nuvem tem e pede: carregar (reaproveita
+  `syncFromFirebase()`, o MESMO pull não destrutivo de "atualizar deste
+  backup/nuvem" — sem lógica de merge paralela) ou confirmar, com aviso
+  explícito de sobrescrita futura, que quer continuar vazio.
+- **Preservação automática (herdada de `syncFromFirebase`/
+  `mergeEntryNonDestructive`/`unionEntryImages`, sem código novo):** imagens
+  (união aditiva, sem duplicar), `assignedAt` (mais antigo válido vence),
+  SRS mais novo, REVIEW/SESSIONLOG (máximo preservado), ownership (conflito
+  automático bloqueado e registrado, nunca resolvido em silêncio).
+- **Marcador local:** `atlas:v1:deviceInitialized` (`localStorage`, nunca
+  sincronizado, fora do backup) — só evita reabrir a pergunta à toa; quem
+  decide "é novo?" continua sendo a ausência do próprio catálogo.
+- **Dispositivo já inicializado:** nenhum destes caminhos é acionado —
+  comportamento idêntico ao de antes desta alteração.
+
+Testes: `tests/device-bootstrap.test.js` (**32 PASS**) e
+`tests/critical-flows.test.js` (**21 PASS**, âncoras 6221/6231/8773/11853).
+
+**✓ VALIDADA em teste manual pelo usuário (21/09/2026).** Considerada
+BASELINE ESTÁVEL do projeto, junto com as Alterações 056 e 057. Ainda sem
+commit/publicação (aguardando pedido explícito do usuário).
+
+## 19. Descrição persistente de imagens e quadros (Alteração 056, 2026-09-21)
+
+**✓ VALIDADA em teste manual pelo usuário (21/09/2026).** Considerada
+BASELINE ESTÁVEL do projeto, junto com as Alterações 055 e 057.
+
+`label` continua o **único** campo canônico de descrição de imagem — nenhum
+campo novo foi criado (`description`/`collageDescription`/`boardDescription`
+seguem inexistentes como propriedade de imagem, regra mantida). O que era
+inconsistente foi corrigido: a galeria do editor (`openForm`) e a caixa de
+edição do modal "🖼 Adicionar imagem" do Quiz usavam `<input>` de uma linha;
+agora usam `<textarea rows="3">` (sem `maxlength`, `resize:vertical`), igual
+ao construtor de quadro (que já era `<textarea>`, só ganhou `rows="3"`).
+
+- **Lightbox (o gap real):** `openImageLightbox(src, description)` — sem
+  descrição, nada muda; com descrição, aparece **abaixo** da imagem
+  (`.lightbox-content` em coluna + `.lightbox-desc`, nunca sobreposta, com
+  scroll interno se o texto for longo), escapada com `esc()`. Detalhe da
+  lesão e as duas galerias de edição sempre passam a descrição (sem
+  "spoiler" nesses contextos); a ferramenta de auditoria técnica de imagens
+  não foi alterada.
+- **Quiz — regra de sigilo preservada:** durante a pergunta,
+  `openImageLightbox` **nunca** recebe a descrição
+  (`st.answered ? cur.label : ''`) — mesmo gate que já protegia o bloco
+  `quizImageDescHtml` acima da imagem. Depois de responder, a descrição
+  aparece nos dois lugares (adjacente à imagem e, se maximizar, no
+  lightbox).
+- **Detalhe da lesão:** trocou o escape manual (só `<`) por `esc()`
+  (escapa `&` também); `.detail-img-label` virou texto corrido (esquerda,
+  `white-space:pre-wrap`) em vez de monoespaçado centralizado.
+- **Persistência:** nenhuma mudança de lógica — `label` já viajava por
+  `spread` em salvar/upload/sync/backup; texto longo/multilinha já
+  sobrevivia a esse caminho inteiro.
+- **Limitação preexistente, só registrada (não alterada nesta tarefa):** o
+  merge aditivo não reconcilia campo a campo — `label` divergente da MESMA
+  imagem em dois dispositivos faz o merge manter a versão do lado
+  processado como base. Já valia pra qualquer campo de imagem antes desta
+  entrega.
+- **Alteração 055 intacta:** confirmado por `git diff` (nenhuma
+  remoção/edição nos identificadores do bootstrap) e por
+  `tests/device-bootstrap.test.js` continuando 32 PASS sem qualquer
+  alteração no arquivo de teste.
+
+Testes: `tests/image-description.test.js` (**21 PASS**, novo) e
+`tests/quiz-images.test.js` (**102 PASS**, 2 ajustados + 1 novo).
+
+### Ajuste visual (Alteração 057, mesmo dia, após teste real do usuário)
+
+**✓ VALIDADA em teste manual pelo usuário (21/09/2026)** — "tudo
+funcionando corretamente e a apresentação ficou excelente". Considerada
+BASELINE ESTÁVEL do projeto, junto com as Alterações 055 e 056.
+
+A lógica acima foi validada em teste real e **não foi alterada**. Só
+apresentação: detalhe da lesão limita a descrição a 2 linhas visuais
+(`-webkit-line-clamp`, CSS puro) com clique para expandir/recolher (toggle
+de classe, `label`/`DATA` nunca tocados); lightbox ganhou
+`.lightbox-content{width:min(1200px,94vw)}` — a coluna de texto não fica
+mais presa à largura da `<img>` — e `padding`/`line-height` mais compactos
+em `.lightbox-desc` (sem reduzir a fonte); `quizImageDescHtml` recebeu o
+mesmo polimento de respiro, **sem** nenhum truncamento (continua mostrando
+o texto inteiro após responder). Alteração 055 reconfirmada intacta.
+
+Testes: `tests/image-description.test.js` (**31 PASS**, +10 novos).
+`tests/critical-flows.test.js` com as âncoras atuais: 6247/6257/8799/11884.
+
+## 20. Próximos passos pendentes
+
+1. **Bootstrap seguro em dispositivo novo** (2026-09-21) — implementado,
+   testado e **VALIDADO em teste manual pelo usuário** (Alteração 055, ver
+   seção 17 e seção 21). Nenhuma ação pendente; commit/publicação
+   dependem de pedido explícito.
+2. **Descrição persistente de imagens e quadros** (2026-09-21) —
+   implementado, testado e **VALIDADO em teste manual pelo usuário**
+   (Alteração 056); ajuste visual de acabamento aplicado no mesmo dia,
+   também validado (Alteração 057, ver seção 19 e seção 21). Nenhuma ação
+   pendente; commit/publicação dependem de pedido explícito.
+3. **Merge aditivo e sincronização validados** (2026-09-21) — servidor/site
    conferido após o merge com 58 registros com imagens, 73 imagens e 44 SRS.
    Nenhuma ação pendente aqui.
-2. **Preferências locais de navegação** (2026-09-20): a última seção/site da
+4. **Preferências locais de navegação** (2026-09-20): a última seção/site da
    sidebar e do Quiz já são lembrados de forma independente em `localStorage`
    (`atlas:v1:lastSidebarScope` / `atlas:v1:lastQuizScope`), sem nuvem. Feito.
-3. **Eventuais refinamentos do fluxo de IA** (sem API/segredo; sempre com
+5. **Eventuais refinamentos do fluxo de IA** (sem API/segredo; sempre com
    confirmação humana e sem autoaceite).
-4. **Manutenção incremental** (pequenas correções, sempre preservando dados,
+6. **Manutenção incremental** (pequenas correções, sempre preservando dados,
    imagens e ownership).
+
+## 21. Validação manual — Alterações 055, 056 e 057 (Alteração 058, 2026-09-21)
+
+O usuário testou manualmente (funcional e visualmente) as três entregas
+anteriores e aprovou todas explicitamente:
+
+- **Alteração 055** — bootstrap seguro em dispositivo novo.
+- **Alteração 056** — descrição persistente de imagens e quadros.
+- **Alteração 057** — refinamento visual das descrições.
+
+Todas as três são consideradas **BASELINE ESTÁVEL do projeto**. Esta
+entrada (Alteração 058) é **só documentação** — nenhum código funcional foi
+alterado. Estado do repositório: nada foi commitado nem publicado; `git
+status` continua mostrando as mesmas alterações locais das três entregas
+anteriores (mais esta atualização de documentação). Commit/publicação
+seguem dependendo de pedido explícito do usuário (regra permanente de
+`AGENTS.md`).
+
+Última execução da suíte completa nesta sessão: **730 PASS, 5 TODO, 1 FAIL
+histórico** (`duplicate-detection.test.js`, fora de escopo). `git diff
+--check`: sem erros.

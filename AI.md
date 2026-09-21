@@ -238,6 +238,179 @@ que já foi resolvido, por falta de contexto.
 - Testes: `tests/sidebar-image-stats.test.js` (22 PASS). Suíte: 665 PASS,
   5 TODO + 1 FAIL histórico.
 
+## Atualização 2026-09-21 — bootstrap seguro em dispositivo novo (CAUSA do "Atlas zerado em outro computador")
+
+**✓ VALIDADO em teste manual pelo usuário (21/09/2026) — considerado
+BASELINE ESTÁVEL do projeto, junto com as Alterações 056 e 057. Ainda sem
+commit/publicação (aguardando pedido explícito).**
+
+**Causa raiz encontrada e corrigida.** Um dispositivo/navegador que ainda não
+tinha o catálogo salvo no IndexedDB local (`STORAGE_KEY` ausente — sempre
+verdadeiro na primeira abertura num computador novo) fazia `loadData()`
+entrar no `catch` e usar o `SEED` cru (sem imagens/SRS/progresso) como
+`DATA`. Mais adiante, no MESMO carregamento, havia uma chamada incondicional
+a `pushToFirebaseNow()` que enviava esse catálogo vazio para o Firestore.
+Como `writeShardedState()` faz `.set()` (substituição total, não mescla),
+isso sobrescrevia o estado real que já existia na nuvem — foi exatamente
+isso que zerou o Atlas ao abrir num segundo computador do hospital
+(2026-09-21). **Não reintroduza um push incondicional em `loadData()` sem
+antes conferir se o dispositivo já passou pelo bootstrap** (ver abaixo).
+
+**Antes de aplicar a correção**, foi confirmado com o usuário que o
+computador principal ainda tinha o IndexedDB local intacto (nunca é
+sobrescrito pela nuvem — o pull automático no boot já estava desativado
+desde a Alteração 008/2026-09-19) e que a auditoria mostrou a nuvem íntegra
+(1213/1213 lesões, 65/65 registros com imagem, 89/89 imagens, 11/11
+altPlacements, 49/49 SRS). Não foi necessária recuperação manual.
+
+### O que foi criado
+
+- `deviceBootstrapPending` (flag global): enquanto `true`,
+  `writeShardedState()` — o ÚNICO ponto que realmente escreve no Firestore —
+  recusa qualquer envio (automático, debounced ou pelos botões explícitos
+  "☁ sincronizar este dispositivo"/"🔀 mesclar imagens"), devolvendo `false`
+  (o mesmo sinal já usado para "pedaço grande demais"). Guardar no
+  `writeShardedState()` em vez de em cada chamador cobre TODOS os caminhos
+  de push de uma vez, incluindo os futuros.
+- `loadData()`: o `catch` de dispositivo novo não persiste/envia mais nada
+  sozinho — só marca `isNewLocalDevice`/`deviceBootstrapPending = true` e usa
+  o `SEED` como base EM MEMÓRIA. Depois de REVIEW/SRS/SESSIONLOG/
+  LESION_REVISIONS carregados, e ANTES de qualquer limpeza de duplicatas,
+  snapshot, push ou `renderAll()`, chama `runNewDeviceBootstrapFlow()`. Um
+  dispositivo que JÁ tinha catálogo local não passa por nenhum destes
+  caminhos — comportamento idêntico ao de antes.
+- `checkCloudForBootstrapV1()`: consulta a nuvem SERVER-ONLY, reaproveitando
+  `readCloudAuditFromServer()` (a mesma função da verificação pós-envio).
+  Só considera "vazio" o caso em que NENHUM dispositivo jamais sincronizou o
+  projeto (nenhum documento em `atlas_state/main`); offline/erro nunca vira
+  "vazio" — vira um estado próprio que bloqueia o push e oferece "tentar de
+  novo".
+- `openNewDeviceBootstrapModal()`: modal único, sem clique fora/ESC (força
+  decisão explícita). Estados: nuvem com dados (tabela + `⬇ Carregar meus
+  dados da nuvem` ou `usar este dispositivo vazio mesmo assim`, com
+  `confirm()` explicando a sobrescrita futura), nuvem nunca inicializada
+  (resolve sozinho) ou falha de verificação (retry + a mesma opção de
+  continuar vazio, avisado).
+- `applyNewDeviceBootstrapChoice(choice)`: **reaproveita 100%**
+  `syncFromFirebase()` — o mesmo merge não destrutivo de "⬇ atualizar deste
+  backup/nuvem" — só no ramo `'load'`. Nenhuma lógica de reconciliação
+  paralela foi criada. Isso já garante, sem código novo, que o bootstrap
+  preserva imagens (união aditiva via `unionEntryImages`), `assignedAt` (o
+  mais antigo válido vence), SRS mais novo, REVIEW/SESSIONLOG (máximo
+  preservado) e ownership (conflito automático fica bloqueado e registrado).
+- `DEVICE_INITIALIZED_KEY` (`atlas:v1:deviceInitialized`, `localStorage`,
+  mesmo padrão de `atlas:v1:lastSidebarScope`): marcador estritamente LOCAL,
+  nunca sincronizado, nunca no backup. Só evita reabrir a pergunta à toa —
+  quem decide se o dispositivo é novo continua sendo a ausência do próprio
+  catálogo (`STORAGE_KEY`), nunca esse marcador sozinho.
+- Guardas com mensagem específica ("Este dispositivo ainda não foi
+  inicializado com os dados da nuvem.") também em `syncThisDeviceToCloud()`
+  e `mergeThisDeviceImagesToCloud()`, cobrindo o caso raro de alguém clicar
+  nesses botões antes do modal aparecer.
+
+Testes: `tests/device-bootstrap.test.js` (novo, 32 PASS) e
+`tests/critical-flows.test.js` (21 PASS). Suíte: 698 PASS, 5 TODO + 1 FAIL
+histórico. (Âncoras do `critical-flows` deslocadas de novo pela Alteração
+056 logo abaixo — ver valores atuais lá: 6236/6246/8788/11868.)
+
+## Atualização 2026-09-21 — descrição persistente de imagens e quadros (Alteração 056)
+
+**✓ VALIDADO em teste manual pelo usuário (21/09/2026) — considerado
+BASELINE ESTÁVEL do projeto, junto com as Alterações 055 e 057. Ainda sem
+commit/publicação (aguardando pedido explícito).**
+
+`label` continua o único campo canônico de descrição de imagem (nenhum
+campo novo — `description`/`collageDescription`/`boardDescription`
+continuam inexistentes como propriedade de imagem). O que faltava era
+consistência: dois lugares onde `label` era escrito ainda usavam `<input>`
+de uma linha (galeria do editor `openForm` e a caixa de edição do modal
+"🖼 Adicionar imagem" do Quiz) — só o construtor de quadro já usava
+`<textarea>`. Os dois viraram `<textarea class="img-gallery-label" rows="3">`
+(sem `maxlength`, `resize:vertical`, `min-height` maior), e o construtor de
+quadro passou de `rows="2"` pra `rows="3"`. Mesmo campo, mesma lógica de
+salvar/chips de sequência — sem duplicar nada.
+
+O gap real era o **lightbox**: `openImageLightbox(src)` não sabia nada sobre
+descrição, em nenhum dos 5 lugares onde é chamado. Agora é
+`openImageLightbox(src, description)` — sem descrição, comportamento
+idêntico ao de sempre; com descrição, aparece **abaixo** da imagem (nunca
+sobreposta), num bloco próprio (`.lightbox-content` em coluna +
+`.lightbox-desc`, com scroll interno se o texto for longo), escapada com
+`esc()`, e clicar no texto não fecha o lightbox (`stopPropagation`).
+Detalhe da lesão e as duas galerias de edição (editor e modal do Quiz)
+passam a descrição sempre — não há "spoiler" nesses contextos. **O Quiz
+durante a pergunta nunca passa descrição** (`st.answered ? cur.label : ''`
+— o mesmo gate que já protegia o bloco de texto acima da imagem,
+`quizImageDescHtml`). A ferramenta técnica de auditoria de vínculo de
+imagens continua exatamente como estava, sem descrição — fora do pedido.
+
+Detalhe da lesão também trocou `img.label.replace(/</g,...)` (só escapava
+`<`) por `esc()` (escapa `&` também) e `.detail-img-label` ganhou estilo de
+texto corrido (esquerda, `white-space:pre-wrap`) em vez de monoespaçado
+centralizado.
+
+**Persistência:** nenhuma mudança de lógica foi necessária — `label` já
+viajava por `spread` (`{...x}`) em todo o caminho de salvar/upload
+Cloudinary/sync/backup, então texto longo e com quebra de linha já
+sobrevivia a esse caminho inteiro. **Limitação preexistente, apenas
+registrada nesta entrega (não alterada):** o merge aditivo
+(`unionEntryImages`/`mergeEntryNonDestructive`) não reconcilia campo a
+campo — se a MESMA imagem tiver `label` diferente em dois dispositivos ao
+sincronizar, o merge mantém a versão do lado processado como base. Isso já
+valia pra qualquer campo de imagem antes desta entrega.
+
+**Alteração 055 (bootstrap seguro em dispositivo novo) não foi tocada** —
+confirmado por `git diff` (nenhuma remoção/edição nos identificadores
+daquela entrega) e por `tests/device-bootstrap.test.js` continuando 32
+PASS sem qualquer alteração no arquivo de teste.
+
+Testes: `tests/image-description.test.js` (novo, 21 PASS) e
+`tests/quiz-images.test.js` (102 PASS, 2 testes ajustados + 1 novo pra nova
+assinatura do lightbox e seu gate no Quiz). `tests/critical-flows.test.js`
+com as âncoras atuais: 6236/6246/8788/11868. Suíte: 720 PASS, 5 TODO + 1
+FAIL histórico em `duplicate-detection.test.js`. (Âncoras deslocadas de
+novo pela Alteração 057 logo abaixo — ver valores atuais lá.)
+
+## Atualização 2026-09-21 — ajuste visual das descrições (Alteração 057)
+
+**✓ VALIDADO em teste manual pelo usuário (21/09/2026) — "tudo funcionando
+corretamente e a apresentação ficou excelente". Considerado BASELINE
+ESTÁVEL do projeto, junto com as Alterações 055 e 056. Ainda sem
+commit/publicação (aguardando pedido explícito).**
+
+Depois do teste real da Alteração 056, o usuário confirmou que a LÓGICA
+está correta (gate do Quiz, persistência, sync) e pediu só ajustes de
+apresentação — nada de lógica foi tocado aqui.
+
+- **Detalhe da lesão:** `.detail-img-label` ganhou clamp visual de 2 linhas
+  (`-webkit-line-clamp:2`) com "..." nativo; clique alterna a classe
+  `.expanded` (remove o clamp). É **só CSS + toggle de classe** — o texto
+  completo (`esc(img.label)`) sempre esteve no DOM; nada em `img.label`/
+  `DATA` é lido, escrito ou truncado por esse mecanismo.
+- **Lightbox:** a causa do texto quebrar demais era `.lightbox-content` não
+  ter largura própria — herdava o tamanho da `<img>` (que podia ser
+  estreita/retrato). Agora `.lightbox-content{width:min(1200px,94vw)}` dá à
+  coluna uma largura que escala com a TELA, independente da imagem;
+  `.lightbox-desc` perdeu o teto de `720px`, e `padding`/`line-height`
+  ficaram mais compactos (`8px 18px`/`1.4`, eram `12px 14px`/`1.55`) — sem
+  reduzir a fonte. `.lightbox-img` (tamanho/posição/prioridade visual) não
+  mudou.
+- **Quiz pós-resposta (`quizImageDescHtml`):** mesmo ajuste de respiro
+  (padding/line-height menores, `text-align:left` explícito,
+  `white-space:pre-wrap` pra consistência com detalhe/lightbox) — **sem**
+  nenhum truncamento; a descrição continua aparecendo inteira depois de
+  responder, exatamente como a Alteração 056 deixou.
+
+**Alteração 055 confirmada intacta de novo** (mesmo processo de
+verificação: `git diff` sem remoção/edição nos identificadores do
+bootstrap; `tests/device-bootstrap.test.js` 32 PASS sem alteração).
+
+Testes: `tests/image-description.test.js` (**31 PASS**, +10 novos: clamp
+via CSS/texto íntegro no DOM/toggle sem mutar dado/regressão do gate no
+Quiz e no lightbox/largura independente da imagem/padding compacto sem
+reduzir fonte). `tests/critical-flows.test.js` com as âncoras atuais:
+6247/6257/8799/11884. Suíte: 730 PASS, 5 TODO + 1 FAIL histórico.
+
 ## Atualização 2026-09-18 — auditoria de `altPlacements`
 
 - Regra obrigatória de manutenção: **toda alteração do `index.html` deve ser entregue junto com `AI.md` e `README.md` atualizados**.

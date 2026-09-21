@@ -207,10 +207,41 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // +7 nas quatro âncoras (CSS .tree-stats/.tree-name/ellipsis/responsivo no
   // <style>, antes de tudo) e +4 só no importHandler (métricas 1x por
   // renderTree + stats nas linhas de seção/site; helpers no fim do script).
-  assert.equal(recovery.line, 6073);
-  assert.equal(brokenArtifacts.line, 6063);
-  assert.equal(loadData.line, 8615);
-  assert.equal(importHandler.line, 11670);
+  // +158 nas quatro âncoras (bootstrap seguro em dispositivo novo, 2026-09-21):
+  // deviceBootstrapPending (perto de appStateReady) + guarda em
+  // writeShardedState() + guardas em syncThisDeviceToCloud()/
+  // mergeThisDeviceImagesToCloud() + o módulo inteiro "BOOTSTRAP SEGURO EM
+  // DISPOSITIVO NOVO/VAZIO" (DEVICE_INITIALIZED_KEY, checkCloudForBootstrapV1,
+  // openNewDeviceBootstrapModal, applyNewDeviceBootstrapChoice,
+  // runNewDeviceBootstrapFlow) inserido antes de mergeReviewPreservingProgress
+  // — tudo antes das quatro âncoras. +25 só em loadData()/importHandler:
+  // isNewLocalDevice + comentário/ramo do catch (sem mais saveData() ali) +
+  // a chamada condicional a runNewDeviceBootstrapFlow() logo após
+  // loadClassificationReviewDecisions(), antes da fusão de duplicatas —
+  // dentro do corpo de loadData(), por isso só desloca o que vem depois dela
+  // (importHandler), não a própria declaração.
+  // +15 nas quatro âncoras (descrição persistente de imagens/quadros,
+  // 2026-09-21): CSS de .img-gallery-label (multilinha, comentário + regra
+  // nova), .lightbox-overlay/.lightbox-img/.lightbox-close viraram
+  // .lightbox-overlay/.lightbox-content/.lightbox-img/.lightbox-desc/
+  // .lightbox-close (bloco de descrição abaixo da imagem) — tudo no <style>
+  // do topo, antes das quatro âncoras. As mudanças de HTML/JS entre
+  // loadData() e o importHandler (textarea no lugar de input na galeria do
+  // editor e no modal de imagens do Quiz, `esc()` no detalhe da lesão,
+  // openImageLightbox(src, description) e seus 5 call sites, rows="3" no
+  // construtor de quadro) têm saldo neutro de linhas nesse trecho — por isso
+  // loadData() e o importHandler deslocam igualmente às outras duas âncoras.
+  // +11 nas quatro âncoras (ajuste visual das descrições, 2026-09-21): CSS
+  // do .lightbox-content/.lightbox-desc (largura independente da imagem,
+  // padding/line-height compactos) e do .detail-img-label (clamp de 2
+  // linhas + .expanded), tudo no <style> do topo, antes das quatro âncoras.
+  // +5 só no importHandler: wiring de clique pra expandir/recolher a
+  // descrição no detalhe da lesão (dentro de openDetail, depois de
+  // loadData) — puro toggle de classe CSS, nunca muta DATA/img.label.
+  assert.equal(recovery.line, 6257);
+  assert.equal(brokenArtifacts.line, 6247);
+  assert.equal(loadData.line, 8799);
+  assert.equal(importHandler.line, 11884);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -307,14 +338,32 @@ test('ALTERACAO 008: syncFromFirebase() continua definida, intacta, e disponivel
   assert.match(fn.source, /mergeEntryNonDestructive/, 'precisa continuar com a logica de merge original, intocada');
 
   // Continua alcancavel apenas por ACOES EXPLICITAS do usuario: exportar backup,
-  // restaurar padrao de fabrica e o novo "Atualizar deste backup/nuvem". Nenhuma
-  // delas e automatica no boot/F5/login (os testes acima garantem isso).
+  // restaurar padrao de fabrica, "Atualizar deste backup/nuvem" e (2026-09-21)
+  // a escolha "Carregar meus dados da nuvem" no bootstrap de dispositivo novo
+  // (applyNewDeviceBootstrapChoice() — só executa depois que o usuário clica
+  // no modal de openNewDeviceBootstrapModal(), nunca sozinha). Nenhuma delas e
+  // automatica no boot/F5/login (os testes acima garantem isso, incluindo o
+  // teste seguinte, que cobre especificamente esse novo call site).
   // Exclui mencoes DENTRO do proprio corpo da funcao (o rotulo de string
   // "syncFromFirebase (leitura)" usado em withFirebaseTimeout, linha 2013,
   // bate no regex ingenuo de invocationLocations mas nao e uma chamada).
   const allCalls = activeCallLocations(html, 'syncFromFirebase')
     .filter((m) => m.index < fn.index || m.index >= fn.index + fn.source.length);
-  assert.equal(allCalls.length, 3, 'syncFromFirebase() so pode ser chamada por acoes EXPLICITAS: exportar backup, restaurar padrao de fabrica e "Atualizar deste backup/nuvem" — nenhum call site automatico');
+  assert.equal(allCalls.length, 4, 'syncFromFirebase() so pode ser chamada por acoes EXPLICITAS: exportar backup, restaurar padrao de fabrica, "Atualizar deste backup/nuvem" e a confirmacao de bootstrap em dispositivo novo — nenhum call site automatico');
+});
+
+test('BOOTSTRAP SEGURO: a chamada a syncFromFirebase() do bootstrap fica DENTRO de applyNewDeviceBootstrapChoice(), só depois da escolha do usuário no modal', () => {
+  const applyChoiceFn = extractFunction(html, 'applyNewDeviceBootstrapChoice');
+  const modalFn = extractFunction(html, 'openNewDeviceBootstrapModal');
+  const flowFn = extractFunction(html, 'runNewDeviceBootstrapFlow');
+  assert.match(applyChoiceFn.body, /if\(choice === 'load'\)\{[\s\S]*?await syncFromFirebase\(\);/, 'só chama syncFromFirebase() no ramo "load" (usuário confirmou)');
+  assert.doesNotMatch(modalFn.body, /syncFromFirebase/, 'o modal em si não decide/gravanada, só coleta a escolha do usuário');
+  assert.match(flowFn.body, /await openNewDeviceBootstrapModal\(\)/, 'a decisão vem sempre do modal, nunca de heurística automática');
+  assert.match(flowFn.body, /await applyNewDeviceBootstrapChoice\(choice\)/);
+  // loadData() só chama o orquestrador quando isNewLocalDevice é verdadeiro —
+  // nunca chama applyNewDeviceBootstrapChoice/syncFromFirebase diretamente.
+  assert.match(loadData.source, /if\(isNewLocalDevice\)\{\s*\n\s*await runNewDeviceBootstrapFlow\(\);/);
+  assert.doesNotMatch(loadData.source, /applyNewDeviceBootstrapChoice/);
 });
 
 test('F5 preserva as 1213 identidades ao executar o loadData real', async () => {

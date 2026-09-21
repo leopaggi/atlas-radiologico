@@ -371,6 +371,9 @@ body{
 .img-gallery-label{
   width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
   font-size:11px;padding:4px 6px;border-radius:4px;font-family:inherit;margin-bottom:6px;
+  /* descrição da imagem/quadro: multilinha, sem limite artificial de tamanho —
+     resize:vertical deixa o usuário abrir mais espaço para textos longos. */
+  resize:vertical;min-height:46px;line-height:1.4;box-sizing:border-box;
 }
 .img-gallery-presets{display:flex;flex-wrap:wrap;gap:4px;}
 .img-gallery-modality{margin:5px 0 6px;padding-top:5px;border-top:1px solid var(--line);}
@@ -553,12 +556,35 @@ body{
   position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;
   z-index:9999;padding:24px;cursor:zoom-out;
 }
-.lightbox-img{max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;}
+/* Agrupa imagem + descrição (quando houver) numa coluna própria, com scroll
+   interno se a descrição for longa — a imagem nunca fica coberta pelo texto.
+   A largura da coluna é independente do tamanho da imagem (senão uma imagem
+   estreita/retrato forçaria a descrição a quebrar em muitas linhas à toa) —
+   escala com a tela (min() cobre telas grandes E pequenas sem media query). */
+.lightbox-content{
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  width:min(1200px,94vw);max-width:100%;max-height:100%;overflow:auto;cursor:default;
+}
+.lightbox-img{max-width:100%;max-height:75vh;object-fit:contain;border-radius:4px;flex:0 0 auto;cursor:zoom-out;}
+.lightbox-desc{
+  width:100%;box-sizing:border-box;flex:0 0 auto;cursor:auto;
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:10px;
+  padding:8px 18px;color:#f2f4f6;font-size:14px;line-height:1.4;text-align:left;
+  white-space:pre-wrap;overflow-wrap:anywhere;
+}
 .lightbox-close{
   position:absolute;top:16px;right:20px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);
   color:#fff;width:36px;height:36px;border-radius:50%;font-size:16px;cursor:pointer;
 }
-.detail-img-label{font-size:10.5px;color:var(--muted);text-align:center;padding:4px 2px;font-family:'IBM Plex Mono',monospace;}
+/* Apresentação só VISUAL: o dado completo em `label` nunca é alterado — o
+   clamp de 2 linhas é puro CSS (line-clamp), e o clique só troca a classe
+   .expanded no elemento (não toca DATA/img.label). */
+.detail-img-label{
+  font-size:12px;color:var(--muted);text-align:left;padding:5px 7px;line-height:1.4;
+  white-space:pre-line;overflow-wrap:anywhere;cursor:pointer;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;
+}
+.detail-img-label.expanded{-webkit-line-clamp:unset;display:block;overflow:visible;}
 .detail-notes{color:var(--muted);font-size:13.5px;white-space:pre-wrap;line-height:1.6;}
 .detail-meta{color:var(--muted-2);font-size:12px;font-family:'IBM Plex Mono',monospace;margin-bottom:14px;}
 .detail-altplacements{color:var(--teal);font-size:12px;margin:-8px 0 14px 0;opacity:.9;}
@@ -796,7 +822,7 @@ body{
 .quiz-img-modal-overlay{position:fixed;inset:0;background:rgba(6,10,14,.7);display:flex;align-items:flex-start;justify-content:center;padding:5vh 20px;overflow-y:auto;z-index:10020}
 .quiz-img-modal{max-width:620px}
 .quiz-img-current-label{font-size:11px;color:var(--muted);min-height:16px;margin:0 2px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.quiz-img-edit-box{display:flex;gap:5px;align-items:center;margin-top:6px}.quiz-img-edit-box[hidden]{display:none}.quiz-img-edit-box .img-gallery-label{flex:1;margin:0;min-width:0}.quiz-img-edit-box .btn{padding:5px 7px;font-size:10.5px}
+.quiz-img-edit-box{display:flex;flex-direction:column;gap:5px;margin-top:6px}.quiz-img-edit-box[hidden]{display:none}.quiz-img-edit-box .img-gallery-label{margin:0;min-width:0}.quiz-img-edit-box .btn{padding:5px 7px;font-size:10.5px}.quiz-img-edit-actions{display:flex;gap:5px;justify-content:flex-end}
 .quiz-review-modal-overlay{position:fixed;inset:0;background:rgba(6,10,14,.7);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10020}
 .quiz-review-modal{max-width:540px}
 .quiz-integrated-title{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px}.quiz-integrated-title b{font-size:13px}.quiz-integrated-title span{font:600 10px 'IBM Plex Mono',monospace;color:#55c7ef}
@@ -1777,6 +1803,12 @@ function writeShardedStateSerialized(ms=15000){
   return writeChainV247;
 }
 let appStateReady = false; // impede que migrações iniciais enviem REVIEW/SRS vazios ao Firebase
+// v252 — BOOTSTRAP SEGURO EM DISPOSITIVO NOVO: true entre detectar um
+// dispositivo local novo/sem catálogo (loadData()) e o usuário decidir
+// carregar da nuvem ou confirmar uso vazio (runNewDeviceBootstrapFlow()).
+// Enquanto true, writeShardedState() recusa QUALQUER envio (automático ou
+// manual) — ver motivação completa no bloco "BOOTSTRAP SEGURO" mais abaixo.
+let deviceBootstrapPending = false;
 
 /* mostra/some o aviso permanente de status de sincronização no topo da barra lateral —
    diferente de um toast passageiro, fica visível até o problema ser resolvido. */
@@ -1819,6 +1851,14 @@ function checkChunkSize(chunk, label){
    resto do estado. Apaga pedaços antigos que sobrarem se a lista encolheu
    (ex: depois de uma limpeza de duplicatas). */
 async function writeShardedState(ms=15000){
+  // Bloqueia QUALQUER envio (debounced, imediato ou "sincronizar este
+  // dispositivo") enquanto o dispositivo estiver pendente de bootstrap —
+  // ver runNewDeviceBootstrapFlow(). Sem isso, um dispositivo novo (sem
+  // catálogo local) empurraria o SEED cru — sem imagens/SRS/progresso —
+  // por cima do estado real já sincronizado na nuvem (overwrite total,
+  // não é merge). Retorna false, o mesmo sinal já usado para "pedaço grande
+  // demais", que todo chamador já trata sem quebrar nem mutar nada.
+  if(deviceBootstrapPending) return false;
   const cleanData = stripUndefinedDeep(DATA);
   const chunks = splitIntoChunks(cleanData, DATA_CHUNK_SIZE);
   for(let i=0;i<chunks.length;i++){
@@ -2008,6 +2048,7 @@ async function syncThisDeviceToCloud(opts){
   const onStep = (opts && typeof opts.onStep==='function') ? opts.onStep : ()=>{};
   if(!fbDb){ toast('Firebase indisponível neste navegador.'); return { ok:false, reason:'no_firebase' }; }
   if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return { ok:false, reason:'not_ready' }; }
+  if(deviceBootstrapPending){ toast('Este dispositivo ainda não foi inicializado com os dados da nuvem.'); return { ok:false, reason:'device_not_initialized' }; }
   try{
     onStep(1, 'criando snapshot');
     createSafetySnapshot('antes de sincronizar este dispositivo com a nuvem');
@@ -2268,6 +2309,148 @@ async function openUpdateFromCloudModal(){
       confirmBtn.textContent = '⬇ Trazer da nuvem';
     }
   };
+}
+
+/* ============================================================
+   BOOTSTRAP SEGURO EM DISPOSITIVO NOVO/VAZIO (2026-09-21)
+   ------------------------------------------------------------
+   Causa raiz corrigida: um navegador sem catálogo local ainda (STORAGE_KEY
+   ausente no IndexedDB — sempre verdadeiro na primeira abertura num
+   computador novo) fazia loadData() usar o SEED cru como DATA e, mais
+   adiante no MESMO boot, um pushToFirebaseNow() incondicional enviava esse
+   catálogo sem imagens/SRS/progresso para o Firestore. writeShardedState()
+   faz overwrite total (.set()), não merge — isso sobrescrevia o estado real
+   que já existia na nuvem. Foi isso que zerou o Atlas ao abrir num segundo
+   computador do hospital (2026-09-21).
+   Correção: nenhum envio acontece enquanto deviceBootstrapPending for true
+   (ver writeShardedState/syncThisDeviceToCloud/mergeThisDeviceImagesToCloud
+   mais acima). A nuvem é sempre consultada SERVER-ONLY antes de qualquer
+   decisão (reaproveita readCloudAuditFromServer(), a mesma função da
+   verificação pós-envio). O carregamento em si reaproveita syncFromFirebase()
+   — o merge não destrutivo já existente — sem nenhuma lógica paralela.
+   ============================================================ */
+const DEVICE_INITIALIZED_KEY = 'atlas:v1:deviceInitialized';
+// Marcador LOCAL (localStorage, mesmo padrão de atlas:v1:lastSidebarScope):
+// nunca sincronizado, nunca incluído no backup. Não é usado sozinho como
+// prova de estado — quem decide se o dispositivo é novo é a ausência do
+// próprio catálogo (STORAGE_KEY) em loadData(); este marcador só evita
+// reabrir a pergunta à toa depois que o usuário já decidiu.
+function isDeviceMarkedInitialized(){
+  try{ return localStorage.getItem(DEVICE_INITIALIZED_KEY) === '1'; }catch(_e){ return false; }
+}
+function markDeviceInitialized(){
+  try{ localStorage.setItem(DEVICE_INITIALIZED_KEY, '1'); }catch(_e){}
+}
+
+/* Resumo do estado remoto, sempre lido do servidor (nunca do cache local do
+   SDK) — reaproveita readCloudAuditFromServer(). Devolve:
+   - { ok:false, offline:true, error } quando não foi possível verificar
+     (sem isso, "não consegui ler" nunca deve virar "a nuvem está vazia");
+   - { ok:true, empty:true } só quando NENHUM dispositivo jamais sincronizou
+     este projeto (nenhum documento em atlas_state/main) — o único caso de
+     estado vazio legítimo, sem precisar perguntar nada;
+   - { ok:true, empty:false, counts } quando existe estado remoto (mesmo com
+     contadores baixos) — sempre exige confirmação explícita do usuário. */
+async function checkCloudForBootstrapV1(){
+  if(!fbDb) return { ok:false, offline:true, error:'Firebase indisponível neste navegador.' };
+  try{
+    const counts = await readCloudAuditFromServer();
+    return counts ? { ok:true, empty:false, counts } : { ok:true, empty:true };
+  }catch(e){
+    return { ok:false, offline:true, error:(e && e.message) || String(e) };
+  }
+}
+
+/* Modal único (mesmo esqueleto visual dos outros modais de sincronização:
+   .overlay/.modal review-ai-modal, sync-audit-*). De propósito SEM clique
+   fora/ESC: força uma decisão explícita antes de liberar o app — nunca
+   mostra o Atlas "zerado" como se fosse definitivo enquanto isso não
+   acontece. Devolve uma Promise que resolve com 'empty' (nuvem nunca
+   inicializada — resolvida sozinha, sem perguntar nada), 'load' (usuário
+   pediu para carregar da nuvem) ou 'skip' (usuário confirmou, com aviso
+   explícito, que quer continuar com este dispositivo vazio mesmo assim). */
+function openNewDeviceBootstrapModal(){
+  return new Promise((resolve)=>{
+    const ov = document.createElement('div');
+    ov.className = 'overlay';
+    ov.innerHTML = `<div class="modal review-ai-modal">
+      <h2>☁ Verificando dados na nuvem</h2>
+      <div class="modal-sub">este dispositivo ainda não tem uma cópia local do seu Atlas</div>
+      <div id="bootstrap-box"><div class="sync-audit-note">🔎 Verificando…</div></div>
+      <div id="bootstrap-actions" class="modal-actions" style="justify-content:flex-end;flex-wrap:wrap;gap:8px;"></div>
+    </div>`;
+    document.body.appendChild(ov);
+    const box = ov.querySelector('#bootstrap-box');
+    const actions = ov.querySelector('#bootstrap-actions');
+    const finish = (result)=>{ if(ov.isConnected) ov.remove(); resolve(result); };
+
+    const renderFound = (counts)=>{
+      box.innerHTML = `
+        <div class="sync-audit-note ok">Dados encontrados na nuvem.</div>
+        <div class="sync-audit-table">
+          <div class="sync-audit-head"><span>Contador</span><b>Este dispositivo</b><b>Nuvem</b></div>
+          ${syncAuditRowsHtml(null, counts)}
+        </div>
+        <div class="sync-audit-note">As imagens já estão no Cloudinary — carregar traz só metadados/URLs, sem duplicar nada. Enquanto você não decidir, nada é enviado deste dispositivo para a nuvem.</div>`;
+      actions.innerHTML = `
+        <button class="btn btn-ghost" id="bootstrap-skip">usar este dispositivo vazio mesmo assim</button>
+        <button class="btn btn-primary" id="bootstrap-load">⬇ Carregar meus dados da nuvem</button>`;
+      actions.querySelector('#bootstrap-load').onclick = ()=> finish('load');
+      actions.querySelector('#bootstrap-skip').onclick = ()=>{
+        const c = counts || {};
+        const warn = 'Continuar com este dispositivo vazio faz com que, na próxima sincronização, ele SOBRESCREVA a nuvem com um catálogo sem os dados encontrados agora ('+(c.lesions||0)+' lesões, '+(c.totalImages||0)+' imagem(ns), SRS '+(c.srs||0)+'). Isso não é reversível automaticamente. Só continue se tiver certeza de que não quer os dados que a nuvem mostrou.\n\nContinuar mesmo assim?';
+        if(!confirm(warn)) return;
+        finish('skip');
+      };
+    };
+    const renderOffline = (error)=>{
+      box.innerHTML = `<div class="sync-audit-note warn">Não foi possível verificar seus dados na nuvem${error?(': '+escAttr(error)):''}.</div>`;
+      actions.innerHTML = `
+        <button class="btn btn-ghost" id="bootstrap-skip">usar este dispositivo vazio mesmo assim</button>
+        <button class="btn btn-primary" id="bootstrap-retry">🔄 tentar novamente</button>`;
+      actions.querySelector('#bootstrap-retry').onclick = runCheck;
+      actions.querySelector('#bootstrap-skip').onclick = ()=>{
+        if(!confirm('Não foi possível confirmar se a nuvem tem dados. Continuar pode fazer este dispositivo sobrescrever qualquer dado existente na nuvem quando a conexão voltar. Só continue se tiver certeza.\n\nContinuar mesmo assim?')) return;
+        finish('skip');
+      };
+    };
+    const runCheck = async ()=>{
+      box.innerHTML = '<div class="sync-audit-note">🔎 Verificando…</div>';
+      actions.innerHTML = '';
+      const status = await checkCloudForBootstrapV1();
+      if(!status.ok){ renderOffline(status.error); return; }
+      if(status.empty){ finish('empty'); return; }
+      renderFound(status.counts);
+    };
+    runCheck();
+  });
+}
+
+/* Aplica a decisão do modal. Separada da UI de propósito, para ser testável
+   sem simular DOM: 'load' reaproveita o mesmo merge não destrutivo já usado
+   por "⬇ atualizar deste backup/nuvem" (syncFromFirebase) — o dispositivo já
+   foi identificado explicitamente pelo usuário como pronto pra adotar o
+   estado da nuvem, então o push de verificação interno dela deixa de ficar
+   bloqueado. 'empty'/'skip' apenas liberam o dispositivo para o fluxo normal
+   (a nuvem nunca existiu, ou o usuário confirmou o aviso de sobrescrita). */
+async function applyNewDeviceBootstrapChoice(choice){
+  if(choice === 'load'){
+    deviceBootstrapPending = false;
+    markDeviceInitialized();
+    await syncFromFirebase();
+    return;
+  }
+  deviceBootstrapPending = false;
+  markDeviceInitialized();
+}
+
+/* Orquestra a decisão. Chamada só por loadData(), só quando isNewLocalDevice
+   é verdadeiro, ANTES de renderAll() — o Atlas nunca chega a desenhar a
+   sidebar/dashboard com o catálogo zerado como se fosse definitivo enquanto
+   isso não resolve. */
+async function runNewDeviceBootstrapFlow(){
+  const choice = await openNewDeviceBootstrapModal();
+  await applyNewDeviceBootstrapChoice(choice);
 }
 
 /* reconciliação não destrutiva entre estado local e nuvem */
@@ -2602,6 +2785,7 @@ async function mergeThisDeviceImagesToCloud(opts){
   const onStep = (opts && typeof opts.onStep==='function') ? opts.onStep : ()=>{};
   if(!fbDb){ toast('Firebase indisponível neste navegador.'); return { ok:false, reason:'no_firebase' }; }
   if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return { ok:false, reason:'not_ready' }; }
+  if(deviceBootstrapPending){ toast('Este dispositivo ainda não foi inicializado com os dados da nuvem.'); return { ok:false, reason:'device_not_initialized' }; }
   PUSH_IMAGE_OWNERSHIP_CONFLICTS = [];
   try{
     onStep(1, 'criando snapshot');
@@ -8613,6 +8797,7 @@ function openClassificationAuditModal(){
 }
 
 async function loadData(){
+  let isNewLocalDevice = false; // v252 — ver runNewDeviceBootstrapFlow() abaixo
   try{
     const r = await storage.get(STORAGE_KEY, false);
     DATA = JSON.parse(r.value);
@@ -8675,8 +8860,19 @@ async function loadData(){
     DATA.forEach(e=>{ if(typeof e.inc !== 'number'){ ensureInc(e); migrated = true; } });
     if(migrated) await saveData();
   }catch(e){
+    // v252: DISPOSITIVO NOVO/SEM CATÁLOGO LOCAL — não decide sozinho e não
+    // persiste/envia nada ainda. O SEED aqui é só uma base de trabalho EM
+    // MEMÓRIA (necessária pra ORDER_KEY/REVIEW_KEY/etc. abaixo terem algo
+    // consistente pra ler junto), até a nuvem ser consultada (server-only) e
+    // o usuário decidir, logo depois de REVIEW/SRS/etc. estarem carregados
+    // — ver isNewLocalDevice/runNewDeviceBootstrapFlow() mais abaixo. Antes
+    // desta correção, este ramo já chamava saveData() aqui, que persistia o
+    // SEED zerado localmente; mais adiante no mesmo boot, um
+    // pushToFirebaseNow() incondicional enviava esse catálogo sem imagens/
+    // SRS/progresso e sobrescrevia (overwrite total) o estado real da nuvem.
+    isNewLocalDevice = true;
+    deviceBootstrapPending = true;
     DATA = JSON.parse(JSON.stringify(activeCanonicalSeedV172()));
-    await saveData();
     try{ await storage.set(RECOVERY_KEY,RECOVERY_VERSION,false); }catch(_e){}
   }
   try{
@@ -8702,6 +8898,19 @@ async function loadData(){
   await loadSessionLog();
   await loadLesionRevisions();
   await loadClassificationReviewDecisions();
+
+  // v252 — BOOTSTRAP SEGURO EM DISPOSITIVO NOVO: só entra aqui quando o
+  // catálogo local (STORAGE_KEY) não existia (ver o catch acima). REVIEW/
+  // SRS/SESSIONLOG/LESION_REVISIONS já estão carregados (vazios, de fato,
+  // num dispositivo novo). runNewDeviceBootstrapFlow() consulta a nuvem
+  // SERVER-ONLY e SÓ ENTÃO decide: nada é enviado à nuvem nem tratado como
+  // "vazio definitivo" antes disso (deviceBootstrapPending continua
+  // bloqueando qualquer envio — ver writeShardedState). Isso acontece ANTES
+  // de renderAll(), no fim desta função: a sidebar/dashboard nunca chegam a
+  // desenhar o catálogo zerado como se fosse o estado real.
+  if(isNewLocalDevice){
+    await runNewDeviceBootstrapFlow();
+  }
 
   // Funde duplicatas exatas (mesma seção+sítio+nome) — pode acontecer quando uma
   // lesão foi criada manualmente num dispositivo que ainda não tinha essa lesão
@@ -9308,9 +9517,14 @@ function openDetail(id){
     getEntryImgs(e).then(imgs=>{
       const gal=document.getElementById('detail-img-gallery'); if(!gal) return;
       const all=imgs.length?imgs:(e.img?[{data:e.img,label:''}]:[]);
-      gal.innerHTML=all.map((img,i)=>`<div class="detail-img-item"><img src="${img.data}" data-idx="${i}">${img.label?`<div class="detail-img-label">${img.label.replace(/</g,'&lt;')}</div>`:''}</div>`).join('');
+      gal.innerHTML=all.map((img,i)=>`<div class="detail-img-item"><img src="${img.data}" data-idx="${i}">${img.label?`<div class="detail-img-label">${esc(img.label)}</div>`:''}</div>`).join('');
       gal.querySelectorAll('img').forEach(imgEl=>{
-        imgEl.addEventListener('click', ()=> openImageLightbox(all[+imgEl.dataset.idx].data));
+        imgEl.addEventListener('click', ()=>{ const it=all[+imgEl.dataset.idx]; openImageLightbox(it.data, it.label); });
+      });
+      // Expandir/recolher é só apresentação (classe CSS) — nunca muta
+      // img.label/DATA; o texto completo já está no DOM o tempo todo.
+      gal.querySelectorAll('.detail-img-label').forEach(labelEl=>{
+        labelEl.addEventListener('click', ()=> labelEl.classList.toggle('expanded'));
       });
     });
   }
@@ -9691,7 +9905,7 @@ function openForm(id, opts){
       item.innerHTML = `
         <span class="img-source-badge">${sourceLabel}</span>
         <img src="${img.data}" class="img-gallery-thumb" title="clique pra ampliar">
-        <input class="img-gallery-label" placeholder="descrição da imagem (ex: axial T2, CC, MLO, pós-contraste)" value="${(img.label||'').replace(/"/g,'&quot;')}">
+        <textarea class="img-gallery-label" rows="3" placeholder="descrição da imagem/quadro (sequências curtas como &quot;axial T2, CC, MLO&quot; ou um texto mais longo)">${esc(img.label||'')}</textarea>
         <div class="img-gallery-preset-groups"></div>
         <div class="img-gallery-replace-box" style="display:none;">
           <button type="button" class="img-gallery-replace-file">📁 escolher arquivo</button>
@@ -9704,7 +9918,7 @@ function openForm(id, opts){
           <button type="button" class="img-gallery-remove" title="remover este quadro do Atlas">✕</button>
         </div>
       `;
-      item.querySelector('.img-gallery-thumb').addEventListener('click', ()=> openImageLightbox(img.data));
+      item.querySelector('.img-gallery-thumb').addEventListener('click', ()=> openImageLightbox(img.data, img.label));
       if(Array.isArray(img.panels) && img.panels.length){
         item.querySelector('.img-gallery-edit-collage').addEventListener('click', ()=>{
           openCollageBuilder(getCurrentLesionMeta(), collage=>{
@@ -10028,7 +10242,7 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
       <div class="field"><label>Resolução</label><select id="collage-size"><option value="1600">1600 px</option><option value="1920" selected>1920 px</option><option value="2400">2400 px</option></select></div>
       <button type="button" class="btn btn-primary" id="collage-generate">gerar quadro</button>
     </div>
-    <div class="field"><label>Descrição geral do quadro</label><textarea id="collage-desc" rows="2" placeholder="Ex.: TC do joelho demonstrando ... (vai para a legenda, sem queimar na imagem)"></textarea></div>
+    <div class="field"><label>Descrição geral do quadro</label><textarea id="collage-desc" rows="3" placeholder="Ex.: TC do joelho demonstrando ... (vai para a legenda, sem queimar na imagem; pode ser um texto longo)"></textarea></div>
     <canvas id="collage-canvas" style="display:none"></canvas><img id="collage-preview" class="collage-preview">
     <div class="modal-actions"><button class="btn btn-ghost" id="collage-cancel">cancelar</button><button class="btn btn-primary" id="collage-insert" disabled>${isEditMode?'salvar quadro atualizado':'inserir quadro no caso'}</button></div>
   </div>`;
@@ -11814,12 +12028,27 @@ function showHoverPreview(src, x, y){
 }
 function hideHoverPreview(){ if(hoverPreviewEl) hoverPreviewEl.style.display = 'none'; }
 
-/* lightbox — expande qualquer imagem de galeria em tela cheia ao clicar */
-function openImageLightbox(src){
+/* lightbox — expande qualquer imagem/quadro de galeria em tela cheia ao clicar.
+   `description` é OPCIONAL: quando vazio/undefined, nenhuma caixa aparece
+   (mesmo comportamento de sempre). Quando presente, aparece abaixo da
+   imagem, nunca sobreposta — quem decide SE deve passar a descrição é cada
+   chamador (ex.: o Quiz só passa depois de st.answered===true, nunca antes
+   de responder, pra não vazar dica). */
+function openImageLightbox(src, description){
   const ov = document.createElement('div');
   ov.className = 'overlay lightbox-overlay';
   ov.onclick = ()=> ov.remove();
-  ov.innerHTML = `<img src="${src}" class="lightbox-img"><button type="button" class="lightbox-close">✕</button>`;
+  const desc = String(description||'').trim();
+  ov.innerHTML = `<div class="lightbox-content">
+      <img src="${src}" class="lightbox-img">
+      ${desc ? `<div class="lightbox-desc">${esc(desc)}</div>` : ''}
+    </div>
+    <button type="button" class="lightbox-close">✕</button>`;
+  if(desc){
+    // clicar no texto não fecha o lightbox (permite ler/selecionar); clicar
+    // na imagem ou fora continua fechando, como sempre.
+    ov.querySelector('.lightbox-desc').onclick = e=> e.stopPropagation();
+  }
   document.body.appendChild(ov);
 }
 function attachThumbHoverPreview(thumbEl, e){
@@ -12272,11 +12501,13 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
           <button type="button" class="img-gallery-remove quiz-img-remove">🗑 Remover</button>
         </div>
         <div class="quiz-img-edit-box" hidden>
-          <input class="img-gallery-label" value="${escAttr(img.label||'')}" placeholder="legenda da imagem">
-          <button type="button" class="btn btn-primary quiz-img-edit-save">salvar</button>
-          <button type="button" class="btn btn-ghost quiz-img-edit-cancel">cancelar</button>
+          <textarea class="img-gallery-label" rows="3" placeholder="legenda/descrição da imagem (pode ser longa)">${esc(img.label||'')}</textarea>
+          <div class="quiz-img-edit-actions">
+            <button type="button" class="btn btn-primary quiz-img-edit-save">salvar</button>
+            <button type="button" class="btn btn-ghost quiz-img-edit-cancel">cancelar</button>
+          </div>
         </div>`;
-      item.querySelector('.img-gallery-thumb').onclick = ()=> openImageLightbox(src);
+      item.querySelector('.img-gallery-thumb').onclick = ()=> openImageLightbox(src, img.label);
       const editBox = item.querySelector('.quiz-img-edit-box');
       const labelInput = item.querySelector('.img-gallery-label');
       item.querySelector('.quiz-img-edit').onclick = ()=>{ editBox.hidden=false; labelInput.focus(); labelInput.select(); };
@@ -12518,7 +12749,9 @@ function renderQuizCardIntegrated(host){
           <button type="button" class="quiz-carousel-ov-btn quiz-carousel-ov-next" aria-label="Próxima imagem">›</button>
         </div>`:''}
       </div>`;
-    const im=media.querySelector('img'); if(im) im.onclick=()=>openImageLightbox(cur.data);
+    // Só passa a descrição pro lightbox DEPOIS de responder — antes disso,
+    // maximizar a imagem não pode vazar a legenda (mesmo gate de quizImageDescHtml).
+    const im=media.querySelector('img'); if(im) im.onclick=()=>openImageLightbox(cur.data, st.answered ? cur.label : '');
     if(hasMultiple){
       // Setas laterais e setas do overlay superior controlam o MESMO quizImgIdx —
       // um único estado de carrossel. Navegação circular (o wrap acontece no
@@ -12994,8 +13227,12 @@ function quizImageDescHtml(label, answered){
   if (!answered) return '';
   const t = String(label || '').trim();
   if (!t) return '';
-  return `<div class="quiz-img-desc" style="font-size:15px;line-height:1.5;color:var(--text);background:rgba(20,184,166,.07);border:1px solid var(--teal-dim);border-radius:10px;padding:10px 12px;margin-bottom:10px;max-width:100%;overflow-wrap:anywhere;">`
-    + `<div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);margin-bottom:4px;">Descrição da imagem</div>`
+  // Sem truncamento aqui de propósito — depois de responder, faz parte do
+  // estudo ver a descrição inteira. Só ajustes de espaço (padding/line-height
+  // compactos, largura já 100% do container — não depende do tamanho da
+  // imagem, ao contrário do lightbox).
+  return `<div class="quiz-img-desc" style="font-size:15px;line-height:1.4;color:var(--text);background:rgba(20,184,166,.07);border:1px solid var(--teal-dim);border-radius:10px;padding:7px 14px;margin-bottom:10px;max-width:100%;overflow-wrap:anywhere;text-align:left;white-space:pre-wrap;">`
+    + `<div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);margin-bottom:3px;">Descrição da imagem</div>`
     + `<div>${esc(t)}</div></div>`;
 }
 
