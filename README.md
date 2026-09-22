@@ -1125,11 +1125,17 @@ então o caso é gravado (é a única ação desta extensão que persiste de
 verdade — igual a "adicionar imagem" no Quiz): entra no novo campo opcional
 `clinicalCases[]` da lesão (`source`, `title`, `sourceUrl`, `patientAge`,
 `patientSex`, `modality`, `presentation`, `addedAt` — só os campos que a
-fonte realmente tinha) e a `sourceUrl` é adicionada aos links se ainda não
-existir. **Nome, descrição, tags, seção, sítio, imagens, classificação,
-ownership e SRS da lesão nunca são tocados.** A mesma URL não duplica na
-mesma lesão; se já estiver vinculada a OUTRA lesão, o Atlas avisa e só
-vincula também ali com confirmação explícita extra (nunca em silêncio).
+fonte realmente tinha). **Nome, descrição, tags, seção, sítio, imagens,
+classificação, ownership, SRS e `links` da lesão nunca são tocados** — o
+próprio card do caso clínico já mostra "Abrir caso" com essa URL, então ela
+não é copiada de novo para a seção de referências (ajuste 22/09/2026: uma
+versão anterior chegou a copiar, e isso duplicava a mesma URL nas duas
+seções; se uma lesão antiga ainda tiver essa cópia histórica, a tela de
+detalhe oculta só a EXIBIÇÃO do link redundante — o dado em si não é
+apagado — e um link manual com URL diferente continua aparecendo
+normalmente). A mesma URL não duplica na mesma lesão; se já estiver
+vinculada a OUTRA lesão, o Atlas avisa e só vincula também ali com
+confirmação explícita extra (nunca em silêncio).
 
 Na lesão, quando há pelo menos um caso vinculado, aparece a seção
 recolhível "Casos clínicos exemplo (N)" (título, fonte, idade/sexo,
@@ -1140,7 +1146,7 @@ mesmo caminho de sempre (IndexedDB, Firestore, backup/export/import) e, ao
 sincronizar entre dispositivos, é unido aditivamente (nunca perde um caso
 vinculado só de um lado, nunca duplica); não afeta `assignedAt`.
 
-Testes: `tests/clinical-cases.test.js` (34 PASS, novo) e reforço em
+Testes: `tests/clinical-cases.test.js` (42 PASS, novo) e reforço em
 `tests/external-import.test.js` (67 PASS), `tests/critical-flows.test.js`
 (21 PASS, âncoras atualizadas) e `tests/snapshots-ownership.test.js`
 (47 PASS).

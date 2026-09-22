@@ -9505,7 +9505,10 @@ function getStudyOverlay(){
 function openDetail(id){
   const e = DATA.find(x=>x.id===id);
   if(!e) return;
-  const links = ensureLinks(e);
+  // Ajuste UX 22/09/2026: um link de referência com a MESMA URL de um caso
+  // clínico vinculado não aparece de novo aqui (o card de clinicalCases já
+  // mostra "Abrir caso") — só na EXIBIÇÃO; o DATA/links não é tocado.
+  const links = filterReferenceLinksForDisplay(ensureLinks(e), e.clinicalCases);
   const ov = document.createElement('div');
   ov.className = 'overlay';
   ov.onclick = (ev)=>{ if(ev.target===ov) closeOverlay(); };
@@ -14860,8 +14863,12 @@ function findClinicalCaseElsewhere(sourceUrl, catalog, excludeId){
 
 // Pura: devolve uma NOVA lesão (cópia) com o caso adicionado — nunca muta o
 // argumento, nunca toca em name/notes/tags/s/site/images/classification/
-// altPlacements/SRS/ownership. Só acrescenta a clinicalCases e, se ainda
-// não existir, a sourceUrl aos links.
+// altPlacements/SRS/ownership/links. Só acrescenta a clinicalCases.
+// Ajuste UX 22/09/2026: a sourceUrl NÃO é mais copiada para links — o
+// próprio card do caso clínico já mostra "Abrir caso" com essa URL; copiar
+// duplicava a mesma referência nas duas seções da lesão (ver
+// filterReferenceLinksForDisplay para a compatibilidade com vínculos
+// antigos que já tinham essa cópia).
 function addClinicalCaseToLesion(entry, draft){
   if (!entry || typeof entry !== 'object') return { ok: false, reason: 'lesão inválida', entry: null };
   const url = String((draft && draft.sourceUrl) || '').trim();
@@ -14873,12 +14880,20 @@ function addClinicalCaseToLesion(entry, draft){
   const newCase = buildClinicalCaseFromDraft(draft);
   const next = Object.assign({}, entry);
   next.clinicalCases = existingCases.concat([newCase]);
-  const links = Array.isArray(entry.links) ? entry.links.slice() : [];
-  if (!links.some(l => l && sameExternalUrl(l.url, url))) {
-    links.push({ label: (String((draft && draft.source) || 'Fonte') + ' — ' + String((draft && draft.title) || '')).slice(0, 120), url });
-  }
-  next.links = links;
   return { ok: true, reason: '', entry: next, case: newCase };
+}
+
+// Só para EXIBIÇÃO (regra: nunca apagar dado histórico automaticamente).
+// Lesões vinculadas ANTES deste ajuste podem ter a mesma URL em links E em
+// clinicalCases (cópia antiga) — nesse caso, oculta só o link redundante na
+// seção de referências da tela de detalhe; o array `links` do DATA e o
+// backup continuam intactos, e um link manual com URL diferente aparece
+// normalmente.
+function filterReferenceLinksForDisplay(links, clinicalCases){
+  const cases = Array.isArray(clinicalCases) ? clinicalCases : [];
+  const list = Array.isArray(links) ? links : [];
+  if (!cases.length) return list;
+  return list.filter(l => !(l && cases.some(c => c && sameExternalUrl(c.sourceUrl, l.url))));
 }
 
 // Pura: remove SÓ o caso correspondente (por sourceUrl), sem apagar a lesão,
@@ -14934,7 +14949,6 @@ async function linkClinicalCaseToLesion(lesionId, draft, opts){
   const result = addClinicalCaseToLesion(entry, draft);
   if (!result.ok) return { ok: false, reason: result.reason };
   entry.clinicalCases = result.entry.clinicalCases;
-  entry.links = result.entry.links;
   entry._userUpdatedAt = Date.now();
   await saveData();
   return { ok: true, entry, case: result.case };

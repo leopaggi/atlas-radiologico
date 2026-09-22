@@ -3083,8 +3083,16 @@ o caso a uma lesão JÁ EXISTENTE** como caso clínico exemplo.
   `patientAge`, `patientSex`, `modality`, `presentation`, `addedAt`; nunca
   inventa ausente). `addClinicalCaseToLesion()` é pura e **nunca** toca em
   `name`/`notes`/`tags`/`s`/`site`/`images`/`classification`/
-  `altPlacements`/ownership/SRS — só acrescenta a `clinicalCases` e, se
-  ainda não existir, a `sourceUrl` aos `links`.
+  `altPlacements`/ownership/SRS/`links` — só acrescenta a `clinicalCases`.
+- **Ajuste UX 22/09/2026 — sem duplicar referência:** a primeira versão
+  também copiava a `sourceUrl` para `links`, e isso duplicava a mesma URL
+  na seção de referências E em "Casos clínicos exemplo" (que já mostra
+  "Abrir caso"). `addClinicalCaseToLesion()` deixou de tocar em `links`.
+  Para lesões vinculadas ANTES desse ajuste (que já têm a cópia histórica
+  em `links` E em `clinicalCases`), `filterReferenceLinksForDisplay()`
+  oculta o link redundante SÓ na exibição do detalhe da lesão
+  (`openDetail`) — nunca apaga nada de `DATA`/backup, e um link manual com
+  URL diferente da de qualquer `clinicalCases` continua aparecendo normal.
 - **Duplicidade:** mesma `sourceUrl` na MESMA lesão nunca duplica
   (`duplicate_same_lesion`). Se a URL já está vinculada a OUTRA lesão,
   `linkClinicalCaseToLesion` recusa por padrão (`linked_elsewhere` +
@@ -3109,15 +3117,16 @@ o caso a uma lesão JÁ EXISTENTE** como caso clínico exemplo.
   `writeShardedState`/`hasValidEntries`). Não afeta `assignedAt`.
 - Todas as funções/HTML novos ficam no fim do script (depois do
   `importHandler`), preservando as âncoras de `critical-flows.test.js`
-  (só a UNION de `clinicalCases` dentro de `mergeEntryNonDestructive`, e o
-  campo/lista/draft de remoção dentro de `openForm`, deslocam as âncoras —
-  ver o comentário no próprio teste).
+  (só a UNION de `clinicalCases` dentro de `mergeEntryNonDestructive`, o
+  campo/lista/draft de remoção dentro de `openForm`, e o filtro de
+  `openDetail` do ajuste UX seguinte deslocam as âncoras — ver o
+  comentário no próprio teste).
 
-Testes: `tests/clinical-cases.test.js` (novo, 34 PASS: busca automática,
-busca manual, vincular existente, criar nova/regressão, duplicidade,
+Testes: `tests/clinical-cases.test.js` (42 PASS: busca automática, busca
+manual, vincular existente, criar nova/regressão, duplicidade,
 persistência JSON/Firestore, sync/backup (union aditiva), visualização,
-remoção). Reforço em `tests/external-import.test.js` (67 PASS, sem
-regressão), `tests/critical-flows.test.js` (21 PASS, âncoras atualizadas)
-e `tests/snapshots-ownership.test.js` (47 PASS, +1 teste estático de
-integração do merge). Suíte completa: 830 PASS, 5 TODO + 1 FAIL histórico
-em `duplicate-detection.test.js` (fora de escopo).
+remoção, referências sem duplicar). Reforço em `tests/external-import.test.js`
+(67 PASS, sem regressão), `tests/critical-flows.test.js` (21 PASS, âncoras
+atualizadas) e `tests/snapshots-ownership.test.js` (47 PASS, +1 teste
+estático de integração do merge). Suíte completa: 838 PASS, 5 TODO + 1 FAIL
+histórico em `duplicate-detection.test.js` (fora de escopo).

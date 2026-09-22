@@ -278,10 +278,15 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // altPlacements) — as funções novas do importador (busca automática/
   // manual, confirmação, vínculo) ficam no fim do script e não deslocam
   // nada.
+  // +0 nas 3 primeiras âncoras / +3 só no importHandler (ajuste UX
+  // 22/09/2026 — não duplicar caso clínico nas referências): openDetail
+  // (depois de loadData, antes do importHandler) passou a filtrar a lista
+  // de referências exibida com filterReferenceLinksForDisplay(); a função
+  // em si e o corte em addClinicalCaseToLesion() ficam no fim do script.
   assert.equal(recovery.line, 6263);
   assert.equal(brokenArtifacts.line, 6253);
   assert.equal(loadData.line, 8805);
-  assert.equal(importHandler.line, 12019);
+  assert.equal(importHandler.line, 12022);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

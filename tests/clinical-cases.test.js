@@ -86,6 +86,7 @@ function loadPure() {
     extractFunction(html, 'lesionHasClinicalCaseUrl'),
     extractFunction(html, 'findClinicalCaseElsewhere'),
     extractFunction(html, 'addClinicalCaseToLesion'),
+    extractFunction(html, 'filterReferenceLinksForDisplay'),
     extractFunction(html, 'removeClinicalCaseFromLesion'),
     extractFunction(html, 'clinicalCaseIdentityKey'),
     extractFunction(html, 'unionClinicalCases'),
@@ -104,7 +105,7 @@ function loadPure() {
     extractFunction(html, 'stripUndefinedDeep')
   ].join('\n');
   const ctx = vm.createContext({ console: { warn: () => {}, log: () => {}, error: () => {} } });
-  vm.runInContext(src + '\nthis.__api = { normalizeExternalTitle, tokenizeExternalTitle, externalMatchBand, findExternalImportCandidates, sameExternalUrl, buildClinicalCaseFromDraft, lesionHasClinicalCaseUrl, findClinicalCaseElsewhere, addClinicalCaseToLesion, removeClinicalCaseFromLesion, clinicalCaseIdentityKey, unionClinicalCases, findExternalImportCandidatesForLink, searchExistingLesionsForLink, externalLinkCandidatesHtml, externalManualResultsHtml, externalModeTabsHtml, externalLinkConfirmModalHtml, clinicalCasesSectionHtml, externalImportModalHtml, stripUndefinedDeep };', ctx);
+  vm.runInContext(src + '\nthis.__api = { normalizeExternalTitle, tokenizeExternalTitle, externalMatchBand, findExternalImportCandidates, sameExternalUrl, buildClinicalCaseFromDraft, lesionHasClinicalCaseUrl, findClinicalCaseElsewhere, addClinicalCaseToLesion, filterReferenceLinksForDisplay, removeClinicalCaseFromLesion, clinicalCaseIdentityKey, unionClinicalCases, findExternalImportCandidatesForLink, searchExistingLesionsForLink, externalLinkCandidatesHtml, externalManualResultsHtml, externalModeTabsHtml, externalLinkConfirmModalHtml, clinicalCasesSectionHtml, externalImportModalHtml, stripUndefinedDeep };', ctx);
   return ctx.__api;
 }
 
@@ -247,7 +248,7 @@ test('BUSCA MANUAL: sem correspondencia devolve lista vazia (nao inventa candida
 // 3. VINCULAR EXISTENTE (addClinicalCaseToLesion / linkClinicalCaseToLesion)
 // ===========================================================================
 
-test('VINCULAR: addClinicalCaseToLesion acrescenta o caso e a URL aos links, sem tocar no resto', () => {
+test('VINCULAR: addClinicalCaseToLesion acrescenta SO o caso clinico, sem tocar em links nem no resto (ajuste UX 22/09/2026)', () => {
   const api = loadPure();
   const e = lesion();
   const before = JSON.parse(JSON.stringify(e));
@@ -257,7 +258,8 @@ test('VINCULAR: addClinicalCaseToLesion acrescenta o caso e a URL aos links, sem
   assert.equal(r.entry.clinicalCases[0].sourceUrl, DRAFT.sourceUrl);
   assert.equal(r.entry.clinicalCases[0].title, DRAFT.title);
   assert.equal(r.entry.clinicalCases[0].patientAge, DRAFT.patientAge);
-  assert.ok(r.entry.links.some(l => l.url === DRAFT.sourceUrl));
+  // NÃO copia mais a sourceUrl para links — o card do caso já tem "Abrir caso".
+  assert.deepEqual(r.entry.links, before.links, 'links permanece exatamente como estava');
   // nunca sobrescreve nome/descricao/tags/secao/sitio/imagens/classificacao/altPlacements
   assert.equal(r.entry.name, before.name);
   assert.equal(r.entry.notes, before.notes);
@@ -269,6 +271,14 @@ test('VINCULAR: addClinicalCaseToLesion acrescenta o caso e a URL aos links, sem
   assert.deepEqual(r.entry.altPlacements, before.altPlacements);
   // a lesao ORIGINAL passada não foi mutada (função pura)
   assert.deepEqual(e, before);
+});
+
+test('VINCULAR: um link manual pre-existente com URL DIFERENTE da sourceUrl continua intacto', () => {
+  const api = loadPure();
+  const e = lesion({ links: [{ label: 'Referência manual', url: 'https://radiopaedia.org/cases/outro-caso' }] });
+  const r = api.addClinicalCaseToLesion(e, DRAFT);
+  assert.equal(r.entry.links.length, 1);
+  assert.equal(r.entry.links[0].url, 'https://radiopaedia.org/cases/outro-caso');
 });
 
 test('VINCULAR: campos ausentes no draft nunca sao inventados no caso clinico', () => {
@@ -288,6 +298,7 @@ test('VINCULAR (dinamico): linkClinicalCaseToLesion persiste via saveData() e at
   assert.equal(r.ok, true);
   assert.equal(rt.ctx.DATA[0].clinicalCases.length, 1);
   assert.equal(rt.ctx.DATA[0].clinicalCases[0].sourceUrl, DRAFT.sourceUrl);
+  assert.equal(rt.ctx.DATA[0].links.length, 0, 'links não recebe mais cópia da sourceUrl (ajuste UX 22/09/2026)');
   assert.equal(rt.saveCalls, 1, 'saveData chamado exatamente uma vez');
 });
 
@@ -296,6 +307,65 @@ test('VINCULAR (dinamico): lesao inexistente nao quebra e nao chama saveData', a
   const r = await rt.api.linkClinicalCaseToLesion('seed_inexistente', DRAFT, {});
   assert.equal(r.ok, false);
   assert.equal(rt.saveCalls, 0);
+});
+
+// ===========================================================================
+// 3.1 REFERÊNCIAS — sem duplicar na exibição (ajuste UX 22/09/2026)
+// ===========================================================================
+
+test('REFERENCIAS: novo vinculo nao adiciona link duplicado (links fica vazio)', () => {
+  const api = loadPure();
+  const r = api.addClinicalCaseToLesion(lesion(), DRAFT);
+  assert.deepEqual(r.entry.links, []);
+});
+
+test('REFERENCIAS: caso clinico continua com "Abrir caso" (a URL nao sumiu, só não é copiada pra links)', () => {
+  const api = loadPure();
+  const r = api.addClinicalCaseToLesion(lesion(), DRAFT);
+  const out = api.clinicalCasesSectionHtml(r.entry);
+  assert.match(out, /Abrir caso/);
+  assert.match(out, new RegExp('href="' + DRAFT.sourceUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"'));
+});
+
+test('REFERENCIAS: link historico com a MESMA URL do clinicalCases é ocultado só na exibição (filterReferenceLinksForDisplay)', () => {
+  const api = loadPure();
+  const cases = [{ source: 'Radiopaedia', title: 'Caso antigo', sourceUrl: DRAFT.sourceUrl, addedAt: '2026-09-21T00:00:00.000Z' }];
+  const links = [{ label: 'Radiopaedia — Caso antigo', url: DRAFT.sourceUrl }];
+  const visible = api.filterReferenceLinksForDisplay(links, cases);
+  assert.equal(visible.length, 0, 'link redundante oculto na exibição');
+});
+
+test('REFERENCIAS: URL diferente (link manual) continua aparecendo normalmente', () => {
+  const api = loadPure();
+  const cases = [{ source: 'Radiopaedia', title: 'Caso A', sourceUrl: 'https://radiopaedia.org/cases/a' }];
+  const links = [
+    { label: 'Radiopaedia — Caso A', url: 'https://radiopaedia.org/cases/a' },
+    { label: 'Outra referência', url: 'https://radiopaedia.org/cases/outro-diferente' }
+  ];
+  const visible = api.filterReferenceLinksForDisplay(links, cases);
+  assert.equal(visible.length, 1);
+  assert.equal(visible[0].url, 'https://radiopaedia.org/cases/outro-diferente');
+});
+
+test('REFERENCIAS: sem clinicalCases, todos os links aparecem normalmente (nao filtra à toa)', () => {
+  const api = loadPure();
+  const links = [{ label: 'X', url: 'https://radiopaedia.org/cases/x' }];
+  assert.deepEqual(api.filterReferenceLinksForDisplay(links, []), links);
+  assert.deepEqual(api.filterReferenceLinksForDisplay(links, undefined), links);
+});
+
+test('REFERENCIAS: filterReferenceLinksForDisplay nunca apaga do array original (só filtra a exibição)', () => {
+  const api = loadPure();
+  const cases = [{ source: 'Radiopaedia', title: 'Caso A', sourceUrl: 'https://radiopaedia.org/cases/a' }];
+  const links = [{ label: 'Radiopaedia — Caso A', url: 'https://radiopaedia.org/cases/a' }];
+  const before = JSON.stringify(links);
+  api.filterReferenceLinksForDisplay(links, cases);
+  assert.equal(JSON.stringify(links), before, 'array de entrada intacto (função pura)');
+});
+
+test('REFERENCIAS (openDetail): usa filterReferenceLinksForDisplay ao montar a lista de referências', () => {
+  const src = stripJsComments(extractFunction(html, 'openDetail'));
+  assert.match(src, /const links = filterReferenceLinksForDisplay\(ensureLinks\(e\), e\.clinicalCases\);/);
 });
 
 // ===========================================================================
