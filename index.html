@@ -12133,7 +12133,7 @@ const IMAGES_HISTORY_PAGE_SIZE = 15;
     const showMore = hist.days.length > visibleDays;
     content.innerHTML = imagesHistorySummaryHtml(hist)
       + imagesHistoryFilterTabsHtml(activeFilter)
-      + `<div id="images-history-list">` + imagesHistoryListHtml(daysToShow) + `</div>`
+      + `<div id="images-history-list" style="max-height:320px;overflow-y:auto;padding-right:4px;">` + imagesHistoryListHtml(daysToShow) + `</div>`
       + (showMore ? `<button type="button" class="btn btn-ghost" id="images-history-more" style="margin-top:8px;">Mostrar mais</button>` : '');
     content.querySelectorAll('.images-history-filter-btn').forEach(fbtn=>{
       fbtn.onclick = ()=>{ activeFilter = fbtn.getAttribute('data-filter'); visibleDays = IMAGES_HISTORY_PAGE_SIZE; renderPanel(); };
@@ -15701,7 +15701,7 @@ function buildImagesHistory(catalog, opts){
 
 function imagesHistorySummaryHtml(hist){
   const item = (n, label) => `<div><b style="color:var(--text);">${n}</b> ${label}</div>`;
-  return `<div class="images-history-summary" style="display:flex;flex-wrap:wrap;gap:14px;margin:8px 0;font-size:12px;color:var(--muted-2);">`
+  return `<div class="images-history-summary" style="display:flex;flex-wrap:wrap;gap:10px;margin:6px 0;font-size:11px;color:var(--muted-2);">`
     + item(hist.totalWithAssignedAt, 'com data')
     + item(hist.todayCount, 'hoje')
     + item(hist.last7Count, 'últimos 7 dias')
@@ -15727,21 +15727,17 @@ function imagesHistoryDateLabel(dateKey){
   return parts.length === 3 ? (parts[2] + '/' + parts[1] + '/' + parts[0]) : String(dateKey || '');
 }
 function imagesHistoryLesionRowHtml(l){
-  const ctx = [l.s, l.site].filter(Boolean).map(esc).join(' &gt; ');
-  const times = (Array.isArray(l.times) ? l.times : []).map(imagesHistoryTimeLabel).filter(Boolean).join(' · ');
-  return `<div class="images-history-lesion-row" data-lesion-id="${escAttr(l.id)}" style="border-top:1px solid var(--line);padding:8px 0;cursor:pointer;">`
-    + `<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;">`
-    + `<div style="font-weight:600;color:var(--teal);">${esc(l.name)}</div>`
-    + `<div style="color:var(--muted-2);font-size:12px;white-space:nowrap;">${l.count} ${l.count === 1 ? 'imagem' : 'imagens'}</div>`
-    + `</div>`
-    + (ctx ? `<div style="color:var(--muted-2);font-size:12px;">${ctx}</div>` : '')
-    + (times ? `<div style="color:var(--muted-2);font-size:11px;font-family:'IBM Plex Mono',monospace;margin-top:2px;">${esc(times)}</div>` : '')
+  // LOG compacto: UMA linha por lesão (nome + contador). Seção/sítio e
+  // horários NÃO aparecem aqui (continuam nos dados e nas outras telas).
+  return `<div class="images-history-lesion-row" data-lesion-id="${escAttr(l.id)}" title="${escAttr(l.name)}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding:5px 0;cursor:pointer;">`
+    + `<span style="font-size:12.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">${esc(l.name)}</span>`
+    + `<span style="color:var(--muted-2);font-size:11px;white-space:nowrap;flex-shrink:0;">${l.count} ${l.count === 1 ? 'imagem' : 'imagens'}</span>`
     + `</div>`;
 }
 function imagesHistoryDayGroupHtml(day){
-  return `<div class="images-history-day" style="margin:10px 0;">`
-    + `<div style="font-weight:700;">${esc(imagesHistoryDateLabel(day.dateKey))}</div>`
-    + `<div style="color:var(--muted-2);font-size:12px;margin-bottom:2px;">${day.totalImages} ${day.totalImages === 1 ? 'imagem' : 'imagens'} · ${day.totalLesions} ${day.totalLesions === 1 ? 'lesão' : 'lesões'}</div>`
+  return `<div class="images-history-day" style="margin:8px 0 2px;">`
+    + `<div style="font-weight:700;font-size:12.5px;">${esc(imagesHistoryDateLabel(day.dateKey))}</div>`
+    + `<div style="color:var(--muted-2);font-size:11px;margin-bottom:2px;">${day.totalImages} ${day.totalImages === 1 ? 'imagem' : 'imagens'} · ${day.totalLesions} ${day.totalLesions === 1 ? 'lesão' : 'lesões'}</div>`
     + day.lesions.map(imagesHistoryLesionRowHtml).join('')
     + `</div>`;
 }

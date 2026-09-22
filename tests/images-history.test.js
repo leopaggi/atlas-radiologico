@@ -237,11 +237,12 @@ test('HORÁRIOS: imagesHistoryTimeLabel formata um ISO para HH:MM local', () => 
   assert.match(out, /^\d{2}:\d{2}$/, 'formato HH:MM');
 });
 
-test('HORÁRIOS: o HTML da linha da lesão lista os horários separados por " · "', () => {
+test('HORÁRIOS: o HTML da linha da lesão NÃO lista horários (log compacto; dados continuam em l.times)', () => {
   const api = loadPure();
   const out = api.imagesHistoryLesionRowHtml({ id: 'x', name: 'N', s: 'S', site: 'Y', count: 2, times: [T0, T1] });
   const t0 = api.imagesHistoryTimeLabel(T0), t1 = api.imagesHistoryTimeLabel(T1);
-  assert.match(out, new RegExp(t0 + ' · ' + t1));
+  assert.doesNotMatch(out, new RegExp(t0));
+  assert.doesNotMatch(out, new RegExp(t1));
 });
 
 // ===========================================================================
@@ -437,6 +438,99 @@ test('BOOT: IMAGES_HISTORY_FILTERS/DEFAULT_FILTER/PAGE_SIZE são declaradas ANTE
   assert.ok(filtersIdx !== -1 && filtersIdx < iifeStart, 'IMAGES_HISTORY_FILTERS precisa vir antes da IIFE');
   assert.ok(defaultIdx !== -1 && defaultIdx < iifeStart, 'IMAGES_HISTORY_DEFAULT_FILTER precisa vir antes da IIFE');
   assert.ok(pageSizeIdx !== -1 && pageSizeIdx < iifeStart, 'IMAGES_HISTORY_PAGE_SIZE precisa vir antes da IIFE');
+});
+
+// ===========================================================================
+// LOG COMPACTO (2026-09-22): uma linha por lesão, sem seção/sítio/horários,
+// ellipsis, scroll interno; cabeçalho e filtros fora da rolagem
+// ===========================================================================
+
+test('LOG: uma linha por lesão (nome + contador, sem seção/sítio)', () => {
+  const api = loadPure();
+  const out = api.imagesHistoryLesionRowHtml({ id: 'x', name: 'Diverticulite de Meckel', s: 'Abdômen', site: 'Cólon', count: 1, times: [T0] });
+  assert.match(out, /Diverticulite de Meckel/);
+  assert.match(out, /1 imagem/);
+  assert.doesNotMatch(out, /Abdômen/);
+  assert.doesNotMatch(out, /Cólon/);
+});
+
+test('LOG: sem horários na linha (nem parêntese de hora)', () => {
+  const api = loadPure();
+  const out = api.imagesHistoryLesionRowHtml({ id: 'x', name: 'N', s: 'S', site: 'Y', count: 3, times: [T0, T1, T2] });
+  assert.doesNotMatch(out, /\d{2}:\d{2}/);
+});
+
+test('LOG: ellipsis no nome + title com nome completo', () => {
+  const api = loadPure();
+  const out = api.imagesHistoryLesionRowHtml({ id: 'x', name: 'Lesão neoplásica de base de crânio extensa', s: 'S', site: 'Y', count: 1, times: [] });
+  assert.match(out, /text-overflow:\s*ellipsis/);
+  assert.match(out, /white-space:\s*nowrap/);
+  assert.match(out, /overflow:\s*hidden/);
+  assert.match(out, /title="Lesão neoplásica de base de crânio extensa"/);
+});
+
+test('LOG: contador à direita, discreto (1 imagem / N imagens)', () => {
+  const api = loadPure();
+  assert.match(api.imagesHistoryLesionRowHtml({ id: 'a', name: 'A', s: 'S', site: 'Y', count: 1, times: [] }), /1 imagem</);
+  assert.match(api.imagesHistoryLesionRowHtml({ id: 'a', name: 'A', s: 'S', site: 'Y', count: 2, times: [] }), /2 imagens</);
+  assert.match(api.imagesHistoryLesionRowHtml({ id: 'a', name: 'A', s: 'S', site: 'Y', count: 1, times: [] }), /flex-shrink:\s*0/);
+});
+
+test('LOG: fonte compacta (nome e contador menores que antes)', () => {
+  const api = loadPure();
+  const out = api.imagesHistoryLesionRowHtml({ id: 'a', name: 'A', s: 'S', site: 'Y', count: 1, times: [] });
+  assert.match(out, /font-size:\s*12\.5px/);
+  assert.match(out, /font-size:\s*11px/);
+  assert.doesNotMatch(out, /font-size:\s*1[3-9]px/);
+  const day = api.imagesHistoryDayGroupHtml({ dateKey: '2026-09-22', totalImages: 5, totalLesions: 4, lesions: [] });
+  assert.match(day, /font-size:\s*12\.5px/);
+});
+
+test('LOG: scroll interno existe na lista (cabeçalho e filtros fora)', () => {
+  const src = extractFunction(html, 'initImagesHistoryPanel').source;
+  assert.match(src, /id="images-history-list"[^>]*max-height:\s*320px[^>]*overflow-y:\s*auto/);
+  assert.doesNotMatch(src, /imagesHistorySummaryHtml\(hist\)[^;]*overflow-y/);
+  assert.doesNotMatch(src, /imagesHistoryFilterTabsHtml\(activeFilter\)[^;]*overflow-y/);
+});
+
+test('LOG: clique ainda abre a lesão (data-lesion-id + wiring intactos)', () => {
+  const api = loadPure();
+  const out = api.imagesHistoryLesionRowHtml({ id: 'seed_9', name: 'X', s: 'S', site: 'Y', count: 1, times: [] });
+  assert.match(out, /data-lesion-id="seed_9"/);
+  const src = stripJsComments(extractFunction(html, 'initImagesHistoryPanel').source);
+  assert.match(src, /row\.onclick = \(\)=> openDetail\(row\.getAttribute\('data-lesion-id'\)\);/);
+});
+
+test('LOG: contagens idênticas às de antes (só layout mudou)', () => {
+  const api = loadPure();
+  const catalog = [lesion({ images: [img({ assignedAt: T0 }), img({ assignedAt: T1 }), img({ assignedAt: YDAY })] })];
+  const hist = api.buildImagesHistory(catalog, { now: NOW, rangeDays: null });
+  assert.equal(hist.days[0].totalImages, 2);
+  assert.equal(hist.days[0].totalLesions, 1);
+  assert.equal(hist.days[0].lesions[0].count, 2);
+  const dayHtml = api.imagesHistoryDayGroupHtml(hist.days[0]);
+  assert.match(dayHtml, /2 imagens · 1 lesão/);
+});
+
+test('LOG: filtros e paginação intactos após a compactação', () => {
+  const src = stripJsComments(extractFunction(html, 'initImagesHistoryPanel').source);
+  assert.match(src, /content\.innerHTML = imagesHistorySummaryHtml\(hist\)/);
+  assert.match(src, /imagesHistoryFilterTabsHtml\(activeFilter\)/);
+  assert.match(src, /id="images-history-more"/);
+});
+
+test('LOG: dia sem lesões não quebra e grupo tem cabeçalho compacto', () => {
+  const api = loadPure();
+  const out = api.imagesHistoryDayGroupHtml({ dateKey: '2026-09-22', totalImages: 0, totalLesions: 0, lesions: [] });
+  assert.match(out, /22\/09\/2026/);
+  assert.match(out, /margin:\s*8px 0 2px/);
+});
+
+test('LOG: HTML escapa nome malicioso mesmo no formato compacto', () => {
+  const api = loadPure();
+  const out = api.imagesHistoryLesionRowHtml({ id: 'x', name: '<img src=x onerror=alert(1)>', s: 'S', site: 'Y', count: 1, times: [] });
+  assert.doesNotMatch(out, /<img src=x/);
+  assert.match(out, /&lt;img/);
 });
 
 test('BOOT (dinâmico): rodar a IIFE de verdade, na ordem REAL do arquivo, não lança TDZ (reproduz o bug real se a ordem regredir)', () => {

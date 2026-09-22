@@ -4369,3 +4369,45 @@ Painel único na sidebar; Ferramentas avançadas independente.
 ### Commit após aprovação
 
 Ainda não criado (tarefa pediu sem commit/push).
+
+**Número da alteração:** 065
+**Data:** 22/09/2026
+
+### Objetivo
+
+Transformar o "Histórico de imagens" num LOG compacto: uma linha por
+lesão, sem seção/sítio/horários, com scroll interno.
+
+### Estado antes
+
+Cada lesão ocupava várias linhas (nome + seção/sítio + horários), fonte
+grande, sem scroll — o painel empurrava o resto da sidebar.
+
+### Arquivos modificados
+
+- `index.html` (só render: `imagesHistoryLesionRowHtml`,
+  `imagesHistoryDayGroupHtml`, resumo menor, scroll em
+  `#images-history-list`)
+- `tests/images-history.test.js` (+11 testes do log compacto; teste de
+  horários invertido para ausência)
+
+### O que foi alterado
+
+- Linha única nome + contador, ellipsis com `title` completo, fonte
+  12.5/11px, cabeçalho do dia compacto, resumo menor, lista com
+  `max-height:320px` + `overflow-y:auto` (resumo/filtros/"mostrar mais"
+  fora da rolagem). Dados, contagens, filtros, links e lazy intactos.
+
+### Testes realizados
+
+- `node tests/images-history.test.js`: 42 PASS, 0 FAIL;
+- `tools-layout`: 11 PASS; `critical-flows`: 21 PASS;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Log denso e legível; painel não desloca mais a sidebar.
+
+### Commit após aprovação
+
+Ainda não criado (tarefa pediu sem commit/push).
