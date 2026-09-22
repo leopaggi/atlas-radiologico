@@ -3682,5 +3682,103 @@ do projeto**:
 
 ### Commit após aprovação
 
-Ainda não criado (aguardando pedido explícito do usuário para commitar
-e/ou publicar).
+**Publicado** (atualização retroativa desta nota): commit `670ffd6` —
+"feat: secure device bootstrap and image descriptions" — criado e enviado
+para `origin/main` mediante pedido explícito do usuário (Alterações
+055–058). `HEAD` local e `origin/main` confirmados idênticos no momento do
+push.
+
+**Número da alteração:** 059
+**Data:** 21/09/2026
+
+### Objetivo
+
+Auditoria forense + correção pontual: 2 imagens (`atlas-radiologico/o0ykul2z1qp00pp6yxel`,
+`atlas-radiologico/n5oyigvmkpb8zpqykd3g`) foram encontradas — via cross-
+reference entre o `SEED` congelado em 18/09/2026 (git, antes de qualquer
+reconciliação ao vivo) e um backup real exportado do app em 20/09/2026—
+com o próprio `lesionName` reescrito de "Abscesso cerebral" para
+"Oligodendroglioma". Causa raiz: o antigo sincronismo canônico por id
+(hoje desligado, `CANONICAL_REFRESH_DISABLED_V250=true`) casou um registro
+persistido com o SEED só pelo `id` posicional, sem checar identidade
+semântica, no momento em que o SEED foi reordenado/compactado (70
+duplicatas removidas em 18/09/2026 11:46, commit `c27fe256`).
+
+### Estado antes
+
+As 2 imagens apareciam sob "Oligodendroglioma" (hoje `seed_11`), enquanto
+seu conteúdo real e todo o histórico (SEED de 18/09, `createdAt` no
+Cloudinary de 14/09) apontam para "Abscesso cerebral" (hoje `seed_10`).
+Outras 63 ocorrências no acervo têm `lesionId` desatualizado mas
+`lesionName` já compatível com a lesão atual — classificadas
+`LEGACY_ID_ONLY`, inofensivas, não tocadas.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/critical-flows.test.js` (âncoras)
+- `tests/ownership-fix-20260921.test.js` (novo, 10 testes)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- **`fixAbscessoOligodendrogliomaOwnership20260921()`** (nova, console-only,
+  mesmo padrão de `consolidateSameIdDuplicates`): localiza origem/destino
+  por **identidade semântica** (`exactLesionIdentityKey`, s+site+nome),
+  nunca por `seed_N`; confirma as 2 imagens pelo `publicId` exato; snapshot
+  obrigatório antes (aborta se falhar); usa o guard manual existente
+  (`assertManualImageOwnershipChange`/`IMAGE_OWNERSHIP_MANUAL`); remove da
+  origem e adiciona ao destino reaproveitando `removeImageFromLesionData`/
+  `addImageToLesionData` (já existentes, sem lógica paralela); persiste via
+  `saveData()`. Preserva assetId/publicId/URL/label/source/attribution/
+  assignedAt; nunca chama upload/destroy no Cloudinary; nunca carimba
+  `assignedAt` novo (é correção histórica, não produtividade nova).
+- **Proteção arquitetural em `loadData()`**: o bloco de sincronismo
+  canônico por id (inerte, `CANONICAL_REFRESH_DISABLED_V250=true`, mantido
+  desligado) ganhou uma checagem de identidade semântica ANTES de copiar
+  qualquer campo — se o registro persistido já tem `s+site+name` e eles não
+  batem com o canônico da mesma posição, o conflito é **registrado**
+  (`registerImageOwnershipConflict`) e nada é alterado automaticamente.
+  Protege contra uma recorrência do mesmo bug, mesmo que o bloco seja
+  reativado no futuro por engano.
+
+### Segurança
+
+- As 63 ocorrências `LEGACY_ID_ONLY` não foram tocadas (confirmado por
+  teste dedicado).
+- Nenhuma migração global; nenhuma reescrita de `lesionId` em massa;
+  `CANONICAL_REFRESH_DISABLED_V250` continua `true`; nenhum reorder no
+  SEED.
+- SRS/REVIEW/LESION_REVISIONS/SESSIONLOG intocados (indexados pelo id da
+  lesão, que não muda nesta correção).
+
+### Testes realizados
+
+- `node tests/ownership-fix-20260921.test.js` (novo): **10 PASS**, 0 FAIL
+  — cobre as 14 verificações pedidas (localização semântica, sem
+  duplicar, metadados preservados, `assignedAt` intacto, sem Cloudinary,
+  SRS/revisão intactos, `LEGACY_ID_ONLY` preservado, canonical refresh
+  continua bloqueado, conflito semântico nunca autoaplicado).
+- `node tests/critical-flows.test.js`: **21 PASS**, 0 FAIL (âncoras
+  atualizadas: `loadData` continua 8799; `importHandler` foi para 11900).
+- Suíte completa: **740 PASS, 5 TODO**, só o FAIL histórico.
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+**Executada pelo usuário no console do navegador e CONFIRMADA no `DATA`
+real (21/09/2026):**
+
+```
+{ ok: true,
+  reason: '2 imagem(ns) movida(s) de "Oligodendroglioma" para "Abscesso cerebral"',
+  snapshotId: 'snap_mubyvs5t_x2jmnm' }
+```
+
+Conferência visual manual aprovada pelo usuário: Oligodendroglioma sem as
+2 imagens incorretas; Abscesso cerebral com as 2 imagens corretas.
+
+### Commit após aprovação
+
+**Publicado** — commit e push executados nesta mesma entrega, mediante
+pedido explícito do usuário (ver hash abaixo/relatório final da sessão).

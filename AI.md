@@ -371,6 +371,60 @@ com as âncoras atuais: 6236/6246/8788/11868. Suíte: 720 PASS, 5 TODO + 1
 FAIL histórico em `duplicate-detection.test.js`. (Âncoras deslocadas de
 novo pela Alteração 057 logo abaixo — ver valores atuais lá.)
 
+## Atualização 2026-09-21 — correção pontual de ownership: Abscesso cerebral / Oligodendroglioma (Alteração 059)
+
+Auditoria forense (comparando o `SEED` congelado em 18/09/2026 no git,
+ANTES de qualquer reconciliação ao vivo, contra um backup real exportado
+do app em 20/09/2026) confirmou que 2 imagens
+(`atlas-radiologico/o0ykul2z1qp00pp6yxel`,
+`atlas-radiologico/n5oyigvmkpb8zpqykd3g`) tiveram o próprio `lesionName`
+reescrito de "Abscesso cerebral" para "Oligodendroglioma". **Causa raiz:**
+o antigo sincronismo canônico por id em `loadData()` (hoje inerte,
+`CANONICAL_REFRESH_DISABLED_V250=true`) casou um registro persistido com o
+SEED só pelo `id` posicional — sem checar identidade semântica — no
+instante em que o SEED foi reordenado/compactado (70 duplicatas removidas
+em 18/09/2026 11:46, commit `c27fe256`; o `seed_11` passou a apontar para
+outra lesão). **Isso é o MESMO mecanismo já documentado para o bug do
+C-RADS em lesões fetais** (ver §3.1 do `CONTEXTO_MESTRE`) — só que
+manifestando via `images` em vez de `classification`. Outras 63
+ocorrências no acervo têm `lesionId` desatualizado mas `lesionName` já
+compatível com a lesão que as contém (`LEGACY_ID_ONLY` — inofensivas, NÃO
+tocadas).
+
+**`fixAbscessoOligodendrogliomaOwnership20260921()`** (nova, só via
+console, mesmo padrão de `consolidateSameIdDuplicates`): localiza
+origem/destino por **identidade semântica** (`exactLesionIdentityKey`,
+s+site+nome normalizado) — nunca por `seed_N`; confirma as 2 imagens pelo
+`publicId` exato; snapshot obrigatório antes (aborta se falhar, ou se
+qualquer pré-condição falhar); usa o guard manual já existente
+(`assertManualImageOwnershipChange`/`IMAGE_OWNERSHIP_MANUAL`); reaproveita
+`removeImageFromLesionData`/`addImageToLesionData` (sem lógica paralela);
+persiste via `saveData()`. Preserva assetId/publicId/URL/label/source/
+attribution/`assignedAt` (nunca carimba um novo — é correção histórica,
+não produtividade nova); nunca chama upload/destroy no Cloudinary.
+**✓ Executada pelo usuário no console do navegador contra o `DATA` real e
+CONFIRMADA (21/09/2026):** `{ ok:true, reason:'2 imagem(ns) movida(s) de
+"Oligodendroglioma" para "Abscesso cerebral"' }`, snapshot
+`snap_mubyvs5t_x2jmnm`. Conferência visual manual aprovada.
+
+**Proteção arquitetural:** o bloco de sincronismo canônico por id em
+`loadData()` (continua desligado,
+`CANONICAL_REFRESH_DISABLED_V250=true` — **não reativado**) ganhou uma
+checagem de identidade semântica ANTES de copiar qualquer campo: se o
+registro persistido já tem `s+site+name` preenchidos e não batem com o
+canônico da mesma posição, o conflito é **registrado**
+(`registerImageOwnershipConflict`, mesmo registro já usado por ownership de
+imagens) e nada é alterado automaticamente. Protege contra recorrência do
+mesmo bug mesmo que esse bloco seja reativado por engano no futuro.
+
+Testes: `tests/ownership-fix-20260921.test.js` (novo, **10 PASS**, cobrindo
+localização semântica, ausência de duplicação, preservação de metadados/
+`assignedAt`, ausência de chamadas Cloudinary, SRS/revisões intactos,
+`LEGACY_ID_ONLY` preservado, e o guard de identidade semântica bloqueando
+uma reativação futura do sincronismo canônico). `tests/critical-flows.test.js`
+com as âncoras atuais: `loadData` continua 8799; `importHandler` foi para
+11900. Suíte: 740 PASS, 5 TODO + 1 FAIL histórico.
+
 ## Atualização 2026-09-21 — ajuste visual das descrições (Alteração 057)
 
 **✓ VALIDADO em teste manual pelo usuário (21/09/2026) — "tudo funcionando

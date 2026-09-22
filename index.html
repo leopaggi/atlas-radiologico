@@ -8820,6 +8820,22 @@ async function loadData(){
       if(Number(e._userUpdatedAt)||0) return;
       const canon = seedById.get(e.id);
       if(!canon) return;
+      // PROTEÇÃO ARQUITETURAL (2026-09-21, Alteração 059): NUNCA casar só
+      // por id. O id é posicional (SEED.forEach reindexa por posição a cada
+      // boot) e já causou uma contaminação real — Abscesso cerebral virou
+      // Oligodendroglioma quando o SEED foi reordenado/compactado (70
+      // duplicatas removidas em 18/09/2026) e este bloco, então ativo,
+      // copiou o nome do NOVO ocupante da posição por cima de um registro
+      // que ainda guardava conteúdo do ocupante ANTIGO. Mesmo que este
+      // bloco seja reativado no futuro, ele exige compatibilidade semântica
+      // (s+site+nome normalizado, mesma chave de findExactLesionMatch) além
+      // do id — se o registro persistido já tem identidade preenchida e ela
+      // não bate com o canônico da mesma posição, o conflito é REGISTRADO e
+      // nada é alterado automaticamente (nunca resolvido em silêncio).
+      if(e.s && e.site && e.name && exactLesionIdentityKey(e.s,e.site,e.name) !== exactLesionIdentityKey(canon.s,canon.site,canon.name)){
+        registerImageOwnershipConflict({ kind:'canonical_refresh_identity_mismatch_blocked', entryId:e.id, persistedName:e.name, canonicalName:canon.name, persistedIdentity:{s:e.s,site:e.site}, canonicalIdentity:{s:canon.s,site:canon.site} });
+        return;
+      }
       const fieldsToSync = ['name','s','site','tags','notes','classification','enTerm','inc'];
       let changed = false;
       fieldsToSync.forEach(f=>{
@@ -14179,6 +14195,111 @@ async function consolidateSameIdDuplicates(targetId, opts){
   }
   report.ok = true;
   report.reason = 'consolidado: 3 → 1, 3 imagens preservadas';
+  return report;
+}
+
+/* ============================================================
+   CORREÇÃO PONTUAL DE OWNERSHIP — Abscesso cerebral (Alteração 059, 2026-09-21)
+   ------------------------------------------------------------
+   Auditoria forense confirmou, comparando o SEED congelado em 18/09/2026
+   (git, ANTES de qualquer reconciliação ao vivo) contra um backup real
+   exportado do app em 20/09/2026, que exatamente 2 imagens tiveram o
+   próprio `lesionName` reescrito de "Abscesso cerebral" para
+   "Oligodendroglioma" — efeito colateral do antigo bloco de sincronismo
+   canônico por id (hoje sob CANONICAL_REFRESH_DISABLED_V250=true) quando o
+   SEED foi reordenado/compactado (70 duplicatas removidas em 18/09) e o
+   `id` posicional "seed_11" passou a apontar pra outra lesão.
+   Esta função corrige SOMENTE essas 2 imagens, identificadas pelo publicId
+   EXATO — nunca por seed_N. Localiza origem/destino por IDENTIDADE
+   SEMÂNTICA (s+site+nome, mesma chave de findExactLesionMatch), só usa o
+   `id` atual do destino depois disso, como compatibilidade operacional do
+   campo lesionId (nunca como prova de identidade). As 63 ocorrências
+   classificadas como LEGACY_ID_ONLY na auditoria (id desatualizado, mas
+   lesionName já compatível com a lesão atual) NÃO são tocadas por esta
+   função nem por nenhuma outra rotina.
+   Sem upload/destroy no Cloudinary (mesmos assetId/publicId/URL); sem novo
+   assignedAt (correção histórica de ownership, não nova atribuição); SRS/
+   REVIEW/LESION_REVISIONS/SESSIONLOG intocados (indexados pelo id da lesão,
+   que não muda). Snapshot obrigatório antes; qualquer pré-condição que
+   falhe aborta sem tocar no DATA.
+   Uso (console, manual, uma única vez):
+   await fixAbscessoOligodendrogliomaOwnership20260921()
+   ============================================================ */
+const OWNERSHIP_FIX_20260921 = {
+  publicIds: ['atlas-radiologico/o0ykul2z1qp00pp6yxel', 'atlas-radiologico/n5oyigvmkpb8zpqykd3g'],
+  wrongIdentity: { s:'Neurorradiologia', site:'Intra-axial (parênquima)', name:'Oligodendroglioma' },
+  correctIdentity: { s:'Neurorradiologia', site:'Intra-axial (parênquima)', name:'Abscesso cerebral' }
+};
+async function fixAbscessoOligodendrogliomaOwnership20260921(){
+  const report = { ok:false, reason:'', snapshotId:null, sourceEntry:null, destEntry:null, imagesFound:[], moved:[], persisted:false };
+
+  // 1. Snapshot OBRIGATÓRIO; falhou => ABORTA sem tocar no DATA.
+  let snap = null;
+  try{ snap = createSafetySnapshot('antes de operação em massa de ownership'); }catch(e){ snap = null; }
+  if(!snap){ report.reason = 'snapshot falhou — abortado sem tocar no DATA'; return report; }
+  report.snapshotId = snap.id || null;
+
+  // 2. Origem e destino por IDENTIDADE SEMÂNTICA — nunca por seed_N.
+  const wrongKey = exactLesionIdentityKey(OWNERSHIP_FIX_20260921.wrongIdentity.s, OWNERSHIP_FIX_20260921.wrongIdentity.site, OWNERSHIP_FIX_20260921.wrongIdentity.name);
+  const correctKey = exactLesionIdentityKey(OWNERSHIP_FIX_20260921.correctIdentity.s, OWNERSHIP_FIX_20260921.correctIdentity.site, OWNERSHIP_FIX_20260921.correctIdentity.name);
+  const wrongMatches = DATA.filter(e=>e && typeof e.name==='string' && exactLesionIdentityKey(e.s,e.site,e.name)===wrongKey);
+  const correctMatches = DATA.filter(e=>e && typeof e.name==='string' && exactLesionIdentityKey(e.s,e.site,e.name)===correctKey);
+  if(wrongMatches.length !== 1){ report.reason = `origem ("${OWNERSHIP_FIX_20260921.wrongIdentity.name}") não encontrada de forma única (achadas: ${wrongMatches.length}) — abortado`; return report; }
+  if(correctMatches.length !== 1){ report.reason = `destino ("${OWNERSHIP_FIX_20260921.correctIdentity.name}") não encontrado de forma única (achadas: ${correctMatches.length}) — abortado`; return report; }
+  const sourceEntry = wrongMatches[0];
+  const destEntry = correctMatches[0];
+  report.sourceEntry = { id: sourceEntry.id, name: sourceEntry.name };
+  report.destEntry = { id: destEntry.id, name: destEntry.name };
+
+  // 3. As 2 imagens EXATAS pelo publicId: confirma que estão na origem e
+  //    que nenhuma já está no destino (evita duplicar).
+  const targets = [];
+  for(const pubId of OWNERSHIP_FIX_20260921.publicIds){
+    const idx = (Array.isArray(sourceEntry.images)?sourceEntry.images:[]).findIndex(img=>img && img.publicId===pubId);
+    if(idx === -1){ report.reason = `imagem ${pubId} não encontrada em "${sourceEntry.name}" — abortado`; return report; }
+    const alreadyThere = (Array.isArray(destEntry.images)?destEntry.images:[]).some(img=>img && img.publicId===pubId);
+    if(alreadyThere){ report.reason = `imagem ${pubId} já está em "${destEntry.name}" — abortado (evita duplicar)`; return report; }
+    targets.push({ pubId, idx });
+    report.imagesFound.push(pubId);
+  }
+
+  // 4. Move cada imagem: guard de ownership MANUAL explícito primeiro,
+  //    remove da origem por índice (nunca por posição adivinhada, índices
+  //    decrescentes pra não deslocar), soma no destino preservando tudo
+  //    (assetId/publicId/URL/label/source/attribution/assignedAt) — só
+  //    lesionId/lesionName são recarimbados com o destino, igual a
+  //    addImageToLesionData já faz para qualquer imagem nova.
+  targets.sort((a,b)=>b.idx-a.idx);
+  for(const t of targets){
+    const img = sourceEntry.images[t.idx];
+    const guard = assertManualImageOwnershipChange(img, destEntry.id, IMAGE_OWNERSHIP_MANUAL);
+    if(!guard.ok){ report.reason = `guard de ownership recusou mover ${t.pubId} — abortado (conflito registrado, nada foi alterado)`; return report; }
+    removeImageFromLesionData(sourceEntry, t.idx);
+    addImageToLesionData(destEntry, { ...img });
+    report.moved.push(t.pubId);
+  }
+
+  // 5. Pós-condição: origem sem os 2 publicIds; destino com exatamente 1
+  //    ocorrência de cada.
+  const stillInSource = OWNERSHIP_FIX_20260921.publicIds.some(p=>(sourceEntry.images||[]).some(img=>img&&img.publicId===p));
+  const destCounts = OWNERSHIP_FIX_20260921.publicIds.map(p=>(destEntry.images||[]).filter(img=>img&&img.publicId===p).length);
+  if(stillInSource || destCounts.some(c=>c!==1)){
+    report.reason = `pós-condição falhou (restaurar MANUALMENTE o snapshot ${report.snapshotId})`;
+    return report;
+  }
+
+  // 6. Persistência pelo fluxo atual seguro (sem Cloudinary, sem novo
+  //    assignedAt — saveData() não carimba nada).
+  try{
+    await saveData();
+    report.persisted = true;
+  }catch(e){
+    report.reason = `saveData falhou (memória já corrigida; snapshot ${report.snapshotId} preservado) — chame saveData() de novo ou restaure o snapshot manualmente`;
+    return report;
+  }
+
+  report.ok = true;
+  report.reason = `2 imagem(ns) movida(s) de "${sourceEntry.name}" para "${destEntry.name}"`;
   return report;
 }
 

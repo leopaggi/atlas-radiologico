@@ -1048,3 +1048,17 @@ pós-resposta, mesmo respiro visual — sem nenhum truncamento aí, porque faz
 parte do estudo ver o texto inteiro.
 
 Testes: `tests/image-description.test.js` (31 PASS).
+
+### Correção pontual de ownership (2026-09-21)
+
+Uma auditoria forense encontrou 2 imagens que, por causa de uma
+reordenação/compactação antiga do catálogo (18/09/2026), ficaram
+associadas à lesão errada ("Oligodendroglioma" em vez de "Abscesso
+cerebral"). Foi criada `fixAbscessoOligodendrogliomaOwnership20260921()`
+— uma função de correção pontual, só via console, que localiza origem e
+destino pelo **nome real da lesão** (nunca por número de id interno), com
+snapshot automático antes e sem enviar nada ao Cloudinary. Executada
+manualmente pelo usuário no navegador e confirmada: as 2 imagens já
+aparecem corretamente em "Abscesso cerebral".
+
+Testes: `tests/ownership-fix-20260921.test.js` (10 PASS).

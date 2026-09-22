@@ -317,15 +317,16 @@ Destino: `https://ntfy.sh/acervo-leo-7k29-radiologia`. Detalhes em `AGENTS.md`.
 | `tests/sidebar-image-stats.test.js` | **22 PASS**, 0 FAIL |
 | `tests/device-bootstrap.test.js` | **32 PASS**, 0 FAIL |
 | `tests/image-description.test.js` | **31 PASS**, 0 FAIL |
-| Total (suíte completa) | **736 testes, 730 PASS, 5 TODO, 0 FAIL** |
+| `tests/ownership-fix-20260921.test.js` | **10 PASS**, 0 FAIL |
+| Total (suíte completa) | **746 testes, 740 PASS, 5 TODO, 0 FAIL** |
 
 - `tests/duplicate-detection.test.js` tem 1 FAIL **histórico e fora de escopo**
   (`DUPLICATE_PAIRS_V171`, 28 entradas malformadas). Não corrigir sem pedido.
   (Não entra na tabela acima nem no total, por ter esse FAIL conhecido — ver
   `README.md`.)
 - `tests/critical-flows.test.js` usa âncoras de linha exatas; após edições antes
-  das âncoras, atualizar via script. Valores atuais (Alteração 057):
-  **6247/6257/8799/11884** (`brokenArtifacts`/`recovery`/`loadData`/
+  das âncoras, atualizar via script. Valores atuais (Alteração 059):
+  **6247/6257/8799/11900** (`brokenArtifacts`/`recovery`/`loadData`/
   `importHandler`, respectivamente).
 - `git diff --check`: sem erros de espaço em branco.
 
@@ -607,12 +608,63 @@ anteriores e aprovou todas explicitamente:
 
 Todas as três são consideradas **BASELINE ESTÁVEL do projeto**. Esta
 entrada (Alteração 058) é **só documentação** — nenhum código funcional foi
-alterado. Estado do repositório: nada foi commitado nem publicado; `git
-status` continua mostrando as mesmas alterações locais das três entregas
-anteriores (mais esta atualização de documentação). Commit/publicação
-seguem dependendo de pedido explícito do usuário (regra permanente de
-`AGENTS.md`).
+alterado.
 
-Última execução da suíte completa nesta sessão: **730 PASS, 5 TODO, 1 FAIL
-histórico** (`duplicate-detection.test.js`, fora de escopo). `git diff
---check`: sem erros.
+**Nota (atualização posterior):** as Alterações 055–058 foram commitadas e
+publicadas em `origin/main` no commit `670ffd6` (mediante pedido explícito
+do usuário) — ver seção 1. As Alterações 059 em diante (auditoria forense
+de imagens + correção pontual) vieram DEPOIS desse push e ainda não foram
+commitadas.
+
+Última execução da suíte completa nesta sessão (antes do push): **730
+PASS, 5 TODO, 1 FAIL histórico** (`duplicate-detection.test.js`, fora de
+escopo). `git diff --check`: sem erros.
+
+## 22. Correção pontual de ownership — Abscesso cerebral / Oligodendroglioma (Alteração 059, 2026-09-21)
+
+Auditoria forense (cross-reference entre o `SEED` congelado em 18/09/2026
+no git — antes de qualquer reconciliação ao vivo — e um backup real
+exportado do app em 20/09/2026) confirmou que 2 imagens
+(`atlas-radiologico/o0ykul2z1qp00pp6yxel`,
+`atlas-radiologico/n5oyigvmkpb8zpqykd3g`) tiveram o próprio `lesionName`
+reescrito de "Abscesso cerebral" para "Oligodendroglioma". Causa raiz: o
+antigo sincronismo canônico por id (hoje inerte,
+`CANONICAL_REFRESH_DISABLED_V250=true`) casou um registro persistido com o
+SEED só pelo `id` posicional no instante em que o SEED foi
+reordenado/compactado (70 duplicatas removidas em 18/09/2026 11:46, commit
+`c27fe256`) — **o mesmo mecanismo já documentado para o bug do C-RADS em
+lesões fetais** (§3.1), agora confirmado também via `images`. As outras 63
+ocorrências no acervo são `LEGACY_ID_ONLY` (id desatualizado, nome já
+correto) — inofensivas, não tocadas.
+
+- **`fixAbscessoOligodendrogliomaOwnership20260921()`** (nova, só console,
+  mesmo padrão de `consolidateSameIdDuplicates`): localiza origem/destino
+  por identidade semântica (`exactLesionIdentityKey`, s+site+nome) —
+  nunca por `seed_N`; confirma as 2 imagens pelo `publicId` exato;
+  snapshot obrigatório (aborta se falhar ou se qualquer pré-condição
+  falhar); usa o guard manual existente
+  (`assertManualImageOwnershipChange`/`IMAGE_OWNERSHIP_MANUAL`); reaproveita
+  `removeImageFromLesionData`/`addImageToLesionData`; persiste via
+  `saveData()`. Preserva assetId/publicId/URL/label/source/attribution/
+  `assignedAt` (nunca carimba um novo); sem upload/destroy no Cloudinary.
+  **Precisa ser executada pelo usuário no console do navegador contra o
+  `DATA` real** — sem acesso ao Firestore/IndexedDB ao vivo nesta sessão.
+- **Proteção arquitetural:** o bloco de sincronismo canônico por id em
+  `loadData()` (continua desligado, `CANONICAL_REFRESH_DISABLED_V250=true`
+  — **não reativado**) ganhou checagem de identidade semântica antes de
+  copiar qualquer campo; identidade divergente é **registrada**
+  (`registerImageOwnershipConflict`), nunca aplicada automaticamente.
+
+Testes: `tests/ownership-fix-20260921.test.js` (**10 PASS**, novo).
+`tests/critical-flows.test.js` com as âncoras atuais: `importHandler` foi
+para 11900 (as outras três não mudaram). Suíte: 740 PASS, 5 TODO + 1 FAIL
+histórico.
+
+**✓ EXECUTADA E CONFIRMADA no `DATA` real pelo usuário (21/09/2026).**
+`fixAbscessoOligodendrogliomaOwnership20260921()` rodada no console do
+navegador: `{ ok:true, reason:'2 imagem(ns) movida(s) de
+"Oligodendroglioma" para "Abscesso cerebral"' }`, snapshot
+`snap_mubyvs5t_x2jmnm` criado antes da correção. Conferência visual manual
+aprovada: Oligodendroglioma sem as imagens incorretas; Abscesso cerebral
+com as 2 imagens corretas. Considerada **BASELINE ESTÁVEL**, junto com as
+Alterações 055–058.

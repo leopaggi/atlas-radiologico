@@ -238,10 +238,18 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // +5 só no importHandler: wiring de clique pra expandir/recolher a
   // descrição no detalhe da lesão (dentro de openDetail, depois de
   // loadData) — puro toggle de classe CSS, nunca muta DATA/img.label.
+  // +0 nas 3 primeiras âncoras / +16 só no importHandler (correção pontual
+  // de ownership, Alteração 059, 2026-09-21): bloco de proteção arquitetural
+  // dentro de loadData() (verificação de identidade semântica antes de
+  // qualquer sincronismo canônico por id — ainda inerte, CANONICAL_REFRESH_
+  // DISABLED_V250 continua true) desloca só o que vem depois de loadData();
+  // a função fixAbscessoOligodendrogliomaOwnership20260921() foi inserida
+  // depois de consolidateSameIdDuplicates(), no fim do script, e não afeta
+  // nenhuma das quatro âncoras.
   assert.equal(recovery.line, 6257);
   assert.equal(brokenArtifacts.line, 6247);
   assert.equal(loadData.line, 8799);
-  assert.equal(importHandler.line, 11884);
+  assert.equal(importHandler.line, 11900);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
