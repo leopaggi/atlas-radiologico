@@ -369,6 +369,54 @@ test('REFERENCIAS (openDetail): usa filterReferenceLinksForDisplay ao montar a l
 });
 
 // ===========================================================================
+// 3.2 ABAS DO MODAL — ajuste visual (UX 22/09/2026, sem mudar lógica)
+// ===========================================================================
+
+test('ABAS: rotulos curtos e sem as classes de botao de acao (nao parecem CTA)', () => {
+  const api = loadPure();
+  const out = api.externalModeTabsHtml();
+  assert.match(out, /🔗 Vincular existente/);
+  assert.match(out, /➕ Nova lesão/);
+  assert.doesNotMatch(out, /class="btn/, 'abas não usam .btn/.btn-ghost/.btn-primary (não podem parecer botão de ação)');
+  assert.match(out, /role="tab"/g);
+});
+
+test('ABAS: estado inicial (Nova lesão selecionada) é coerente com a aba visualmente marcada por padrão', () => {
+  const api = loadPure();
+  const out = api.externalModeTabsHtml();
+  assert.match(out, /id="external-tab-new"[^>]*aria-selected="true"/);
+  assert.match(out, /id="external-tab-link"[^>]*aria-selected="false"/);
+});
+
+test('ABAS: alternância troca as duas abas em conjunto (paintExternalModeTab em ambas, nunca só uma) — lógica de mostrar/esconder painel intacta', () => {
+  const src = stripJsComments(extractFunction(html, 'openExternalImportModal'));
+  // A mesma lógica de antes (regra 8): isLink decide newPane/linkPane/createBtn0.hidden.
+  assert.match(src, /const isLink = mode === 'link';/);
+  assert.match(src, /newPane\.hidden = isLink/);
+  assert.match(src, /linkPane\.hidden = !isLink/);
+  assert.match(src, /createBtn0\.hidden = isLink/);
+  // As DUAS abas são sempre repintadas juntas — nunca fica ambíguo qual está ativa.
+  assert.match(src, /paintExternalModeTab\(tabLink, isLink\);/);
+  assert.match(src, /paintExternalModeTab\(tabNew, !isLink\);/);
+  assert.match(src, /tabLink\.onclick = \(\) => setExternalMode\('link'\);/);
+  assert.match(src, /tabNew\.onclick = \(\) => setExternalMode\('new'\);/);
+  assert.match(src, /setExternalMode\('new'\);/, 'estado inicial explícito ao abrir o modal');
+});
+
+test('ABAS: pintura da aba ativa usa a mesma linguagem visual de "seção ativa" da sidebar (--teal-dim/--teal), nunca a cor do botão de ação (--amber)', () => {
+  const src = stripJsComments(extractFunction(html, 'openExternalImportModal'));
+  const paintFn = src.slice(src.indexOf('function paintExternalModeTab'), src.indexOf('function setExternalMode'));
+  assert.match(paintFn, /var\(--teal-dim\)/);
+  assert.match(paintFn, /var\(--teal\)/);
+  assert.doesNotMatch(paintFn, /var\(--amber\)/, 'aba ativa nunca usa a cor do botão de ação real');
+});
+
+test('ABAS: botão inferior "Criar nova lesão" continua sendo o único que de fato cria (regressão)', () => {
+  const src = stripJsComments(extractFunction(html, 'externalImportModalHtml'));
+  assert.match(src, /id="external-create-btn">Criar nova lesão<\/button>/);
+});
+
+// ===========================================================================
 // 4. CRIAR NOVA — regressão do fluxo atual (permanece intacto)
 // ===========================================================================
 
