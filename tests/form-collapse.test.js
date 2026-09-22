@@ -133,6 +133,33 @@ test('8. salvar e reabrir mantém os dados (fluxo de save intocado)', () => {
   assert.match(src, /\bDATA\.push\(newEntry\)/, 'criação intacta');
 });
 
+test('10b. bloco de tags no topo, antes de Nome da lesão (sem ocorrência no fim)', () => {
+  const src = formSrc();
+  const tagsIdx = src.indexOf('Tags de característica de imagem</label>');
+  const nomeIdx = src.indexOf('Nome da lesão</label>');
+  assert.ok(tagsIdx !== -1 && nomeIdx !== -1 && tagsIdx < nomeIdx, 'bloco antes de Nome da lesão');
+  assert.equal((src.match(/Tags de característica de imagem<\/label>/g) || []).length, 1, 'ocorrência única');
+  assert.equal((src.match(/id="chip-wrap"/g) || []).length, 1, 'chip-wrap único');
+  assert.equal((src.match(/id="f-tag-input"/g) || []).length, 1, 'input único');
+  assert.equal((src.match(/id="suggest-row"/g) || []).length, 1, 'suggest-row único');
+  const enTermIdx = src.indexOf('Termo em inglês');
+  assert.ok(enTermIdx === -1 || tagsIdx < enTermIdx, 'fora da posição antiga');
+});
+
+test('10. toggle de tags avançadas embutido na linha do título (sem linha extra)', () => {
+  const src = formSrc();
+  const labelIdx = src.indexOf('Tags de característica de imagem</label>');
+  assert.notEqual(labelIdx, -1);
+  const toggleIdx = src.indexOf('id="suggest-toggle"');
+  assert.notEqual(toggleIdx, -1);
+  const between = src.slice(labelIdx, toggleIdx);
+  assert.ok(!between.includes('chip-wrap') && !between.includes('suggest-row'), 'toggle antes dos chips, sem bloco no meio');
+  assert.match(src, /display:flex;align-items:center;justify-content:space-between/, 'título à esquerda, expansor à direita');
+  assert.match(src, /flex-wrap:wrap/, 'quebra responsiva em janela estreita');
+  assert.equal((src.match(/id="suggest-toggle"/g) || []).length, 1, 'sem duplicação do expansor');
+  assert.match(src, /id="suggest-toggle"[^>]*>▸ Tags avançadas/, 'começa recolhido');
+});
+
 test('9. nenhuma regressão no editor (blocos e handlers preservados)', () => {
   const src = formSrc();
   assert.match(src, /Também aparece em/, 'rótulo original preservado');

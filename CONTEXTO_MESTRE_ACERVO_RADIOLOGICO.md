@@ -318,10 +318,10 @@ Destino: `https://ntfy.sh/acervo-leo-7k29-radiologia`. Detalhes em `AGENTS.md`.
 | `tests/device-bootstrap.test.js` | **32 PASS**, 0 FAIL |
 | `tests/image-description.test.js` | **31 PASS**, 0 FAIL |
 | `tests/ownership-fix-20260921.test.js` | **10 PASS**, 0 FAIL |
-| `tests/form-collapse.test.js` | **9 PASS**, 0 FAIL |
+| `tests/form-collapse.test.js` | **11 PASS**, 0 FAIL |
 | `tests/form-layout-desktop.test.js` | **10 PASS**, 0 FAIL |
 | `tests/image-handling.test.js` | **18 PASS**, 0 FAIL |
-| Total (suíte completa) | **773 testes, 767 PASS, 5 TODO, 0 FAIL** |
+| Total (suíte completa) | **777 testes, 771 PASS, 5 TODO, 0 FAIL** |
 
 - `tests/duplicate-detection.test.js` tem 1 FAIL **histórico e fora de escopo**
   (`DUPLICATE_PAIRS_V171`, 28 entradas malformadas). Não corrigir sem pedido.

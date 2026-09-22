@@ -260,10 +260,19 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // zoom, 2026-09-21): zona #images-field + listener com guarda de texto no
   // openForm; núcleo puro paste/zoom no fim do script. Lightbox (zoom/pan)
   // fica depois do importHandler e não desloca nada.
+  // +0 nas 3 primeiras âncoras / +2 só no importHandler (toggle de tags
+  // avançadas embutido na linha do título, 2026-09-21): mesma linha, sem
+  // linha extra; fiação e corpos inalterados.
+  // +0 nas 3 primeiras âncoras / -1 só no importHandler (bloco de tags no
+  // topo do formulário, 2026-09-21): bloco movido para após o subtítulo,
+  // ocorrência antiga removida; ids/fiação/dados intactos.
+  // +0 nas 3 primeiras âncoras / +1 só no importHandler (correção do footer,
+  // 2026-09-21): faltava a abertura do .lesion-form-body (só existia o
+  // fechamento), o que quebrava o modal/rodapé no DOM; tags continuam no topo.
   assert.equal(recovery.line, 6257);
   assert.equal(brokenArtifacts.line, 6247);
   assert.equal(loadData.line, 8799);
-  assert.equal(importHandler.line, 11982);
+  assert.equal(importHandler.line, 11984);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

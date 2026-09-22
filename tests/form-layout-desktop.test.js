@@ -124,6 +124,31 @@ test('9. expansores continuam funcionando (recolhidos recentemente)', () => {
   assert.match(src, /renderSuggest\(\)/);
 });
 
+test('11. footer existe no DOM com os dois botões (regressão: abertura do body)', () => {
+  const src = formSrc();
+  assert.equal((src.match(/<div class="lesion-form-body">/g) || []).length, 1, 'uma abertura do corpo');
+  const openIdx = src.indexOf('<div class="lesion-form-body">');
+  const footIdx = src.indexOf('lesion-form-footer');
+  const cancelIdx = src.indexOf('id="f-cancel"');
+  const saveIdx = src.indexOf('id="f-save"');
+  assert.ok(openIdx !== -1 && footIdx > openIdx, 'rodapé após a abertura do corpo');
+  assert.ok(cancelIdx > footIdx && saveIdx > footIdx, 'botões dentro do rodapé');
+  assert.match(src, /id="f-cancel"[^>]*>cancelar</);
+  assert.match(src, /id="f-save"/);
+  assert.match(src, /existing\?'salvar alterações':'adicionar ao banco'/, 'rótulo do salvar conforme modo');
+});
+
+test('12. template do modal balanceado (sem stray que quebre o DOM)', () => {
+  const src = formSrc();
+  const start = src.indexOf('ov.innerHTML');
+  const end = src.indexOf('document.body.appendChild(ov)');
+  assert.ok(start !== -1 && end !== -1 && end > start);
+  const tpl = src.slice(start, end);
+  const open = (tpl.match(/<div[\s>]/g) || []).length;
+  const close = (tpl.match(/<\/div>/g) || []).length;
+  assert.equal(open, close, `divs balanceadas no template (open=${open} close=${close})`);
+});
+
 test('10. nenhuma regressão de save/edit (ids e fluxo preservados)', () => {
   const src = formSrc();
   for (const id of ['f-name', 'f-section', 'f-site', 'f-inc', 'f-notes', 'f-link-label', 'f-link-url', 'f-tag-input', 'f-en-term', 'f-img', 'f-classification']) {

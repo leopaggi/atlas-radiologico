@@ -9623,6 +9623,17 @@ function openForm(id, opts){
       <div class="modal-sub">preencha o nome, o sítio e as tags que caracterizam a imagem</div>
       <div class="lesion-form-body">
       <div class="field">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <label style="margin-bottom:0;">Tags de característica de imagem</label>
+          <button type="button" class="btn btn-ghost" id="suggest-toggle" aria-expanded="false" style="margin-bottom:0;flex-shrink:0;">▸ Tags avançadas</button>
+        </div>
+        <div class="chip-input-wrap" id="chip-wrap">
+          <input id="f-tag-input" placeholder="digite e pressione Enter…">
+        </div>
+        <div class="suggest-row" id="suggest-row" hidden></div>
+      </div>
+
+      <div class="field">
         <label>Nome da lesão</label>
         <input id="f-name" value="${existing?existing.name.replace(/"/g,'&quot;'):''}" placeholder="ex: Endometrioma">
       </div>
@@ -9706,15 +9717,6 @@ function openForm(id, opts){
           <option value="" ${!existing||!existing.classification?'selected':''}>Nenhuma</option>
           ${Object.keys(CLASSIFICATION_SYSTEMS).map(k=>`<option value="${k}" ${existing&&existing.classification===k?'selected':''}>${CLASSIFICATION_SYSTEMS[k].name}</option>`).join('')}
         </select>
-      </div>
-
-      <div class="field">
-        <label>Tags de característica de imagem</label>
-        <div class="chip-input-wrap" id="chip-wrap">
-          <input id="f-tag-input" placeholder="digite e pressione Enter…">
-        </div>
-        <button type="button" class="btn btn-ghost" id="suggest-toggle" aria-expanded="false" style="width:100%;text-align:left;margin-top:8px;margin-bottom:0;">▸ Tags avançadas</button>
-        <div class="suggest-row" id="suggest-row" hidden></div>
       </div>
 
       <div class="field">

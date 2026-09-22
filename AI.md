@@ -3018,6 +3018,18 @@ visíveis. Só UI (`hidden`/rótulo/aria), sem persistência e sem mudar
 DATA/save/chips/sync. Testes: `tests/form-collapse.test.js` (9 PASS);
 âncora `importHandler` em 11949.
 
+## Atualização 22/09/2026 — toggle de tags na linha do título
+
+"▸ Tags avançadas" embutido à direita do título (flex + wrap); sem linha
+extra, sem duplicação, fiação intacta. Testes:
+`tests/form-collapse.test.js` (10 PASS); âncora `importHandler` em 11984.
+
+## Atualização 22/09/2026 — bloco de tags no topo do formulário
+
+Bloco inteiro (título + toggle + chips + avançadas) movido para após o
+subtítulo, antes de Nome da lesão; ocorrência antiga removida (sem cópia).
+Testes: `form-collapse` (11 PASS); âncora `importHandler` em 11983.
+
 ## Atualização 22/09/2026 — layout desktop do editor (só template/CSS)
 
 Modal `min(1180px,100vw-40px)`/`92vh`, scroll interno, rodapé sticky,
@@ -3025,6 +3037,12 @@ grade 3→2→1, galeria 2-3 colunas. CSS embutido no template (sem tocar no
 `<style>` global); ids e lógica intactos; expansores preservados.
 Testes: `tests/form-layout-desktop.test.js` (10 PASS);
 âncora `importHandler` em 11961.
+
+## Atualização 22/09/2026 — footer restaurado no DOM
+
+Faltava a abertura do `.lesion-form-body` (template 35×36); adicionada 1
+linha, sem mover as tags. Testes: `form-layout-desktop` (12 PASS);
+âncora `importHandler` em 11984.
 
 ## Atualização 22/09/2026 — paste amplo + zoom profundo (só interação)
 

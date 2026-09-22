@@ -1075,12 +1075,28 @@ Sequências/modalidade, tags avançadas e localização adicional começam
 recolhidos; descrição, tags e ações da imagem sempre visíveis.
 Testes: `tests/form-collapse.test.js` (9 PASS).
 
+### UX 22/09/2026 — tags avançadas na linha do título
+
+O expansor `▸ Tags avançadas` fica à direita do título, sem linha extra;
+conteúdo abre abaixo dos chips. Testes em `form-collapse` (10 PASS).
+
+### UX 22/09/2026 — tags no topo do formulário
+
+Bloco de tags movido para após o subtítulo, antes de Nome da lesão;
+ocorrência antiga do fim removida. Testes em `form-collapse` (11 PASS).
+
 ### UX 22/09/2026 — editor largo para desktop
 
 Modal até 1180px com scroll interno e rodapé sticky (Cancelar/Salvar sempre
 visíveis); Seção/Sítio/Incidência em grade responsiva; galeria lado a lado.
 Só layout, sem mudar lógica.
 Testes: `tests/form-layout-desktop.test.js` (10 PASS).
+
+### Correção 22/09/2026 — footer de volta ao DOM
+
+Abertura do corpo do formulário restaurada (estava só o fechamento);
+Cancelar/Salvar de volta com rodapé sticky. Testes em `form-layout-desktop`
+(12 PASS).
 
 ### UX 22/09/2026 — colar em toda a seção + zoom profundo
 

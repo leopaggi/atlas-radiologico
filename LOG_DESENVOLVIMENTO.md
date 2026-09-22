@@ -3974,3 +3974,115 @@ Colar em qualquer ponto da seção; zoom até 2000% com pan e reset.
 ### Commit após aprovação
 
 Ainda não criado (tarefa pediu sem commit/push).
+
+**Número da alteração:** 063
+**Data:** 22/09/2026
+
+### Objetivo
+
+Embutir "▸ Tags avançadas" na mesma linha do título "Tags de
+característica de imagem", sem linha extra.
+
+### Estado antes
+
+Expansor ocupava linha própria de largura total abaixo dos chips.
+
+### Arquivos modificados
+
+- `index.html` (linha flex título + toggle; resto intacto)
+- `tests/form-collapse.test.js` (+1 teste de posição)
+- `tests/critical-flows.test.js` (âncora importHandler 11984)
+
+### O que foi alterado
+
+- Título à esquerda, expansor à direita (`space-between`, `wrap`
+  responsivo); conteúdo avançado continua logo abaixo dos chips; fiação,
+  dados, save e demais fluxos intactos.
+
+### Testes realizados
+
+- `node tests/form-collapse.test.js`: 10 PASS, 0 FAIL;
+- `critical-flows`: 21 PASS; `lesion-review`: 138 PASS;
+  `quiz-images`: 102 PASS;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Cabeçalho compacto sem perder função nem quebrar responsivo.
+
+### Commit após aprovação
+
+Ainda não criado (tarefa pediu sem commit/push).
+
+**Número da alteração:** 065
+**Data:** 22/09/2026
+
+### Objetivo
+
+Restaurar Cancelar/Salvar no DOM: faltava a abertura do
+`.lesion-form-body` (só existia o fechamento), desequilibrando o template
+(35 opens × 36 closes) e quebrando modal/rodapé.
+
+### Estado antes
+
+Rodapé fora do modal no DOM (botões ausentes para o navegador).
+
+### Arquivos modificados
+
+- `index.html` (1 linha: abertura do corpo)
+- `tests/form-layout-desktop.test.js` (+2 regressões: footer e balanço)
+- `tests/critical-flows.test.js` (âncora importHandler 11984)
+
+### Testes realizados
+
+- `node tests/form-layout-desktop.test.js`: 12 PASS, 0 FAIL;
+- `modal-cleanup`: 14 PASS; `critical-flows`: 21 PASS;
+  `external-import`: 67 PASS; `collage-desc`: 15 PASS;
+  `quiz-image-desc`: 8 PASS; `form-collapse`: 11 PASS;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Template 36×36, footer sticky com os dois botões, tags no topo.
+
+### Commit após aprovação
+
+Ainda não criado (tarefa pediu sem commit/push).
+
+**Número da alteração:** 064
+**Data:** 22/09/2026
+
+### Objetivo
+
+Mover TODO o bloco de tags para o topo do formulário (após o subtítulo,
+antes de Nome da lesão) e remover a ocorrência antiga do fim.
+
+### Estado antes
+
+Bloco (mesmo com toggle inline) permanecia no fim do formulário.
+
+### Arquivos modificados
+
+- `index.html` (bloco movido, ocorrência antiga removida)
+- `tests/form-collapse.test.js` (+1 teste de posição/unicidade)
+- `tests/critical-flows.test.js` (âncora importHandler 11983)
+
+### O que foi alterado
+
+- Só posição no template; ids, fiação, chips, avançadas, save e dados
+  intactos; expansor continua na linha do título.
+
+### Testes realizados
+
+- `node tests/form-collapse.test.js`: 11 PASS, 0 FAIL;
+- `critical-flows`: 21 PASS; `lesion-review`: 138 PASS;
+  `quiz-images`: 102 PASS; `form-layout-desktop`: 10 PASS;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Tags principais + avançadas no topo; restante do formulário abaixo.
+
+### Commit após aprovação
+
+Ainda não criado (tarefa pediu sem commit/push).
