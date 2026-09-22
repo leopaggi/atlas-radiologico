@@ -4171,3 +4171,93 @@ nenhum dado clínico já cadastrado. Todos os testes pedidos passaram.
 ### Commit após aprovação
 
 Ainda não criado (tarefa pediu sem commit/push).
+
+**Número da alteração:** 066
+**Data:** 22/09/2026
+
+### Objetivo
+
+Dois problemas relacionados ao campo "Sítio / órgão" do editor de lesão:
+(1) não havia uma seta visível para abrir a lista de sítios já cadastrados
+na seção, só um autocomplete discreto; (2) digitar qualquer texto nesse
+campo e salvar criava uma subseção nova sem nenhum aviso — foi assim que
+"Fossa ilíaca direita" apareceu como subseção de "Abdômen Superior" sem
+intenção.
+
+### Estado antes
+
+O campo "Sítio / órgão" era um `<input>` de texto livre, sem seta, sem
+lista, sem validação nenhuma contra o que já existia.
+
+### Arquivos modificados
+
+- `index.html` (seta/dropdown no campo, aviso de "sítio novo", validação
+  no Salvar, e uma ferramenta de console — não executada — para migrar uma
+  lesão de sítio com segurança)
+- `tests/site-taxonomy.test.js` (novo)
+- `tests/critical-flows.test.js` (âncora atualizada)
+- `AI.md`, `README.md`, este diário
+
+### O que foi alterado
+
+- O campo "Sítio / órgão" ganhou uma seta (▾) que abre todos os sítios já
+  cadastrados na seção escolhida — a mesma lista que a barra lateral já
+  mostra (o Atlas nunca teve uma lista separada de seções/sítios: ela é
+  sempre calculada, na hora, a partir das lesões que já existem). Dá para
+  digitar pra filtrar, e a seta funciona mesmo com o campo vazio.
+- Ao salvar, o sítio digitado agora precisa bater com um já cadastrado na
+  seção. Se não bater, aparece um aviso "⚠️ Este sítio ainda não existe
+  nesta seção" com uma caixinha "confirmar que é um sítio/órgão novo" — só
+  marcando essa caixinha o Atlas aceita um sítio realmente novo. Sem
+  marcar, salvar mostra "Selecione um sítio/órgão existente na lista." e
+  não salva. Isso vale só para o campo Sítio/órgão — a Seção continua como
+  estava, sem essa trava.
+- Como a lista de sítios é sempre calculada na hora a partir das lesões
+  reais, não existe um passo separado de "apagar uma subseção": basta
+  nenhuma lesão mais usar aquele sítio, e ele some sozinho da tela na
+  próxima vez que a página atualizar. Por isso não há risco dele voltar
+  depois de um F5.
+- Foi criada uma ferramenta de console (só para uso manual, como as outras
+  ferramentas de correção pontual do Atlas) para mover uma lesão de um
+  sítio para outro com segurança: cria uma cópia de segurança antes, muda
+  só o campo do sítio, acrescenta o nome do sítio antigo como uma tag (se
+  ainda não tiver), e preserva tudo o mais — imagens, descrição, links,
+  casos clínicos vinculados, classificação, ownership e progresso do
+  estudo. **Essa ferramenta não foi executada nesta tarefa.**
+
+### Auditoria de "Fossa ilíaca direita" (pedida, não executada)
+
+O arquivo `index.html` deste repositório não tem nenhuma lesão com esse
+sítio — nem "Fossa ilíaca direita" nem "Diverticulite de Meckel" aparecem
+no catálogo embutido (`SEED`). Isso é esperado: o catálogo que o usuário
+vê no navegador vive no IndexedDB/Firestore dele, não no arquivo do
+repositório, e os dois podem estar diferentes. Por isso a auditoria real
+precisa ser feita no navegador do usuário — foi passado um comando de
+console (só leitura, não altera nada) para ele rodar e trazer a lista real
+de lesões afetadas antes de qualquer migração.
+
+### Testes realizados
+
+- `node tests/site-taxonomy.test.js`: 25 PASS, 0 FAIL (novo arquivo);
+- `node tests/critical-flows.test.js`: 21 PASS, 0 FAIL (âncora
+  `importHandler` atualizada; as outras três não mudaram);
+- `node tests/form-layout-desktop.test.js`: 12 PASS, 0 FAIL;
+- `node tests/form-collapse.test.js`: 11 PASS, 0 FAIL;
+- `node tests/clinical-cases.test.js`: 47 PASS, 0 FAIL;
+- `node tests/snapshots-ownership.test.js`: 47 PASS, 0 FAIL;
+- Suíte completa do projeto: 868 PASS, 5 TODO (conhecidos) e 1 FAIL
+  histórico em `duplicate-detection.test.js` (fora de escopo, já
+  documentado);
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+A seta/dropdown e a proteção contra subseção acidental estão prontas e
+testadas. A correção de dados de "Fossa ilíaca direita" NÃO foi feita —
+está esperando o usuário rodar a auditoria real no navegador dele e
+escolher o sítio de destino.
+
+### Commit após aprovação
+
+Ainda não criado (tarefa pediu para não publicar a migração de dados
+ainda, e não incluiu pedido de commit/push para o dropdown/proteção).

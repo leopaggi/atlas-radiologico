@@ -9656,7 +9656,15 @@ function openForm(id, opts){
         </div>
         <div class="field">
           <label>Sítio / órgão</label>
-          <input id="f-site" value="${existing?existing.site.replace(/"/g,'&quot;'):''}" placeholder="ex: Ovário">
+          <div id="f-site-wrap" style="position:relative;">
+            <input id="f-site" value="${existing?existing.site.replace(/"/g,'&quot;'):''}" placeholder="ex: Ovário" autocomplete="off" style="padding-right:30px;">
+            <button type="button" id="f-site-toggle" aria-label="Ver sítios desta seção" aria-expanded="false" style="position:absolute;right:4px;top:0;bottom:0;background:none;border:none;color:var(--muted-2);cursor:pointer;font-size:13px;padding:0 6px;">▾</button>
+            <div id="f-site-dropdown" hidden style="position:absolute;left:0;right:0;top:100%;z-index:20;margin-top:2px;background:var(--panel);border:1px solid var(--line);border-radius:8px;max-height:220px;overflow-y:auto;box-shadow:0 6px 18px rgba(0,0,0,.35);"></div>
+          </div>
+          <div id="f-site-hint" style="display:none;margin-top:6px;font-size:12px;color:var(--amber,#b45309);">
+            <div>⚠️ Este sítio ainda não existe nesta seção.</div>
+            <label class="quiz-check" style="display:flex;align-items:center;gap:6px;margin-top:4px;font-weight:400;"><input type="checkbox" id="f-site-new-confirm"> confirmar que é um sítio/órgão novo</label>
+          </div>
         </div>
         <div class="field">
           <label>Incidência (dentro deste sítio)</label>
@@ -9809,6 +9817,64 @@ function openForm(id, opts){
     });
   }
   renderClinicalCasesDraft();
+
+  // Dropdown/validação do Sítio/órgão (ajuste 22/09/2026): a seta abre TODOS
+  // os sítios JÁ CADASTRADOS nesta seção (mesma fonte que a sidebar usa —
+  // knownSitesForSection()/structure(), nunca uma lista hardcoded); digitar
+  // filtra a lista; um valor que não bate com nenhum sítio existente exige
+  // confirmação explícita ("é um sítio novo") — nunca vira subseção nova só
+  // por ter sido digitado e salvo (proteção real fica no Salvar, abaixo).
+  const siteInput = document.getElementById('f-site');
+  const sectionInputForSite = document.getElementById('f-section');
+  const siteToggleBtn = document.getElementById('f-site-toggle');
+  const siteDropdown = document.getElementById('f-site-dropdown');
+  const siteHint = document.getElementById('f-site-hint');
+  const siteNewConfirm = document.getElementById('f-site-new-confirm');
+  function onDocClickCloseSiteDropdown(ev){
+    if(ev.target===siteToggleBtn || ev.target===siteInput || siteDropdown.contains(ev.target)) return;
+    closeSiteDropdown();
+  }
+  function closeSiteDropdown(){
+    siteDropdown.hidden = true;
+    siteToggleBtn.setAttribute('aria-expanded','false');
+    document.removeEventListener('click', onDocClickCloseSiteDropdown, true);
+  }
+  function renderSiteDropdown(){
+    const known = knownSitesForSection(sectionInputForSite.value, DATA);
+    const filtered = filterSiteOptions(known, siteInput.value);
+    siteDropdown.innerHTML = known.length
+      ? (filtered.length ? siteDropdownOptionsHtml(filtered) : '<div style="padding:8px 10px;color:var(--muted-2);font-size:12px;">nenhum sítio combina com o texto digitado</div>')
+      : '<div style="padding:8px 10px;color:var(--muted-2);font-size:12px;">nenhum sítio cadastrado ainda nesta seção</div>';
+    siteDropdown.querySelectorAll('.site-option').forEach(opt=>{
+      opt.onmouseenter = ()=>{ opt.style.background='var(--panel-2)'; };
+      opt.onmouseleave = ()=>{ opt.style.background=''; };
+      opt.onclick = ()=>{
+        siteInput.value = opt.getAttribute('data-site');
+        closeSiteDropdown();
+        refreshSiteHint();
+        siteInput.focus();
+      };
+    });
+  }
+  function openSiteDropdown(){
+    renderSiteDropdown();
+    siteDropdown.hidden = false;
+    siteToggleBtn.setAttribute('aria-expanded','true');
+    document.addEventListener('click', onDocClickCloseSiteDropdown, true);
+  }
+  if(siteToggleBtn) siteToggleBtn.onclick = (ev)=>{ ev.stopPropagation(); if(siteDropdown.hidden) openSiteDropdown(); else closeSiteDropdown(); };
+  function refreshSiteHint(){
+    const sec = sectionInputForSite.value.trim();
+    const typed = siteInput.value.trim();
+    if(!sec || !typed){ siteHint.style.display='none'; if(siteNewConfirm) siteNewConfirm.checked=false; return; }
+    const v = validateSiteAgainstSection(sec, typed, DATA, true);
+    if(v.ok && !v.isNew){ siteHint.style.display='none'; if(siteNewConfirm) siteNewConfirm.checked=false; return; }
+    siteHint.style.display='block';
+  }
+  if(siteInput) siteInput.addEventListener('input', ()=>{ if(!siteDropdown.hidden) renderSiteDropdown(); refreshSiteHint(); });
+  if(sectionInputForSite) sectionInputForSite.addEventListener('input', ()=>{ if(!siteDropdown.hidden) renderSiteDropdown(); refreshSiteHint(); });
+  refreshSiteHint();
+
   // "Também aparece em" — reaproveita o campo altPlacements já existente.
   let altPlacementsDraft = (existing && Array.isArray(existing.altPlacements)) ? JSON.parse(JSON.stringify(existing.altPlacements)) : [];
   function renderAltPlacements(){
@@ -10184,13 +10250,27 @@ function openForm(id, opts){
     formSaving = true;
     const name = document.getElementById('f-name').value.trim();
     const sec = document.getElementById('f-section').value.trim();
-    const site = document.getElementById('f-site').value.trim();
+    let site = document.getElementById('f-site').value.trim();
     const img = document.getElementById('f-img').value.trim();
     const enTerm = document.getElementById('f-en-term').value.trim();
     const inc = parseInt(document.getElementById('f-inc').value,10) || 2;
     const classification = document.getElementById('f-classification').value || null;
     const notes = document.getElementById('f-notes').value.trim();
     if(!name || !sec || !site){ toast('Preencha nome, seção e sítio.'); formSaving=false; return; }
+    {
+      // Proteção contra subseção acidental (ajuste 22/09/2026): salvar exige
+      // que o sítio corresponda a um já cadastrado nesta seção (mesma fonte
+      // do dropdown, knownSitesForSection) — a não ser que o usuário tenha
+      // marcado explicitamente "confirmar que é um sítio/órgão novo".
+      const siteNewConfirmEl = document.getElementById('f-site-new-confirm');
+      const allowNewSite = !!(siteNewConfirmEl && siteNewConfirmEl.checked);
+      const siteCheck = validateSiteAgainstSection(sec, site, DATA, allowNewSite);
+      if(!siteCheck.ok){
+        toast('Selecione um sítio/órgão existente na lista.');
+        formSaving=false; return;
+      }
+      site = siteCheck.value; // grafia canônica exata (evita "Ovário"/"ovário" virarem 2 sítios)
+    }
     if(existing){
       const markReviewCk = document.getElementById('f-mark-review');
       if(markReviewCk && markReviewCk.checked && !document.getElementById('f-review-request').value.trim()){
@@ -15116,6 +15196,134 @@ function wireClinicalCasesToggle(ov, entry){
     toggle.textContent = (body.hidden ? '▸' : '▾') + ' Casos clínicos exemplo (' + list.length + ')';
     toggle.setAttribute('aria-expanded', body.hidden ? 'false' : 'true');
   };
+}
+
+/* ============================================================
+   SÍTIO/ÓRGÃO — dropdown + proteção contra subseção acidental
+   (ajuste 22/09/2026)
+   ------------------------------------------------------------
+   Não existe taxonomia canônica separada em nenhum lugar do Atlas: a
+   árvore seção→sítio da sidebar (structure()) é SEMPRE derivada, ao vivo,
+   do que já existe em DATA (e.s/e.site + altPlacements) — nunca uma lista
+   hardcoded. Por isso "sítio válido nesta seção" só pode significar "sítio
+   que já aparece em algum registro desta seção agora". knownSitesForSection
+   reaproveita exatamente essa mesma lógica (não duplica), só devolve uma
+   lista ordenada e distinta em vez de contagens.
+   ============================================================ */
+function normalizeSiteName(s){
+  return String(s || '').trim().replace(/\s+/g, ' ');
+}
+// Mesma fonte que structure()/sidebar usa (e.site + altPlacements) — só
+// devolve os nomes distintos e ordenados de uma seção, sem contagem.
+function knownSitesForSection(section, catalog){
+  const sec = normalizeSiteName(section);
+  if (!sec) return [];
+  const set = new Set();
+  (Array.isArray(catalog) ? catalog : []).forEach(e => {
+    if (!e) return;
+    if (normalizeSiteName(e.s) === sec && typeof e.site === 'string' && e.site.trim()) set.add(e.site);
+    (Array.isArray(e.altPlacements) ? e.altPlacements : []).forEach(p => {
+      if (p && normalizeSiteName(p.s) === sec && typeof p.site === 'string' && p.site.trim()) set.add(p.site);
+    });
+  });
+  return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+// Pura: valida o sítio digitado contra os sítios JÁ CADASTRADOS na seção.
+// Match é por grafia normalizada (espaço/maiúscula) — quando bate, devolve
+// a grafia CANÔNICA exata (evita "Ovário"/"ovário" virarem 2 sítios na
+// árvore, já que structure() agrupa por igualdade exata de string).
+// allowNew=true (checkbox explícito do usuário) libera um sítio realmente
+// novo — nunca decidido sozinho só por o texto ter sido digitado.
+function validateSiteAgainstSection(section, typedSite, catalog, allowNew){
+  const typed = normalizeSiteName(typedSite);
+  if (!typed) return { ok: false, reason: 'empty', known: [] };
+  const known = knownSitesForSection(section, catalog);
+  const match = known.find(s => normalizeSiteName(s).toLowerCase() === typed.toLowerCase());
+  if (match) return { ok: true, value: match, isNew: false, known };
+  if (allowNew) return { ok: true, value: typed, isNew: true, known };
+  return { ok: false, reason: 'unknown_site', known };
+}
+// Filtro do dropdown ao digitar: contains normalizado (acento/caixa
+// insensível, reaproveita normalizeExternalTitle) — só pra achar mais fácil;
+// a identidade/validação real usa normalizeSiteName (mais conservador).
+function filterSiteOptions(sites, query){
+  const q = normalizeExternalTitle(query);
+  const list = Array.isArray(sites) ? sites : [];
+  if (!q) return list;
+  return list.filter(s => normalizeExternalTitle(s).indexOf(q) >= 0);
+}
+function siteDropdownOptionsHtml(sites){
+  const list = Array.isArray(sites) ? sites : [];
+  return list.map(s => `<div class="site-option" data-site="${escAttr(s)}" style="padding:7px 10px;cursor:pointer;font-size:13px;">${esc(s)}</div>`).join('');
+}
+
+/* ============================================================
+   AUDITORIA + MIGRAÇÃO MANUAL DE SÍTIO (console, mesmo padrão de
+   consolidateSameIdDuplicates/fixAbscessoOligodendrogliomaOwnership20260921)
+   ------------------------------------------------------------
+   Não existe "apagar uma subseção": como a árvore é sempre derivada ao
+   vivo de DATA, uma subseção deixa de aparecer sozinha assim que NENHUM
+   registro mais referenciar esse s+site — não há id/posição para remover.
+   auditSiteUsage() é 100% READ-ONLY. migrateLesionSite() só roda por
+   decisão explícita (destino escolhido pelo usuário, nunca inferido),
+   com snapshot antes, muda SOMENTE o campo site (+ tag do sítio antigo, se
+   ainda não existir) e preserva tudo o mais (imagens, descrição, links,
+   clinicalCases, SRS, ownership, assignedAt, classification, altPlacements).
+   Uso (console, depois de confirmado o destino):
+     auditSiteUsage('Abdômen Superior', 'Fossa ilíaca direita')
+     await migrateLesionSite('<id da lesão>', 'Apêndice')
+   ============================================================ */
+function auditSiteUsage(section, site, catalog){
+  const cat = Array.isArray(catalog) ? catalog : (typeof DATA !== 'undefined' ? DATA : []);
+  const sec = normalizeSiteName(section);
+  const targetSite = normalizeSiteName(site);
+  const lesions = cat.filter(e => e && normalizeSiteName(e.s) === sec && normalizeSiteName(e.site) === targetSite)
+    .map(e => ({ id: e.id, name: e.name, tags: Array.isArray(e.tags) ? e.tags.slice() : [] }));
+  const altPlacementHits = [];
+  cat.forEach(e => {
+    (Array.isArray(e && e.altPlacements) ? e.altPlacements : []).forEach(p => {
+      if (p && normalizeSiteName(p.s) === sec && normalizeSiteName(p.site) === targetSite) {
+        altPlacementHits.push({ id: e.id, name: e.name });
+      }
+    });
+  });
+  const otherSitesInSection = knownSitesForSection(section, cat).filter(s => normalizeSiteName(s).toLowerCase() !== targetSite.toLowerCase());
+  return { section, site, lesions, altPlacementHits, otherSitesInSection };
+}
+// Só muda `site` (grafia canônica de newSite, validada contra a seção de
+// destino ou aceita literal se opts.allowNewSite) e acrescenta o sítio
+// antigo às tags (se ainda não presente, comparação normalizada). Nunca
+// toca em name/notes/tags-restantes/images/links/clinicalCases/SRS/
+// ownership/assignedAt/classification/altPlacements/id/s.
+async function migrateLesionSite(lesionId, newSite, opts){
+  const o = (opts && typeof opts === 'object') ? opts : {};
+  const report = { ok: false, reason: '', lesionId, fromSite: '', toSite: '', tagAdded: false, snapshotId: null };
+  const entry = (typeof DATA !== 'undefined' ? DATA : []).find(e => e && e.id === lesionId);
+  if (!entry) { report.reason = 'lesão não encontrada'; return report; }
+  const fromSite = entry.site;
+  const check = validateSiteAgainstSection(entry.s, newSite, DATA, o.allowNewSite === true);
+  if (!check.ok) { report.reason = 'destino inválido: ' + check.reason; return report; }
+  if (normalizeSiteName(check.value).toLowerCase() === normalizeSiteName(fromSite).toLowerCase()) {
+    report.reason = 'destino igual ao sítio atual — nada a migrar';
+    return report;
+  }
+  let snap = null;
+  try { snap = createSafetySnapshot('antes de migrar sítio de lesão'); } catch (e) { snap = null; }
+  if (!snap) { report.reason = 'snapshot falhou — abortado sem tocar na lesão'; return report; }
+  report.snapshotId = snap.id || null;
+  entry.site = check.value;
+  const tags = Array.isArray(entry.tags) ? entry.tags : (entry.tags = []);
+  const fromNorm = normalizeSiteName(fromSite).toLowerCase();
+  if (fromNorm && !tags.some(t => normalizeSiteName(t).toLowerCase() === fromNorm)) {
+    tags.push(fromSite);
+    report.tagAdded = true;
+  }
+  entry._userUpdatedAt = Date.now();
+  await saveData();
+  report.ok = true;
+  report.fromSite = fromSite;
+  report.toSite = check.value;
+  return report;
 }
 
 </script>

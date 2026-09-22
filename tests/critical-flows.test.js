@@ -283,10 +283,16 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // (depois de loadData, antes do importHandler) passou a filtrar a lista
   // de referências exibida com filterReferenceLinksForDisplay(); a função
   // em si e o corte em addClinicalCaseToLesion() ficam no fim do script.
+  // +80 só no importHandler (dropdown + proteção do Sítio/órgão, 22/09/2026):
+  // dentro de openForm (depois de loadData, antes do importHandler) entram
+  // o markup do dropdown/seta/aviso e toda a fiação (abrir/fechar, filtrar,
+  // clicar opção, aviso de sítio novo) + a validação no Salvar; as funções
+  // puras (knownSitesForSection/validateSiteAgainstSection/etc.) e a
+  // auditoria/migração manual (console) ficam no fim do script.
   assert.equal(recovery.line, 6263);
   assert.equal(brokenArtifacts.line, 6253);
   assert.equal(loadData.line, 8805);
-  assert.equal(importHandler.line, 12022);
+  assert.equal(importHandler.line, 12102);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

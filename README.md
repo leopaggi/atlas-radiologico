@@ -1150,3 +1150,32 @@ Testes: `tests/clinical-cases.test.js` (42 PASS, novo) e reforço em
 `tests/external-import.test.js` (67 PASS), `tests/critical-flows.test.js`
 (21 PASS, âncoras atualizadas) e `tests/snapshots-ownership.test.js`
 (47 PASS).
+
+### Sítio/órgão — dropdown e proteção contra subseção acidental (22/09/2026)
+
+O campo "Sítio / órgão" do editor ganhou uma seta (▾) que abre todos os
+sítios **já cadastrados** na seção escolhida (a mesma lista que a sidebar
+já mostra — o Atlas não tem uma taxonomia separada e hardcoded em lugar
+nenhum: a árvore seção→sítio é sempre calculada, na hora, a partir dos
+dados reais). Digitar continua filtrando a lista; a seta funciona mesmo
+com o campo vazio.
+
+Antes, qualquer texto digitado em "Sítio / órgão" virava subseção nova ao
+salvar — foi assim que "Fossa ilíaca direita" apareceu sob "Abdômen
+Superior" sem intenção. Agora, salvar exige que o sítio corresponda a um
+já existente na seção; um sítio realmente novo exige marcar explicitamente
+"confirmar que é um sítio/órgão novo" — nunca é decidido sozinho só por
+ter sido digitado. Ao bater com um sítio existente, o Atlas grava a grafia
+exata cadastrada (evita "Ovário"/"ovário" virarem dois sítios diferentes).
+
+Como não existe uma lista separada para "remover", uma subseção deixa de
+aparecer sozinha assim que nenhuma lesão mais a usa — sem nenhum passo de
+exclusão. Uma ferramenta de console (mesmo padrão de
+`consolidateSameIdDuplicates`) foi criada para mover lesões de um sítio
+para outro com segurança (`migrateLesionSite`), preservando imagens,
+descrição, links, casos clínicos, classificação e demais campos — só muda
+`site` e acrescenta o sítio antigo como tag, se ainda não existir.
+
+Testes: `tests/site-taxonomy.test.js` (25 PASS, novo), `tests/critical-flows.test.js`
+(21 PASS, âncoras atualizadas), `tests/form-layout-desktop.test.js` (12 PASS)
+e `tests/form-collapse.test.js` (11 PASS), sem regressão.

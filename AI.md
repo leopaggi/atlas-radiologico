@@ -3130,3 +3130,71 @@ remoção, referências sem duplicar). Reforço em `tests/external-import.test.j
 atualizadas) e `tests/snapshots-ownership.test.js` (47 PASS, +1 teste
 estático de integração do merge). Suíte completa: 838 PASS, 5 TODO + 1 FAIL
 histórico em `duplicate-detection.test.js` (fora de escopo).
+
+## Atualização 22/09/2026 — Sítio/órgão: dropdown + proteção contra subseção acidental
+
+**Fato-chave que orientou todo este ajuste:** o Atlas NÃO tem uma
+taxonomia de seções/sítios guardada em lugar nenhum — `structure()`
+(usada pela sidebar) sempre RECALCULA a árvore seção→sítio a partir de
+`DATA.map(e=>[e.s,e.site])` + `altPlacements`, na hora, sem cache. Ou seja,
+"sítio válido nesta seção" só pode significar "sítio que já aparece em
+algum registro dessa seção agora". Foi assim que "Fossa ilíaca direita"
+virou uma subseção de "Abdômen Superior" sem intenção: o campo `f-site` do
+editor sempre foi um `<input>` de texto livre, sem nenhuma validação —
+qualquer coisa digitada e salva virava sítio novo automaticamente.
+
+- **`knownSitesForSection(section, catalog)`** — reaproveita a MESMA lógica
+  de `structure()` (não duplica: `e.site` + `altPlacements`), só devolve os
+  nomes distintos e ordenados de uma seção, sem contagem. É a fonte única
+  tanto do dropdown quanto da validação.
+- **Dropdown no editor:** seta (▾) ao lado do campo `f-site` abre
+  `knownSitesForSection(seção atual, DATA)` num painel posicionado (sem
+  framework, `hidden`/posição via JS, fecha ao clicar fora). Digitar filtra
+  a lista via `filterSiteOptions()` (usa `normalizeExternalTitle`, tolerante
+  a acento/caixa — só pra achar mais fácil). Campo vazio + seta mostra a
+  lista inteira (sem query, `filterSiteOptions` devolve tudo).
+- **Validação no Salvar:** `validateSiteAgainstSection(section, typedSite,
+  catalog, allowNew)` compara por grafia normalizada (espaço/caixa —
+  `normalizeSiteName`, mais conservador que `normalizeExternalTitle` pra
+  não colapsar sítios realmente diferentes). Quando bate, devolve a grafia
+  CANÔNICA exata (evita duas entradas na árvore por causa de
+  maiúscula/minúscula). Sem bater e sem o checkbox `f-site-new-confirm`
+  marcado, o Salvar é bloqueado com `toast('Selecione um sítio/órgão
+  existente na lista.')` — nunca cria silenciosamente. O checkbox só
+  aparece (via `f-site-hint`) quando o texto digitado não bate com nada
+  conhecido na seção, e é a ÚNICA forma de criar um sítio novo por essa
+  tela — ação explícita, nunca consequência automática de digitar. Escopo
+  deliberadamente restrito ao campo Sítio/órgão (`f-site`); a Seção
+  (`f-section`) e o campo "também aparece em" (`f-alt-site`) continuam sem
+  essa trava, sem pedido para isso.
+- **Sem "remoção" de subseção:** como a árvore é sempre derivada, uma vez
+  que nenhuma lesão (nem `altPlacements`) mais referencia um s+site, ele
+  desaparece sozinho da sidebar no próximo render — não há id/posição pra
+  apagar, e por isso nunca reaparece depois de um F5 (não há nada
+  persistido pra reaparecer).
+- **`auditSiteUsage(section, site, catalog)`** — 100% read-only: lista as
+  lesões com aquele `s`+`site` exatos, as ocorrências em `altPlacements`, e
+  os demais sítios já cadastrados na seção (candidatos a destino).
+- **`migrateLesionSite(lesionId, newSite, opts)`** — console-only, mesmo
+  padrão de `consolidateSameIdDuplicates`/
+  `fixAbscessoOligodendrogliomaOwnership20260921`: snapshot obrigatório
+  antes (aborta se falhar), valida o destino com
+  `validateSiteAgainstSection` (aceita `opts.allowNewSite` pra destino
+  realmente novo), muda **somente** `site` e acrescenta o sítio ANTIGO como
+  tag (se ainda não presente, comparação normalizada) — nunca toca
+  `name`/`notes`/tags restantes/`images`/`links`/`clinicalCases`/
+  `classification`/`altPlacements`/`id`/`s`/SRS/ownership. Persiste via
+  `saveData()`. **Não foi executada** — fica disponível pro usuário decidir
+  o destino primeiro (ver auditoria na resposta da tarefa).
+
+Testes: `tests/site-taxonomy.test.js` (novo, 25 PASS: seta abre lista
+completa incl. campo vazio, filtro, validação aceita/recusa, grafia
+canônica, auditoria read-only incl. altPlacements, migração não apaga/só
+muda site+tag/preserva o resto/não mexe em SRS-ownership/exige
+snapshot/persiste via saveData, subseção some sozinha da árvore após
+migração e não volta num "reload" simulado, regressão do editor). Reforço
+em `tests/critical-flows.test.js` (21 PASS, âncora `importHandler`
+atualizada), `tests/form-layout-desktop.test.js` (12 PASS) e
+`tests/form-collapse.test.js` (11 PASS), sem regressão. Suíte completa:
+868 PASS, 5 TODO + 1 FAIL histórico em `duplicate-detection.test.js` (fora
+de escopo).
