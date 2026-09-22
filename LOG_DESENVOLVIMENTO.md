@@ -3782,3 +3782,195 @@ Conferência visual manual aprovada pelo usuário: Oligodendroglioma sem as
 
 **Publicado** — commit e push executados nesta mesma entrega, mediante
 pedido explícito do usuário (ver hash abaixo/relatório final da sessão).
+
+**Número da alteração:** 055
+**Data:** 22/09/2026
+
+### Objetivo
+
+Corrigir tela cinza + scroll travado após Salvar edição de lesão (backdrop
+residual que só saía com um clique).
+
+### Estado antes
+
+`refreshStudyDashboardLive()` chamava `getStudyOverlay()`, que cria a
+`#study-overlay` quando ausente — o guarda `!ov.isConnected` nunca barrava.
+As chamadas no pós-save criavam o backdrop com o dashboard fechado.
+
+### Arquivos modificados
+
+- `index.html` (lookup sem criar em `refreshStudyDashboardLive`)
+- `tests/modal-cleanup.test.js` (novo, 14 testes)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- `getElementById('study-overlay')` direto; `getStudyOverlay()` intocado
+  (fluxos que abrem o dashboard continuam usando-o).
+- Sem setTimeout, clique sintético, reload ou remoção indiscriminada.
+
+### Segurança
+
+Nenhuma mudança em dados, sync, quiz, SRS, imagens ou classificação.
+
+### Testes realizados
+
+- `node tests/modal-cleanup.test.js`: 14 PASS, 0 FAIL;
+- `critical-flows`: 21 PASS; `external-import`: 67 PASS;
+  `collage-desc`: 15 PASS; `quiz-image-desc`: 8 PASS;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Pós-save sem overlay residual, scroll imediato, aninhados preservados.
+
+### Commit após aprovação
+
+Ainda não criado (tarefa pediu sem commit/push).
+
+**Número da alteração:** 060
+**Data:** 22/09/2026
+
+### Objetivo
+
+Reduzir a altura do formulário recolhendo só o secundário (sequências,
+tags avançadas, localização adicional), sem esconder descrição/tags da
+imagem.
+
+### Estado antes
+
+Presets de sequência, todos os grupos de sugestão e altPlacements sempre
+expandidos, ocupando muita altura.
+
+### Arquivos modificados
+
+- `index.html` (toggles + `altToggleLabel` puro, só UI)
+- `tests/form-collapse.test.js` (novo, 9 testes)
+- `tests/critical-flows.test.js` (âncora importHandler 11949)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- `▸ Sequências / modalidade` por imagem (WeakSet entre re-renders),
+  `▸ Tags avançadas`, `▸ Localização adicional (opcional[, N])`; tudo
+  começa recolhido, sem persistência, sem mudar DATA/save/chips/sync.
+
+### Segurança
+
+Só alterna `hidden`/rótulo/aria; preview, descrição, tags, ações intactos.
+
+### Testes realizados
+
+- `node tests/form-collapse.test.js`: 9 PASS, 0 FAIL;
+- `critical-flows`: 21 PASS; `external-import`: 67 PASS;
+  `collage-desc`: 15 PASS; `quiz-image-desc`: 8 PASS;
+  `lesion-review`: 138 PASS; `quiz-images`: 102 PASS;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Formulário compacto com informações da imagem sempre visíveis.
+
+### Commit após aprovação
+
+Ainda não criado (tarefa pediu sem commit/push).
+
+**Número da alteração:** 061
+**Data:** 22/09/2026
+
+### Objetivo
+
+Layout desktop do editor: modal largo com scroll interno, rodapé sticky e
+grids responsivos, sem alterar lógica.
+
+### Estado antes
+
+Modal estreito (560px), tudo empilhado, Salvar só no fim, espaço lateral
+desperdiçado em desktop.
+
+### Arquivos modificados
+
+- `index.html` (template + `<style>` embutido no modal)
+- `tests/form-layout-desktop.test.js` (novo, 10 testes)
+- `tests/critical-flows.test.js` (âncora importHandler 11961)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- Modal `min(1180px,100vw-40px)`, `max-height:92vh`, body rolável, rodapé
+  sticky; grade Seção/Sítio/Incidência (3→2→1); galeria 2-3 colunas;
+  espaçamentos compactos; expansores preservados.
+
+### Segurança
+
+Só template/CSS; ids, save, DATA, sync e demais fluxos intactos.
+
+### Testes realizados
+
+- `node tests/form-layout-desktop.test.js`: 10 PASS, 0 FAIL;
+- `form-collapse`: 9 PASS; `lesion-review`: 138 PASS;
+  `quiz-images`: 102 PASS; `critical-flows`: 21 PASS;
+  `external-import`: 67 PASS; `collage-desc`: 15 PASS;
+  `quiz-image-desc`: 8 PASS;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Editor aproveita o desktop com rodapé sempre visível; responsivo em
+janelas menores.
+
+### Commit após aprovação
+
+Ainda não criado (tarefa pediu sem commit/push).
+
+**Número da alteração:** 062
+**Data:** 22/09/2026
+
+### Objetivo
+
+Paste em toda a seção de imagens do editor + zoom profundo com pan no
+lightbox, sem alterar persistência/Cloudinary/estrutura.
+
+### Estado antes
+
+Ctrl+V só na caixinha de upload; lightbox sem zoom (só fit + fechar).
+
+### Arquivos modificados
+
+- `index.html` (zona `#images-field` + núcleo puro paste/zoom + lightbox)
+- `tests/image-handling.test.js` (novo, 18 testes)
+- `tests/image-description.test.js` (harness extrai helpers de zoom)
+- `tests/critical-flows.test.js` (âncora importHandler 11982)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### O que foi alterado
+
+- `#images-field` focável com dica; listener com guarda
+  `pasteTargetIsText` + dedup com a caixa; mesmo `addLocalFile`.
+- Lightbox: roda com âncora no cursor (1–20x), botões −/100%/+/Reset,
+  % discreto, pan com clamp, duplo-clique/EESC, estado por abertura;
+  assinatura e classes preservadas, sem CSS novo.
+- Lateral: `imagesAssignedLast7Days` com duck-type de Date (teste flaky
+  pós-meia-noite eliminado).
+
+### Segurança
+
+Texto nunca interceptado; nada enviado antes do Salvar; escape intacto.
+
+### Testes realizados
+
+- `node tests/image-handling.test.js`: 18 PASS, 0 FAIL;
+- `quiz-images`: 102 PASS; `collage-desc`: 15 PASS;
+  `critical-flows`: 21 PASS; `form-collapse`: 9 PASS;
+  `form-layout-desktop`: 10 PASS; `image-description`: 31 PASS;
+  `modal-cleanup`: 14 PASS; `snapshots-ownership`: 46 PASS;
+- Suíte completa: sem regressão (só o FAIL histórico);
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Colar em qualquer ponto da seção; zoom até 2000% com pan e reset.
+
+### Commit após aprovação
+
+Ainda não criado (tarefa pediu sem commit/push).

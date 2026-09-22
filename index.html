@@ -9606,15 +9606,27 @@ function openForm(id, opts){
   const ov = document.createElement('div');
   ov.className = 'overlay lesion-form-overlay';
   ov.innerHTML = `
-    <div class="modal">
+    <div class="modal lesion-form-modal">
+      <style>
+      .lesion-form-overlay .lesion-form-modal{width:min(1180px,calc(100vw - 40px));max-width:1180px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;}
+      .lesion-form-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding-right:6px;}
+      .lesion-form-overlay .modal-actions{position:sticky;bottom:0;background:var(--panel);z-index:5;border-top:1px solid var(--line);padding-top:12px;margin-top:0;}
+      .lesion-form-modal .field{margin-bottom:10px;}
+      .lesion-form-modal .field>label{margin-bottom:4px;}
+      .lesion-form-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+      .lesion-form-grid-3>.field{margin-bottom:10px;}
+      .lesion-form-overlay .img-gallery{grid-template-columns:repeat(auto-fill,minmax(260px,1fr));}
+      @media(max-width:900px){.lesion-form-grid-3{grid-template-columns:1fr 1fr;}}
+      @media(max-width:640px){.lesion-form-grid-3{grid-template-columns:1fr;}.lesion-form-overlay .img-gallery{grid-template-columns:1fr;}}
+      </style>
       <h2>${existing?'Editar lesão':'Nova lesão'}</h2>
       <div class="modal-sub">preencha o nome, o sítio e as tags que caracterizam a imagem</div>
-
+      <div class="lesion-form-body">
       <div class="field">
         <label>Nome da lesão</label>
         <input id="f-name" value="${existing?existing.name.replace(/"/g,'&quot;'):''}" placeholder="ex: Endometrioma">
       </div>
-      <div class="field-row">
+      <div class="lesion-form-grid-3">
         <div class="field">
           <label>Seção</label>
           <input id="f-section" list="section-list" value="${existing?existing.s.replace(/"/g,'&quot;'):''}" placeholder="ex: Pelve Feminina">
@@ -9624,25 +9636,27 @@ function openForm(id, opts){
           <label>Sítio / órgão</label>
           <input id="f-site" value="${existing?existing.site.replace(/"/g,'&quot;'):''}" placeholder="ex: Ovário">
         </div>
-      </div>
-
-      <div class="field">
-        <label>Também aparece em (opcional)</label>
-        <div id="alt-placements-list"></div>
-        <div class="field-row" style="margin-top:6px;margin-bottom:0;">
-          <div class="field" style="flex:1.2;"><input id="f-alt-section" list="section-list" placeholder="seção (ex: Neurorradiologia)"></div>
-          <div class="field" style="flex:1.2;"><input id="f-alt-site" placeholder="sítio/órgão (ex: Encéfalo)"></div>
-          <button type="button" class="btn btn-ghost" id="f-alt-add" style="height:38px;align-self:flex-start;">+ Adicionar localização</button>
+        <div class="field">
+          <label>Incidência (dentro deste sítio)</label>
+          <select id="f-inc">
+            <option value="1" ${existing&&existing.inc===1?'selected':''}>Muito comum</option>          <option value="2" ${(!existing || existing.inc===2 || !existing.inc)?'selected':''}>Comum</option>
+            <option value="3" ${existing&&existing.inc===3?'selected':''}>Incomum</option>
+            <option value="4" ${existing&&existing.inc===4?'selected':''}>Raro</option>
+          </select>
         </div>
       </div>
 
       <div class="field">
-        <label>Incidência (dentro deste sítio)</label>
-        <select id="f-inc">
-          <option value="1" ${existing&&existing.inc===1?'selected':''}>Muito comum</option>          <option value="2" ${(!existing || existing.inc===2 || !existing.inc)?'selected':''}>Comum</option>
-          <option value="3" ${existing&&existing.inc===3?'selected':''}>Incomum</option>
-          <option value="4" ${existing&&existing.inc===4?'selected':''}>Raro</option>
-        </select>
+        <button type="button" class="btn btn-ghost" id="f-alt-toggle" aria-expanded="false" style="width:100%;text-align:left;margin-bottom:0;">▸ Localização adicional (opcional)</button>
+        <div id="alt-body" hidden>
+          <label style="margin-top:8px;">Também aparece em (opcional)</label>
+          <div id="alt-placements-list"></div>
+          <div class="field-row" style="margin-top:6px;margin-bottom:0;">
+            <div class="field" style="flex:1.2;"><input id="f-alt-section" list="section-list" placeholder="seção (ex: Neurorradiologia)"></div>
+            <div class="field" style="flex:1.2;"><input id="f-alt-site" placeholder="sítio/órgão (ex: Encéfalo)"></div>
+            <button type="button" class="btn btn-ghost" id="f-alt-add" style="height:38px;align-self:flex-start;">+ Adicionar localização</button>
+          </div>
+        </div>
       </div>
 
       <div class="field">
@@ -9668,8 +9682,9 @@ function openForm(id, opts){
       </div>
 
 
-      <div class="field">
+      <div class="field" id="images-field" tabindex="0">
         <label>Imagens (RM, TC, US… com/sem contraste, cada fase que quiser)</label>
+        <div style="color:var(--muted-2);font-size:11px;margin:-2px 0 6px 0;">Clique numa área vazia e pressione Ctrl+V para colar imagem</div>
         <div class="img-gallery" id="img-gallery"></div>
         <div class="img-upload-box" id="img-upload-box">
           <button type="button" class="btn btn-ghost" id="img-pick-btn">📎 adicionar imagem</button>
@@ -9698,7 +9713,8 @@ function openForm(id, opts){
         <div class="chip-input-wrap" id="chip-wrap">
           <input id="f-tag-input" placeholder="digite e pressione Enter…">
         </div>
-        <div class="suggest-row" id="suggest-row"></div>
+        <button type="button" class="btn btn-ghost" id="suggest-toggle" aria-expanded="false" style="width:100%;text-align:left;margin-top:8px;margin-bottom:0;">▸ Tags avançadas</button>
+        <div class="suggest-row" id="suggest-row" hidden></div>
       </div>
 
       <div class="field">
@@ -9712,7 +9728,8 @@ function openForm(id, opts){
         <textarea id="f-review-request" style="display:none;margin-top:8px;" placeholder="O que precisa ser revisado? (ex: otimizar diagnósticos diferenciais, melhorar descrição radiológica, bug de imagem, possível lesão duplicada, corrigir classificação, revisar referências…)"></textarea>
       </div>`:''}
 
-      <div class="modal-actions">
+      </div>
+      <div class="modal-actions lesion-form-footer">
         <button class="btn btn-ghost" id="f-cancel">cancelar</button>
         <button class="btn btn-primary" id="f-save">${existing?'salvar alterações':'adicionar ao banco'}</button>
       </div>
@@ -9761,6 +9778,7 @@ function openForm(id, opts){
   function renderAltPlacements(){
     const box = document.getElementById('alt-placements-list');
     if(!box) return;
+    paintAltToggle();
     if(altPlacementsDraft.length===0){
       box.innerHTML = '<div style="color:var(--muted-2);font-size:12px;padding:2px 0 4px 0;">nenhuma localização adicional</div>';
       return;
@@ -9774,7 +9792,22 @@ function openForm(id, opts){
       box.appendChild(row);
     });
   }
+  function paintAltToggle(){
+    const t = document.getElementById('f-alt-toggle');
+    const b = document.getElementById('alt-body');
+    if(!t || !b) return;
+    t.textContent = altToggleLabel(altPlacementsDraft.length, !b.hidden);
+    t.setAttribute('aria-expanded', !b.hidden ? 'true' : 'false');
+  }
   renderAltPlacements();
+  const altToggleBtn = document.getElementById('f-alt-toggle');
+  if(altToggleBtn) altToggleBtn.onclick = ()=>{
+    const b = document.getElementById('alt-body');
+    if(!b) return;
+    b.hidden = !b.hidden;
+    paintAltToggle();
+  };
+  paintAltToggle();
   const altAddBtn = document.getElementById('f-alt-add');
   if(altAddBtn) altAddBtn.onclick = ()=>{
     const secEl = document.getElementById('f-alt-section');
@@ -9885,9 +9918,24 @@ function openForm(id, opts){
     });
   }
   renderChips(); renderSuggest();
+  // Tags avançadas (sugestões por grupo) começam recolhidas; as tags atuais
+  // (chip-wrap) ficam sempre visíveis. Só alterna `hidden`, sem tocar dados.
+  const suggestToggleBtn = document.getElementById('suggest-toggle');
+  if(suggestToggleBtn) suggestToggleBtn.onclick = ()=>{
+    const b = document.getElementById('suggest-row');
+    if(!b) return;
+    b.hidden = !b.hidden;
+    const open = !b.hidden;
+    suggestToggleBtn.textContent = (open ? '▾ ' : '▸ ') + 'Tags avançadas';
+    suggestToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
 
   /* --- imagens: Cloudinary por padrão quando configurado; local continua como fallback compatível --- */
   let pendingImgs = [];       // [{label,data,source,...}]
+  // Seletores de sequência/modalidade começam recolhidos por imagem; o
+  // WeakSet preserva o estado expandido entre re-renders (mesmo objeto).
+  // Preview, descrição, tags da imagem e ações ficam sempre visíveis.
+  const expandedPresetGroups = new WeakSet();
   let replaceTargetIdx = null; // se definido, o próximo upload/URL SUBSTITUI esse índice em vez de adicionar
   let imgsChanged = false;
   const imgGallery = document.getElementById('img-gallery');
@@ -9922,7 +9970,8 @@ function openForm(id, opts){
         <span class="img-source-badge">${sourceLabel}</span>
         <img src="${img.data}" class="img-gallery-thumb" title="clique pra ampliar">
         <textarea class="img-gallery-label" rows="3" placeholder="descrição da imagem/quadro (sequências curtas como &quot;axial T2, CC, MLO&quot; ou um texto mais longo)">${esc(img.label||'')}</textarea>
-        <div class="img-gallery-preset-groups"></div>
+        <button type="button" class="btn btn-ghost img-gallery-presets-toggle" aria-expanded="false" style="width:100%;text-align:left;margin:6px 0 0;">▸ Sequências / modalidade</button>
+        <div class="img-gallery-preset-groups" hidden></div>
         <div class="img-gallery-replace-box" style="display:none;">
           <button type="button" class="img-gallery-replace-file">📁 escolher arquivo</button>
           <input class="img-gallery-replace-url" placeholder="ou cole uma URL http(s)…">
@@ -9963,6 +10012,19 @@ function openForm(id, opts){
       const labelInput = item.querySelector('.img-gallery-label');
       labelInput.addEventListener('input', (ev)=>{ pendingImgs[idx].label = ev.target.value; imgsChanged = true; });
       const groupsWrap = item.querySelector('.img-gallery-preset-groups');
+      const presetToggle = item.querySelector('.img-gallery-presets-toggle');
+      const paintPresetToggle = ()=>{
+        const open = !groupsWrap.hidden;
+        presetToggle.textContent = (open ? '▾ ' : '▸ ') + 'Sequências / modalidade';
+        presetToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      };
+      presetToggle.onclick = ()=>{
+        groupsWrap.hidden = !groupsWrap.hidden;
+        if(!groupsWrap.hidden) expandedPresetGroups.add(img); else expandedPresetGroups.delete(img);
+        paintPresetToggle();
+      };
+      if(expandedPresetGroups.has(img)) groupsWrap.hidden = false;
+      paintPresetToggle();
       IMG_PRESET_GROUPS.forEach(group=>{
         const groupDiv = document.createElement('div');
         groupDiv.className = 'img-gallery-modality';
@@ -10054,6 +10116,26 @@ function openForm(id, opts){
     if(files.length){ e.preventDefault(); for(const f of files) addLocalFile(f); }
   });
   imgBox.tabIndex=0;
+  // Paste em TODA a seção de imagens: o listener da caixa acima continua
+  // tratando o paste dentro dela (mesmo pipeline addLocalFile); este cobre o
+  // restante da área. Campos de texto nunca são interceptados (paste normal).
+  const imagesField = imgBox.closest('.field');
+  if(imagesField){
+    imagesField.addEventListener('click', (e)=>{
+      if(e.target.closest && e.target.closest('button,input,textarea,select,a,img,[contenteditable="true"]')) return;
+      imagesField.focus({preventScroll:true});
+    });
+    imagesField.addEventListener('focus', ()=>{ imagesField.style.outline='2px dashed var(--teal-dim)'; imagesField.style.outlineOffset='-2px'; });
+    imagesField.addEventListener('blur', ()=>{ imagesField.style.outline=''; imagesField.style.outlineOffset=''; });
+    imagesField.addEventListener('paste', (e)=>{
+      if(pasteTargetIsText(e.target)) return;
+      if(e.target.closest && e.target.closest('#img-upload-box')) return; // imgBox já tratou
+      const items=e.clipboardData&&e.clipboardData.items; if(!items) return;
+      const files=[];
+      for(const it of items) if(it.type&&it.type.startsWith('image/')){ const f=it.getAsFile(); if(f) files.push(f); }
+      if(files.length){ e.preventDefault(); for(const f of files) addLocalFile(f); }
+    });
+  }
   document.getElementById('img-add-url').onclick=()=>{
     const el=document.getElementById('f-img'); const url=el.value.trim();
     if(!/^https?:\/\//i.test(url)){ toast('Cole uma URL http/https válida.'); return; }
@@ -12053,17 +12135,110 @@ function hideHoverPreview(){ if(hoverPreviewEl) hoverPreviewEl.style.display = '
 function openImageLightbox(src, description){
   const ov = document.createElement('div');
   ov.className = 'overlay lightbox-overlay';
-  ov.onclick = ()=> ov.remove();
   const desc = String(description||'').trim();
   ov.innerHTML = `<div class="lightbox-content">
-      <img src="${src}" class="lightbox-img">
+      <div class="lightbox-stage" style="position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:40vh;max-height:70vh;">
+        <img src="${src}" class="lightbox-img" draggable="false">
+      </div>
       ${desc ? `<div class="lightbox-desc">${esc(desc)}</div>` : ''}
     </div>
+    <div class="lightbox-controls" style="display:flex;gap:6px;justify-content:center;margin-top:8px;">
+      <button type="button" class="btn btn-ghost" data-lb="minus" title="reduzir zoom">−</button>
+      <button type="button" class="btn btn-ghost" data-lb="pct" title="voltar a 100%">100%</button>
+      <button type="button" class="btn btn-ghost" data-lb="plus" title="ampliar zoom">+</button>
+      <button type="button" class="btn btn-ghost" data-lb="reset" title="resetar zoom e posição">Reset</button>
+    </div>
     <button type="button" class="lightbox-close">✕</button>`;
+  const lbFind = (sel)=>{ try{ return ov.querySelector(sel); }catch(e){ return null; } };
+  const closeLb = ()=>{
+    try{ document.removeEventListener('keydown', lbEsc); }catch(e){}
+    try{ ov.remove(); }catch(e){}
+  };
+  ov.onclick = (e)=>{ if(e && e.target===ov) closeLb(); };
+  const lbEsc = (e)=>{ if(e && e.key==='Escape' && ov.isConnected) closeLb(); };
+  if(document.addEventListener) document.addEventListener('keydown', lbEsc);
+  const closeBtn = lbFind('.lightbox-close');
+  if(closeBtn) closeBtn.onclick = (e)=>{ if(e && e.stopPropagation) e.stopPropagation(); closeLb(); };
   if(desc){
     // clicar no texto não fecha o lightbox (permite ler/selecionar); clicar
-    // na imagem ou fora continua fechando, como sempre.
-    ov.querySelector('.lightbox-desc').onclick = e=> e.stopPropagation();
+    // fora continua fechando, como sempre.
+    const descEl = lbFind('.lightbox-desc');
+    if(descEl) descEl.onclick = e=> e.stopPropagation();
+  }
+  // Zoom profundo + pan: estado por abertura (reset a cada open). Escala de
+  // 1 (fit) a 20 (2000%), sem limite de resolução original. Roda amplia na
+  // região do cursor; arrastar move só a imagem (clamp impede perdê-la).
+  let zb = zoomStateInit();
+  const stage = lbFind('.lightbox-stage');
+  const zimg = lbFind('.lightbox-img');
+  const pctEl = lbFind('[data-lb="pct"]');
+  function zbLayout(){
+    let r = { left: 0, top: 0 };
+    try{ r = stage.getBoundingClientRect(); }catch(e){}
+    return {
+      stageW: (stage && (stage.clientWidth || r.width)) || 0,
+      stageH: (stage && (stage.clientHeight || r.height)) || 0,
+      imgW: (zimg && (zimg.offsetWidth || zimg.clientWidth)) || 0,
+      imgH: (zimg && (zimg.offsetHeight || zimg.clientHeight)) || 0
+    };
+  }
+  function zbCursor(e){
+    let r = { left: 0, top: 0 };
+    try{ r = stage.getBoundingClientRect(); }catch(e2){}
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+  function zbPaint(){
+    if(zimg && zimg.style){
+      zimg.style.transform = `translate(${zb.tx}px,${zb.ty}px) scale(${zb.s})`;
+      zimg.style.transformOrigin = '0 0';
+      zimg.style.cursor = zb.s > 1 ? 'grab' : '';
+    }
+    if(pctEl) pctEl.textContent = Math.round(zb.s * 100) + '%';
+  }
+  function zbReset(){ zb = zoomStateInit(); zbPaint(); }
+  function zbStep(factor){
+    const lay = zbLayout();
+    zb = zoomAtPoint(zb, lay, { x: lay.stageW / 2, y: lay.stageH / 2 }, factor);
+    zbPaint();
+  }
+  const wireLbBtn = (name, fn)=>{
+    const b = lbFind(`[data-lb="${name}"]`);
+    if(b) b.onclick = (e)=>{ if(e && e.stopPropagation) e.stopPropagation(); fn(); };
+  };
+  wireLbBtn('minus', ()=> zbStep(1 / LIGHTBOX_ZOOM_STEP));
+  wireLbBtn('plus', ()=> zbStep(LIGHTBOX_ZOOM_STEP));
+  wireLbBtn('pct', zbReset);
+  wireLbBtn('reset', zbReset);
+  if(stage && stage.addEventListener){
+    stage.addEventListener('wheel', (e)=>{
+      if(e && e.preventDefault) e.preventDefault();
+      zb = zoomAtPoint(zb, zbLayout(), zbCursor(e), e.deltaY < 0 ? LIGHTBOX_ZOOM_WHEEL : 1 / LIGHTBOX_ZOOM_WHEEL);
+      zbPaint();
+    }, { passive: false });
+    stage.ondblclick = ()=> zbReset();
+  }
+  let zbPanning = null;
+  if(zimg && zimg.addEventListener){
+    zimg.addEventListener('pointerdown', (e)=>{
+      if(zb.s <= 1) return;
+      zbPanning = { x: e.clientX, y: e.clientY };
+      try{ if(zimg.setPointerCapture && e.pointerId !== undefined) zimg.setPointerCapture(e.pointerId); }catch(_e){}
+      zimg.style.cursor = 'grabbing';
+      if(e.stopPropagation) e.stopPropagation();
+    });
+    zimg.addEventListener('pointermove', (e)=>{
+      if(!zbPanning) return;
+      zb = clampZoomPan({ s: zb.s, tx: zb.tx + (e.clientX - zbPanning.x), ty: zb.ty + (e.clientY - zbPanning.y) }, zbLayout());
+      zbPanning = { x: e.clientX, y: e.clientY };
+      zbPaint();
+      zimg.style.cursor = 'grabbing';
+    });
+    const zbEndPan = ()=>{
+      zbPanning = null;
+      if(zimg.style) zimg.style.cursor = zb.s > 1 ? 'grab' : '';
+    };
+    zimg.addEventListener('pointerup', zbEndPan);
+    zimg.addEventListener('pointercancel', zbEndPan);
   }
   document.body.appendChild(ov);
 }
@@ -12355,7 +12530,12 @@ function renderReviewPanels(ov){
 }
 
 function refreshStudyDashboardLive(){
-  const ov=getStudyOverlay();
+  // Busca SEM criar: getStudyOverlay() cria e anexa a #study-overlay quando
+  // ela não existe, então usá-la aqui gerava uma overlay residual escura (com
+  // scroll travado) toda vez que o refresh rodava com o dashboard fechado
+  // (ex: após Salvar do formulário). Com o dashboard aberto, o elemento já
+  // existe e o refresh funciona igual.
+  const ov=(typeof document!=='undefined') ? document.getElementById('study-overlay') : null;
   if(!ov || !ov.isConnected) return;
   renderReviewPanels(ov);
 
@@ -14011,6 +14191,55 @@ function sidebarStatsTitle(st){
 }
 
 /* ============================================================
+   EXPANSORES DO FORMULÁRIO (UX 2026-09-21) — rótulo puro e testável.
+   ============================================================ */
+function altToggleLabel(count, open){
+  const base = (Number(count) || 0) > 0
+    ? `Localização adicional (${count})`
+    : 'Localização adicional (opcional)';
+  return (open ? '▾ ' : '▸ ') + base;
+}
+
+/* ============================================================
+   PASTE EM ÁREA AMPLA + ZOOM DO LIGHTBOX (puros e testados)
+   ------------------------------------------------------------
+   pasteTargetIsText(): campos de texto nunca têm o paste interceptado.
+   Núcleo do zoom (zoomStateInit/zoomAtPoint/clampZoomPan): matemática pura
+   com origem no centro deslocado; cursor como âncora; escala 1 (fit) a 20
+   (2000%), sem limite de resolução original. Estado por abertura.
+   ============================================================ */
+function pasteTargetIsText(el){
+  if(!el || typeof el.closest !== 'function') return false;
+  return !!el.closest('input,textarea,select,[contenteditable="true"]');
+}
+const LIGHTBOX_ZOOM_MIN = 1;
+const LIGHTBOX_ZOOM_MAX = 20;
+const LIGHTBOX_ZOOM_WHEEL = 1.15;
+const LIGHTBOX_ZOOM_STEP = 1.25;
+function zoomStateInit(){ return { s:1, tx:0, ty:0 }; }
+function clampZoomPan(st, layout){
+  const sw = (Number(layout.imgW) || 0) * st.s;
+  const sh = (Number(layout.imgH) || 0) * st.s;
+  const mx = Math.max(0, sw / 2);
+  const my = Math.max(0, sh / 2);
+  return {
+    s: st.s,
+    tx: Math.min(mx, Math.max(-mx, st.tx)),
+    ty: Math.min(my, Math.max(-my, st.ty))
+  };
+}
+function zoomAtPoint(st, layout, cursor, factor){
+  const s0 = Math.min(LIGHTBOX_ZOOM_MAX, Math.max(LIGHTBOX_ZOOM_MIN, st.s));
+  const s1 = Math.min(LIGHTBOX_ZOOM_MAX, Math.max(LIGHTBOX_ZOOM_MIN, s0 * factor));
+  if(s1 === s0) return { s: s0, tx: st.tx, ty: st.ty };
+  const cx0 = ((Number(layout.stageW) || 0) - (Number(layout.imgW) || 0)) / 2;
+  const cy0 = ((Number(layout.stageH) || 0) - (Number(layout.imgH) || 0)) / 2;
+  const px = (cursor.x - cx0 - st.tx) / s0;
+  const py = (cursor.y - cy0 - st.ty) / s0;
+  return clampZoomPan({ s: s1, tx: cursor.x - cx0 - px * s1, ty: cursor.y - cy0 - py * s1 }, layout);
+}
+
+/* ============================================================
    BLOQUEIO DE DUPLICATA NO SALVAR + IDEMPOTÊNCIA (auditoria 2026-09-21)
    ------------------------------------------------------------
    Causa encontrada: o botão Salvar só era desabilitado DEPOIS dos uploads,
@@ -14405,8 +14634,11 @@ function countLesionsWithImages(catalog){
   return (Array.isArray(catalog) ? catalog : []).filter(lesionHasAnyImage).length;
 }
 // Série de 7 dias (hoje + 6 anteriores, zeros incluídos, nunca omitidos).
+// Duck-type em vez de instanceof: funciona cross-realm (vm/iframes), onde
+// instanceof falha e a série cairia silenciosamente para "hoje".
 function imagesAssignedLast7Days(catalog, refDate){
-  const ref = (refDate instanceof Date) ? new Date(refDate) : new Date();
+  const isDate = Object.prototype.toString.call(refDate) === '[object Date]' && !Number.isNaN(refDate.getTime());
+  const ref = isDate ? new Date(refDate.getTime()) : new Date();
   const out = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date(ref);

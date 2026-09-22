@@ -9,7 +9,7 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 - **Nota (2026-09-21):** HEAD local e `origin/main` publicados coincidem em
   `c628d09` ("Melhora importacao imagens quiz e cobertura do acervo"). As
   Alterações 055, 056, 057 (seções 17/19) estão implementadas, testadas e
-  **validadas manualmente pelo usuário** (ver seção 21), mas **ainda não
+  **validadas manualmente pelo usuário** (ver seção 25), mas **ainda não
   commitadas nem publicadas** — `git status` mostra os arquivos alterados
   como working tree sujo sobre esse mesmo HEAD. Commit/push seguem
   dependendo de pedido explícito.
@@ -318,16 +318,20 @@ Destino: `https://ntfy.sh/acervo-leo-7k29-radiologia`. Detalhes em `AGENTS.md`.
 | `tests/device-bootstrap.test.js` | **32 PASS**, 0 FAIL |
 | `tests/image-description.test.js` | **31 PASS**, 0 FAIL |
 | `tests/ownership-fix-20260921.test.js` | **10 PASS**, 0 FAIL |
-| Total (suíte completa) | **746 testes, 740 PASS, 5 TODO, 0 FAIL** |
+| `tests/form-collapse.test.js` | **9 PASS**, 0 FAIL |
+| `tests/form-layout-desktop.test.js` | **10 PASS**, 0 FAIL |
+| `tests/image-handling.test.js` | **18 PASS**, 0 FAIL |
+| Total (suíte completa) | **773 testes, 767 PASS, 5 TODO, 0 FAIL** |
 
 - `tests/duplicate-detection.test.js` tem 1 FAIL **histórico e fora de escopo**
   (`DUPLICATE_PAIRS_V171`, 28 entradas malformadas). Não corrigir sem pedido.
   (Não entra na tabela acima nem no total, por ter esse FAIL conhecido — ver
   `README.md`.)
 - `tests/critical-flows.test.js` usa âncoras de linha exatas; após edições antes
-  das âncoras, atualizar via script. Valores atuais (Alteração 059):
-  **6247/6257/8799/11900** (`brokenArtifacts`/`recovery`/`loadData`/
-  `importHandler`, respectivamente).
+  das âncoras, atualizar via script. Valores atuais:
+  **6247/6257/8799/11949** (`brokenArtifacts`/`recovery`/`loadData`/
+  `importHandler`, respectivamente — importHandler deslocado pelos
+  expansores do formulário).
 - `git diff --check`: sem erros de espaço em branco.
 
 ## 12. Entrega da Alteração 044
@@ -575,16 +579,57 @@ o texto inteiro após responder). Alteração 055 reconfirmada intacta.
 Testes: `tests/image-description.test.js` (**31 PASS**, +10 novos).
 `tests/critical-flows.test.js` com as âncoras atuais: 6247/6257/8799/11884.
 
-## 20. Próximos passos pendentes
+## 20. Overlay residual pós-save (bug 2026-09-21, corrigido sem commit)
+
+- Sintoma: após Salvar edição, tela cinza + scroll travado até um clique.
+- Causa: `refreshStudyDashboardLive()` chamava `getStudyOverlay()`, que CRIA
+  a `#study-overlay` quando ausente — o `!ov.isConnected` nunca barrava.
+  As chamadas no pós-save (produtividade de imagens) criavam o backdrop com
+  o dashboard fechado; o clique caía no próprio backdrop (`closeOverlay`).
+- Correção: lookup direto sem criar (`getElementById('study-overlay')`).
+  Com o dashboard aberto, tudo funciona igual; fechado, retorna sem tocar.
+- Testes: `tests/modal-cleanup.test.js`, **14 PASS**.
+
+## 21. Expansores do formulário (UX 2026-09-21, sem commit)
+
+- Seletores de sequência/modalidade por imagem, tags avançadas (sugestões
+  por grupo) e localização adicional começam recolhidos (▸); preview,
+  descrição, tags atuais, ações e chips intactos e sempre visíveis.
+- Só alterna `hidden`/rótulo/aria — sem persistência, sem mudar DATA, save,
+  chips, sync ou Cloudinary. Estado expandido por imagem via WeakSet.
+- Testes: `tests/form-collapse.test.js`, **9 PASS**.
+
+## 22. Layout desktop do editor (UX 2026-09-21, sem commit)
+
+- Modal largo (`min(1180px, 100vw-40px)`, `max-height:92vh`) com scroll
+  interno (`.lesion-form-body`) e rodapé sticky (Cancelar/Salvar sempre
+  visíveis); grade Seção/Sítio/Incidência (3→2→1 colunas); galeria 2-3
+  colunas; espaçamentos compactos. CSS embutido no template (sem tocar no
+  `<style>` global); expansores e overlay-residual preservados.
+- Testes: `tests/form-layout-desktop.test.js`, **10 PASS**.
+
+## 23. Paste amplo + zoom profundo (UX 2026-09-21, sem commit)
+
+- Seção de imagens do editor virou zona de paste (`#images-field` focável +
+  dica); campos de texto nunca interceptados (`pasteTargetIsText`); mesmo
+  pipeline `addLocalFile` (pending até Salvar, sem upload antecipado).
+- Lightbox com zoom 1–20x (roda com âncora no cursor, botões −/100%/+/Reset,
+  % discreto), pan com clamp quando ampliada, duplo-clique/EESC, estado por
+  abertura; assinatura e classes preservadas; sem CSS novo.
+- Correção lateral: `imagesAssignedLast7Days` com duck-type de Date
+  (cross-realm; teste flaky pós-meia-noite eliminado).
+- Testes: `tests/image-handling.test.js`, **18 PASS**.
+
+## 24. Próximos passos pendentes
 
 1. **Bootstrap seguro em dispositivo novo** (2026-09-21) — implementado,
    testado e **VALIDADO em teste manual pelo usuário** (Alteração 055, ver
-   seção 17 e seção 21). Nenhuma ação pendente; commit/publicação
+   seção 17 e seção 25). Nenhuma ação pendente; commit/publicação
    dependem de pedido explícito.
 2. **Descrição persistente de imagens e quadros** (2026-09-21) —
    implementado, testado e **VALIDADO em teste manual pelo usuário**
    (Alteração 056); ajuste visual de acabamento aplicado no mesmo dia,
-   também validado (Alteração 057, ver seção 19 e seção 21). Nenhuma ação
+   também validado (Alteração 057, ver seção 19 e seção 25). Nenhuma ação
    pendente; commit/publicação dependem de pedido explícito.
 3. **Merge aditivo e sincronização validados** (2026-09-21) — servidor/site
    conferido após o merge com 58 registros com imagens, 73 imagens e 44 SRS.
@@ -597,7 +642,7 @@ Testes: `tests/image-description.test.js` (**31 PASS**, +10 novos).
 6. **Manutenção incremental** (pequenas correções, sempre preservando dados,
    imagens e ownership).
 
-## 21. Validação manual — Alterações 055, 056 e 057 (Alteração 058, 2026-09-21)
+## 25. Validação manual — Alterações 055, 056 e 057 (Alteração 058, 2026-09-21)
 
 O usuário testou manualmente (funcional e visualmente) as três entregas
 anteriores e aprovou todas explicitamente:
@@ -620,7 +665,7 @@ commitadas.
 PASS, 5 TODO, 1 FAIL histórico** (`duplicate-detection.test.js`, fora de
 escopo). `git diff --check`: sem erros.
 
-## 22. Correção pontual de ownership — Abscesso cerebral / Oligodendroglioma (Alteração 059, 2026-09-21)
+## 26. Correção pontual de ownership — Abscesso cerebral / Oligodendroglioma (Alteração 059, 2026-09-21)
 
 Auditoria forense (cross-reference entre o `SEED` congelado em 18/09/2026
 no git — antes de qualquer reconciliação ao vivo — e um backup real

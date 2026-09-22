@@ -3000,3 +3000,36 @@ bloqueia e reporta; imagem sem dono incorpora; merge push servidor-only, union,
 preserva SRS/REVIEW/SESSIONLOG, verifica servidor e não faz upload; `crossDivergent`
 na auditoria; aviso + botão na UI. Âncoras de `tests/critical-flows.test.js`:
 6061/6051/8603/11592.
+
+## Atualização 22/09/2026 — overlay residual pós-save (corrigido)
+
+Causa: `refreshStudyDashboardLive()` chamava `getStudyOverlay()`, que CRIA a
+`#study-overlay` quando ausente — com o dashboard fechado (ex: após Salvar),
+isso deixava um backdrop escuro com scroll travado até um clique. Correção:
+lookup direto sem criar (`getElementById('study-overlay')`);
+`getStudyOverlay()` segue exclusivo dos fluxos que abrem o dashboard/Quiz.
+Testes: `tests/modal-cleanup.test.js` (14 PASS).
+
+## Atualização 22/09/2026 — expansores do formulário (UX, sem commit)
+
+Seletores de sequência/modalidade, tags avançadas e localização adicional
+começam recolhidos (▸); preview, descrição, tags atuais e ações sempre
+visíveis. Só UI (`hidden`/rótulo/aria), sem persistência e sem mudar
+DATA/save/chips/sync. Testes: `tests/form-collapse.test.js` (9 PASS);
+âncora `importHandler` em 11949.
+
+## Atualização 22/09/2026 — layout desktop do editor (só template/CSS)
+
+Modal `min(1180px,100vw-40px)`/`92vh`, scroll interno, rodapé sticky,
+grade 3→2→1, galeria 2-3 colunas. CSS embutido no template (sem tocar no
+`<style>` global); ids e lógica intactos; expansores preservados.
+Testes: `tests/form-layout-desktop.test.js` (10 PASS);
+âncora `importHandler` em 11961.
+
+## Atualização 22/09/2026 — paste amplo + zoom profundo (só interação)
+
+Seção de imagens virou zona de paste (`pasteTargetIsText` protege campos;
+mesmo `addLocalFile`, pending até Salvar). Lightbox com zoom 1–20x (roda
+com âncora, botões, pan com clamp, reset, ESC), estado por abertura;
+assinatura/classes intactas, sem CSS novo. Testes:
+`tests/image-handling.test.js` (18 PASS); âncora `importHandler` em 11982.

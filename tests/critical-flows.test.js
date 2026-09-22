@@ -246,10 +246,24 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // a função fixAbscessoOligodendrogliomaOwnership20260921() foi inserida
   // depois de consolidateSameIdDuplicates(), no fim do script, e não afeta
   // nenhuma das quatro âncoras.
+  // +0 nas 3 primeiras âncoras / +49 só no importHandler (expansores do
+  // formulário, 2026-09-21): toggles + corpos recolhidos nos templates de
+  // altPlacements/sugestões/presets por imagem, paintAltToggle, fiação dos
+  // toggles, WeakSet de expandidos e helper puro altToggleLabel (fim do
+  // script) — tudo dentro do openForm, depois de loadData(). Sem CSS novo,
+  // sem mudança em DATA/save/chips/sync.
+  // +0 nas 3 primeiras âncoras / +12 só no importHandler (layout desktop do
+  // editor, 2026-09-21): <style> embutido no template + grade seção/sítio/
+  // incidência + wrapper .lesion-form-body + rodapé sticky — tudo dentro do
+  // template do openForm, depois de loadData(). Sem lógica alterada.
+  // +0 nas 3 primeiras âncoras / +21 só no importHandler (paste amplo +
+  // zoom, 2026-09-21): zona #images-field + listener com guarda de texto no
+  // openForm; núcleo puro paste/zoom no fim do script. Lightbox (zoom/pan)
+  // fica depois do importHandler e não desloca nada.
   assert.equal(recovery.line, 6257);
   assert.equal(brokenArtifacts.line, 6247);
   assert.equal(loadData.line, 8799);
-  assert.equal(importHandler.line, 11900);
+  assert.equal(importHandler.line, 11982);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

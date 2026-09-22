@@ -191,7 +191,10 @@ function invokeLightbox(src, description) {
     esc: vm.runInContext('esc', escCtx)
   };
   vm.createContext(ctx);
-  vm.runInContext(openImageLightboxFn.source + '\nthis.__call = openImageLightbox;', ctx, { filename: 'lightbox-call.js' });
+  // openImageLightbox() usa o núcleo puro de zoom (zoomStateInit etc.);
+  // extrai junto para o contexto isolado (sem isso, ReferenceError).
+  const zoomSrc = ['zoomStateInit', 'clampZoomPan', 'zoomAtPoint'].map((n) => extractFunction(html, n).source).join('\n');
+  vm.runInContext(zoomSrc + '\n' + openImageLightboxFn.source + '\nthis.__call = openImageLightbox;', ctx, { filename: 'lightbox-call.js' });
   vm.runInContext('__call', ctx)(src, description);
   return { ov, descEl, appended };
 }

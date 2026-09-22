@@ -1062,3 +1062,29 @@ manualmente pelo usuário no navegador e confirmada: as 2 imagens já
 aparecem corretamente em "Abscesso cerebral".
 
 Testes: `tests/ownership-fix-20260921.test.js` (10 PASS).
+
+### Correção 22/09/2026 — tela cinza após salvar
+
+`refreshStudyDashboardLive()` criava a overlay do dashboard mesmo com ele
+fechado. Agora usa busca sem criar; pós-save sem backdrop residual.
+Testes: `tests/modal-cleanup.test.js` (14 PASS).
+
+### UX 22/09/2026 — formulário compacto
+
+Sequências/modalidade, tags avançadas e localização adicional começam
+recolhidos; descrição, tags e ações da imagem sempre visíveis.
+Testes: `tests/form-collapse.test.js` (9 PASS).
+
+### UX 22/09/2026 — editor largo para desktop
+
+Modal até 1180px com scroll interno e rodapé sticky (Cancelar/Salvar sempre
+visíveis); Seção/Sítio/Incidência em grade responsiva; galeria lado a lado.
+Só layout, sem mudar lógica.
+Testes: `tests/form-layout-desktop.test.js` (10 PASS).
+
+### UX 22/09/2026 — colar em toda a seção + zoom profundo
+
+Clique numa área vazia da seção de imagens e Ctrl+V cola via pipeline
+normal (campos de texto nunca interceptados). Lightbox com zoom até 2000%
+(roda, botões, pan, reset, ESC), sem mudar persistência ou estrutura.
+Testes: `tests/image-handling.test.js` (18 PASS).
