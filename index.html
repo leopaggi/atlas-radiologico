@@ -2757,6 +2757,12 @@ function mergeEntryNonDestructive(localEntry, remoteEntry){
   merged.localImg = !!(local.localImg || remote.localImg);
   if(!merged.img) merged.img = local.img || remote.img || '';
 
+  // Casos clínicos exemplo (clinicalCases): mesma lógica aditiva das imagens
+  // — nunca perde um caso vinculado só de um lado (local ou nuvem). Dedup por
+  // sourceUrl (função definida mais abaixo, junto do resto do recurso).
+  const unionedCases = unionClinicalCases(local.clinicalCases, remote.clinicalCases);
+  if(unionedCases.length) merged.clinicalCases = unionedCases; else delete merged.clinicalCases;
+
   // Para registros legados sem timestamp, campos não vazios locais têm prioridade.
   if(lt===0 && rt===0){
     if(local.notes) merged.notes = local.notes;
@@ -9516,6 +9522,7 @@ function openDetail(id){
         <div class="detail-links-label">VER IMAGENS / CASOS</div>
         ${links.map(l=>`<a class="detail-link" href="${l.url}" target="_blank" rel="noopener">↗ ${l.label||l.url}</a>`).join('')}
       </div>`:''}
+      ${clinicalCasesSectionHtml(e)}
       <div class="detail-review">
         <div class="detail-links-label">STATUS DE REVISÃO</div>
         <div class="review-btn-row" id="review-btn-row"></div>
@@ -9560,6 +9567,7 @@ function openDetail(id){
     });
   }
   renderReviewButtons();
+  wireClinicalCasesToggle(ov, e);
   document.getElementById('btn-close').onclick = closeOverlay;
   document.getElementById('btn-edit').onclick = ()=>{ closeOverlay(); openForm(e.id); };
   document.getElementById('btn-del').onclick = async ()=>{
@@ -9724,6 +9732,12 @@ function openForm(id, opts){
         <input id="f-en-term" value="${existing?(existing.enTerm||'').replace(/"/g,'&quot;'):''}" placeholder="ex: hepatic hemangioma — o Radiopaedia é em inglês">
       </div>
 
+      ${existing && Array.isArray(existing.clinicalCases) && existing.clinicalCases.length?`
+      <div class="field">
+        <label>Casos clínicos exemplo vinculados</label>
+        <div id="clinical-cases-list"></div>
+      </div>`:''}
+
       ${existing?`
       <div class="field">
         <label class="quiz-check" for="f-mark-review" style="display:flex;align-items:center;gap:8px;margin-bottom:0;font-size:13.5px;color:var(--text);"><input type="checkbox" id="f-mark-review"> marcar para revisão</label>
@@ -9775,6 +9789,23 @@ function openForm(id, opts){
 
   let tags = existing ? [...existing.tags] : [];
   let links = existing ? [...ensureLinks(existing)] : [];
+  // Casos clínicos exemplo: só VISUALIZAR/REMOVER aqui (vincular acontece
+  // pelo importador). Draft até o Salvar, igual a altPlacements/links.
+  let clinicalCasesDraft = (existing && Array.isArray(existing.clinicalCases)) ? JSON.parse(JSON.stringify(existing.clinicalCases)) : [];
+  function renderClinicalCasesDraft(){
+    const box = document.getElementById('clinical-cases-list');
+    if(!box) return;
+    if(!clinicalCasesDraft.length){ box.innerHTML = '<div style="color:var(--muted-2);font-size:12px;padding:2px 0 4px 0;">nenhum caso vinculado</div>'; return; }
+    box.innerHTML = '';
+    clinicalCasesDraft.forEach((c,i)=>{
+      const row = document.createElement('div');
+      row.className = 'link-row';
+      row.innerHTML = `<span class="link-row-label">${escAttr(c.title||c.source||'caso clínico')}</span><span class="link-row-url">${escAttr(c.sourceUrl||'')}</span><button type="button" class="link-row-del" title="remover este vínculo (não apaga a lesão nem o Cloudinary)">✕</button>`;
+      row.querySelector('.link-row-del').onclick = ()=>{ clinicalCasesDraft.splice(i,1); renderClinicalCasesDraft(); };
+      box.appendChild(row);
+    });
+  }
+  renderClinicalCasesDraft();
   // "Também aparece em" — reaproveita o campo altPlacements já existente.
   let altPlacementsDraft = (existing && Array.isArray(existing.altPlacements)) ? JSON.parse(JSON.stringify(existing.altPlacements)) : [];
   function renderAltPlacements(){
@@ -10223,6 +10254,10 @@ function openForm(id, opts){
     if(existing){
       existing.name=name; existing.s=sec; existing.site=site; existing.tags=tags; existing.img=img; existing.notes=notes; existing.links=links; existing.enTerm=enTerm; existing.inc=inc; existing.localImg=localImgFlag; existing.images=remoteImgs; existing.classification=classification; existing._userUpdatedAt=Date.now();
       if(altPlacementsDraft.length) existing.altPlacements = JSON.parse(JSON.stringify(altPlacementsDraft)); else delete existing.altPlacements;
+      // Casos clínicos exemplo: só reflete remoções feitas nesta tela (nunca
+      // adiciona aqui — vincular é exclusivo do importador). Sem draft (form
+      // de lesão nova), o campo nem é tocado.
+      if(clinicalCasesDraft.length) existing.clinicalCases = JSON.parse(JSON.stringify(clinicalCasesDraft)); else delete existing.clinicalCases;
     } else if(DATA.some(x=>x && x.id===entryId)){
       // Rede de segurança anti-mesmo-id (auditoria 2026-09-21): se o id já
       // está no acervo (ex.: submit duplicado que escapou da trava), atualiza
@@ -13838,15 +13873,38 @@ function externalSuggestionHtml(suggestion){
     + aiLine + `</div>`;
 }
 
-function externalImportModalHtml(draft, matches, suggestion){
+// Duas opções (regra 1): vincular a lesão existente OU criar nova lesão.
+// Alterna só duas seções da MESMA modal (sem fechar/reabrir); o fluxo de
+// criar nova lesão continua exatamente o mesmo de antes (regra 8).
+function externalModeTabsHtml(){
+  return `<div class="external-mode-tabs" style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;">`
+    + `<button type="button" class="btn btn-ghost" id="external-tab-link">🔗 Vincular a lesão existente</button>`
+    + `<button type="button" class="btn btn-ghost" id="external-tab-new">➕ Criar nova lesão</button>`
+    + `</div>`;
+}
+
+function externalImportModalHtml(draft, matches, suggestion, catalog){
+  const linkMatches = suggestion ? findExternalImportCandidatesForLink(draft, suggestion, catalog || []) : matches;
   return `<div class="modal">`
     + `<h2>📥 Importar caso externo</h2>`
     + `<div class="modal-sub">pré-checagem do acervo — nada será salvo sem a sua decisão</div>`
     + externalPendingBlockHtml(draft)
+    + externalModeTabsHtml()
+    + `<div id="external-new-pane">`
     + (suggestion ? externalSuggestionHtml(suggestion) : '')
     + `<div class="detail-links-label">PRÉ-CHECAGEM DO ACERVO</div>`
     + `<div id="external-matches">` + externalMatchesHtml(matches) + `</div>`
     + `<div id="external-alert"></div>`
+    + `</div>`
+    + `<div id="external-link-pane" hidden>`
+    + `<div class="detail-links-label">CANDIDATOS AUTOMÁTICOS PARA VÍNCULO</div>`
+    + `<div id="external-link-candidates">` + externalLinkCandidatesHtml(linkMatches) + `</div>`
+    + `<div class="field" style="margin-top:10px;">`
+    + `<label>Pesquisar lesão existente no Atlas…</label>`
+    + `<input id="external-manual-search" placeholder="nome, sinônimo (termo em inglês), tag…">`
+    + `</div>`
+    + `<div id="external-manual-results"></div>`
+    + `</div>`
     + `<div class="modal-actions" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">`
     + `<button type="button" class="btn btn-primary" id="external-create-btn">Criar nova lesão</button>`
     + `<button type="button" class="btn btn-ghost" id="external-cancel-btn">Cancelar</button>`
@@ -13859,6 +13917,39 @@ function wireExternalOpenButtons(ov, draft){
   });
 }
 
+// Botão "Adicionar como caso clínico exemplo" — presente nos candidatos
+// automáticos e nos resultados da busca manual. Abre a confirmação (regra 4)
+// e só então persiste (linkClinicalCaseToLesion), tratando duplicidade
+// (regra 7).
+function wireExternalLinkCaseButtons(ov, draft){
+  ov.querySelectorAll('.external-link-case-btn').forEach(btn => {
+    btn.onclick = () => { const id = btn.getAttribute('data-lesion-id'); handleExternalLinkCaseClick(draft, id); };
+  });
+}
+
+async function handleExternalLinkCaseClick(draft, lesionId){
+  const entry = (Array.isArray(DATA) ? DATA : []).find(e => e && e.id === lesionId);
+  if (!entry) { toast('Lesão não encontrada no acervo.'); return; }
+  const confirmed = await openClinicalCaseLinkConfirm(entry);
+  if (!confirmed) return;
+  let result = await linkClinicalCaseToLesion(entry.id, draft, {});
+  if (!result.ok && result.reason === 'linked_elsewhere') {
+    const other = result.otherEntry;
+    const force = confirm('Este caso já está vinculado a "' + other.name + '". Vincular também a "' + entry.name + '" mesmo assim?');
+    if (!force) return;
+    result = await linkClinicalCaseToLesion(entry.id, draft, { forceElsewhere: true });
+  }
+  if (result.ok) {
+    pendingExternalCase = null;
+    closeOverlay();
+    toast('Caso clínico vinculado a "' + entry.name + '".');
+    openDetail(entry.id);
+    return;
+  }
+  if (result.reason === 'duplicate_same_lesion') { toast('Este caso já está vinculado a esta lesão — não foi duplicado.'); return; }
+  toast('Não foi possível vincular o caso clínico.');
+}
+
 // Re-precheck após edição do nome: compara título original E nome em PT.
 // Novidades fortes geram o alerta com [Abrir lesão existente] / [Continuar].
 function refreshExternalMatches(ov, draft, suggestion, baseMatches){
@@ -13869,6 +13960,7 @@ function refreshExternalMatches(ov, draft, suggestion, baseMatches){
   const box = ov.querySelector('#external-matches');
   if (box) box.innerHTML = externalMatchesHtml(fresh);
   wireExternalOpenButtons(ov, draft);
+  refreshExternalLinkCandidates(ov, probe, suggestion, draft);
   const known = new Set((baseMatches || []).map(m => m.entry.id));
   const novel = fresh.filter(m => (m.band === 'exata' || m.band === 'alta') && !known.has(m.entry.id));
   const alertBox = ov.querySelector('#external-alert');
@@ -13886,6 +13978,20 @@ function refreshExternalMatches(ov, draft, suggestion, baseMatches){
   if (openBtn) openBtn.onclick = () => { pendingExternalCase = null; closeOverlay(); openExternalOnLesion(draft, first.id); };
   const keepBtn = alertBox.querySelector('#external-alert-keep');
   if (keepBtn) keepBtn.onclick = () => { alertBox.innerHTML = ''; };
+}
+
+// Mantém os candidatos automáticos da aba "Vincular" em dia com o nome em
+// edição (mesma fonte que a aba "Criar nova" já usa para o re-precheck).
+// draftProbe só serve pra ENCONTRAR candidatos (título pode estar em edição);
+// realDraft é o caso de verdade, usado ao abrir/vincular.
+function refreshExternalLinkCandidates(ov, draftProbe, suggestion, realDraft){
+  const box = ov.querySelector('#external-link-candidates');
+  if (!box) return;
+  const draft = realDraft || draftProbe;
+  const fresh = findExternalImportCandidatesForLink(draftProbe, suggestion, DATA);
+  box.innerHTML = externalLinkCandidatesHtml(fresh);
+  wireExternalOpenButtons(ov, draft);
+  wireExternalLinkCaseButtons(ov, draft);
 }
 
 const EXTERNAL_AI_DEFAULT_INSTRUCTION = 'Revisar nome, tags e descrição da lesão.';
@@ -13963,10 +14069,40 @@ function openExternalImportModal(draft){
   const suggestion = buildExternalSuggestion(draft, DATA, matches);
   const ov = document.createElement('div');
   ov.className = 'overlay external-import-overlay';
-  ov.innerHTML = externalImportModalHtml(draft, matches, suggestion);
+  ov.innerHTML = externalImportModalHtml(draft, matches, suggestion, DATA);
   ov.onclick = (ev) => { if (ev.target === ov) { pendingExternalCase = null; closeOverlay(); } };
   document.body.appendChild(ov);
   wireExternalOpenButtons(ov, draft);
+  wireExternalLinkCaseButtons(ov, draft);
+  // Duas opções (regra 1): alterna só o conteúdo da MESMA modal — "Criar
+  // nova lesão" é o padrão (comportamento inalterado quando o usuário não
+  // clica em nada, regra 8).
+  const newPane = ov.querySelector('#external-new-pane');
+  const linkPane = ov.querySelector('#external-link-pane');
+  const createBtn0 = ov.querySelector('#external-create-btn');
+  const tabLink = ov.querySelector('#external-tab-link');
+  const tabNew = ov.querySelector('#external-tab-new');
+  function setExternalMode(mode){
+    const isLink = mode === 'link';
+    if (newPane) newPane.hidden = isLink;
+    if (linkPane) linkPane.hidden = !isLink;
+    if (createBtn0) createBtn0.hidden = isLink;
+    if (tabLink) tabLink.classList.toggle('btn-primary', isLink);
+    if (tabNew) tabNew.classList.toggle('btn-primary', !isLink);
+  }
+  setExternalMode('new');
+  if (tabLink) tabLink.onclick = () => setExternalMode('link');
+  if (tabNew) tabNew.onclick = () => setExternalMode('new');
+  // Busca manual (regra 3): nome parcial/normalizado + enTerm/tags.
+  const manualInput = ov.querySelector('#external-manual-search');
+  if (manualInput) manualInput.addEventListener('input', () => {
+    const box = ov.querySelector('#external-manual-results');
+    if (!box) return;
+    const results = searchExistingLesionsForLink(manualInput.value, DATA);
+    box.innerHTML = externalManualResultsHtml(results);
+    wireExternalOpenButtons(ov, draft);
+    wireExternalLinkCaseButtons(ov, draft);
+  });
   const track = (id, field) => {
     const el = ov.querySelector(id);
     if (!el) return;
@@ -14674,6 +14810,281 @@ function renderImagesWeekSvg(series){
     + pts.map(p => `<circle class="study-dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3"><title>dia ${p.label}: ${p.count} ${p.count === 1 ? 'imagem' : 'imagens'}</title></circle>`).join('')
     + list.map((s, i) => `<text x="${x(i).toFixed(1)}" y="148" class="study-line-x-label" text-anchor="middle">${esc(String(s.label))}</text>`).join('')
     + `</svg>`;
+}
+
+/* ============================================================
+   CASOS CLÍNICOS EXEMPLO — vincular caso externo a lesão existente
+   (evolução do importador Radiopaedia → Atlas, 2026-09-22)
+   ------------------------------------------------------------
+   Além de "criar nova lesão" (fluxo intacto), o importador agora permite
+   vincular o caso a uma lesão JÁ existente, como caso clínico exemplo
+   (campo opcional clinicalCases[]). Vincular é uma ação real — persiste
+   via saveData(), igual a "adicionar imagem" no Quiz — diferente do
+   caminho "criar nova lesão", que continua 100% draft até o Salvar do
+   formulário. NUNCA sobrescreve nome, descrição, tags, seção, sítio,
+   imagens, classificação, ownership ou SRS da lesão alvo: só acrescenta a
+   clinicalCases e, se ainda não existir, a sourceUrl aos links.
+   ============================================================ */
+// Só os campos realmente presentes no draft — nunca inventa um campo ausente.
+function buildClinicalCaseFromDraft(draft){
+  const d = draft || {};
+  const out = {
+    source: String(d.source || '').trim(),
+    title: String(d.title || '').trim(),
+    sourceUrl: String(d.sourceUrl || '').trim(),
+    addedAt: new Date().toISOString()
+  };
+  if (d.patientAge) out.patientAge = String(d.patientAge);
+  if (d.patientSex) out.patientSex = String(d.patientSex);
+  if (d.modality) out.modality = String(d.modality);
+  if (d.presentation) out.presentation = String(d.presentation);
+  return out;
+}
+
+function lesionHasClinicalCaseUrl(entry, sourceUrl){
+  const list = Array.isArray(entry && entry.clinicalCases) ? entry.clinicalCases : [];
+  return list.some(c => c && sameExternalUrl(c.sourceUrl, sourceUrl));
+}
+
+// Procura em TODO o catálogo (exceto excludeId) se essa URL já está
+// vinculada como caso clínico a OUTRA lesão — evita duplicação silenciosa
+// (regra 7: mesmo caso vinculado a duas lesões precisa de aviso explícito).
+function findClinicalCaseElsewhere(sourceUrl, catalog, excludeId){
+  const list = Array.isArray(catalog) ? catalog : [];
+  for (const e of list) {
+    if (!e || e.id === excludeId) continue;
+    if (lesionHasClinicalCaseUrl(e, sourceUrl)) return e;
+  }
+  return null;
+}
+
+// Pura: devolve uma NOVA lesão (cópia) com o caso adicionado — nunca muta o
+// argumento, nunca toca em name/notes/tags/s/site/images/classification/
+// altPlacements/SRS/ownership. Só acrescenta a clinicalCases e, se ainda
+// não existir, a sourceUrl aos links.
+function addClinicalCaseToLesion(entry, draft){
+  if (!entry || typeof entry !== 'object') return { ok: false, reason: 'lesão inválida', entry: null };
+  const url = String((draft && draft.sourceUrl) || '').trim();
+  if (!url) return { ok: false, reason: 'sourceUrl ausente', entry };
+  const existingCases = Array.isArray(entry.clinicalCases) ? entry.clinicalCases : [];
+  if (existingCases.some(c => c && sameExternalUrl(c.sourceUrl, url))) {
+    return { ok: false, reason: 'duplicate_same_lesion', entry };
+  }
+  const newCase = buildClinicalCaseFromDraft(draft);
+  const next = Object.assign({}, entry);
+  next.clinicalCases = existingCases.concat([newCase]);
+  const links = Array.isArray(entry.links) ? entry.links.slice() : [];
+  if (!links.some(l => l && sameExternalUrl(l.url, url))) {
+    links.push({ label: (String((draft && draft.source) || 'Fonte') + ' — ' + String((draft && draft.title) || '')).slice(0, 120), url });
+  }
+  next.links = links;
+  return { ok: true, reason: '', entry: next, case: newCase };
+}
+
+// Pura: remove SÓ o caso correspondente (por sourceUrl), sem apagar a lesão,
+// sem tocar imagens/Cloudinary/mais nada.
+function removeClinicalCaseFromLesion(entry, sourceUrl){
+  const list = Array.isArray(entry && entry.clinicalCases) ? entry.clinicalCases : [];
+  const idx = list.findIndex(c => c && sameExternalUrl(c.sourceUrl, sourceUrl));
+  if (idx < 0) return { ok: false, entry };
+  const next = Object.assign({}, entry);
+  next.clinicalCases = list.slice(0, idx).concat(list.slice(idx + 1));
+  return { ok: true, entry: next, removed: list[idx] };
+}
+
+// UNION aditiva (mesmo padrão de unionEntryImages): identidade por sourceUrl
+// normalizada; sem URL, cai para título normalizado. Usada no merge
+// local↔nuvem (mergeEntryNonDestructive) — nunca perde um caso vinculado só
+// de um lado, nunca duplica o mesmo caso.
+function clinicalCaseIdentityKey(c){
+  if (!c || typeof c !== 'object') return '';
+  const url = String(c.sourceUrl || '').trim().replace(/\/+$/, '');
+  if (url) return 'url:' + url;
+  return 'title:' + normalizeExternalTitle(c.title || '');
+}
+function unionClinicalCases(baseCases, addCases){
+  const out = [];
+  const seen = new Set();
+  const pushCase = (c) => {
+    if (!c || typeof c !== 'object') return;
+    const key = clinicalCaseIdentityKey(c);
+    if (key && seen.has(key)) return;
+    if (key) seen.add(key);
+    out.push(c);
+  };
+  (Array.isArray(baseCases) ? baseCases : []).forEach(pushCase);
+  (Array.isArray(addCases) ? addCases : []).forEach(pushCase);
+  return out;
+}
+
+// Efetua o vínculo de verdade: localiza a lesão em DATA, aplica
+// addClinicalCaseToLesion() e persiste com saveData() — mesmo caminho
+// seguro de sempre (IndexedDB + Firestore). Bloqueia vínculo silencioso a
+// uma URL já ligada a OUTRA lesão, a menos que opts.forceElsewhere===true
+// (decisão explícita do usuário, depois de avisado).
+async function linkClinicalCaseToLesion(lesionId, draft, opts){
+  const o = opts || {};
+  const entry = (Array.isArray(DATA) ? DATA : []).find(e => e && e.id === lesionId);
+  if (!entry) return { ok: false, reason: 'not_found' };
+  const url = String((draft && draft.sourceUrl) || '').trim();
+  if (!o.forceElsewhere) {
+    const elsewhere = findClinicalCaseElsewhere(url, DATA, lesionId);
+    if (elsewhere) return { ok: false, reason: 'linked_elsewhere', otherEntry: elsewhere };
+  }
+  const result = addClinicalCaseToLesion(entry, draft);
+  if (!result.ok) return { ok: false, reason: result.reason };
+  entry.clinicalCases = result.entry.clinicalCases;
+  entry.links = result.entry.links;
+  entry._userUpdatedAt = Date.now();
+  await saveData();
+  return { ok: true, entry, case: result.case };
+}
+
+// Busca automática ampliada (regra 2): reusa findExternalImportCandidates —
+// MESMA proteção anti-falso-positivo (bandas exata/alta/possível, trava de
+// zero token em comum) — contra o TÍTULO ORIGINAL e, quando diferente,
+// também contra o NOME SUGERIDO em português. Resultado combinado (melhor
+// banda por lesão vence), mesmo teto de 5 candidatos.
+function findExternalImportCandidatesForLink(draft, suggestion, catalog){
+  const byOriginal = findExternalImportCandidates(draft, catalog);
+  const ptName = suggestion && suggestion.name && suggestion.name !== draft.title ? suggestion.name : null;
+  if (!ptName) return byOriginal;
+  const byPt = findExternalImportCandidates(Object.assign({}, draft, { title: ptName }), catalog);
+  const rank = { exata: 0, alta: 1, 'possível': 2 };
+  const merged = new Map(byOriginal.map(m => [m.entry.id, m]));
+  byPt.forEach(m => {
+    const cur = merged.get(m.entry.id);
+    if (!cur || rank[m.band] < rank[cur.band]) merged.set(m.entry.id, m);
+  });
+  const out = [...merged.values()];
+  out.sort((x, y) => (rank[x.band] - rank[y.band]) || (y.score - x.score));
+  return out.slice(0, 5);
+}
+
+// Busca manual (regra 3): nome parcial/normalizado + enTerm (sinônimo em
+// inglês) + tags — os únicos campos de "sinônimo/alias" que já existem no
+// catálogo (não inventa um campo aliases novo). Consulta curta demais
+// (<2 caracteres úteis) não busca, para não listar o catálogo à toa. Ao
+// contrário da pré-checagem automática (que evita alarme falso), aqui a
+// busca é 100% iniciada pelo usuário — sem bandas, lista direta por score.
+function searchExistingLesionsForLink(query, catalog){
+  const q = normalizeExternalTitle(query);
+  if (!q || q.length < 2) return [];
+  const qTokens = tokenizeExternalTitle(q);
+  const list = Array.isArray(catalog) ? catalog : [];
+  const scored = [];
+  list.forEach(e => {
+    if (!e || typeof e.name !== 'string') return;
+    const name = normalizeExternalTitle(e.name);
+    const enTerm = normalizeExternalTitle(e.enTerm || '');
+    const tags = (Array.isArray(e.tags) ? e.tags : []).map(t => normalizeExternalTitle(t));
+    let score = 0;
+    if (name === q) score = 100;
+    else if (name.indexOf(q) >= 0 || (q.length >= 4 && q.indexOf(name) >= 0)) score = 60;
+    else if (enTerm && (enTerm === q || enTerm.indexOf(q) >= 0)) score = 55;
+    else if (qTokens.length && qTokens.every(t => name.indexOf(t) >= 0)) score = 40;
+    else if (tags.some(t => t && (t === q || t.indexOf(q) >= 0))) score = 30;
+    if (score > 0) scored.push({ entry: e, score });
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, 20).map(s => s.entry);
+}
+
+// HTML 100% escapado (mesmo padrão de externalMatchesHtml). Cada linha tem
+// "Abrir esta lesão" (comportamento já existente, preservado) e o botão
+// novo "Adicionar como caso clínico exemplo".
+function externalLinkCandidateRowHtml(m){
+  const e = m.entry;
+  const ctx = [e.s, e.site].filter(Boolean).map(esc).join(' &gt; ');
+  return `<div class="external-match" style="border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;">`
+    + `<div style="font-weight:700;">${esc(e.name)}</div>`
+    + (ctx ? `<div style="color:var(--muted-2);font-size:12px;">${ctx}</div>` : '')
+    + (m.via === 'url' ? `<div style="font-size:12px;margin:4px 0;">🟢 URL já registrada</div>` : (m.band ? `<div style="font-size:12px;margin:4px 0;">🔎 ${esc(externalBandLabel(m.band))}</div>` : ''))
+    + `<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">`
+    + `<button type="button" class="btn btn-ghost external-open-btn" data-lesion-id="${esc(e.id)}">Abrir esta lesão</button>`
+    + `<button type="button" class="btn btn-primary external-link-case-btn" data-lesion-id="${esc(e.id)}">Adicionar como caso clínico exemplo</button>`
+    + `</div></div>`;
+}
+function externalLinkCandidatesHtml(matches){
+  const list = Array.isArray(matches) ? matches : [];
+  if (!list.length) return '<div style="color:var(--muted-2);font-size:13px;">✅ Nenhuma correspondência automática — use a busca manual abaixo.</div>';
+  return list.map(externalLinkCandidateRowHtml).join('');
+}
+// Resultados da busca manual: mesmo layout/botões, sem banda (é o usuário
+// quem decide a relevância ao pesquisar).
+function externalManualResultsHtml(results){
+  const list = Array.isArray(results) ? results : [];
+  if (!list.length) return '';
+  return list.map(e => {
+    const ctx = [e.s, e.site].filter(Boolean).map(esc).join(' &gt; ');
+    return `<div class="external-match" style="border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;">`
+      + `<div style="font-weight:700;">${esc(e.name)}</div>`
+      + (ctx ? `<div style="color:var(--muted-2);font-size:12px;">${ctx}</div>` : '')
+      + `<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">`
+      + `<button type="button" class="btn btn-ghost external-open-btn" data-lesion-id="${esc(e.id)}">Abrir esta lesão</button>`
+      + `<button type="button" class="btn btn-primary external-link-case-btn" data-lesion-id="${esc(e.id)}">Adicionar como caso clínico exemplo</button>`
+      + `</div></div>`;
+  }).join('');
+}
+
+// Confirmação (regra 4): "Vincular este caso a: [nome] [seção > sítio]" +
+// botão "Adicionar como caso clínico exemplo". Promise resolvida com
+// true/false; nada é persistido aqui, só a decisão.
+function externalLinkConfirmModalHtml(entry){
+  const ctx = [entry && entry.s, entry && entry.site].filter(Boolean).map(esc).join(' &gt; ');
+  return `<div class="modal"><h2>Vincular caso clínico</h2>`
+    + `<div class="modal-sub">Vincular este caso a: <b>${esc((entry && entry.name) || '')}</b>${ctx ? ' — ' + ctx : ''}</div>`
+    + `<div class="modal-actions" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">`
+    + `<button type="button" class="btn btn-ghost" id="link-case-cancel-btn">Cancelar</button>`
+    + `<button type="button" class="btn btn-primary" id="link-case-confirm-btn">Adicionar como caso clínico exemplo</button>`
+    + `</div></div>`;
+}
+function openClinicalCaseLinkConfirm(entry){
+  return new Promise((resolve) => {
+    const ov = document.createElement('div');
+    ov.className = 'overlay external-link-confirm-overlay';
+    ov.innerHTML = externalLinkConfirmModalHtml(entry);
+    document.body.appendChild(ov);
+    const done = (v) => { try { ov.remove(); } catch (e) {} resolve(v); };
+    ov.onclick = (ev) => { if (ev.target === ov) done(false); };
+    document.getElementById('link-case-cancel-btn').onclick = () => done(false);
+    document.getElementById('link-case-confirm-btn').onclick = () => done(true);
+  });
+}
+
+// Visualização (regra 9): seção compacta/recolhível na lesão, só quando há
+// pelo menos um caso vinculado. HTML 100% escapado.
+function clinicalCaseRowHtml(c){
+  const pac = [c.patientAge ? esc(c.patientAge + ' anos') : '', c.patientSex ? esc(c.patientSex) : ''].filter(Boolean).join(' / ');
+  return `<div class="clinical-case-row" style="border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;">`
+    + `<div style="font-weight:700;">${esc(c.title || '')}</div>`
+    + `<div style="color:var(--muted-2);font-size:12px;">${esc(c.source || '')}</div>`
+    + (pac ? `<div style="font-size:12px;">${pac}</div>` : '')
+    + (c.modality ? `<div style="font-size:12px;">Modalidade: ${esc(c.modality)}</div>` : '')
+    + (c.presentation ? `<div style="font-size:12px;margin-top:2px;">${esc(c.presentation)}</div>` : '')
+    + (c.sourceUrl ? `<a class="detail-link" href="${esc(c.sourceUrl)}" target="_blank" rel="noopener">↗ Abrir caso</a>` : '')
+    + `</div>`;
+}
+function clinicalCasesSectionHtml(entry){
+  const list = Array.isArray(entry && entry.clinicalCases) ? entry.clinicalCases : [];
+  if (!list.length) return '';
+  return `<div class="detail-clinical-cases">`
+    + `<button type="button" class="btn btn-ghost clinical-cases-toggle" aria-expanded="false" style="width:100%;text-align:left;margin-bottom:0;">▸ Casos clínicos exemplo (${list.length})</button>`
+    + `<div class="clinical-cases-body" hidden>${list.map(clinicalCaseRowHtml).join('')}</div>`
+    + `</div>`;
+}
+// Só alterna hidden/rótulo — nunca muta DATA/entry.
+function wireClinicalCasesToggle(ov, entry){
+  const toggle = ov.querySelector('.clinical-cases-toggle');
+  if (!toggle) return;
+  const list = Array.isArray(entry && entry.clinicalCases) ? entry.clinicalCases : [];
+  toggle.onclick = () => {
+    const body = ov.querySelector('.clinical-cases-body');
+    if (!body) return;
+    body.hidden = !body.hidden;
+    toggle.textContent = (body.hidden ? '▸' : '▾') + ' Casos clínicos exemplo (' + list.length + ')';
+    toggle.setAttribute('aria-expanded', body.hidden ? 'false' : 'true');
+  };
 }
 
 </script>

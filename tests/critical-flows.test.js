@@ -269,10 +269,19 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // +0 nas 3 primeiras âncoras / +1 só no importHandler (correção do footer,
   // 2026-09-21): faltava a abertura do .lesion-form-body (só existia o
   // fechamento), o que quebrava o modal/rodapé no DOM; tags continuam no topo.
-  assert.equal(recovery.line, 6257);
-  assert.equal(brokenArtifacts.line, 6247);
-  assert.equal(loadData.line, 8799);
-  assert.equal(importHandler.line, 11984);
+  // +6 nas 3 primeiras âncoras / +35 no importHandler (casos clínicos
+  // exemplo — vincular caso externo a lesão existente, 2026-09-22): a UNION
+  // aditiva de clinicalCases dentro de mergeEntryNonDestructive (antes das
+  // três primeiras âncoras) soma 6 linhas nelas; dentro de openForm (depois
+  // de loadData, antes do importHandler) entram o campo/lista de casos
+  // vinculados e o draft de remoção (persistido só no Salvar, igual a
+  // altPlacements) — as funções novas do importador (busca automática/
+  // manual, confirmação, vínculo) ficam no fim do script e não deslocam
+  // nada.
+  assert.equal(recovery.line, 6263);
+  assert.equal(brokenArtifacts.line, 6253);
+  assert.equal(loadData.line, 8805);
+  assert.equal(importHandler.line, 12019);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

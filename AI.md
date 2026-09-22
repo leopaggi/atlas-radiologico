@@ -3051,3 +3051,73 @@ mesmo `addLocalFile`, pending até Salvar). Lightbox com zoom 1–20x (roda
 com âncora, botões, pan com clamp, reset, ESC), estado por abertura;
 assinatura/classes intactas, sem CSS novo. Testes:
 `tests/image-handling.test.js` (18 PASS); âncora `importHandler` em 11982.
+
+## Atualização 22/09/2026 — importador: vincular caso a lesão existente (clinicalCases)
+
+Evolução do importador Radiopaedia → Atlas (que já era metadata-only e
+100% draft até o Salvar/Criar, seção "Atualização 2026-09-21" acima). Além
+de "criar nova lesão" (fluxo intacto, sem nenhuma mudança de comportamento
+quando o usuário não interage com a aba nova), agora é possível **vincular
+o caso a uma lesão JÁ EXISTENTE** como caso clínico exemplo.
+
+- **Modal com duas abas** (mesma janela, sem reabrir): `🔗 Vincular a lesão
+  existente` (padrão continua sendo `➕ Criar nova lesão`, igual a antes).
+- **Busca automática** (`findExternalImportCandidatesForLink`): reusa
+  100% a proteção anti-falso-positivo já existente
+  (`findExternalImportCandidates`/`externalMatchBand`, bandas sem %, trava
+  de zero token relevante em comum) — só chama duas vezes (título original
+  + nome sugerido em português) e funde o resultado, melhor banda por
+  lesão vence, teto de 5.
+- **Busca manual** (`searchExistingLesionsForLink`): nome parcial/
+  normalizado + `enTerm` (sinônimo em inglês) + `tags` — os ÚNICOS campos
+  de "sinônimo/alias" que já existem no catálogo; não foi criado nenhum
+  campo `aliases` novo. Consulta curta (<2 chars úteis) não busca.
+- **Confirmação explícita** (`openClinicalCaseLinkConfirm`): "Vincular
+  este caso a: [nome] [seção › sítio]" + botão "Adicionar como caso
+  clínico exemplo" — só essa ação persiste de verdade
+  (`linkClinicalCaseToLesion`, via `saveData()`, igual ao "adicionar
+  imagem" do Quiz); todas as outras funções novas desta extensão são puras/
+  somente-leitura (coberto por teste estático).
+- **Campo novo, opcional:** `clinicalCases[]` na lesão — cada item só com
+  os campos que a fonte realmente tinha (`source`, `title`, `sourceUrl`,
+  `patientAge`, `patientSex`, `modality`, `presentation`, `addedAt`; nunca
+  inventa ausente). `addClinicalCaseToLesion()` é pura e **nunca** toca em
+  `name`/`notes`/`tags`/`s`/`site`/`images`/`classification`/
+  `altPlacements`/ownership/SRS — só acrescenta a `clinicalCases` e, se
+  ainda não existir, a `sourceUrl` aos `links`.
+- **Duplicidade:** mesma `sourceUrl` na MESMA lesão nunca duplica
+  (`duplicate_same_lesion`). Se a URL já está vinculada a OUTRA lesão,
+  `linkClinicalCaseToLesion` recusa por padrão (`linked_elsewhere` +
+  `otherEntry`) — só vincula também ali com `forceElsewhere:true`, decisão
+  explícita do usuário depois de avisado (nunca duplicação silenciosa).
+- **Visualização:** `clinicalCasesSectionHtml()` — seção recolhível
+  "Casos clínicos exemplo (N)" no detalhe da lesão (`openDetail`), só
+  quando há pelo menos um caso; título/fonte/idade-sexo/modalidade/
+  apresentação/"Abrir caso", tudo escapado (`esc()`).
+- **Editor:** só visualizar/remover (nunca adicionar aqui — vincular é
+  exclusivo do importador). `clinicalCasesDraft` segue o mesmo padrão de
+  `altPlacements`/`links` — draft em memória, persiste só no Salvar
+  (`if(clinicalCasesDraft.length) existing.clinicalCases = ...; else
+  delete existing.clinicalCases;`); remover não mexe no Cloudinary nem
+  apaga a lesão.
+- **Sync/backup:** `unionClinicalCases()` (mesmo padrão de
+  `unionEntryImages`, dedup por `sourceUrl` normalizada) foi integrada em
+  `mergeEntryNonDestructive()` — nunca perde um caso vinculado só de um
+  lado ao sincronizar entre dispositivos, nunca duplica. Persiste em
+  IndexedDB/Firestore/backup pelo mesmo caminho de sempre (é só mais um
+  campo do objeto da lesão, sem allowlist que precisasse ser ajustada em
+  `writeShardedState`/`hasValidEntries`). Não afeta `assignedAt`.
+- Todas as funções/HTML novos ficam no fim do script (depois do
+  `importHandler`), preservando as âncoras de `critical-flows.test.js`
+  (só a UNION de `clinicalCases` dentro de `mergeEntryNonDestructive`, e o
+  campo/lista/draft de remoção dentro de `openForm`, deslocam as âncoras —
+  ver o comentário no próprio teste).
+
+Testes: `tests/clinical-cases.test.js` (novo, 34 PASS: busca automática,
+busca manual, vincular existente, criar nova/regressão, duplicidade,
+persistência JSON/Firestore, sync/backup (union aditiva), visualização,
+remoção). Reforço em `tests/external-import.test.js` (67 PASS, sem
+regressão), `tests/critical-flows.test.js` (21 PASS, âncoras atualizadas)
+e `tests/snapshots-ownership.test.js` (47 PASS, +1 teste estático de
+integração do merge). Suíte completa: 830 PASS, 5 TODO + 1 FAIL histórico
+em `duplicate-detection.test.js` (fora de escopo).

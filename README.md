@@ -1104,3 +1104,43 @@ Clique numa área vazia da seção de imagens e Ctrl+V cola via pipeline
 normal (campos de texto nunca interceptados). Lightbox com zoom até 2000%
 (roda, botões, pan, reset, ESC), sem mudar persistência ou estrutura.
 Testes: `tests/image-handling.test.js` (18 PASS).
+
+### Importador externo — vincular caso a lesão existente (22/09/2026)
+
+O importador Radiopaedia → Atlas ganhou uma segunda opção, além de "criar
+nova lesão" (que continua igual): **"🔗 Vincular a lesão existente"**. O
+modal passou a ter duas abas na mesma janela (sem fechar/reabrir nada):
+
+- **Candidatos automáticos** — reaproveita a mesma pré-checagem conservadora
+  já existente (URL exata, título exato, faixas de similaridade, sem % e sem
+  falso positivo), agora comparando tanto o título original quanto o nome
+  sugerido em português.
+- **Busca manual** — campo "Pesquisar lesão existente no Atlas…" por nome
+  parcial/normalizado, termo em inglês (`enTerm`) e tags — os únicos campos
+  de "sinônimo" que já existiam no catálogo (nada novo foi inventado).
+
+Ao escolher uma lesão aparece a confirmação "Vincular este caso a: [nome]
+[seção › sítio]" com o botão **"Adicionar como caso clínico exemplo"**. Só
+então o caso é gravado (é a única ação desta extensão que persiste de
+verdade — igual a "adicionar imagem" no Quiz): entra no novo campo opcional
+`clinicalCases[]` da lesão (`source`, `title`, `sourceUrl`, `patientAge`,
+`patientSex`, `modality`, `presentation`, `addedAt` — só os campos que a
+fonte realmente tinha) e a `sourceUrl` é adicionada aos links se ainda não
+existir. **Nome, descrição, tags, seção, sítio, imagens, classificação,
+ownership e SRS da lesão nunca são tocados.** A mesma URL não duplica na
+mesma lesão; se já estiver vinculada a OUTRA lesão, o Atlas avisa e só
+vincula também ali com confirmação explícita extra (nunca em silêncio).
+
+Na lesão, quando há pelo menos um caso vinculado, aparece a seção
+recolhível "Casos clínicos exemplo (N)" (título, fonte, idade/sexo,
+modalidade, apresentação e "Abrir caso"). No editor, é possível ver e
+**remover** um vínculo (persiste só no Salvar, igual a `altPlacements`) —
+isso nunca apaga a lesão nem mexe no Cloudinary. `clinicalCases` viaja pelo
+mesmo caminho de sempre (IndexedDB, Firestore, backup/export/import) e, ao
+sincronizar entre dispositivos, é unido aditivamente (nunca perde um caso
+vinculado só de um lado, nunca duplica); não afeta `assignedAt`.
+
+Testes: `tests/clinical-cases.test.js` (34 PASS, novo) e reforço em
+`tests/external-import.test.js` (67 PASS), `tests/critical-flows.test.js`
+(21 PASS, âncoras atualizadas) e `tests/snapshots-ownership.test.js`
+(47 PASS).

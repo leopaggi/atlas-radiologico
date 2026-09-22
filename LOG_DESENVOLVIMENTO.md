@@ -4086,3 +4086,88 @@ Tags principais + avançadas no topo; restante do formulário abaixo.
 ### Commit após aprovação
 
 Ainda não criado (tarefa pediu sem commit/push).
+
+**Número da alteração:** 065
+**Data:** 22/09/2026
+
+### Objetivo
+
+Evoluir o importador de casos do Radiopaedia: hoje, todo caso importado
+virava sempre uma lesão nova. Agora também é possível vincular o caso a
+uma lesão que JÁ existe no Atlas, como "caso clínico exemplo" — sem
+sobrescrever nada do que já estava cadastrado nessa lesão.
+
+### Estado antes
+
+Ao clicar em "Enviar ao Atlas" no Radiopaedia, o modal só oferecia
+"Criar nova lesão" (ou abrir uma lesão parecida, sem anexar nada a ela).
+
+### Arquivos modificados
+
+- `index.html` (nova opção "Vincular a lesão existente", campo opcional
+  `clinicalCases` na lesão, seção "Casos clínicos exemplo" no detalhe,
+  visualizar/remover vínculo no editor, sincronização entre dispositivos)
+- `tests/clinical-cases.test.js` (novo)
+- `tests/external-import.test.js` (ajuste de suporte às novas funções)
+- `tests/critical-flows.test.js` (âncoras de linha atualizadas)
+- `tests/snapshots-ownership.test.js` (+1 teste)
+- `tests/device-bootstrap.test.js` (ajuste de suporte, sem mudar cenários)
+- `AI.md`, `README.md`, este diário
+
+### O que foi alterado
+
+- Ao receber um caso do Radiopaedia, o modal agora tem duas opções: "🔗
+  Vincular a lesão existente" e "➕ Criar nova lesão" (que continua
+  funcionando exatamente como antes, sem nenhuma mudança).
+- Na aba de vincular: uma busca automática (reaproveitando a mesma
+  proteção contra falso positivo que já existia) e uma busca manual
+  ("Pesquisar lesão existente no Atlas…") por nome, sinônimo em inglês ou
+  tag.
+- Ao escolher uma lesão, aparece a confirmação "Vincular este caso a:
+  [nome] [seção › sítio]" com o botão "Adicionar como caso clínico
+  exemplo". Só depois desse clique o vínculo é realmente salvo.
+- O vínculo entra num campo novo e opcional da lesão, `clinicalCases`,
+  guardando só os dados que o Radiopaedia realmente forneceu (título,
+  link, idade/sexo, modalidade, apresentação, data). Nome, descrição,
+  tags, seção, sítio, imagens, classificação e o "dono" das imagens da
+  lesão NUNCA são alterados por esse caminho.
+- O mesmo caso não duplica se vinculado de novo à mesma lesão. Se o
+  mesmo caso já estiver vinculado a OUTRA lesão, o Atlas avisa e só
+  permite vincular também ali com uma confirmação extra explícita —
+  nunca em silêncio.
+- Na tela de detalhe da lesão, quando existem casos vinculados, aparece
+  uma seção recolhível "Casos clínicos exemplo (N)" com um resumo de cada
+  caso e um link "Abrir caso".
+- No formulário de editar lesão, dá para ver e remover um vínculo (isso
+  não apaga a lesão nem mexe nas imagens do Cloudinary).
+- Esses casos vinculados são salvos e sincronizados do mesmo jeito que o
+  resto da lesão (computador local, nuvem, backup) e, ao sincronizar dois
+  dispositivos, os vínculos de ambos são somados (nunca um substitui o
+  outro nem se perde).
+
+### Testes realizados
+
+- `node tests/clinical-cases.test.js`: 34 PASS, 0 FAIL (novo arquivo);
+- `node tests/external-import.test.js`: 67 PASS, 0 FAIL (sem regressão);
+- `node tests/critical-flows.test.js`: 21 PASS, 0 FAIL (âncoras
+  atualizadas: `recovery` 6263, `brokenArtifacts` 6253, `loadData` 8805,
+  `importHandler` 12019);
+- `node tests/snapshots-ownership.test.js`: 47 PASS, 0 FAIL;
+- `node tests/device-bootstrap.test.js`: 32 PASS, 0 FAIL (precisou de um
+  pequeno ajuste no próprio teste para reconhecer a função nova de união
+  de casos clínicos — nenhum cenário existente foi alterado);
+- Suíte completa do projeto: 830 PASS, 5 TODO (conhecidos, não
+  relacionados) e 1 FAIL histórico em `duplicate-detection.test.js` (as 28
+  entradas malformadas de `DUPLICATE_PAIRS_V171`, já documentado e fora de
+  escopo desta tarefa);
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+O importador ganhou o caminho de vincular a uma lesão já existente, sem
+tocar no caminho de criar lesão nova (que continua idêntico) nem em
+nenhum dado clínico já cadastrado. Todos os testes pedidos passaram.
+
+### Commit após aprovação
+
+Ainda não criado (tarefa pediu sem commit/push).

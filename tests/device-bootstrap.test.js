@@ -71,6 +71,9 @@ const identityKeysFn = extractFunction(html, 'imageIdentityKeys');
 const stableKeyFn = extractFunction(html, 'stableImageKeyV208');
 const isValidAssignedAtFn = extractFunction(html, 'isValidAssignedAt');
 const adoptOldestFn = extractFunction(html, 'adoptOldestAssignedAt');
+const unionClinicalCasesFn = extractFunction(html, 'unionClinicalCases');
+const clinicalCaseIdentityKeyFn = extractFunction(html, 'clinicalCaseIdentityKey');
+const normalizeExternalTitleFn = extractFunction(html, 'normalizeExternalTitle');
 
 // ===========================================================================
 // 1) DETECÇÃO — checkCloudForBootstrapV1 (server-only, nunca assume vazio)
@@ -481,6 +484,7 @@ function makeMergeContext() {
   vm.runInContext(
     stableKeyFn.source + '\n' + identityKeysFn.source + '\n' + isValidAssignedAtFn.source + '\n' +
     adoptOldestFn.source + '\n' + unionFn.source + '\n' + dedupeFn.source + '\n' +
+    normalizeExternalTitleFn.source + '\n' + clinicalCaseIdentityKeyFn.source + '\n' + unionClinicalCasesFn.source + '\n' +
     'let PULL_IMAGE_OWNERSHIP_CONFLICTS=[];\n' +
     mergeEntryNonDestructiveFn.source,
     ctx, { filename: 'merge-entry.js' }

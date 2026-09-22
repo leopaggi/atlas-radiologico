@@ -12,10 +12,7 @@
 (function () {
   'use strict';
 
-  // ---------------------------------------------------------------------------
-  // CONFIGURAÇÃO — URL alvo do Atlas (troque para desenvolvimento local):
-  //   Produção:  https://leopaggi.github.io/atlas-radiologico/
-  //   Local:     http://localhost:3000/
+  // URL alvo do Atlas: sempre o site publicado.
   // ---------------------------------------------------------------------------
   var ATLAS_URL = 'https://leopaggi.github.io/atlas-radiologico/';
 

@@ -107,15 +107,31 @@ function loadPure() {
     extractFunction(html, 'applySuggestionEdit'),
     extractFunction(html, 'externalMatchesHtml'),
     extractFunction(html, 'externalSuggestionHtml'),
+    extractFunction(html, 'externalModeTabsHtml'),
+    extractFunction(html, 'findExternalImportCandidatesForLink'),
+    extractFunction(html, 'externalLinkCandidateRowHtml'),
+    extractFunction(html, 'externalLinkCandidatesHtml'),
+    extractFunction(html, 'externalManualResultsHtml'),
+    extractFunction(html, 'searchExistingLesionsForLink'),
     extractFunction(html, 'externalImportModalHtml'),
     extractFunction(html, 'exactLesionIdentityKey'),
     extractFunction(html, 'findExactLesionMatch'),
-    extractFunction(html, 'confirmDuplicateLesion')
+    extractFunction(html, 'confirmDuplicateLesion'),
+    extractFunction(html, 'buildClinicalCaseFromDraft'),
+    extractFunction(html, 'lesionHasClinicalCaseUrl'),
+    extractFunction(html, 'findClinicalCaseElsewhere'),
+    extractFunction(html, 'addClinicalCaseToLesion'),
+    extractFunction(html, 'removeClinicalCaseFromLesion'),
+    extractFunction(html, 'clinicalCaseIdentityKey'),
+    extractFunction(html, 'unionClinicalCases'),
+    extractFunction(html, 'clinicalCaseRowHtml'),
+    extractFunction(html, 'clinicalCasesSectionHtml'),
+    extractFunction(html, 'externalLinkConfirmModalHtml')
   ].join('\n');
   const ctx = vm.createContext({
     atob, TextDecoder, URL, console: { warn: () => {}, log: () => {}, error: () => {} }
   });
-  vm.runInContext(src + '\nthis.__api = { parseExternalImportHash, validateExternalImportPayload, normalizeExternalTitle, diceTokenSimilarity, tokenizeExternalTitle, externalMatchBand, findExternalImportCandidates, externalPendingBlockHtml, externalMatchesHtml, externalSuggestionHtml, externalImportModalHtml, suggestPortugueseLesionName, suggestExternalTags, suggestExternalDescription, buildExternalSuggestion, applySuggestionEdit, exactLesionIdentityKey, findExactLesionMatch, EXTERNAL_IMPORT_TRANSLATIONS, EXTERNAL_IMPORT_MODALITY_TAGS };', ctx);
+  vm.runInContext(src + '\nthis.__api = { parseExternalImportHash, validateExternalImportPayload, normalizeExternalTitle, diceTokenSimilarity, tokenizeExternalTitle, externalMatchBand, findExternalImportCandidates, externalPendingBlockHtml, externalMatchesHtml, externalSuggestionHtml, externalModeTabsHtml, findExternalImportCandidatesForLink, externalLinkCandidatesHtml, externalManualResultsHtml, searchExistingLesionsForLink, externalImportModalHtml, suggestPortugueseLesionName, suggestExternalTags, suggestExternalDescription, buildExternalSuggestion, applySuggestionEdit, exactLesionIdentityKey, findExactLesionMatch, EXTERNAL_IMPORT_TRANSLATIONS, EXTERNAL_IMPORT_MODALITY_TAGS, buildClinicalCaseFromDraft, lesionHasClinicalCaseUrl, findClinicalCaseElsewhere, addClinicalCaseToLesion, removeClinicalCaseFromLesion, clinicalCaseIdentityKey, unionClinicalCases, clinicalCaseRowHtml, clinicalCasesSectionHtml, externalLinkConfirmModalHtml };', ctx);
   return ctx.__api;
 }
 

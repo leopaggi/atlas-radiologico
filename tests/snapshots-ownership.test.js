@@ -559,6 +559,7 @@ const IDENTITY_KEYS_FN = extractFunction(html, 'imageIdentityKeys');
 const UNION_FN = extractFunction(html, 'unionEntryImages');
 const MERGE_PUSH_FN = extractFunction(html, 'mergeEntryForImagePush');
 const MERGE_PUSH_CLOUD_FN = extractFunction(html, 'mergeThisDeviceImagesToCloud');
+const MERGE_NONDESTRUCTIVE_FN = extractFunction(html, 'mergeEntryNonDestructive');
 
 function buildUnionCtx(){
   const ctx = { console, JSON, Object, Array, String, Number, Map, Set };
@@ -622,6 +623,11 @@ test('MERGE PUSH (estático): servidor-only, union aditiva, preserva SRS/REVIEW/
   assert.doesNotMatch(src, /uploadToCloudinary|uploadPendingImage/, 'não reenvia imagens ao Cloudinary');
   assert.match(src, /server\.totalImages >= localCounters\.totalImages/, 'sucesso só se as imagens estão no servidor');
   assert.match(src, /server\.srs >= beforeServer\.srs/, 'sucesso só se o SRS não regrediu');
+});
+
+test('MERGE NAO-DESTRUTIVO (estático): clinicalCases usa UNION aditiva (nunca overwrite/perda ao sincronizar entre dispositivos)', () => {
+  const src = MERGE_NONDESTRUCTIVE_FN.source;
+  assert.match(src, /unionClinicalCases\(local\.clinicalCases, remote\.clinicalCases\)/, 'casos clínicos são unidos, não sobrescritos por spread');
 });
 
 test('MERGE PUSH (estático): mergeEntryForImagePush usa o remoto como base e só soma imagens locais', () => {
