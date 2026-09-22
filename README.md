@@ -1179,3 +1179,17 @@ descrição, links, casos clínicos, classificação e demais campos — só mud
 Testes: `tests/site-taxonomy.test.js` (25 PASS, novo), `tests/critical-flows.test.js`
 (21 PASS, âncoras atualizadas), `tests/form-layout-desktop.test.js` (12 PASS)
 e `tests/form-collapse.test.js` (11 PASS), sem regressão.
+
+### Correção 22/09/2026 — `migrateLesionSite()` sempre abortava no snapshot
+
+O motivo de risco usado pela nova ferramenta de migração de sítio
+(`'antes de migrar sítio de lesão'`) não estava cadastrado na lista de
+motivos aprovados que `createSafetySnapshot()` reconhece — por isso o
+snapshot obrigatório sempre falhava e a migração sempre abortava, mesmo
+sem nenhum problema real de armazenamento. Corrigido adicionando o motivo
+à mesma lista aprovada (sem contornar a proteção). O erro devolvido agora
+também explica a causa real em vez de uma mensagem genérica.
+
+Testes: `tests/site-taxonomy.test.js` (31 PASS, +6 usando o mecanismo de
+snapshot real, não um mock), `tests/critical-flows.test.js` (21 PASS,
+âncoras atualizadas) e `tests/snapshots-ownership.test.js` (47 PASS).

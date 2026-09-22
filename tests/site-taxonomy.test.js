@@ -51,8 +51,28 @@ function extractFunction(source, name) {
   };
 }
 
+function extractConst(source, name) {
+  const declaration = new RegExp(`\\b(?:const|let)\\s+${name}\\s*=`).exec(source);
+  assert.ok(declaration, `Constante ${name} nao encontrada`);
+  const semi = source.indexOf(';', declaration.index);
+  return source.slice(declaration.index, semi + 1);
+}
+
 function stripJsComments(src) {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^\S\n])\/\/[^\n]*/g, '$1');
+}
+
+// Extrai um trecho por marcadores de texto (não por chave de função) — usado
+// só para o bloco REAL de snapshots de segurança (mesmo padrão de
+// tests/snapshots-ownership.test.js), para testar migrateLesionSite() com o
+// createSafetySnapshot() de verdade, não um mock que esconderia o bug real
+// (motivo fora da allowlist SAFETY_SNAPSHOT_RISK_REASONS).
+function extractMarkerBlock(source, startMarker, endMarker) {
+  const start = source.indexOf(startMarker);
+  assert.notEqual(start, -1, 'marcador inicial não encontrado: ' + startMarker);
+  const end = source.indexOf(endMarker, start);
+  assert.notEqual(end, -1, 'marcador final não encontrado: ' + endMarker);
+  return source.slice(start, end);
 }
 
 // Compara por JSON, não por deepEqual: valores devolvidos pelo `vm` isolado
@@ -89,18 +109,25 @@ function loadStructureWith(data) {
   return ctx.__structure;
 }
 
+// Mock de createSafetySnapshot/isRiskSnapshotReason — usado nos testes de
+// LÓGICA de migração (ordem, campos preservados, etc). Os testes que
+// exercitam o mecanismo de snapshot DE VERDADE (allowlist real) ficam na
+// seção "INTEGRAÇÃO REAL" mais abaixo — foi lá que o bug real (motivo fora
+// da allowlist) apareceu; um mock sempre-sucesso como este não o pegaria.
 function loadRuntime(dataFixture, opts) {
   const o = opts || {};
   const src = [
     extractFunction(html, 'normalizeSiteName').source,
     extractFunction(html, 'knownSitesForSection').source,
     extractFunction(html, 'validateSiteAgainstSection').source,
+    extractConst(html, 'SITE_MIGRATION_SNAPSHOT_REASON'),
     extractFunction(html, 'migrateLesionSite').source
   ].join('\n');
   let saveCalls = 0;
   let snapCalls = 0;
   const ctx = vm.createContext({
     DATA: JSON.parse(JSON.stringify(dataFixture)),
+    isRiskSnapshotReason: () => true,
     createSafetySnapshot: (reason) => { snapCalls += 1; if (o.snapFail) return null; return { id: 'snap-site-1' }; },
     saveData: async () => { saveCalls += 1; if (o.saveFail) throw new Error('save falhou (mock)'); },
     console: { warn: () => {}, log: () => {}, error: () => {} }
@@ -370,4 +397,113 @@ test('REGRESSAO: a seção (f-section) continua sem essa restrição — só o s
   assert.doesNotMatch(src, /validateSiteAgainstSection\(.*sec.*\).*section/i);
   // f-section não tem toggle/dropdown novo — só o datalist existente.
   assert.doesNotMatch(src, /f-section-toggle/);
+});
+
+// ===========================================================================
+// INTEGRAÇÃO REAL — migrateLesionSite() + createSafetySnapshot() de verdade
+// (bug real corrigido em 22/09/2026: o motivo usado pela migração não
+// estava em SAFETY_SNAPSHOT_RISK_REASONS, então createSafetySnapshot()
+// sempre devolvia null e a migração sempre abortava — mesmo com o storage
+// saudável. Os testes anteriores usavam um MOCK de createSafetySnapshot
+// que sempre "funcionava", por isso não pegaram esse bug; estes aqui usam
+// o mecanismo REAL, extraído do próprio index.html.)
+// ===========================================================================
+
+const SNAPSHOT_REAL_SOURCE = extractMarkerBlock(html, "const SAFETY_SNAPSHOT_PREFIX = 'atlas:safetySnapshot:';", 'function isSeedLikeId(id){');
+const MIGRATION_SOURCE = [
+  extractFunction(html, 'normalizeSiteName').source,
+  extractFunction(html, 'knownSitesForSection').source,
+  extractFunction(html, 'validateSiteAgainstSection').source,
+  extractConst(html, 'SITE_MIGRATION_SNAPSHOT_REASON'),
+  extractFunction(html, 'migrateLesionSite').source
+].join('\n');
+
+function makeRealStorage(backing) {
+  return {
+    async get(key) {
+      if (Object.prototype.hasOwnProperty.call(backing, key)) return { value: backing[key] };
+      throw new Error('not found: ' + key);
+    },
+    async set(key, value) { backing[key] = value; },
+    async delete(key) { delete backing[key]; },
+    async list(prefix) { return { keys: Object.keys(backing).filter(k => !prefix || k.indexOf(prefix) === 0) }; }
+  };
+}
+
+// Contexto com o createSafetySnapshot() REAL (mesma allowlist do app) +
+// migrateLesionSite() REAL, ligados como o app de verdade os usa.
+function loadRealMigrationRuntime(dataFixture) {
+  const backing = {};
+  let saveCalls = 0;
+  const ctx = {
+    console, Date, Math, JSON, Object, Array, String, Number,
+    DATA: JSON.parse(JSON.stringify(dataFixture)),
+    REVIEW: {}, SRS: {}, SESSIONLOG: {}, LESION_REVISIONS: {},
+    sectionOrder: [], siteOrder: {},
+    storage: makeRealStorage(backing),
+    __backing: backing,
+    saveData: async () => { saveCalls += 1; }
+  };
+  vm.createContext(ctx);
+  vm.runInContext(SNAPSHOT_REAL_SOURCE + '\n' + MIGRATION_SOURCE + '\nthis.__rt = { migrateLesionSite, isRiskSnapshotReason, SAFETY_SNAPSHOT_RISK_REASONS, SITE_MIGRATION_SNAPSHOT_REASON };', ctx, { filename: 'real-migration.js' });
+  return { api: ctx.__rt, ctx, get saveCalls() { return saveCalls; } };
+}
+
+test('INTEGRACAO REAL: "antes de migrar sítio de lesão" está na allowlist SAFETY_SNAPSHOT_RISK_REASONS (regressão do bug)', () => {
+  const rt = loadRealMigrationRuntime([lesion()]);
+  assert.ok(rt.api.SAFETY_SNAPSHOT_RISK_REASONS.includes(rt.api.SITE_MIGRATION_SNAPSHOT_REASON));
+  assert.equal(rt.api.isRiskSnapshotReason(rt.api.SITE_MIGRATION_SNAPSHOT_REASON), true);
+});
+
+test('INTEGRACAO REAL: createSafetySnapshot() não é async — migrateLesionSite() corretamente NÃO usa await nela', () => {
+  const src = stripJsComments(extractFunction(html, 'migrateLesionSite').source);
+  assert.doesNotMatch(src, /await\s+createSafetySnapshot/, 'createSafetySnapshot é síncrona; await nela seria um bug (Promise nunca é o que ela devolve)');
+  assert.match(src, /snap\s*=\s*createSafetySnapshot\(/);
+});
+
+test('INTEGRACAO REAL (snapshot sucesso): migração acontece de ponta a ponta com o mecanismo de verdade', async () => {
+  const rt = loadRealMigrationRuntime([lesion(), { id: 'seed_2', s: 'Abdômen Superior', site: 'Apêndice', name: 'Z' }]);
+  const r = await rt.api.migrateLesionSite('seed_1', 'Apêndice', {});
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(r.fromSite, 'Fossa ilíaca direita');
+  assert.equal(r.toSite, 'Apêndice');
+  assert.ok(r.snapshotId, 'snapshot real foi criado e devolveu um id');
+  assert.equal(rt.ctx.DATA.find(e => e.id === 'seed_1').site, 'Apêndice');
+  assert.equal(rt.saveCalls, 1);
+  // o snapshot de verdade foi gravado no storage (não só um objeto solto em memória)
+  assert.ok(Object.keys(rt.ctx.__backing).some(k => k.indexOf('atlas:safetySnapshot:') === 0));
+});
+
+test('INTEGRACAO REAL (retorno em caso de erro): destino inválido devolve fromSite/toSite vazios e NÃO cria snapshot', async () => {
+  const rt = loadRealMigrationRuntime([lesion()]);
+  const r = await rt.api.migrateLesionSite('seed_1', 'Sítio Inexistente', {});
+  assert.equal(r.ok, false);
+  assert.equal(r.fromSite, '');
+  assert.equal(r.toSite, '');
+  assert.equal(Object.keys(rt.ctx.__backing).length, 0, 'nada gravado — abortou antes do snapshot');
+  assert.equal(rt.saveCalls, 0);
+});
+
+test('INTEGRACAO REAL (diagnóstico): destino válido devolve fromSite/toSite preenchidos mesmo que o snapshot venha a falhar depois', async () => {
+  // Simula "storage saudável, mas motivo não aprovado" reescrevendo a
+  // allowlist DEPOIS de montar o contexto — prova que o diagnóstico novo
+  // (snapshotError) não depende de um storage quebrado pra aparecer.
+  const rt = loadRealMigrationRuntime([lesion(), { id: 'seed_2', s: 'Abdômen Superior', site: 'Apêndice', name: 'Z' }]);
+  vm.runInContext('SAFETY_SNAPSHOT_RISK_REASONS.length = 0;', rt.ctx); // esvazia a allowlist de propósito
+  const r = await rt.api.migrateLesionSite('seed_1', 'Apêndice', {});
+  assert.equal(r.ok, false);
+  assert.equal(r.fromSite, 'Fossa ilíaca direita', 'fromSite/toSite aparecem MESMO no erro de snapshot');
+  assert.equal(r.toSite, 'Apêndice');
+  assert.match(r.snapshotError, /não está em SAFETY_SNAPSHOT_RISK_REASONS/);
+  assert.equal(rt.ctx.DATA.find(e => e.id === 'seed_1').site, 'Fossa ilíaca direita', 'lesão byte-equivalente — nenhuma mutação');
+  assert.equal(rt.saveCalls, 0, 'saveData só ocorre depois do snapshot confirmado');
+});
+
+test('INTEGRACAO REAL (byte-equivalência): quando o snapshot falha, a lesão inteira permanece idêntica (JSON antes == depois)', async () => {
+  const fixture = [lesion(), { id: 'seed_2', s: 'Abdômen Superior', site: 'Apêndice', name: 'Z' }];
+  const rt = loadRealMigrationRuntime(fixture);
+  vm.runInContext('SAFETY_SNAPSHOT_RISK_REASONS.length = 0;', rt.ctx);
+  const beforeJson = JSON.stringify(rt.ctx.DATA);
+  await rt.api.migrateLesionSite('seed_1', 'Apêndice', {});
+  assert.equal(JSON.stringify(rt.ctx.DATA), beforeJson);
 });

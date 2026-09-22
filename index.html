@@ -6133,7 +6133,8 @@ const SAFETY_SNAPSHOT_RISK_REASONS = [
   'antes de aplicar reconciliação V2',
   'antes de restaurar snapshot de segurança',
   'antes de operação em massa de ownership',
-  'antes de corrigir classificações inválidas'
+  'antes de corrigir classificações inválidas',
+  'antes de migrar sítio de lesão'
 ];
 function isRiskSnapshotReason(reason){ return SAFETY_SNAPSHOT_RISK_REASONS.includes(reason); }
 
@@ -15290,27 +15291,63 @@ function auditSiteUsage(section, site, catalog){
   const otherSitesInSection = knownSitesForSection(section, cat).filter(s => normalizeSiteName(s).toLowerCase() !== targetSite.toLowerCase());
   return { section, site, lesions, altPlacementHits, otherSitesInSection };
 }
+// Motivo de risco desta ferramenta — precisa estar em
+// SAFETY_SNAPSHOT_RISK_REASONS (definida no bloco de snapshots de
+// segurança, bem acima) ou createSafetySnapshot() SEMPRE devolve null e
+// aborta a migração, mesmo com o storage saudável. Bug corrigido em
+// 22/09/2026: o motivo abaixo não estava na allowlist.
+const SITE_MIGRATION_SNAPSHOT_REASON = 'antes de migrar sítio de lesão';
 // Só muda `site` (grafia canônica de newSite, validada contra a seção de
 // destino ou aceita literal se opts.allowNewSite) e acrescenta o sítio
 // antigo às tags (se ainda não presente, comparação normalizada). Nunca
 // toca em name/notes/tags-restantes/images/links/clinicalCases/SRS/
 // ownership/assignedAt/classification/altPlacements/id/s.
+// Ordem de segurança (22/09/2026): A) localizar a lesão → B) confirmar o
+// site atual real → C) validar que o destino existe na seção (ou
+// allowNewSite) → D) montar fromSite/toSite JÁ no report, mesmo antes do
+// snapshot (aparecem também se o snapshot falhar depois) → E) snapshot
+// obrigatório → F) só com snapshot confirmado, mutar + tag + saveData() →
+// G) snapshot falhou = zero mutação.
 async function migrateLesionSite(lesionId, newSite, opts){
   const o = (opts && typeof opts === 'object') ? opts : {};
   const report = { ok: false, reason: '', lesionId, fromSite: '', toSite: '', tagAdded: false, snapshotId: null };
+  // A) localizar a lesão.
   const entry = (typeof DATA !== 'undefined' ? DATA : []).find(e => e && e.id === lesionId);
   if (!entry) { report.reason = 'lesão não encontrada'; return report; }
+  // B) confirmar o site atual real (não presumido).
   const fromSite = entry.site;
+  // C) validar que o destino existe na seção (ou é explicitamente novo).
   const check = validateSiteAgainstSection(entry.s, newSite, DATA, o.allowNewSite === true);
   if (!check.ok) { report.reason = 'destino inválido: ' + check.reason; return report; }
   if (normalizeSiteName(check.value).toLowerCase() === normalizeSiteName(fromSite).toLowerCase()) {
     report.reason = 'destino igual ao sítio atual — nada a migrar';
     return report;
   }
+  // D) fromSite/toSite já no report — visíveis mesmo se o snapshot falhar.
+  report.fromSite = fromSite;
+  report.toSite = check.value;
+  // E) snapshot obrigatório. createSafetySnapshot() é SÍNCRONA, nunca
+  // lança e só devolve algo diferente de null quando o motivo está na
+  // allowlist de risco E a captura/serialização deu certo — por isso o
+  // diagnóstico abaixo distingue as duas causas possíveis de null em vez
+  // de esconder tudo atrás de uma mensagem genérica.
+  if (!isRiskSnapshotReason(SITE_MIGRATION_SNAPSHOT_REASON)) {
+    report.reason = 'snapshot falhou — abortado sem tocar na lesão';
+    report.snapshotError = 'motivo "' + SITE_MIGRATION_SNAPSHOT_REASON + '" não está em SAFETY_SNAPSHOT_RISK_REASONS (bug de configuração — corrija a allowlist, nunca contorne a proteção)';
+    return report;
+  }
   let snap = null;
-  try { snap = createSafetySnapshot('antes de migrar sítio de lesão'); } catch (e) { snap = null; }
-  if (!snap) { report.reason = 'snapshot falhou — abortado sem tocar na lesão'; return report; }
+  let snapshotThrew = null;
+  try { snap = createSafetySnapshot(SITE_MIGRATION_SNAPSHOT_REASON); } catch (e) { snap = null; snapshotThrew = e; }
+  if (!snap) {
+    report.reason = 'snapshot falhou — abortado sem tocar na lesão';
+    report.snapshotError = snapshotThrew
+      ? ('createSafetySnapshot() lançou: ' + (snapshotThrew && snapshotThrew.message || snapshotThrew))
+      : 'createSafetySnapshot() devolveu null (motivo aprovado; falha real de captura/storage — ver console)';
+    return report;
+  }
   report.snapshotId = snap.id || null;
+  // F) só agora, com snapshot confirmado, a mutação real acontece.
   entry.site = check.value;
   const tags = Array.isArray(entry.tags) ? entry.tags : (entry.tags = []);
   const fromNorm = normalizeSiteName(fromSite).toLowerCase();
@@ -15321,8 +15358,6 @@ async function migrateLesionSite(lesionId, newSite, opts){
   entry._userUpdatedAt = Date.now();
   await saveData();
   report.ok = true;
-  report.fromSite = fromSite;
-  report.toSite = check.value;
   return report;
 }
 

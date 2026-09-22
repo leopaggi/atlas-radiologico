@@ -289,10 +289,15 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // clicar opção, aviso de sítio novo) + a validação no Salvar; as funções
   // puras (knownSitesForSection/validateSiteAgainstSection/etc.) e a
   // auditoria/migração manual (console) ficam no fim do script.
-  assert.equal(recovery.line, 6263);
-  assert.equal(brokenArtifacts.line, 6253);
-  assert.equal(loadData.line, 8805);
-  assert.equal(importHandler.line, 12102);
+  // +1 nas 4 âncoras (correção do bug do snapshot, 22/09/2026): o motivo
+  // 'antes de migrar sítio de lesão' foi adicionado a
+  // SAFETY_SNAPSHOT_RISK_REASONS (antes das quatro âncoras) — sem essa
+  // entrada, createSafetySnapshot() sempre devolvia null pra esse motivo e
+  // migrateLesionSite() sempre abortava, mesmo com o storage saudável.
+  assert.equal(recovery.line, 6264);
+  assert.equal(brokenArtifacts.line, 6254);
+  assert.equal(loadData.line, 8806);
+  assert.equal(importHandler.line, 12103);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

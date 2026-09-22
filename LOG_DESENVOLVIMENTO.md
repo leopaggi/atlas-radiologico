@@ -4259,5 +4259,72 @@ escolher o sítio de destino.
 
 ### Commit após aprovação
 
-Ainda não criado (tarefa pediu para não publicar a migração de dados
-ainda, e não incluiu pedido de commit/push para o dropdown/proteção).
+Commit `88d6047` ("Sitio/orgao: dropdown de sitios + protecao contra
+subsecao acidental"), publicado em `origin/main` mediante pedido explícito
+do usuário em tarefa seguinte. A migração real de dados continuou não
+executada.
+
+**Número da alteração:** 067
+**Data:** 22/09/2026
+
+### Objetivo
+
+Corrigir um bug real relatado pelo usuário: ao testar
+`migrateLesionSite('u_1790101615508_5dm18o', 'Intestino / cólon')` no site
+já publicado, o Atlas sempre devolvia `{ ok:false, reason:'snapshot
+falhou...' }` e a lesão não era alterada — mesmo com tudo funcionando
+normalmente.
+
+### Estado antes
+
+`migrateLesionSite()` pedia um "carimbo de segurança" antes de mexer na
+lesão (`createSafetySnapshot('antes de migrar sítio de lesão')`), mas essa
+frase nunca tinha sido cadastrada na lista de motivos que o Atlas realmente
+aceita para criar esse carimbo. Sem estar na lista, o pedido de carimbo
+sempre volta vazio — não porque algo quebrou, mas porque a frase certa
+nunca foi ensinada ao Atlas.
+
+### Arquivos modificados
+
+- `index.html` (frase adicionada à lista aprovada; diagnóstico de erro mais
+  claro; `fromSite`/`toSite` aparecem no retorno mesmo quando dá erro)
+- `tests/site-taxonomy.test.js` (+6 testes usando o mecanismo de carimbo de
+  segurança DE VERDADE, não uma simulação)
+- `tests/critical-flows.test.js` (âncora atualizada)
+- `AI.md`, `README.md`, este diário
+
+### O que foi alterado
+
+- A frase `'antes de migrar sítio de lesão'` foi adicionada à lista de
+  motivos aprovados (a mesma lista já usada por outras correções do Atlas,
+  como importar backup ou fundir duplicatas) — sem criar nenhum atalho que
+  pule a proteção.
+- Se algum dia essa frase sumir da lista de novo por engano, o Atlas agora
+  explica exatamente isso no erro, em vez de uma mensagem genérica.
+- A lesão de origem e o sítio de destino aparecem no retorno mesmo quando
+  a migração falha, pra facilitar entender o que deu errado.
+- Nada na proteção em si foi removido ou enfraquecida: o carimbo de
+  segurança continua obrigatório antes de qualquer alteração, e sem ele
+  nada é mudado na lesão.
+
+### Testes realizados
+
+- `node tests/site-taxonomy.test.js`: 31 PASS, 0 FAIL (6 novos, usando o
+  mecanismo real de carimbo de segurança);
+- `node tests/critical-flows.test.js`: 21 PASS, 0 FAIL (âncoras +1);
+- `node tests/snapshots-ownership.test.js`: 47 PASS, 0 FAIL;
+- Suíte completa do projeto: 874 PASS, 5 TODO (conhecidos) e 1 FAIL
+  histórico em `duplicate-detection.test.js` (fora de escopo);
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+O comando que o usuário tentou rodar (`migrateLesionSite(...)`) agora
+funciona de verdade. A migração real de "Fossa ilíaca direita" continua
+não executada — pedido explícito do usuário para rodar manualmente.
+
+### Commit após aprovação
+
+Ainda não criado no momento em que este registro foi escrito (a
+publicação, quando aprovada, é registrada com o hash real assim que o
+commit existir).

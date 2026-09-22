@@ -3198,3 +3198,42 @@ atualizada), `tests/form-layout-desktop.test.js` (12 PASS) e
 `tests/form-collapse.test.js` (11 PASS), sem regressão. Suíte completa:
 868 PASS, 5 TODO + 1 FAIL histórico em `duplicate-detection.test.js` (fora
 de escopo).
+
+### Correção 22/09/2026 — `migrateLesionSite()` sempre abortava no snapshot
+
+**Bug real, reproduzido no site publicado pelo usuário**
+(`await migrateLesionSite('u_...', 'Intestino / cólon')` devolvia
+`{ ok:false, reason:'snapshot falhou...' }` mesmo com storage saudável).
+**Causa:** `createSafetySnapshot(reason)` é SÍNCRONA e só cria/devolve algo
+quando `isRiskSnapshotReason(reason)` é `true` — ou seja, quando `reason`
+está literalmente em `SAFETY_SNAPSHOT_RISK_REASONS`; qualquer outro motivo
+devolve `null` sempre, mesmo sem nenhum problema de storage.
+`SITE_MIGRATION_SNAPSHOT_REASON = 'antes de migrar sítio de lesão'` nunca
+tinha sido adicionado a essa allowlist — `migrateLesionSite()` sempre
+abortava, 100% das vezes, por design (não por falha intermitente).
+
+**Correção:** o motivo foi adicionado a `SAFETY_SNAPSHOT_RISK_REASONS` (a
+mesma allowlist aprovada, sem bypass/skipSnapshot/force). `createSafetySnapshot`
+em si não foi alterada. `migrateLesionSite()` também ganhou diagnóstico
+real: antes de chamar `createSafetySnapshot`, confere
+`isRiskSnapshotReason()` e, se o motivo não estiver aprovado, devolve
+`snapshotError` explicando exatamente isso (bug de configuração, não
+"storage falhou"); se `createSafetySnapshot` lançar ou devolver `null` com
+motivo aprovado, `snapshotError` também diferencia os dois casos. E
+`report.fromSite`/`report.toSite` passaram a ser preenchidos ANTES da
+tentativa de snapshot (não só no sucesso final) — apareciam vazios mesmo
+quando o destino era válido, escondendo informação útil de diagnóstico.
+Ordem de segurança inalterada: localizar → validar origem/destino →
+snapshot obrigatório → só então mutar+tag+`saveData()`.
+
+Testes: `tests/site-taxonomy.test.js` (**31 PASS**, +6 novos — seção
+"INTEGRAÇÃO REAL" usa o `createSafetySnapshot`/`isRiskSnapshotReason`/
+`SAFETY_SNAPSHOT_RISK_REASONS` REAIS extraídos do `index.html`, não um mock
+sempre-sucesso, que foi exatamente por que os testes anteriores não
+pegaram esse bug). `tests/critical-flows.test.js` (**21 PASS**, âncoras
++1 — nova entrada na allowlist fica antes das 4 âncoras) e
+`tests/snapshots-ownership.test.js` (**47 PASS**, sem regressão). Suíte
+completa: 874 PASS, 5 TODO + 1 FAIL histórico em
+`duplicate-detection.test.js` (fora de escopo). **A migração real de
+"Fossa ilíaca direita" continua não executada** — fica para o usuário
+rodar manualmente depois desta correção estar publicada.
