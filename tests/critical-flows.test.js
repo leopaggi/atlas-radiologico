@@ -301,10 +301,27 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // validação (validateSiteAgainstSection, sem allowNew) no "+ Adicionar
   // localização"; nenhuma função nova no fim do script — tudo reaproveitado
   // do dropdown do sítio principal.
-  assert.equal(recovery.line, 6264);
-  assert.equal(brokenArtifacts.line, 6254);
-  assert.equal(loadData.line, 8806);
-  assert.equal(importHandler.line, 12163);
+  // +2 nas 4 âncoras / +44 a mais no importHandler (Histórico/auditoria de
+  // imagens, 22/09/2026): o botão+painel do expansor na sidebar (bem antes
+  // de recovery/brokenArtifacts) soma 2 linhas nas quatro; a fiação
+  // (initImagesHistoryPanel, depois de loadData, antes do importHandler)
+  // soma mais 44 só no importHandler. As funções puras
+  // (buildImagesHistory/render*Html) ficam no fim do script.
+  // +19 só no importHandler (correção do bug real de TDZ, mesmo dia):
+  // IMAGES_HISTORY_FILTERS/DEFAULT_FILTER/PAGE_SIZE precisam ser
+  // declaradas ANTES da IIFE initImagesHistoryPanel (que roda
+  // imediatamente, não só num clique) — foram movidas do fim do script pra
+  // logo antes da IIFE; sem isso o boot travava com "Cannot access ...
+  // before initialization" (TDZ de const/let, que não são hoisted com
+  // valor como function declarations são).
+  // +1 nas 4 âncoras (Histórico fora das Ferramentas avançadas): removida a
+  // cópia duplicada do painel de dentro de #advanced-tools (IDs duplicados);
+  // mantida a ocorrência da sidebar, acima de "configurar Cloudinary".
+  // Valores remedidos com o algoritmo do próprio teste (lineNumberAt).
+  assert.equal(recovery.line, 6267);
+  assert.equal(brokenArtifacts.line, 6257);
+  assert.equal(loadData.line, 8809);
+  assert.equal(importHandler.line, 12227);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

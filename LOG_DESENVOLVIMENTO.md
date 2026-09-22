@@ -4328,3 +4328,44 @@ não executada — pedido explícito do usuário para rodar manualmente.
 Ainda não criado no momento em que este registro foi escrito (a
 publicação, quando aprovada, é registrada com o hash real assim que o
 commit existir).
+
+**Número da alteração:** 064
+**Data:** 22/09/2026
+
+### Objetivo
+
+Mover o painel "Histórico de imagens" para fora de Ferramentas avançadas:
+sidebar, acima de "configurar Cloudinary". Só posição/layout.
+
+### Estado antes
+
+O painel existia em 2 lugares ao mesmo tempo (sidebar + dentro de
+#advanced-tools), com IDs duplicados (`btn-images-history`,
+`images-history-panel`).
+
+### Arquivos modificados
+
+- `index.html` (removida a cópia de dentro de #advanced-tools; rótulo
+  unificado em "▸ Histórico de imagens")
+- `tests/images-history.test.js` (testes de posição/unicidade)
+- `tests/critical-flows.test.js` (âncoras remedidas)
+
+### O que foi alterado
+
+- Nada na lógica: mesma fiação (`getElementById` agora sem ambiguidade),
+  mesmos filtros, agrupamento, links e lazy ao expandir.
+
+### Testes realizados
+
+- `node tests/images-history.test.js`: 31 PASS, 0 FAIL;
+- `critical-flows`: 21 PASS; `tools-layout`: 11 PASS;
+  `local-scope-prefs`: 14 PASS; `sidebar-image-stats`: 22 PASS;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Painel único na sidebar; Ferramentas avançadas independente.
+
+### Commit após aprovação
+
+Ainda não criado (tarefa pediu sem commit/push).

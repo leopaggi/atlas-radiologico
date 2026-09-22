@@ -1687,6 +1687,9 @@ body{
     </div>
     <div id="tree"></div>
     <div id="sidebar-foot">
+      <button type="button" class="foot-btn" id="btn-images-history" aria-expanded="false" aria-controls="images-history-panel" title="Mostra as imagens adicionadas ao acervo ao longo do tempo, agrupadas por dia e por lesão (usa assignedAt) — só leitura, não altera nada">▸ Histórico de imagens</button>
+      <div id="images-history-panel" hidden><div id="images-history-content"></div></div>
+      <div class="sidebar-separator"></div>
       <button class="foot-btn" id="btn-cloudinary">☁ configurar Cloudinary</button>
       <div class="sidebar-separator"></div>
       <div class="backup-actions">
@@ -12089,6 +12092,67 @@ document.getElementById('btn-sync-from-cloud').onclick = openUpdateFromCloudModa
     btn.textContent = label(open);
   };
 })();
+// Histórico/auditoria de imagens (22/09/2026): expansor recolhível dentro de
+// Ferramentas avançadas, só leitura (buildImagesHistory/render*Html são
+// puras, definidas mais abaixo). Calcula SÓ ao abrir ou ao trocar o filtro
+// (nunca em renderAll, sem polling/observer) — regra explícita de
+// performance. Fechar não limpa o conteúdo; reabrir recalcula do zero.
+// Correção 22/09/2026 (bug real de boot): estas 3 constantes precisam ser
+// declaradas ANTES da IIFE de fiação abaixo — a IIFE roda imediatamente
+// (síncrona) e usa IMAGES_HISTORY_DEFAULT_FILTER/IMAGES_HISTORY_PAGE_SIZE
+// já na inicialização (let activeFilter=...), não só dentro de um clique
+// futuro. const/let não são hoisted com valor (TDZ): declarar essas
+// constantes só no fim do script (onde as demais funções puras do recurso
+// ficam) fazia a IIFE explodir com "Cannot access ... before
+// initialization" antes mesmo da tela de login aparecer. Funções (como
+// buildImagesHistory, chamadas só de dentro de handlers de clique — nunca
+// na inicialização síncrona da IIFE) não têm esse problema, porque
+// function declarations SÃO hoisted com valor.
+const IMAGES_HISTORY_FILTERS = [
+  { key: 'today', label: 'Hoje', rangeDays: 1 },
+  { key: '7d', label: '7 dias', rangeDays: 7 },
+  { key: '30d', label: '30 dias', rangeDays: 30 },
+  { key: 'all', label: 'Tudo', rangeDays: null }
+];
+const IMAGES_HISTORY_DEFAULT_FILTER = '30d';
+const IMAGES_HISTORY_PAGE_SIZE = 15;
+(function initImagesHistoryPanel(){
+  const toggleBtn = document.getElementById('btn-images-history');
+  const panel = document.getElementById('images-history-panel');
+  const content = document.getElementById('images-history-content');
+  if(!toggleBtn || !panel || !content) return;
+  let activeFilter = IMAGES_HISTORY_DEFAULT_FILTER;
+  let visibleDays = IMAGES_HISTORY_PAGE_SIZE;
+  function currentRangeDays(){
+    const f = IMAGES_HISTORY_FILTERS.find(x=>x.key===activeFilter);
+    return f ? f.rangeDays : IMAGES_HISTORY_FILTERS.find(x=>x.key===IMAGES_HISTORY_DEFAULT_FILTER).rangeDays;
+  }
+  function renderPanel(){
+    const hist = buildImagesHistory(DATA, { rangeDays: currentRangeDays() });
+    const daysToShow = hist.days.slice(0, visibleDays);
+    const showMore = hist.days.length > visibleDays;
+    content.innerHTML = imagesHistorySummaryHtml(hist)
+      + imagesHistoryFilterTabsHtml(activeFilter)
+      + `<div id="images-history-list">` + imagesHistoryListHtml(daysToShow) + `</div>`
+      + (showMore ? `<button type="button" class="btn btn-ghost" id="images-history-more" style="margin-top:8px;">Mostrar mais</button>` : '');
+    content.querySelectorAll('.images-history-filter-btn').forEach(fbtn=>{
+      fbtn.onclick = ()=>{ activeFilter = fbtn.getAttribute('data-filter'); visibleDays = IMAGES_HISTORY_PAGE_SIZE; renderPanel(); };
+    });
+    const moreBtn = document.getElementById('images-history-more');
+    if(moreBtn) moreBtn.onclick = ()=>{ visibleDays += IMAGES_HISTORY_PAGE_SIZE; renderPanel(); };
+    content.querySelectorAll('.images-history-lesion-row').forEach(row=>{
+      row.onclick = ()=> openDetail(row.getAttribute('data-lesion-id'));
+    });
+  }
+  const label = open => (open ? '▾' : '▸') + ' Histórico de imagens';
+  toggleBtn.onclick = ()=>{
+    const willOpen = panel.hidden;
+    panel.hidden = !willOpen;
+    toggleBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    toggleBtn.textContent = label(willOpen);
+    if(willOpen) renderPanel();
+  };
+})();
 // As ferramentas técnicas (forçar envio, exportar checkpoint, reconciliar V2,
 // fundir duplicatas, recuperar dados antigos, restaurar padrão e snapshots)
 // foram RETIRADAS da interface — não aparecem em lugar nenhum da UI. A
@@ -13498,7 +13562,7 @@ function openProgressDashboard(){
       <div class="study-kpi"><div class="study-kpi-icon">🎯</div><div><div class="v">${todayN} / ${goal}</div><div class="t">questões hoje</div></div></div>
       <div class="study-kpi"><div class="study-kpi-icon">📈</div><div><div class="v">${(r14+w14)?acc14+'%':'—'}</div><div class="t">acerto · 14 dias</div></div></div>
       <div class="study-kpi"><div class="study-kpi-icon">🧠</div><div><div class="v" style="color:var(--amber)">${due}</div><div class="t">revisões pendentes</div></div></div>
-      <div class="study-kpi"><div class="study-kpi-icon">🖼️</div><div><div class="v" id="kpi-images-today">${imgsToday}</div><div class="t">imagens hoje</div></div></div>
+      <div class="study-kpi" id="kpi-images-today-card" title="Ver lesões que receberam imagens hoje" style="cursor:pointer;"><div class="study-kpi-icon">🖼️</div><div><div class="v" id="kpi-images-today">${imgsToday}</div><div class="t">imagens hoje</div></div></div>
     </div>
     <div class="study-dashboard-main">
       <div class="study-start-card">
@@ -13564,6 +13628,15 @@ function openProgressDashboard(){
     </div>
     <div class="modal-actions study-close-row"><button class="btn btn-primary" id="progress-close">fechar</button></div>
   </div>`;
+  // KPI "imagens hoje" clicável (22/09/2026): affordance discreta (cursor
+  // + leve realce de borda no hover, sem virar botão chamativo); abre o
+  // modal "Imagens adicionadas hoje" agrupado por lesão.
+  const imgsTodayCard = document.getElementById('kpi-images-today-card');
+  if (imgsTodayCard) {
+    imgsTodayCard.onclick = openImagesTodayModal;
+    imgsTodayCard.onmouseenter = () => { imgsTodayCard.style.borderColor = 'var(--teal-dim)'; };
+    imgsTodayCard.onmouseleave = () => { imgsTodayCard.style.borderColor = ''; };
+  }
   document.getElementById('study-today').onclick=()=>{const q=buildSmartStudyQueue(15);if(q.length)startQuizInsideDashboard(q);};
   document.getElementById('study-quick').onclick=()=>{const q=buildSmartStudyQueue(5);if(q.length)startQuizInsideDashboard(q);};
   document.getElementById('study-cbr').onclick=()=>{const bySection={};DATA.forEach(e=>(bySection[e.s]||(bySection[e.s]=[])).push(e));const q=[],seen=new Set();while(q.length<20){let added=0;for(const s of shuffleArr(Object.keys(bySection))){const e=shuffleArr(bySection[s]).find(x=>!seen.has(x.id));if(e){seen.add(e.id);q.push(e);added++;if(q.length>=20)break;}}if(!added)break;}if(q.length)startQuizInsideDashboard(q);};
@@ -14968,6 +15041,31 @@ function countImagesAssignedOnDate(catalog, dateStr){
   });
   return n;
 }
+// Mesma regra e MESMA dedup do KPI acima (countImagesAssignedOnDate),
+// agrupada por lesão em vez de um número só — usada pelo modal "Imagens
+// adicionadas hoje" (22/09/2026). Itera catalog/images na mesma ordem e usa
+// o mesmo Set de identidade estável, então a soma de todos os `count`
+// aqui é SEMPRE igual ao número do KPI (nunca inventa timestamp nem infla
+// por duplicata). Ordena pela imagem mais recente de cada lesão.
+function imagesAssignedTodayByLesion(catalog, dateStr){
+  if (typeof dateStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return [];
+  const seen = new Set();
+  const byLesion = new Map();
+  (Array.isArray(catalog) ? catalog : []).forEach(e => {
+    if (!e) return;
+    (Array.isArray(e.images) ? e.images : []).forEach(img => {
+      if (!img || typeof img !== 'object') return;
+      if (imageAssignedDayLocal(img.assignedAt) !== dateStr) return;
+      const k = stableImageKeyV208(img);
+      if (k) { if (seen.has(k)) return; seen.add(k); }
+      const entry = byLesion.get(e.id) || { id: e.id, name: e.name, s: e.s, site: e.site, count: 0, latestAssignedAt: null };
+      entry.count += 1;
+      if (!entry.latestAssignedAt || img.assignedAt > entry.latestAssignedAt) entry.latestAssignedAt = img.assignedAt;
+      byLesion.set(e.id, entry);
+    });
+  });
+  return [...byLesion.values()].sort((a, b) => String(b.latestAssignedAt || '').localeCompare(String(a.latestAssignedAt || '')));
+}
 // Total geral INCLUI históricas sem assignedAt (mesma convenção da auditoria:
 // images.length + legado img). Lesões com imagem segue hasEntryImgs.
 function countTotalImages(catalog){
@@ -15468,6 +15566,189 @@ async function migrateLesionSite(lesionId, newSite, opts){
   await saveData();
   report.ok = true;
   return report;
+}
+
+/* ============================================================
+   MODAL "IMAGENS ADICIONADAS HOJE" (22/09/2026)
+   ------------------------------------------------------------
+   Só visualização/atalho sobre dados já existentes — nenhuma mutação em
+   DATA/assignedAt/SRS/ownership/Cloudinary. Fonte única de verdade:
+   imagesAssignedTodayByLesion() (mesma regra e mesma dedup do KPI "imagens
+   hoje", countImagesAssignedOnDate), então a soma do modal sempre bate com
+   o número do card. Abrir uma lesão fecha este modal antes de chamar
+   openDetail() (fluxo já existente, sem lógica nova de navegação).
+   ============================================================ */
+function imagesTodayRowHtml(g){
+  const ctx = [g.s, g.site].filter(Boolean).map(esc).join(' &gt; ');
+  return `<div class="images-today-row" data-lesion-id="${escAttr(g.id)}" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:8px 0;cursor:pointer;">`
+    + `<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;">`
+    + `<div style="font-weight:700;">${esc(g.name)}</div>`
+    + `<div style="color:var(--muted-2);font-size:12px;white-space:nowrap;">${g.count} ${g.count === 1 ? 'imagem' : 'imagens'}</div>`
+    + `</div>`
+    + (ctx ? `<div style="color:var(--muted-2);font-size:12px;">${ctx}</div>` : '')
+    + `<div style="margin-top:4px;"><a href="#" class="images-today-open-link" data-lesion-id="${escAttr(g.id)}" style="color:var(--teal);font-size:13px;">Abrir lesão →</a></div>`
+    + `</div>`;
+}
+function imagesTodayModalHtml(groups, totalImages){
+  const list = Array.isArray(groups) ? groups : [];
+  const lesionsCount = list.length;
+  const rows = list.length
+    ? list.map(imagesTodayRowHtml).join('')
+    : `<div style="color:var(--muted-2);font-size:13px;padding:12px 0;">Nenhuma imagem adicionada hoje.</div>`;
+  return `<div class="modal images-today-modal" style="max-height:80vh;display:flex;flex-direction:column;">`
+    + `<h2>Imagens adicionadas hoje</h2>`
+    + `<div class="modal-sub">${totalImages} ${totalImages === 1 ? 'imagem' : 'imagens'} · ${lesionsCount} ${lesionsCount === 1 ? 'lesão' : 'lesões'}</div>`
+    + `<div class="images-today-list" style="overflow-y:auto;flex:1 1 auto;margin-top:8px;min-height:0;">${rows}</div>`
+    + `<div class="modal-actions" style="margin-top:12px;display:flex;justify-content:flex-end;">`
+    + `<button type="button" class="btn btn-ghost" id="images-today-close">fechar</button>`
+    + `</div></div>`;
+}
+function openImagesTodayModal(){
+  const dateStr = localDayKeyFromDate(new Date());
+  const groups = imagesAssignedTodayByLesion(DATA, dateStr);
+  const totalImages = groups.reduce((acc, g) => acc + g.count, 0);
+  const ov = document.createElement('div');
+  ov.className = 'overlay images-today-overlay';
+  ov.innerHTML = imagesTodayModalHtml(groups, totalImages);
+  const closeThis = () => {
+    try { document.removeEventListener('keydown', escHandler); } catch (e) {}
+    try { ov.remove(); } catch (e) {}
+  };
+  const escHandler = (ev) => { if (ev && ev.key === 'Escape' && ov.isConnected) closeThis(); };
+  ov.onclick = (ev) => { if (ev.target === ov) closeThis(); };
+  document.addEventListener('keydown', escHandler);
+  document.body.appendChild(ov);
+  const closeBtn = document.getElementById('images-today-close');
+  if (closeBtn) closeBtn.onclick = closeThis;
+  const openLesion = (id) => { closeThis(); openDetail(id); };
+  ov.querySelectorAll('.images-today-open-link').forEach(a => {
+    a.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); openLesion(a.getAttribute('data-lesion-id')); };
+  });
+  ov.querySelectorAll('.images-today-row').forEach(row => {
+    row.onclick = () => openLesion(row.getAttribute('data-lesion-id'));
+  });
+}
+
+/* ============================================================
+   HISTÓRICO / AUDITORIA DE IMAGENS (22/09/2026)
+   ------------------------------------------------------------
+   Só leitura, sob demanda: nenhum log novo é persistido, nenhum write
+   extra, nenhum backfill de assignedAt ausente. Fonte única de verdade:
+   img.assignedAt (mesma regra de dia local e MESMA dedup por identidade
+   estável — stableImageKeyV208 — do KPI "imagens hoje" e do gráfico
+   semanal), então os números aqui são sempre coerentes com os KPIs de
+   produtividade já existentes. buildImagesHistory() faz UMA passagem só
+   por DATA/imagens; o painel (initImagesHistoryPanel, bem acima — as
+   constantes IMAGES_HISTORY_* que ele usa ficam declaradas ANTES dele,
+   perto da fiação, exatamente pra evitar o TDZ de const/let corrigido em
+   22/09/2026) só chama isso ao abrir o expansor ou trocar o filtro —
+   nunca em renderAll, sem polling/observer.
+   ============================================================ */
+// Agrupa por DIA LOCAL e, dentro de cada dia, por LESÃO. rangeDays=null
+// ("Tudo") não corta nenhum dia; caso contrário, só os últimos N dias
+// (hoje incluído) entram nos grupos — mas o RESUMO (totalWithAssignedAt/
+// todayCount/last7Count/last30Count/historicalNoDateCount) é sempre
+// calculado sobre TODAS as imagens com assignedAt, independente do filtro.
+function buildImagesHistory(catalog, opts){
+  const o = (opts && typeof opts === 'object') ? opts : {};
+  const now = (o.now instanceof Date && !Number.isNaN(o.now.getTime())) ? o.now : new Date();
+  const todayKey = localDayKeyFromDate(now);
+  const d7Key = localDayKeyFromDate(new Date(now.getTime() - 6 * 86400000));
+  const d30Key = localDayKeyFromDate(new Date(now.getTime() - 29 * 86400000));
+  const rangeDays = (typeof o.rangeDays === 'number' && o.rangeDays > 0) ? o.rangeDays : null;
+  const rangeStartKey = rangeDays ? localDayKeyFromDate(new Date(now.getTime() - (rangeDays - 1) * 86400000)) : null;
+
+  const seen = new Set();
+  const byDayLesion = new Map();
+  let totalWithAssignedAt = 0, todayCount = 0, last7Count = 0, last30Count = 0, historicalNoDateCount = 0;
+
+  (Array.isArray(catalog) ? catalog : []).forEach(e => {
+    if (!e) return;
+    (Array.isArray(e.images) ? e.images : []).forEach(img => {
+      if (!img || typeof img !== 'object') return;
+      if (!isValidAssignedAt(img.assignedAt)) { historicalNoDateCount++; return; }
+      const k = stableImageKeyV208(img);
+      if (k) { if (seen.has(k)) return; seen.add(k); }
+      totalWithAssignedAt++;
+      const dayKey = imageAssignedDayLocal(img.assignedAt);
+      if (dayKey === todayKey) todayCount++;
+      if (dayKey >= d7Key) last7Count++;
+      if (dayKey >= d30Key) last30Count++;
+      if (rangeStartKey && dayKey < rangeStartKey) return; // fora do filtro do agrupamento (resumo já contou acima)
+
+      if (!byDayLesion.has(dayKey)) byDayLesion.set(dayKey, new Map());
+      const lesionsMap = byDayLesion.get(dayKey);
+      const entry = lesionsMap.get(e.id) || { id: e.id, name: e.name, s: e.s, site: e.site, count: 0, times: [], latest: null };
+      entry.count += 1;
+      entry.times.push(img.assignedAt);
+      if (!entry.latest || img.assignedAt > entry.latest) entry.latest = img.assignedAt;
+      lesionsMap.set(e.id, entry);
+    });
+  });
+
+  const days = [...byDayLesion.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([dateKey, lesionsMap]) => {
+      const lesions = [...lesionsMap.values()]
+        .map(l => ({ ...l, times: l.times.slice().sort() }))
+        .sort((a, b) => String(b.latest || '').localeCompare(String(a.latest || '')));
+      const totalImages = lesions.reduce((acc, l) => acc + l.count, 0);
+      return { dateKey, totalImages, totalLesions: lesions.length, lesions };
+    });
+
+  return { days, totalWithAssignedAt, todayCount, last7Count, last30Count, historicalNoDateCount };
+}
+
+function imagesHistorySummaryHtml(hist){
+  const item = (n, label) => `<div><b style="color:var(--text);">${n}</b> ${label}</div>`;
+  return `<div class="images-history-summary" style="display:flex;flex-wrap:wrap;gap:14px;margin:8px 0;font-size:12px;color:var(--muted-2);">`
+    + item(hist.totalWithAssignedAt, 'com data')
+    + item(hist.todayCount, 'hoje')
+    + item(hist.last7Count, 'últimos 7 dias')
+    + item(hist.last30Count, 'últimos 30 dias')
+    + item(hist.historicalNoDateCount, 'históricas sem data')
+    + `</div>`;
+}
+function imagesHistoryFilterTabsHtml(activeKey){
+  return `<div class="images-history-filters" role="tablist" aria-label="Período" style="display:inline-flex;gap:2px;margin:4px 0 8px;padding:3px;border:1px solid var(--line);border-radius:11px;background:var(--panel-2);">`
+    + IMAGES_HISTORY_FILTERS.map(f => {
+        const active = f.key === activeKey;
+        return `<button type="button" class="images-history-filter-btn" data-filter="${f.key}" role="tab" aria-selected="${active}" style="border:none;border-radius:8px;padding:6px 12px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;background:${active ? 'var(--teal-dim)' : 'none'};color:${active ? 'var(--teal)' : 'var(--muted-2)'};">${f.label}</button>`;
+      }).join('')
+    + `</div>`;
+}
+function imagesHistoryTimeLabel(iso){
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function imagesHistoryDateLabel(dateKey){
+  const parts = String(dateKey || '').split('-');
+  return parts.length === 3 ? (parts[2] + '/' + parts[1] + '/' + parts[0]) : String(dateKey || '');
+}
+function imagesHistoryLesionRowHtml(l){
+  const ctx = [l.s, l.site].filter(Boolean).map(esc).join(' &gt; ');
+  const times = (Array.isArray(l.times) ? l.times : []).map(imagesHistoryTimeLabel).filter(Boolean).join(' · ');
+  return `<div class="images-history-lesion-row" data-lesion-id="${escAttr(l.id)}" style="border-top:1px solid var(--line);padding:8px 0;cursor:pointer;">`
+    + `<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;">`
+    + `<div style="font-weight:600;color:var(--teal);">${esc(l.name)}</div>`
+    + `<div style="color:var(--muted-2);font-size:12px;white-space:nowrap;">${l.count} ${l.count === 1 ? 'imagem' : 'imagens'}</div>`
+    + `</div>`
+    + (ctx ? `<div style="color:var(--muted-2);font-size:12px;">${ctx}</div>` : '')
+    + (times ? `<div style="color:var(--muted-2);font-size:11px;font-family:'IBM Plex Mono',monospace;margin-top:2px;">${esc(times)}</div>` : '')
+    + `</div>`;
+}
+function imagesHistoryDayGroupHtml(day){
+  return `<div class="images-history-day" style="margin:10px 0;">`
+    + `<div style="font-weight:700;">${esc(imagesHistoryDateLabel(day.dateKey))}</div>`
+    + `<div style="color:var(--muted-2);font-size:12px;margin-bottom:2px;">${day.totalImages} ${day.totalImages === 1 ? 'imagem' : 'imagens'} · ${day.totalLesions} ${day.totalLesions === 1 ? 'lesão' : 'lesões'}</div>`
+    + day.lesions.map(imagesHistoryLesionRowHtml).join('')
+    + `</div>`;
+}
+function imagesHistoryListHtml(days){
+  const list = Array.isArray(days) ? days : [];
+  if (!list.length) return `<div style="color:var(--muted-2);font-size:13px;padding:12px 0;">Nenhuma imagem neste período.</div>`;
+  return list.map(imagesHistoryDayGroupHtml).join('');
 }
 
 </script>
