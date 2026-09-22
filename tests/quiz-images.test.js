@@ -467,8 +467,12 @@ test('PREVIEW QUADRO: a miniatura do Quiz usa a blob URL local enquanto pending 
 
 test('PREVIEW QUADRO: ampliar/lightbox recebe a MESMA src local do pending (e a legenda atual, pra descrição no maximizar)', () => {
   const src = openQuizAddImageModalFn.source;
+  // Chamada de dentro do Quiz continua com só 2 argumentos, de propósito —
+  // ajuste 22/09/2026 (navegação do lightbox) não mexeu no Quiz; a função
+  // ganhou 2 parâmetros opcionais (navImages/startIndex) que ficam undefined
+  // aqui, mantendo o comportamento antigo (sem setas/contador) intacto.
   assert.match(src, /item\.querySelector\('\.img-gallery-thumb'\)\.onclick = \(\)=> openImageLightbox\(src, img\.label\);/);
-  assert.match(html, /function openImageLightbox\(src, description\)\{/);
+  assert.match(html, /function openImageLightbox\(src, description, navImages, startIndex\)\{/);
 });
 
 test('PREVIEW QUADRO: callback do Quiz registra a blob URL do quadro e NÃO faz upload', () => {

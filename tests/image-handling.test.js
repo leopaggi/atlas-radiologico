@@ -228,7 +228,11 @@ test('17. carrossel continua funcionando (setas/teclado intactos)', () => {
 });
 
 test('18. ESC continua funcionando (fecha o lightbox)', () => {
+  // Ajuste 22/09/2026: o handler dedicado de tecla (antes só ESC, "lbEsc")
+  // virou "lbKeydown" ao ganhar também a navegação ArrowLeft/ArrowRight —
+  // ESC continua tratado primeiro e sempre fecha, com ou sem navegação.
   const src = extractFunction(html, 'openImageLightbox');
-  assert.match(src, /lbEsc/, 'handler de Escape dedicado');
-  assert.match(src, /removeEventListener\('keydown', lbEsc\)/, 'listener removido ao fechar');
+  assert.match(src, /lbKeydown/, 'handler de teclado dedicado');
+  assert.match(src, /if\(e\.key==='Escape'\)\{ closeLb\(\); return; \}/, 'ESC sempre fecha, antes de qualquer checagem de navegação');
+  assert.match(src, /removeEventListener\('keydown', lbKeydown\)/, 'listener removido ao fechar');
 });

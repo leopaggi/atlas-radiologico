@@ -507,3 +507,91 @@ test('INTEGRACAO REAL (byte-equivalência): quando o snapshot falha, a lesão in
   await rt.api.migrateLesionSite('seed_1', 'Apêndice', {});
   assert.equal(JSON.stringify(rt.ctx.DATA), beforeJson);
 });
+
+// ===========================================================================
+// LOCALIZAÇÃO ADICIONAL — mesmo dropdown/proteção do Sítio/órgão principal
+// (ajuste 22/09/2026). Sem jsdom no projeto: interação de DOM (abrir/
+// fechar, clicar opção) é coberta por checagem estática do wiring real
+// (mesmo padrão já usado pelas demais suítes deste projeto); a validação
+// em si (o que realmente decide aceitar/recusar) é testada de forma
+// dinâmica via validateSiteAgainstSection, a mesma função reaproveitada.
+// ===========================================================================
+
+// NÃO usa stripJsComments aqui: essa função é uma stripagem ingênua por
+// regex, sem noção de strings — em openForm() ela confunde o `/*` dentro do
+// atributo `accept="image/*"` (input de arquivo, texto legítimo, não
+// comentário) com abertura de comentário de bloco, e some com um trecho
+// grande de código real até o próximo `*/` de verdade (foi assim que os
+// testes abaixo, que checam justamente o dropdown novo, ficavam com
+// "actual" sem a declaração que devia estar lá). Bug pré-existente da
+// própria stripJsComments (também usada por outros arquivos de teste),
+// não do index.html — aqui só evitamos acioná-lo, sem alterar o helper
+// compartilhado por fora do escopo desta tarefa.
+const OPEN_FORM_SRC = extractFunction(html, 'openForm').source;
+
+test('LOC.ADICIONAL 1: a seta (dropdown) existe no campo Sítio/órgão da localização adicional', () => {
+  assert.match(html, /id="f-alt-site-toggle"[^>]*>▾</);
+  assert.match(html, /id="f-alt-site-dropdown"/);
+});
+
+test('LOC.ADICIONAL 2/3: o dropdown usa knownSitesForSection da SEÇÃO informada na própria linha (f-alt-section), nunca da seção principal', () => {
+  assert.match(OPEN_FORM_SRC, /function renderAltSiteDropdown\(\)\{[\s\S]*?knownSitesForSection\(sec, DATA\)/);
+  assert.match(OPEN_FORM_SRC, /const sec = altSectionInput\.value\.trim\(\);/);
+  assert.doesNotMatch(OPEN_FORM_SRC.slice(OPEN_FORM_SRC.indexOf('renderAltSiteDropdown'), OPEN_FORM_SRC.indexOf('renderAltSiteDropdown') + 700), /sectionInputForSite/, 'não usa a seção do campo principal por engano');
+});
+
+test('LOC.ADICIONAL 4: digitar no campo filtra a lista (reaproveita filterSiteOptions, não duplica lógica de filtro)', () => {
+  assert.match(OPEN_FORM_SRC, /filterSiteOptions\(known, altSiteInput\.value\)/);
+});
+
+test('LOC.ADICIONAL 5: clicar numa opção grava o valor exato do data-site (grafia canônica) no campo', () => {
+  const block = OPEN_FORM_SRC.slice(OPEN_FORM_SRC.indexOf('function renderAltSiteDropdown'));
+  assert.match(block, /altSiteInput\.value = opt\.getAttribute\('data-site'\);/);
+});
+
+test('LOC.ADICIONAL 6: sem seção informada, o dropdown mostra orientação em vez de misturar sítios de outras seções', () => {
+  assert.match(OPEN_FORM_SRC, /if\(!sec\)\{ altSiteDropdown\.innerHTML = '<div[^>]*>Selecione a seção primeiro<\/div>'; return; \}/);
+});
+
+test('LOC.ADICIONAL 7: "+ Adicionar localização" reusa validateSiteAgainstSection (mesma função do sítio principal) sem permitir sítio novo', () => {
+  const idx = OPEN_FORM_SRC.indexOf("altAddBtn.onclick");
+  const block = OPEN_FORM_SRC.slice(idx, idx + 1800);
+  assert.match(block, /validateSiteAgainstSection\(s, st, DATA, false\)/, 'allowNew=false: localização adicional nunca inventa sítio');
+  assert.match(block, /toast\('Selecione um sítio\/órgão existente na lista\.'\)/);
+  assert.match(block, /altPlacementsDraft\.push\(\{ s, site: canonicalSite \}\)/, 'grava a grafia canônica devolvida pela validação, não o texto digitado');
+});
+
+test('LOC.ADICIONAL 7 (dinâmico): sítio inexistente na seção é recusado (mesma regra do campo principal, sem allowNew)', () => {
+  const api = loadPure();
+  const v = api.validateSiteAgainstSection('Coluna Vertebral', 'Sítio Inventado', [{ id: 'x', s: 'Coluna Vertebral', site: 'Corpo vertebral' }], false);
+  assert.equal(v.ok, false);
+  assert.equal(v.reason, 'unknown_site');
+});
+
+test('LOC.ADICIONAL 8 (dinâmico): sítio já cadastrado na seção é aceito e devolve a grafia canônica exata', () => {
+  const api = loadPure();
+  const catalog = [{ id: 'x', s: 'Coluna Vertebral', site: 'Corpo vertebral', name: 'Y' }];
+  const v = api.validateSiteAgainstSection('Coluna Vertebral', '  corpo VERTEBRAL  ', catalog, false);
+  assert.equal(v.ok, true);
+  assert.equal(v.value, 'Corpo vertebral');
+});
+
+test('LOC.ADICIONAL 9: altPlacements já existentes continuam renderizando/removendo normalmente (fluxo antigo intacto)', () => {
+  assert.match(OPEN_FORM_SRC, /function renderAltPlacements\(\)\{/);
+  assert.match(OPEN_FORM_SRC, /altPlacementsDraft\.splice\(i,1\); renderAltPlacements\(\);/);
+  assert.match(OPEN_FORM_SRC, /let altPlacementsDraft = \(existing && Array\.isArray\(existing\.altPlacements\)\)/);
+});
+
+test('LOC.ADICIONAL 10 (regressão): o campo Sítio/órgão PRINCIPAL continua com seu próprio dropdown/validação intactos', () => {
+  assert.match(OPEN_FORM_SRC, /siteInput = document\.getElementById\('f-site'\);/);
+  assert.match(OPEN_FORM_SRC, /siteCheck = validateSiteAgainstSection\(sec, site, DATA, allowNewSite\)/);
+  assert.match(html, /id="f-site-toggle"/, 'markup do dropdown principal preservado');
+});
+
+test('LOC.ADICIONAL: não cria uma segunda fonte de taxonomia (mesmas funções puras reaproveitadas, nenhuma nova)', () => {
+  const altBlockStart = OPEN_FORM_SRC.indexOf("altSiteInput = document.getElementById('f-alt-site');");
+  const altBlockEnd = OPEN_FORM_SRC.indexOf('let altPlacementsDraft');
+  assert.ok(altBlockStart >= 0 && altBlockEnd > altBlockStart, 'bloco do dropdown da localização adicional encontrado');
+  const altBlock = OPEN_FORM_SRC.slice(altBlockStart, altBlockEnd);
+  assert.doesNotMatch(altBlock, /function knownSitesForSection|function validateSiteAgainstSection|function filterSiteOptions/, 'reaproveita as funções existentes, não redefine');
+});

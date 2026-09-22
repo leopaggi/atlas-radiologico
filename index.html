@@ -9546,7 +9546,7 @@ function openDetail(id){
       const all=imgs.length?imgs:(e.img?[{data:e.img,label:''}]:[]);
       gal.innerHTML=all.map((img,i)=>`<div class="detail-img-item"><img src="${img.data}" data-idx="${i}">${img.label?`<div class="detail-img-label">${esc(img.label)}</div>`:''}</div>`).join('');
       gal.querySelectorAll('img').forEach(imgEl=>{
-        imgEl.addEventListener('click', ()=>{ const it=all[+imgEl.dataset.idx]; openImageLightbox(it.data, it.label); });
+        imgEl.addEventListener('click', ()=>{ const idx=+imgEl.dataset.idx; const it=all[idx]; openImageLightbox(it.data, it.label, all, idx); });
       });
       // Expandir/recolher é só apresentação (classe CSS) — nunca muta
       // img.label/DATA; o texto completo já está no DOM o tempo todo.
@@ -9684,7 +9684,13 @@ function openForm(id, opts){
           <div id="alt-placements-list"></div>
           <div class="field-row" style="margin-top:6px;margin-bottom:0;">
             <div class="field" style="flex:1.2;"><input id="f-alt-section" list="section-list" placeholder="seção (ex: Neurorradiologia)"></div>
-            <div class="field" style="flex:1.2;"><input id="f-alt-site" placeholder="sítio/órgão (ex: Encéfalo)"></div>
+            <div class="field" style="flex:1.2;">
+              <div id="f-alt-site-wrap" style="position:relative;">
+                <input id="f-alt-site" placeholder="sítio/órgão (ex: Encéfalo)" autocomplete="off" style="padding-right:30px;">
+                <button type="button" id="f-alt-site-toggle" aria-label="Ver sítios desta seção" aria-expanded="false" style="position:absolute;right:4px;top:0;bottom:0;background:none;border:none;color:var(--muted-2);cursor:pointer;font-size:13px;padding:0 6px;">▾</button>
+                <div id="f-alt-site-dropdown" hidden style="position:absolute;left:0;right:0;top:100%;z-index:20;margin-top:2px;background:var(--panel);border:1px solid var(--line);border-radius:8px;max-height:220px;overflow-y:auto;box-shadow:0 6px 18px rgba(0,0,0,.35);"></div>
+              </div>
+            </div>
             <button type="button" class="btn btn-ghost" id="f-alt-add" style="height:38px;align-self:flex-start;">+ Adicionar localização</button>
           </div>
         </div>
@@ -9876,6 +9882,52 @@ function openForm(id, opts){
   if(sectionInputForSite) sectionInputForSite.addEventListener('input', ()=>{ if(!siteDropdown.hidden) renderSiteDropdown(); refreshSiteHint(); });
   refreshSiteHint();
 
+  // Dropdown do Sítio/órgão da LOCALIZAÇÃO ADICIONAL (ajuste 22/09/2026):
+  // mesmo comportamento do campo principal acima — reaproveita
+  // knownSitesForSection/filterSiteOptions/siteDropdownOptionsHtml, sem
+  // segunda fonte de taxonomia. Depende da seção informada NESTA mesma
+  // linha (f-alt-section), não da seção principal do formulário.
+  const altSiteInput = document.getElementById('f-alt-site');
+  const altSectionInput = document.getElementById('f-alt-section');
+  const altSiteToggleBtn = document.getElementById('f-alt-site-toggle');
+  const altSiteDropdown = document.getElementById('f-alt-site-dropdown');
+  function closeAltSiteDropdown(){
+    altSiteDropdown.hidden = true;
+    altSiteToggleBtn.setAttribute('aria-expanded','false');
+    document.removeEventListener('click', onDocClickCloseAltSiteDropdown, true);
+  }
+  function onDocClickCloseAltSiteDropdown(ev){
+    if(ev.target===altSiteToggleBtn || ev.target===altSiteInput || altSiteDropdown.contains(ev.target)) return;
+    closeAltSiteDropdown();
+  }
+  function renderAltSiteDropdown(){
+    const sec = altSectionInput.value.trim();
+    if(!sec){ altSiteDropdown.innerHTML = '<div style="padding:8px 10px;color:var(--muted-2);font-size:12px;">Selecione a seção primeiro</div>'; return; }
+    const known = knownSitesForSection(sec, DATA);
+    const filtered = filterSiteOptions(known, altSiteInput.value);
+    altSiteDropdown.innerHTML = known.length
+      ? (filtered.length ? siteDropdownOptionsHtml(filtered) : '<div style="padding:8px 10px;color:var(--muted-2);font-size:12px;">nenhum sítio combina com o texto digitado</div>')
+      : '<div style="padding:8px 10px;color:var(--muted-2);font-size:12px;">nenhum sítio cadastrado ainda nesta seção</div>';
+    altSiteDropdown.querySelectorAll('.site-option').forEach(opt=>{
+      opt.onmouseenter = ()=>{ opt.style.background='var(--panel-2)'; };
+      opt.onmouseleave = ()=>{ opt.style.background=''; };
+      opt.onclick = ()=>{
+        altSiteInput.value = opt.getAttribute('data-site');
+        closeAltSiteDropdown();
+        altSiteInput.focus();
+      };
+    });
+  }
+  function openAltSiteDropdown(){
+    renderAltSiteDropdown();
+    altSiteDropdown.hidden = false;
+    altSiteToggleBtn.setAttribute('aria-expanded','true');
+    document.addEventListener('click', onDocClickCloseAltSiteDropdown, true);
+  }
+  if(altSiteToggleBtn) altSiteToggleBtn.onclick = (ev)=>{ ev.stopPropagation(); if(altSiteDropdown.hidden) openAltSiteDropdown(); else closeAltSiteDropdown(); };
+  if(altSiteInput) altSiteInput.addEventListener('input', ()=>{ if(!altSiteDropdown.hidden) renderAltSiteDropdown(); });
+  if(altSectionInput) altSectionInput.addEventListener('input', ()=>{ if(!altSiteDropdown.hidden) renderAltSiteDropdown(); });
+
   // "Também aparece em" — reaproveita o campo altPlacements já existente.
   let altPlacementsDraft = (existing && Array.isArray(existing.altPlacements)) ? JSON.parse(JSON.stringify(existing.altPlacements)) : [];
   function renderAltPlacements(){
@@ -9918,10 +9970,18 @@ function openForm(id, opts){
     const s = (secEl.value||'').trim();
     const st = (siteEl.value||'').trim();
     if(!s || !st){ toast('Informe a seção e o sítio da localização adicional.'); return; }
-    const key = normalizeReviewAltPlacementKey(s, st);
+    // Proteção contra subseção acidental (ajuste 22/09/2026): mesma
+    // validação/canonicalização do Sítio/órgão principal
+    // (validateSiteAgainstSection), sem opção de "sítio novo" aqui —
+    // localização adicional só referencia um sítio JÁ existente em alguma
+    // seção, nunca inventa um novo.
+    const altSiteCheck = validateSiteAgainstSection(s, st, DATA, false);
+    if(!altSiteCheck.ok){ toast('Selecione um sítio/órgão existente na lista.'); return; }
+    const canonicalSite = altSiteCheck.value;
+    const key = normalizeReviewAltPlacementKey(s, canonicalSite);
     if(key===normalizeReviewAltPlacementKey(document.getElementById('f-section').value, document.getElementById('f-site').value)){ toast('Essa já é a localização principal.'); return; }
     if(altPlacementsDraft.some(p=>normalizeReviewAltPlacementKey(p.s,p.site)===key)){ toast('Essa localização já foi adicionada.'); return; }
-    altPlacementsDraft.push({ s, site: st });
+    altPlacementsDraft.push({ s, site: canonicalSite });
     secEl.value=''; siteEl.value='';
     renderAltPlacements();
   };
@@ -10086,7 +10146,7 @@ function openForm(id, opts){
           <button type="button" class="img-gallery-remove" title="remover este quadro do Atlas">✕</button>
         </div>
       `;
-      item.querySelector('.img-gallery-thumb').addEventListener('click', ()=> openImageLightbox(img.data, img.label));
+      item.querySelector('.img-gallery-thumb').addEventListener('click', ()=> openImageLightbox(img.data, img.label, pendingImgs, idx));
       if(Array.isArray(img.panels) && img.panels.length){
         item.querySelector('.img-gallery-edit-collage').addEventListener('click', ()=>{
           openCollageBuilder(getCurrentLesionMeta(), collage=>{
@@ -12253,15 +12313,33 @@ function hideHoverPreview(){ if(hoverPreviewEl) hoverPreviewEl.style.display = '
    imagem, nunca sobreposta — quem decide SE deve passar a descrição é cada
    chamador (ex.: o Quiz só passa depois de st.answered===true, nunca antes
    de responder, pra não vazar dica). */
-function openImageLightbox(src, description){
+// Navegação do lightbox (ajuste 22/09/2026): só imagens com `data` real, na
+// ordem recebida — quem decide o conjunto é sempre o CHAMADOR (já filtrado
+// pela lesão/caso aberto; nunca busca imagens de outro lugar sozinha).
+function lightboxNavList(images){
+  return (Array.isArray(images) ? images : []).filter(img => img && typeof img === 'object' && img.data);
+}
+function lightboxNextIndex(idx, total){ return total > 0 ? (idx + 1) % total : 0; }
+function lightboxPrevIndex(idx, total){ return total > 0 ? (idx - 1 + total) % total : 0; }
+// navImages/startIndex são OPCIONAIS: sem eles (ou com 0/1 imagem), o
+// lightbox continua exatamente como antes — sem setas, sem contador, sem
+// teclado de navegação (só ESC, como sempre).
+function openImageLightbox(src, description, navImages, startIndex){
+  const navList = lightboxNavList(navImages);
+  const hasNav = navList.length > 1;
+  let navIdx = (hasNav && Number.isInteger(startIndex) && startIndex >= 0 && startIndex < navList.length) ? startIndex : 0;
   const ov = document.createElement('div');
   ov.className = 'overlay lightbox-overlay';
   const desc = String(description||'').trim();
+  const navBtnStyle = 'position:absolute;top:50%;transform:translateY(-50%);z-index:5;width:38px;height:38px;border-radius:50%;border:none;background:rgba(6,10,14,.6);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;';
   ov.innerHTML = `<div class="lightbox-content">
       <div class="lightbox-stage" style="position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:40vh;max-height:70vh;">
         <img src="${src}" class="lightbox-img" draggable="false">
+        ${hasNav ? `<button type="button" class="lightbox-nav-prev" aria-label="Imagem anterior" style="${navBtnStyle}left:8px;">‹</button>
+        <button type="button" class="lightbox-nav-next" aria-label="Próxima imagem" style="${navBtnStyle}right:8px;">›</button>
+        <div class="lightbox-nav-counter" aria-live="polite" style="position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:5;background:rgba(6,10,14,.6);color:#fff;font-size:12px;padding:2px 10px;border-radius:999px;font-family:'IBM Plex Mono',monospace;">${navIdx+1} / ${navList.length}</div>` : ''}
       </div>
-      ${desc ? `<div class="lightbox-desc">${esc(desc)}</div>` : ''}
+      <div class="lightbox-desc" ${desc ? '' : 'hidden'}>${esc(desc)}</div>
     </div>
     <div class="lightbox-controls" style="display:flex;gap:6px;justify-content:center;margin-top:8px;">
       <button type="button" class="btn btn-ghost" data-lb="minus" title="reduzir zoom">−</button>
@@ -12272,19 +12350,50 @@ function openImageLightbox(src, description){
     <button type="button" class="lightbox-close">✕</button>`;
   const lbFind = (sel)=>{ try{ return ov.querySelector(sel); }catch(e){ return null; } };
   const closeLb = ()=>{
-    try{ document.removeEventListener('keydown', lbEsc); }catch(e){}
+    try{ document.removeEventListener('keydown', lbKeydown); }catch(e){}
     try{ ov.remove(); }catch(e){}
   };
   ov.onclick = (e)=>{ if(e && e.target===ov) closeLb(); };
-  const lbEsc = (e)=>{ if(e && e.key==='Escape' && ov.isConnected) closeLb(); };
-  if(document.addEventListener) document.addEventListener('keydown', lbEsc);
+  // ESC sempre fecha; ArrowLeft/ArrowRight (e </>) só navegam quando há mais
+  // de 1 imagem, e nunca quando o foco está num campo de texto (mesma
+  // checagem já usada pelo paste amplo do editor, pasteTargetIsText()).
+  const lbKeydown = (e)=>{
+    if(!e || !ov.isConnected) return;
+    if(e.key==='Escape'){ closeLb(); return; }
+    if(!hasNav || pasteTargetIsText(e.target)) return;
+    if(e.key==='ArrowLeft' || e.key==='<'){ if(e.preventDefault) e.preventDefault(); goToLbImage(lightboxPrevIndex(navIdx, navList.length)); }
+    else if(e.key==='ArrowRight' || e.key==='>'){ if(e.preventDefault) e.preventDefault(); goToLbImage(lightboxNextIndex(navIdx, navList.length)); }
+  };
+  if(document.addEventListener) document.addEventListener('keydown', lbKeydown);
   const closeBtn = lbFind('.lightbox-close');
   if(closeBtn) closeBtn.onclick = (e)=>{ if(e && e.stopPropagation) e.stopPropagation(); closeLb(); };
-  if(desc){
+  const descEl = lbFind('.lightbox-desc');
+  if(descEl){
     // clicar no texto não fecha o lightbox (permite ler/selecionar); clicar
     // fora continua fechando, como sempre.
-    const descEl = lbFind('.lightbox-desc');
-    if(descEl) descEl.onclick = e=> e.stopPropagation();
+    descEl.onclick = e=> e.stopPropagation();
+  }
+  // Troca de imagem: atualiza src/legenda/contador e RESETA zoom/pan (regra
+  // 4) — nunca fecha/reabre a overlay. zbReset() é definida logo abaixo,
+  // mas por ser function declaration já está disponível aqui (hoisting).
+  function goToLbImage(idx){
+    if(!hasNav) return;
+    navIdx = idx;
+    const item = navList[navIdx];
+    if(!item) return;
+    const img = lbFind('.lightbox-img');
+    if(img) img.src = item.data;
+    const newDesc = String(item.label || '').trim();
+    if(descEl){ descEl.hidden = !newDesc; descEl.textContent = newDesc; }
+    const counterEl = lbFind('.lightbox-nav-counter');
+    if(counterEl) counterEl.textContent = (navIdx + 1) + ' / ' + navList.length;
+    zbReset();
+  }
+  if(hasNav){
+    const prevBtn = lbFind('.lightbox-nav-prev');
+    const nextBtn = lbFind('.lightbox-nav-next');
+    if(prevBtn) prevBtn.onclick = (e)=>{ if(e && e.stopPropagation) e.stopPropagation(); goToLbImage(lightboxPrevIndex(navIdx, navList.length)); };
+    if(nextBtn) nextBtn.onclick = (e)=>{ if(e && e.stopPropagation) e.stopPropagation(); goToLbImage(lightboxNextIndex(navIdx, navList.length)); };
   }
   // Zoom profundo + pan: estado por abertura (reset a cada open). Escala de
   // 1 (fit) a 20 (2000%), sem limite de resolução original. Roda amplia na

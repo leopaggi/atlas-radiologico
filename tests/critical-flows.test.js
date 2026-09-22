@@ -294,10 +294,17 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // SAFETY_SNAPSHOT_RISK_REASONS (antes das quatro âncoras) — sem essa
   // entrada, createSafetySnapshot() sempre devolvia null pra esse motivo e
   // migrateLesionSite() sempre abortava, mesmo com o storage saudável.
+  // +60 só no importHandler (dropdown de sítio na Localização adicional,
+  // 22/09/2026): dentro de openForm (depois de loadData, antes do
+  // importHandler) entram o markup da seta/dropdown do f-alt-site e toda a
+  // fiação (abrir/fechar, filtrar por seção, selecionar opção) + a mesma
+  // validação (validateSiteAgainstSection, sem allowNew) no "+ Adicionar
+  // localização"; nenhuma função nova no fim do script — tudo reaproveitado
+  // do dropdown do sítio principal.
   assert.equal(recovery.line, 6264);
   assert.equal(brokenArtifacts.line, 6254);
   assert.equal(loadData.line, 8806);
-  assert.equal(importHandler.line, 12103);
+  assert.equal(importHandler.line, 12163);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

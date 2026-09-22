@@ -98,7 +98,10 @@ test('EDITOR: o textarea não tem limite artificial de tamanho (sem maxlength) e
 });
 
 test('EDITOR: clicar na miniatura abre o lightbox já passando a legenda/descrição atual', () => {
-  assert.match(openFormFn.body, /openImageLightbox\(img\.data, img\.label\)/);
+  // Ajuste 22/09/2026 (navegação do lightbox): a chamada ganhou pendingImgs/idx
+  // (conjunto de navegação = só as imagens desta lesão), mas continua passando
+  // img.data/img.label do mesmo jeito.
+  assert.match(openFormFn.body, /openImageLightbox\(img\.data, img\.label, pendingImgs, idx\)/);
 });
 
 test('EDITOR: chips de sequência continuam funcionando sobre o mesmo campo (sem duplicar lógica)', () => {
@@ -151,7 +154,9 @@ test('DETALHE: continua sem mostrar caixa quando não há descrição', () => {
 });
 
 test('DETALHE: clicar na imagem no grid abre o lightbox já com a descrição (sem gate — não é contexto de quiz)', () => {
-  assert.match(openDetailFn.body, /const it=all\[\+imgEl\.dataset\.idx\]; openImageLightbox\(it\.data, it\.label\);/);
+  // Ajuste 22/09/2026: mesma chamada, agora também passando all/idx (conjunto
+  // de navegação = só as imagens desta lesão).
+  assert.match(openDetailFn.body, /const idx=\+imgEl\.dataset\.idx; const it=all\[idx\]; openImageLightbox\(it\.data, it\.label, all, idx\);/);
 });
 
 // ===========================================================================
@@ -159,7 +164,10 @@ test('DETALHE: clicar na imagem no grid abre o lightbox já com a descrição (s
 // ===========================================================================
 
 test('LIGHTBOX: assinatura aceita descrição opcional; ferramenta de auditoria técnica continua chamando sem ela (inalterada)', () => {
-  assert.match(html, /function openImageLightbox\(src, description\)\{/);
+  // Ajuste 22/09/2026: 2 parâmetros novos e opcionais (navImages/startIndex)
+  // para a navegação — a auditoria técnica (chamada de 1 argumento) continua
+  // funcionando exatamente igual (undefined nos dois novos = sem setas).
+  assert.match(html, /function openImageLightbox\(src, description, navImages, startIndex\)\{/);
   assert.match(html, /thumb\.onclick = \(e\)=>\{ e\.stopPropagation\(\); openImageLightbox\(thumb\.src\); \};/, 'auditoria de vínculo de imagens continua sem passar descrição');
 });
 
@@ -191,18 +199,26 @@ function invokeLightbox(src, description) {
     esc: vm.runInContext('esc', escCtx)
   };
   vm.createContext(ctx);
-  // openImageLightbox() usa o núcleo puro de zoom (zoomStateInit etc.);
-  // extrai junto para o contexto isolado (sem isso, ReferenceError).
-  const zoomSrc = ['zoomStateInit', 'clampZoomPan', 'zoomAtPoint'].map((n) => extractFunction(html, n).source).join('\n');
+  // openImageLightbox() usa o núcleo puro de zoom (zoomStateInit etc.) e,
+  // desde 22/09/2026, também as funções puras de navegação e o guard de
+  // teclado reaproveitado do editor (pasteTargetIsText) — extrai tudo junto
+  // para o contexto isolado (sem isso, ReferenceError).
+  const zoomSrc = ['zoomStateInit', 'clampZoomPan', 'zoomAtPoint', 'lightboxNavList', 'lightboxNextIndex', 'lightboxPrevIndex', 'pasteTargetIsText'].map((n) => extractFunction(html, n).source).join('\n');
   vm.runInContext(zoomSrc + '\n' + openImageLightboxFn.source + '\nthis.__call = openImageLightbox;', ctx, { filename: 'lightbox-call.js' });
   vm.runInContext('__call', ctx)(src, description);
   return { ov, descEl, appended };
 }
 
-test('LIGHTBOX (dinâmico): sem descrição -> nenhuma caixa/elemento de descrição aparece (comportamento de sempre)', () => {
+test('LIGHTBOX (dinâmico): sem descrição -> nenhuma caixa de descrição VISÍVEL aparece (comportamento de sempre)', () => {
+  // Ajuste 22/09/2026 (navegação): o elemento .lightbox-desc passou a
+  // existir SEMPRE no DOM (com [hidden] quando vazio), em vez de nem ser
+  // criado — necessário pra goToLbImage() poder mostrar/ocultar a
+  // descrição ao trocar de imagem sem recriar a overlay inteira. A garantia
+  // de "nenhuma caixa aparece" continua valendo (elemento [hidden] não é
+  // visível), só muda COMO isso é garantido.
   for (const empty of [undefined, '', '   ', null]) {
     const { ov, appended } = invokeLightbox('https://x/y.jpg', empty);
-    assert.doesNotMatch(ov.innerHTML, /lightbox-desc/, `description=${JSON.stringify(empty)} não pode gerar caixa`);
+    assert.match(ov.innerHTML, /<div class="lightbox-desc" hidden><\/div>/, `description=${JSON.stringify(empty)} deve renderizar a caixa oculta, vazia`);
     assert.match(ov.innerHTML, /class="lightbox-img"/);
     assert.equal(appended.length, 1, 'o lightbox precisa ser anexado ao body normalmente');
     assert.equal(typeof ov.onclick, 'function', 'clicar fora continua fechando');
@@ -226,7 +242,7 @@ test('LIGHTBOX (dinâmico): com descrição -> aparece abaixo da imagem, escapad
 
 test('LIGHTBOX (dinâmico): descrição só com espaços é tratada como vazia (trim), igual a não ter descrição', () => {
   const { ov } = invokeLightbox('https://x/y.jpg', '   \n  ');
-  assert.doesNotMatch(ov.innerHTML, /lightbox-desc/);
+  assert.match(ov.innerHTML, /<div class="lightbox-desc" hidden><\/div>/);
 });
 
 test('LIGHTBOX: CSS garante que a descrição fica ABAIXO da imagem, nunca sobreposta (coluna, sem position:absolute na descrição)', () => {
@@ -376,6 +392,6 @@ test('AJUSTE VISUAL: nenhuma regressão nas Alterações 055/056 — testes dedi
   // continuam de pé textualmente após os ajustes de CSS/wiring desta tarefa.
   assert.match(html, /let deviceBootstrapPending = false;/, 'Alteração 055: flag de bootstrap intacta');
   assert.match(html, /async function runNewDeviceBootstrapFlow\(\)\{/, 'Alteração 055: orquestrador intacto');
-  assert.match(html, /function openImageLightbox\(src, description\)\{/, 'Alteração 056: assinatura do lightbox intacta');
+  assert.match(html, /function openImageLightbox\(src, description, navImages, startIndex\)\{/, 'Alteração 056: assinatura do lightbox intacta (2 parâmetros novos e opcionais em 22/09/2026, comportamento de descrição inalterado)');
   assert.match(openCollageBuilderFn.body, /<textarea id="collage-desc" rows="3"/, 'Alteração 056: textarea do quadro intacto');
 });
