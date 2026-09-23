@@ -683,7 +683,8 @@ test('loadData() carrega LESION_REVISIONS no boot (estaticamente)', () => {
   assert.notEqual(loadDataStart, -1);
   const loadLesionRevisionsIdx = html.indexOf('await loadLesionRevisions();', loadDataStart);
   assert.notEqual(loadLesionRevisionsIdx, -1, 'loadData precisa carregar as revisões salvas ao abrir o app');
-  const nextFunctionIdx = html.indexOf('\nasync function saveData(){', loadDataStart);
+  // (marcador sem o ')' final: desde a Alteração 072 a assinatura é saveData(internal))
+  const nextFunctionIdx = html.indexOf('\nasync function saveData(', loadDataStart);
   assert.ok(loadLesionRevisionsIdx < nextFunctionIdx, 'a chamada precisa estar dentro do corpo de loadData()');
 });
 

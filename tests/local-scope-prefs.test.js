@@ -143,10 +143,56 @@ test('PREFS: só grava em mudança MANUAL (render/F5/sync/import não escrevem)'
   // handlers manuais (sidebar) e nos seletores do Quiz — não em renderAll/loadData.
   const renderAll = extractBlock(html, 'function renderAll(){', '\n}');
   assert.doesNotMatch(renderAll, /saveSidebarScopePref|saveQuizScopePref|writeScopePref/);
-  const loadData = extractBlock(html, 'async function loadData(){', '\nasync function saveData(){');
-  assert.match(loadData, /scope = loadSidebarScopePref\(\)/);
+  const loadData = extractBlock(html, 'async function loadData(){', '\nasync function saveData(');
+  // Estado padrão de fábrica (2026-09-22): o boot NÃO lê mais a preferência
+  // de seção/sítio — seção/site nascem limpos; só o Quiz restaura a sua.
+  assert.doesNotMatch(loadData, /scope = loadSidebarScopePref\(\)/, 'boot ignora seção/sítio antigos');
+  assert.match(loadData, /scope\s*=\s*\{section:null,\s*site:null\}/);
   assert.match(loadData, /quizScope = loadQuizScopePref\(\)/);
-  assert.doesNotMatch(loadData, /saveSidebarScopePref|saveQuizScopePref|writeScopePref/, 'F5/boot só LÊ a preferência');
+  assert.doesNotMatch(loadData, /saveSidebarScopePref|saveQuizScopePref|writeScopePref/, 'F5/boot não ESCREVE preferência');
+});
+
+test('FILTROS-RESET: reload nasce em Todas as seções, sem tags, Revisões=Todas', () => {
+  const loadData = extractBlock(html, 'async function loadData(){', '\nasync function saveData(');
+  assert.match(loadData, /scope\s*=\s*\{section:null,\s*site:null\}/, '1. Todas as seções');
+  assert.match(html, /let activeTags = new Set\(\);/, '2. sem tags (conjunto nasce vazio)');
+  assert.match(html, /let reviewFilter = null;/, '3. Revisões=Todas (null)');
+  assert.match(loadData, /bootSearch\.value = ''/, 'busca textual limpa no boot');
+});
+
+test('FILTROS-RESET: Limpar filtros restaura o mesmo estado de fábrica', () => {
+  const tagbar = extractBlock(html, 'function renderTagbar(){', '\nfunction renderReviewBar(){');
+  assert.match(tagbar, /activeTags\.clear\(\)/, '4. limpa tags (e sítio via scope abaixo)');
+  assert.match(tagbar, /scope\s*=\s*\{section:null,\s*site:null\}/, '5. remove sítio/escopo específico');
+  assert.match(tagbar, /reviewFilter = null;/, 'Revisões volta para Todas');
+  assert.match(tagbar, /searchTerm = '';/, '6. busca textual limpa');
+  assert.match(tagbar, /renderAll\(\)/, 're-renderiza tudo');
+  assert.doesNotMatch(tagbar, /saveData|pushToFirebase|storage\.set\(/, 'não toca em dados');
+});
+
+test('FILTROS-RESET: botão aparece com qualquer filtro ativo, não só com tags', () => {
+  const tagbar = extractBlock(html, 'function renderTagbar(){', '\nfunction renderReviewBar(){');
+  assert.match(tagbar, /activeFilterCount/, 'conta todas as facetas ativas');
+  assert.match(tagbar, /reviewFilter!==null\?1:0/);
+  assert.match(tagbar, /limpar filtros/);
+});
+
+test('FILTROS-RESET: tags antigas nunca reaparecem (sem hidratação de storage)', () => {
+  assert.match(html, /let activeTags = new Set\(\);/);
+  assert.doesNotMatch(html, /activeTags\s*=\s*new Set\(JSON/, '7. nunca reconstruído de valor guardado');
+});
+
+test('FILTROS-RESET: seção/sítio/tags/Revisões nunca são relidos do localStorage no boot', () => {
+  const raw = extractBlock(html, 'async function loadData(){', '\nasync function saveData(');
+  const loadData = raw.replace(/\/\/[^\n]*/g, '');
+  assert.doesNotMatch(loadData, /loadSidebarScopePref/, '8. valor antigo não restaura filtros');
+  assert.doesNotMatch(loadData, /localStorage\.getItem/, 'nenhuma leitura de preferência de filtro no boot');
+});
+
+test('FILTROS-RESET: outras preferências locais continuam intactas', () => {
+  const loadData = extractBlock(html, 'async function loadData(){', '\nasync function saveData(');
+  assert.match(loadData, /quizScope = loadQuizScopePref\(\)/, '9. Quiz restaura a sua');
+  assert.match(html, /function saveCloudinaryConfig|CLOUDINARY_CONFIG_LOCAL/, 'Cloudinary e demais prefs intocados');
 });
 
 test('PREFS: import de backup e sync NÃO sobrescrevem as preferências', () => {
@@ -158,10 +204,10 @@ test('PREFS: import de backup e sync NÃO sobrescrevem as preferências', () => 
 
 test('PREFS: sidebar grava em cada mudança manual (Todas/seção/sítio/limpar tags)', () => {
   const tree = extractBlock(html, 'function renderTree(){', 'function entryMatchesScope(');
-  assert.match(tree, /scope=\{section:null,site:null\}; saveSidebarScopePref\(\)/);
+  assert.match(tree, /scope\s*=\s*\{section:null,\s*site:null\}; saveSidebarScopePref\(\)/);
   assert.match(tree, /scope = \{section:sectionName, site:null\};\s*saveSidebarScopePref\(\)/);
   assert.match(tree, /scope = \{section:sectionName, site:siteName\}; saveSidebarScopePref\(\)/);
-  assert.match(html, /scope = \{section:null, site:null\};\s*saveSidebarScopePref\(\)/);
+  assert.match(html, /scope\s*=\s*\{section:null,\s*site:null\};\s*saveSidebarScopePref\(\)/);
 });
 
 test('PREFS: Quiz grava a seção escolhida ao praticar uma área e tem seletores próprios', () => {

@@ -1801,9 +1801,37 @@ let fbPushTimer = null;
    executa — nunca dados "congelados" de quando foi originalmente chamado. */
 let writeChainV247 = Promise.resolve();
 function writeShardedStateSerialized(ms=15000){
-  const run = ()=> writeShardedState(ms);
+  const run = ()=> writeShardedStateWithConflictRetry(ms);
   writeChainV247 = writeChainV247.then(run, run);
   return writeChainV247;
+}
+// ALTERAÇÃO 070 (2026-09-23) — sinaliza pra syncFromFirebase() não fazer o
+// PRÓPRIO push ao final (ela sempre faz, ver mais abaixo) quando ela é
+// chamada só para reconciliar antes de repetir uma escrita que colidiu por
+// revisão (logo abaixo). Sem isso, a reconciliação chamaria de volta
+// writeShardedStateSerialized() de dentro de si mesma (reentrância
+// desnecessária) — aqui, quem repete a escrita é o próprio chamador, uma
+// única vez, já com o estado mesclado. Consumida (resetada) numa única
+// chamada — nunca fica "presa" ligada. Variável (não parâmetro) de
+// propósito: preserva a assinatura da função sem parênteses novos, que
+// testes existentes localizam procurando o texto exato da declaração.
+let syncFromFirebaseSkipTrailingPush = false;
+/* ALTERAÇÃO 070 — trata o sinal de CONFLITO DE REVISÃO (ver writeShardedState):
+   reconcilia com a nuvem (mesmo merge não destrutivo de sempre, sem push
+   próprio) e tenta escrever UMA vez mais, já com o estado mesclado. Nunca
+   escreve às cegas por cima de uma nuvem que mudou. Se a segunda tentativa
+   também falhar (conflito novamente, ou outro motivo), desiste — o estado
+   local já está salvo e syncPushPending continua true, tentando de novo na
+   próxima chamada/reconexão, igual a qualquer outra falha já existente. */
+async function writeShardedStateWithConflictRetry(ms){
+  const ok = await writeShardedState(ms);
+  if(ok) return true;
+  if(lastWriteRefusedReason === 'cloud_revision_conflict' || lastWriteRefusedReason === 'no_known_revision'){
+    syncFromFirebaseSkipTrailingPush = true;
+    try{ await syncFromFirebase(); }catch(_e){}
+    return await writeShardedState(ms);
+  }
+  return false;
 }
 let appStateReady = false; // impede que migrações iniciais enviem REVIEW/SRS vazios ao Firebase
 // v252 — BOOTSTRAP SEGURO EM DISPOSITIVO NOVO: true entre detectar um
@@ -1813,9 +1841,49 @@ let appStateReady = false; // impede que migrações iniciais enviem REVIEW/SRS 
 // manual) — ver motivação completa no bloco "BOOTSTRAP SEGURO" mais abaixo.
 let deviceBootstrapPending = false;
 
+// ALTERAÇÃO 068 (2026-09-23) — estado mínimo de sincronização, mantido aqui
+// (chokepoint único já chamado por todo envio/pull) para dois usos: o
+// diagnóstico do sistema (buildSystemDiagnosticReport) e o retry automático
+// ao reconectar (ver listener 'online' logo abaixo de pushToFirebaseNow()).
+// Puramente em memória — nunca sincronizado, nunca persistido.
+let syncPushPending = false; // true = o último envio/sync falhou; tenta de novo sozinho quando a conexão voltar
+let lastSyncOkAt = null;     // Date.now() do último envio/pull confirmado com sucesso
+let lastSyncErrorAt = null;  // Date.now() do último erro
+let lastSyncErrorDetail = null;
+
+// ALTERAÇÃO 072 (2026-09-23) — DIRTY PERSISTENTE E EXPLÍCITO. As Alterações
+// 068/069/071 tentaram decidir "precisa publicar?" comparando conteúdo
+// (local tem algo que a nuvem não tem) — mas um teste manual real provou
+// que isso ainda deixava o boot escrever sem nenhuma edição do usuário
+// (REVIEW/SRS podem legitimamente divergir um pouco entre dispositivos só
+// de uso normal do Quiz, sem que isso signifique "preciso publicar agora").
+// A partir daqui, a decisão de publicar no BOOT (dentro de syncFromFirebase
+// e dos blocos de migração de loadData) passa a depender SÓ deste marcador
+// — nunca mais de comparação de conteúdo. `syncDirty` só fica `true` quando
+// uma ação REAL do usuário (ou algo que precisa mesmo chegar à nuvem, como
+// resposta do quiz) é persistida — nunca só porque houve boot, pull, merge
+// ou uma migração puramente local. Persistido (SYNC_DIRTY_KEY, mesma camada
+// storage/IndexedDB de REVIEW/SRS) pra sobreviver a reload/offline; só volta
+// a `false` depois de uma escrita CONFIRMADA na nuvem (ver pushToFirebaseNow/
+// pushToFirebase, chokepoints únicos de escrita real). saveData()/
+// saveReview()/saveSRS()/saveSessionLog() — os 4 caminhos reais de
+// persistência do usuário — chamam markSyncDirty() antes de tentar
+// publicar; nenhum outro código muta este marcador.
+const SYNC_DIRTY_KEY = 'atlas:syncDirty';
+let syncDirty = false;
+async function markSyncDirty(){
+  syncDirty = true;
+  try{ await storage.set(SYNC_DIRTY_KEY, 'true', false); }catch(_e){}
+}
+async function clearSyncDirty(){
+  syncDirty = false;
+  try{ await storage.set(SYNC_DIRTY_KEY, 'false', false); }catch(_e){}
+}
 /* mostra/some o aviso permanente de status de sincronização no topo da barra lateral —
    diferente de um toast passageiro, fica visível até o problema ser resolvido. */
 function setSyncStatus(ok, detail){
+  if(ok){ lastSyncOkAt = Date.now(); syncPushPending = false; }
+  else{ lastSyncErrorAt = Date.now(); lastSyncErrorDetail = detail || null; syncPushPending = true; }
   const el = document.getElementById('sync-status');
   if(!el) return;
   if(ok){
@@ -1850,9 +1918,41 @@ function checkChunkSize(chunk, label){
   }catch(_e){}
   return true;
 }
+/* ALTERAÇÃO 070 (2026-09-23) — CONTROLE DE REVISÃO / concorrência otimista.
+   Motivo (bug real, comprovado em teste manual): um pull que falha em
+   silêncio (ex.: timeout de rede logo após um hard-refresh, enquanto o SDK
+   do Firebase ainda está autenticando pela primeira vez) deixava DATA local
+   desatualizado — mas o push INCONDICIONAL do fim de loadData() (e de
+   qualquer saveData()) escrevia esse estado por cima da nuvem do mesmo
+   jeito, porque nada nunca conferia se a nuvem ainda era a mesma versão que
+   este dispositivo tinha lido por último. Foi exatamente isso que fez a
+   nuvem "pular" de 118 (o que o Edge tinha) para 108 (o que o Chrome,
+   desatualizado, empurrou sem saber que a nuvem tinha mais).
+   Mecanismo: o documento principal (meta) ganha um campo `revision`
+   (inteiro, incrementado a cada escrita bem-sucedida — 0 quando a nuvem
+   nunca foi escrita). Toda leitura bem-sucedida de readShardedState()
+   grava a revisão vista em lastKnownCloudRevision — null significa "nunca
+   lemos a nuvem com sucesso nesta sessão", e writeShardedState() RECUSA
+   escrever nesse caso (antes, escrevia às cegas). Antes de escrever de
+   verdade, uma TRANSAÇÃO do Firestore relê a revisão atual e SÓ ESCREVE se
+   ela bater com lastKnownCloudRevision — a transação em si (não uma leitura
+   solta seguida de um set()) é o que fecha o TOCTOU: se outro dispositivo
+   comitar uma escrita entre a leitura e o commit desta transação, o SDK
+   detecta e aborta esta também, nunca um "quase ganhou a corrida" silencioso.
+   writeShardedStateSerialized() trata o sinal de conflito reconciliando
+   (syncFromFirebase) e tentando UMA vez mais, sempre com o estado já
+   mesclado — nunca às cegas. Ver seção 29 do CONTEXTO_MESTRE. */
+const CLOUD_REVISION_FIELD = 'revision';
+let lastKnownCloudRevision = null; // null = nunca lido com sucesso nesta sessão
+let lastWriteRefusedReason = null; // 'device_bootstrap_pending'|'chunk_too_large'|'no_known_revision'|'cloud_revision_conflict'|null
+let lastRevisionConflictAt = null; // Date.now() do último conflito de revisão detectado (diagnóstico)
 /* Escreve DATA em vários documentos pequenos + um documento "main" com o
-   resto do estado. Apaga pedaços antigos que sobrarem se a lista encolheu
-   (ex: depois de uma limpeza de duplicatas). */
+   resto do estado, dentro de UMA transação com verificação de revisão (ver
+   comentário acima). Apaga pedaços antigos que sobrarem se a lista encolheu
+   (ex: depois de uma limpeza de duplicatas) — fora da transação de
+   propósito: não é parte do snapshot lógico que precisa ser atômico
+   (chunkCount na meta já reflete o tamanho novo; um chunk extra que sobre,
+   se a exclusão falhar, é só lixo inerte e nunca é lido de volta). */
 async function writeShardedState(ms=15000){
   // Bloqueia QUALQUER envio (debounced, imediato ou "sincronizar este
   // dispositivo") enquanto o dispositivo estiver pendente de bootstrap —
@@ -1861,14 +1961,19 @@ async function writeShardedState(ms=15000){
   // por cima do estado real já sincronizado na nuvem (overwrite total,
   // não é merge). Retorna false, o mesmo sinal já usado para "pedaço grande
   // demais", que todo chamador já trata sem quebrar nem mutar nada.
-  if(deviceBootstrapPending) return false;
+  if(deviceBootstrapPending){ lastWriteRefusedReason = 'device_bootstrap_pending'; return false; }
+  if(lastKnownCloudRevision === null){
+    lastWriteRefusedReason = 'no_known_revision';
+    setSyncStatus(false, 'ainda não foi possível confirmar a versão atual da nuvem — reconciliando antes de enviar.');
+    return false;
+  }
   const cleanData = stripUndefinedDeep(DATA);
   const chunks = splitIntoChunks(cleanData, DATA_CHUNK_SIZE);
   for(let i=0;i<chunks.length;i++){
-    if(!checkChunkSize(chunks[i], `pedaço ${i+1}/${chunks.length}`)) return false;
+    if(!checkChunkSize(chunks[i], `pedaço ${i+1}/${chunks.length}`)){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
   }
 
-  const metaPayload = {
+  const metaPayloadBase = {
     review: stripUndefinedDeep(REVIEW),
     srs: stripUndefinedDeep(SRS),
     sessionLog: stripUndefinedDeep(SESSIONLOG),
@@ -1878,12 +1983,37 @@ async function writeShardedState(ms=15000){
     stateSchemaVersion: 4, // v4 = estado dividido em pedaços (chunks)
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
-  if(!checkChunkSize(metaPayload, 'documento principal (revisão/SRS/histórico)')) return false;
+  if(!checkChunkSize(metaPayloadBase, 'documento principal (revisão/SRS/histórico)')){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
 
-  await withFirebaseTimeout(FB_META_REF().set(metaPayload), ms, 'gravar documento principal');
-  for(let i=0;i<chunks.length;i++){
-    await withFirebaseTimeout(FB_CHUNK_REF(i).set({items: chunks[i]}), ms, `gravar pedaço ${i+1}/${chunks.length}`);
+  let committedRevision = null;
+  try{
+    await withFirebaseTimeout(fbDb.runTransaction(async (tx)=>{
+      const metaSnap = await tx.get(FB_META_REF());
+      const serverRevision = metaSnap.exists ? (Number((metaSnap.data()||{})[CLOUD_REVISION_FIELD]) || 0) : 0;
+      if(serverRevision !== lastKnownCloudRevision){
+        const err = new Error('a nuvem mudou desde a última leitura confirmada deste dispositivo');
+        err.code = 'cloud_revision_conflict';
+        throw err;
+      }
+      const nextRevision = serverRevision + 1;
+      tx.set(FB_META_REF(), {...metaPayloadBase, [CLOUD_REVISION_FIELD]: nextRevision});
+      for(let i=0;i<chunks.length;i++){
+        tx.set(FB_CHUNK_REF(i), {items: chunks[i]});
+      }
+      committedRevision = nextRevision;
+    }), ms, 'gravar estado (transação com verificação de revisão)');
+  }catch(e){
+    if(e && e.code === 'cloud_revision_conflict'){
+      lastWriteRefusedReason = 'cloud_revision_conflict';
+      lastRevisionConflictAt = Date.now();
+      setSyncStatus(false, 'a nuvem mudou desde a última leitura — reconciliando antes de tentar de novo.');
+      return false;
+    }
+    throw e; // outros erros (rede/timeout/pedaço grande) sobem normalmente, como antes
   }
+
+  lastKnownCloudRevision = committedRevision;
+  lastWriteRefusedReason = null;
 
   // Limpa pedaços antigos que sobraram de uma lista maior no passado.
   const prevCount = Number(window.__lastKnownChunkCount || 0);
@@ -1904,8 +2034,18 @@ async function readShardedState(ms=15000){
   // documento (de antes da sua última edição), fazendo parecer que uma
   // correção "voltou atrás" mesmo já tendo sido salva corretamente.
   const metaSnap = await withFirebaseTimeout(FB_META_REF().get({source:'server'}), ms, 'ler documento principal');
-  if(!metaSnap.exists) return null;
+  if(!metaSnap.exists){
+    // ALTERAÇÃO 070: nuvem confirmada vazia NESTA leitura — a primeira
+    // escrita pode acontecer com segurança (revisão 0 -> 1).
+    lastKnownCloudRevision = 0;
+    return null;
+  }
   const meta = metaSnap.data() || {};
+  // ALTERAÇÃO 070: toda leitura bem-sucedida do documento principal atualiza
+  // a revisão conhecida — é essa marca que writeShardedState() usa pra
+  // nunca escrever às cegas por cima de um estado que este dispositivo
+  // nunca viu.
+  lastKnownCloudRevision = Number(meta[CLOUD_REVISION_FIELD]) || 0;
   const chunkCount = Number(meta.chunkCount)||0;
   window.__lastKnownChunkCount = chunkCount;
 
@@ -1931,12 +2071,29 @@ async function readShardedState(ms=15000){
 
 /* envia o estado atual pra nuvem (com pequeno atraso pra juntar mudanças rápidas em uma escrita só) */
 function pushToFirebase(){
-  if(!fbDb || fbSyncing || !appStateReady) return;
+  // ALTERAÇÃO 069/071 (2026-09-23) — enquanto o app ainda está carregando
+  // (!appStateReady), uma chamada aqui é só plumbing interno de boot
+  // (ex.: saveOrder()/saveSiteOrder() persistindo um valor padrão quando
+  // sectionOrder/siteOrder ainda não existiam localmente) — NUNCA uma
+  // intenção real de sincronizar algo do usuário (a UI nem foi desenhada
+  // ainda). Marcar syncPushPending=true aqui faria o flush de
+  // syncFromFirebase() reenviar sem necessidade real (ver ALTERAÇÃO 071:
+  // "boot sem edição não pode gastar nenhuma escrita"). Depois que o app
+  // termina de carregar, QUALQUER bloqueio (offline ou reconciliação em
+  // andamento) já é uma intenção real — não pode mais ser descartado em
+  // silêncio, daí syncPushPending=true nesses dois casos.
+  if(!appStateReady) return;
+  if(!fbDb || fbSyncing){ syncPushPending = true; return; }
   clearTimeout(fbPushTimer);
   fbPushTimer = setTimeout(async ()=>{
+    if(fbSyncing){ syncPushPending = true; return; } // pode ter começado durante os 400ms de espera
     try{
       const ok = await writeShardedStateSerialized(15000);
       setSyncStatus(!!ok);
+      // ALTERAÇÃO 072 — só confirmado (escrita real aceita pela nuvem) limpa
+      // o dirty; uma recusa (conflito de revisão, pedaço grande demais)
+      // mantém syncDirty=true, então o retry seguinte tenta de novo.
+      if(ok) await clearSyncDirty();
     }catch(e){
       console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e);
       setSyncStatus(false, 'falha ao sincronizar — ficou salvo só neste dispositivo: ' + (e.message||e));
@@ -1947,17 +2104,34 @@ function pushToFirebase(){
    nuvem já tenha a mudança antes da tela fechar, evitando que uma sincronização
    futura sobrescreva a edição com uma versão antiga do Firestore. */
 async function pushToFirebaseNow(){
-  if(!fbDb || fbSyncing || !appStateReady) return;
+  // ALTERAÇÃO 069/071: mesmo raciocínio de pushToFirebase() acima.
+  if(!appStateReady) return;
+  if(!fbDb || fbSyncing){ syncPushPending = true; return; }
   clearTimeout(fbPushTimer);
   try{
     const ok = await writeShardedStateSerialized(15000);
     setSyncStatus(!!ok);
     if(!ok) toast('⚠ Não foi possível sincronizar: algum pedaço dos dados ainda ficou grande demais. Veja o aviso na barra lateral.');
+    // ALTERAÇÃO 072 — mesmo raciocínio de pushToFirebase() acima: só uma
+    // escrita CONFIRMADA limpa o dirty.
+    if(ok) await clearSyncDirty();
   }catch(e){
     console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e);
     setSyncStatus(false, 'falha ao sincronizar — ficou salvo só neste dispositivo: ' + (e.message||e));
     toast('⚠ Falha ao sincronizar com a nuvem — esta mudança ficou salva só neste dispositivo por enquanto.');
   }
+}
+/* ALTERAÇÃO 068 (2026-09-23) — retry automático ao reconectar: se o último
+   envio tinha falhado (offline, timeout, erro de rede — syncPushPending fica
+   true via setSyncStatus(false,...)), tenta de novo sozinho assim que o
+   navegador informa que a conexão voltou. Sem isso, uma mudança feita offline
+   ficava salva só localmente até a PRÓXIMA edição/F5 empurrar por acaso — o
+   usuário não tinha como saber que precisava agir. Sem efeito quando não há
+   falha pendente (idempotente); respeita o mesmo bloqueio de bootstrap. */
+if(typeof window !== 'undefined' && typeof window.addEventListener === 'function'){
+  window.addEventListener('online', ()=>{
+    if(syncPushPending && appStateReady && !deviceBootstrapPending) pushToFirebaseNow();
+  });
 }
 
 /* ============================================================
@@ -2034,6 +2208,76 @@ async function readCloudAuditFromServer(){
   counters.storesRevisions = false;
   return counters;
 }
+/* ALTERAÇÃO 069 (2026-09-23) — auditoria READ-ONLY de IDENTIDADE de imagem
+   (local × nuvem), pedida para confirmar se um conjunto de imagens que só
+   aparece de um lado (ex.: "10 imagens a mais na nuvem") são distintas de
+   verdade ou duplicatas — sem apagar, mover ou fundir nada, só relatar.
+   Usa a mesma identidade estável do resto do projeto (stableImageKeyV208/
+   imageIdentityKeys — assetId > publicId > URL normalizada). */
+function imageIdentityDivergenceForEntry(localImgs, remoteImgs){
+  const keyOf = img => (stableImageKeyV208(img) || (imageIdentityKeys(img)[0]||''));
+  const groupByKey = arr => {
+    const map = new Map();
+    for(const img of (Array.isArray(arr)?arr:[])){
+      if(!img) continue;
+      const k = keyOf(img); if(!k) continue;
+      if(!map.has(k)) map.set(k, []);
+      map.get(k).push(img);
+    }
+    return map;
+  };
+  const localMap = groupByKey(localImgs), remoteMap = groupByKey(remoteImgs);
+  const localOnly = [], remoteOnly = [], both = [], localDuplicates = [], remoteDuplicates = [];
+  for(const [k, arr] of localMap){
+    if(arr.length > 1) localDuplicates.push({ key:k, count:arr.length });
+    if(remoteMap.has(k)) both.push(k); else localOnly.push(k);
+  }
+  for(const [k, arr] of remoteMap){
+    if(arr.length > 1) remoteDuplicates.push({ key:k, count:arr.length });
+    if(!localMap.has(k)) remoteOnly.push(k);
+  }
+  return { localOnly, remoteOnly, both, localDuplicates, remoteDuplicates };
+}
+/* Roda a comparação acima para TODO o catálogo (por lesão, casando por id) e
+   soma totais. 100% read-only — pura, sem I/O. */
+function buildImageIdentityDivergenceReport(localData, remoteData){
+  const localById = new Map((Array.isArray(localData)?localData:[]).filter(e=>e&&e.id).map(e=>[e.id,e]));
+  const remoteById = new Map((Array.isArray(remoteData)?remoteData:[]).filter(e=>e&&e.id).map(e=>[e.id,e]));
+  const allIds = new Set([...localById.keys(), ...remoteById.keys()]);
+  const perLesion = [];
+  const totals = { localOnly:0, remoteOnly:0, both:0, localDuplicates:0, remoteDuplicates:0 };
+  for(const id of allIds){
+    const l = localById.get(id), r = remoteById.get(id);
+    const div = imageIdentityDivergenceForEntry(l&&l.images, r&&r.images);
+    if(div.localOnly.length || div.remoteOnly.length || div.localDuplicates.length || div.remoteDuplicates.length){
+      perLesion.push({
+        id, name: (l&&l.name)||(r&&r.name)||'',
+        localOnlyCount: div.localOnly.length,
+        remoteOnlyCount: div.remoteOnly.length,
+        localDuplicateCount: div.localDuplicates.length,
+        remoteDuplicateCount: div.remoteDuplicates.length
+      });
+    }
+    totals.localOnly += div.localOnly.length;
+    totals.remoteOnly += div.remoteOnly.length;
+    totals.both += div.both.length;
+    totals.localDuplicates += div.localDuplicates.length;
+    totals.remoteDuplicates += div.remoteDuplicates.length;
+  }
+  return { perLesion, totals };
+}
+/* Wrapper que lê a nuvem SERVER-ONLY (nunca cache) e compara com o DATA
+   local atual. 100% read-only. Disponível para uso manual/console e pelo
+   diagnóstico do sistema quando a auditoria de contadores mostrar divergência
+   de imagens. */
+async function buildImageIdentityDivergenceAuditFromServer(){
+  if(!fbDb) throw new Error('Firebase indisponível neste navegador.');
+  const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'auditoria de identidade de imagens (servidor)');
+  const remoteData = (Array.isArray(remote && remote.data) ? remote.data : [])
+    .filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+  const localData = (Array.isArray(DATA)?DATA:[]).filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+  return buildImageIdentityDivergenceReport(localData, remoteData);
+}
 /* Só considera "sincronizado" quando os contadores relevantes batem. */
 function syncCountersMatch(local, server){
   if(!local || !server) return false;
@@ -2052,6 +2296,14 @@ async function syncThisDeviceToCloud(opts){
   if(!fbDb){ toast('Firebase indisponível neste navegador.'); return { ok:false, reason:'no_firebase' }; }
   if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return { ok:false, reason:'not_ready' }; }
   if(deviceBootstrapPending){ toast('Este dispositivo ainda não foi inicializado com os dados da nuvem.'); return { ok:false, reason:'device_not_initialized' }; }
+  // ALTERAÇÃO 069 (2026-09-23) — sem este guard, clicar aqui bem na janela em
+  // que o pull automático do boot (ou outra reconciliação) ainda está lendo/
+  // mesclando o servidor faria este envio EXPLÍCITO competir com a
+  // reconciliação em andamento e escrever por cima dela com o DATA de ANTES
+  // do merge terminar. `fbSyncing` é o mesmo mutex já usado em todo o
+  // projeto (ver a rotina de reconciliação nuvem→local/pushToFirebaseNow)
+  // — reaproveitado aqui, não duplicado.
+  if(fbSyncing){ toast('Aguarde a sincronização automática em andamento terminar e tente de novo.'); return { ok:false, reason:'sync_in_progress' }; }
   try{
     onStep(1, 'criando snapshot');
     createSafetySnapshot('antes de sincronizar este dispositivo com a nuvem');
@@ -2699,7 +2951,75 @@ function imageIdentityKeys(img){
   if(!keys.length) keys.push('json:'+JSON.stringify(img));
   return keys;
 }
-function unionEntryImages(baseImgs, addImgs, targetEntry, conflictSink, sourceLabel){
+/* ALTERAÇÃO 072b (2026-09-23) — NORMALIZAÇÃO DE ETIQUETA LEGADA NO PULL.
+   Cenário real: imagem guardada no array da lesão certa na nuvem, mas com
+   img.lesionId de um seed_N histórico (reetiquetagem incompleta após
+   fusão/reordenação — Alteração 059). Sem isto, o pull BLOQUEIA a imagem
+   para sempre (canChangeImageOwnership exige contexto manual) e um PC stale
+   nunca recebe essas imagens legítimas.
+   tryNormalizeLegacyPullImage() decide de forma ESTRUTURAL (sem hardcode de
+   pares): dono divergente + formato seed_N histórico + assetId/publicId +
+   STABLE KEY ÚNICA no catálogo atual — 072c: a mesma noção de identidade do
+   auditor/diagnóstico (assetId > publicId > URL), nunca qualquer chave
+   parcial isolada — nenhuma outra lesão atual detém o MESMO asset.
+   Tudo provado ao mesmo tempo → devolve CÓPIA com só o
+   lesionId normalizado + REGISTRA legacy_image_owner_label_normalized.
+   Conflito real (mesma imagem em outra lesão atual) → { ok:false } e o
+   chamador mantém o BLOQUEIO de sempre. Pura quanto às entradas (nunca muta
+   img). Também usada pela função de console normalizeLegacyImageOwnerLabel,
+   que mantém exatamente o mesmo formato de retorno. */
+/* ALTERAÇÃO 072c (2026-09-23) — holders pela STABLE KEY ÚNICA (a mesma
+   noção de identidade do auditor/diagnóstico: assetId > publicId > URL).
+   A 072b considerava QUALQUER chave parcial compartilhada (ex.: mesmo
+   publicId de um re-upload = asset DIFERENTE fisicamente em outra lesão)
+   como "conflito real" — falso positivo que bloqueou 2 imagens legítimas
+   (Chrome 118/120). Conflito real = o MESMO asset (mesma stable key)
+   fisicamente em outra lesão atual. */
+function legacyImageHoldersByKey(catalog){
+  const map = new Map();
+  for(const e of (Array.isArray(catalog)?catalog:[])){
+    if(!e || typeof e.id !== 'string' || !e.id) continue;
+    for(const img of (Array.isArray(e.images)?e.images:[])){
+      const k = stableImageKeyV208(img);
+      if(!k) continue;
+      if(!map.has(k)) map.set(k, new Set());
+      map.get(k).add(e.id);
+    }
+  }
+  return map;
+}
+function tryNormalizeLegacyPullImage(img, keys, targetId, holdersByKey, sourceLabel, lesionName){
+  const no = { ok:false, reason:'', others:[] };
+  if(!img || typeof img !== 'object'){ no.reason = 'imagem inválida'; return no; }
+  const owner = imageOwnerIdV1(img);
+  if(!owner || owner === targetId){ no.reason = 'etiqueta já correta ou ausente'; return no; }
+  // Ordem das checagens = mesma tabela de decisão da função de console
+  // (normalização segura só com TODAS as condições provadas).
+  if(!(img.assetId || img.publicId)){ no.reason = 'sem assetId/publicId'; return no; }
+  const k = stableImageKeyV208(img);
+  if(!k){ no.reason = 'sem identidade estável'; return no; }
+  if(holdersByKey){
+    const holders = holdersByKey.get(k);
+    if(holders){
+      for(const h of holders){
+        if(h !== targetId) no.others.push(h);
+      }
+      if(no.others.length){ no.reason = 'presente em outra lesão atual (conflito real: bloqueado)'; return no; }
+    }
+  }
+  if(!/^seed_\d+$/.test(owner)){ no.reason = 'dono divergente não é seed_N histórico (bloqueado)'; return no; }
+  const image = { ...img, lesionId: targetId }; // APENAS o lesionId; lesionName e resto intactos
+  registerImageOwnershipConflict({
+    kind:'legacy_image_owner_label_normalized',
+    stableKey: k,
+    fromLesionId: owner,
+    toLesionId: targetId,
+    lesionName: lesionName || '',
+    source: sourceLabel || ''
+  });
+  return { ok:true, image, stableKey: k, from: owner, to: targetId };
+}
+function unionEntryImages(baseImgs, addImgs, targetEntry, conflictSink, sourceLabel, legacyCatalog){
   const targetId = String((targetEntry && targetEntry.id) || '');
   const out = [];
   const seen = new Set();
@@ -2713,13 +3033,36 @@ function unionEntryImages(baseImgs, addImgs, targetEntry, conflictSink, sourceLa
   for(const img of (Array.isArray(baseImgs)?baseImgs:[])){
     if(!img) continue; pushImg(img);
   }
+  // ALTERAÇÃO 072b: mapa de quem-detém-o-quê no catálogo atual, construído
+  // UMA vez e só se houver candidato (pull + catálogo informado + etiqueta
+  // legada divergente). Fora do pull — ou sem catálogo — continua null e o
+  // comportamento abaixo é exatamente o de antes (bloqueio puro).
+  let legacyHolders = null;
+  let legacyHoldersBuilt = false;
   for(const img of (Array.isArray(addImgs)?addImgs:[])){
     if(!img) continue;
     const keys = imageIdentityKeys(img);
     if(keys.some(k=>seen.has(k))) continue;
     const owner = imageOwnerIdV1(img);
     if(owner && !canChangeImageOwnership(img, targetId, null)){
-      registerImageOwnershipConflict({ kind:'image_merge_ownership_conflict_blocked', source:sourceLabel||'', stableKey:keys[0], fromLesionId:owner, toLesionId:targetId, lesionName:(targetEntry&&targetEntry.name)||'' });
+      // SOMENTE pull remoto (addImgs = remoteEntry.images, sourceLabel
+      // 'pull'): tenta a normalização estrutural da etiqueta legada. Push
+      // ('push'), importação e recuperação nunca passam catálogo — caem
+      // direto no bloqueio de sempre, sem nenhuma mudança.
+      // 072c: guarda a tentativa para diagnóstico — se o bloqueio for por
+      // holders reais, o evento informa EXATAMENTE quais lesões detêm o
+      // asset (campo conflictingHolders, só leitura, sem mudar a decisão).
+      let normalizeAttempt = null;
+      if(sourceLabel === 'pull' && Array.isArray(legacyCatalog) && /^seed_\d+$/.test(owner)){
+        if(!legacyHoldersBuilt){ legacyHoldersBuilt = true; legacyHolders = legacyImageHoldersByKey(legacyCatalog); }
+        normalizeAttempt = tryNormalizeLegacyPullImage(img, keys, targetId, legacyHolders, sourceLabel, (targetEntry&&targetEntry.name)||'');
+        if(normalizeAttempt.ok){
+          keys.forEach(k=>seen.add(k));
+          out.push(normalizeAttempt.image); // cópia normalizada; o objeto remoto original não é mutado
+          continue;
+        }
+      }
+      registerImageOwnershipConflict({ kind:'image_merge_ownership_conflict_blocked', source:sourceLabel||'', stableKey:keys[0], fromLesionId:owner, toLesionId:targetId, lesionName:(targetEntry&&targetEntry.name)||'', ...(normalizeAttempt && normalizeAttempt.others && normalizeAttempt.others.length ? { conflictingHolders: normalizeAttempt.others } : {}) });
       if(conflictSink) conflictSink.push({ stableKey:keys[0], fromLesionId:owner, toLesionId:targetId, lesionName:(targetEntry&&targetEntry.name)||'' });
       continue;
     }
@@ -2733,7 +3076,7 @@ function unionEntryImages(baseImgs, addImgs, targetEntry, conflictSink, sourceLa
   try{ adoptOldestAssignedAt(out, baseImgs, addImgs); }catch(_e){}
   return out;
 }
-function mergeEntryNonDestructive(localEntry, remoteEntry){
+function mergeEntryNonDestructive(localEntry, remoteEntry, legacyCatalog){
   const local = localEntry || {};
   const remote = remoteEntry || {};
   const lt = Number(local._userUpdatedAt)||0;
@@ -2745,12 +3088,22 @@ function mergeEntryNonDestructive(localEntry, remoteEntry){
   if(rt > lt) merged = {...local, ...remote};
   else merged = {...remote, ...local};
 
+  // ALTERAÇÃO 072b: o catálogo atual só é repassado ao pull quando o merge é
+  // entre a MESMA lesão dos dois lados (mesmo id local e remoto — é o único
+  // caso em que "a lesão-alvo é a mesma lesão remota que contém a imagem"
+  // vale por construção). Quem não informa catálogo (push, importação,
+  // recuperação) mantém o bloqueio puro de sempre.
+  const pullCatalog = (Array.isArray(legacyCatalog) && remoteEntry && localEntry &&
+    String(remoteEntry.id) === String(localEntry.id)) ? legacyCatalog : null;
+
   // PULL nuvem→local: UNION ADITIVA das imagens — preserva as locais e incorpora
   // as remotas que faltam (dedup por identidade estável + ownership). NUNCA apaga
   // imagem local nem move ownership. (Antes, quando um lado tinha timestamp mais
   // novo, o array do outro era descartado — era isso que escondia imagens novas
   // que existiam só na nuvem.)
-  merged.images = unionEntryImages(local.images, remote.images, merged, PULL_IMAGE_OWNERSHIP_CONFLICTS, 'pull');
+  // 072b: imagem remota com etiqueta legada segura é normalizada (só o
+  // lesionId) e adotada normalmente; conflito real continua bloqueado.
+  merged.images = unionEntryImages(local.images, remote.images, merged, PULL_IMAGE_OWNERSHIP_CONFLICTS, 'pull', pullCatalog);
   // v246: aqui só remove duplicata exata de imagem (mesma imagem aparecendo
   // duas vezes na lista) — NUNCA rejeita uma imagem por a etiqueta interna
   // (lesionId) não bater com o id atual. Essa checagem de posse era feita
@@ -2795,6 +3148,9 @@ async function mergeThisDeviceImagesToCloud(opts){
   if(!fbDb){ toast('Firebase indisponível neste navegador.'); return { ok:false, reason:'no_firebase' }; }
   if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return { ok:false, reason:'not_ready' }; }
   if(deviceBootstrapPending){ toast('Este dispositivo ainda não foi inicializado com os dados da nuvem.'); return { ok:false, reason:'device_not_initialized' }; }
+  // ALTERAÇÃO 069 (2026-09-23) — mesmo raciocínio de syncThisDeviceToCloud():
+  // não pode competir com uma reconciliação automática em andamento.
+  if(fbSyncing){ toast('Aguarde a sincronização automática em andamento terminar e tente de novo.'); return { ok:false, reason:'sync_in_progress' }; }
   PUSH_IMAGE_OWNERSHIP_CONFLICTS = [];
   try{
     onStep(1, 'criando snapshot');
@@ -2858,7 +3214,24 @@ async function mergeThisDeviceImagesToCloud(opts){
 }
 
 async function syncFromFirebase(){
-  if(!fbDb) return;
+  // ALTERAÇÃO 069 (2026-09-23) — BARREIRA DE REENTRÂNCIA: syncFromFirebase()
+  // tem 5 call sites (pull automático do boot, "⬇ atualizar deste backup/
+  // nuvem", exportar backup, restaurar padrão de fábrica, escolha "carregar"
+  // do bootstrap de dispositivo novo) e nenhum deles verificava se já havia
+  // uma reconciliação em andamento. Um clique em "atualizar deste backup/
+  // nuvem" bem na janela em que o pull automático do boot ainda está lendo o
+  // servidor entraria aqui DE NOVO enquanto a primeira chamada ainda não
+  // tinha terminado de montar `reconciled` — as duas mexendo nas mesmas
+  // variáveis globais (DATA/fbSyncing) ao mesmo tempo. `fbSyncing` já é o
+  // mutex usado no projeto inteiro para "não deixe nada automático empurrar
+  // agora" (ver pushToFirebase/pushToFirebaseNow, restoreSafetySnapshot,
+  // openRecoveryInspector) — reusar o mesmo aqui, em vez de criar um segundo
+  // flag paralelo, fecha a reentrância sem fragmentar o mutex.
+  if(!fbDb || fbSyncing) return;
+  // ALTERAÇÃO 070 — consome (reseta) o sinal de "não faça seu próprio push
+  // ao final" numa única chamada; ver writeShardedStateWithConflictRetry().
+  const skipTrailingPush = syncFromFirebaseSkipTrailingPush;
+  syncFromFirebaseSkipTrailingPush = false;
 
   // Snapshot obrigatório ANTES de qualquer reconciliação com a nuvem.
   try{ createSafetySnapshot('antes da sincronização Firebase'); }catch(_e){}
@@ -2881,7 +3254,12 @@ async function syncFromFirebase(){
       for(const id of allIds){
         const l = localById.get(id);
         const r = remoteById.get(id);
-        if(l && r) reconciled.push(mergeEntryNonDestructive(l,r));
+        // ALTERAÇÃO 072b: repassa o catálogo atual (pré-merge) para que o
+        // pull normalize etiquetas legadas seguras (só lesionId, com registro)
+        // e adote as imagens — sem isso um PC stale bloquearia para sempre as
+        // imagens legítimas com etiqueta histórica. Conflito real continua
+        // bloqueado dentro do próprio merge.
+        if(l && r) reconciled.push(mergeEntryNonDestructive(l,r,localData));
         else reconciled.push(l || r);
       }
 
@@ -2918,15 +3296,42 @@ async function syncFromFirebase(){
 
       // Snapshot após reconciliação bem-sucedida.
       try{ createSafetySnapshot('após sincronização Firebase'); }catch(_e){}
-      await pushToFirebaseNow();
+      // ALTERAÇÃO 072 (2026-09-23) — REGRA ABSOLUTA: abrir o Atlas sem
+      // nenhuma alteração do usuário nunca publica nada, PONTO — nunca mais
+      // inferido comparando conteúdo (a Alteração 071 tentou isso; um teste
+      // manual real provou que ainda escrevia sem edição nenhuma, porque
+      // REVIEW/SRS podem legitimamente divergir um pouco só de uso normal do
+      // Quiz). A decisão agora é só `syncDirty` — marcador explícito e
+      // persistente, só ligado por uma ação REAL do usuário (ver declaração
+      // perto de syncPushPending). A barreira de revisão (Alteração 070)
+      // continua protegendo qualquer publicação que realmente aconteça.
+      if(!skipTrailingPush && syncDirty) await pushToFirebaseNow();
     } else {
+      // Nuvem nunca teve nenhum documento (caso raro fora do fluxo normal de
+      // bootstrap de dispositivo novo — ver deviceBootstrapPending/
+      // runNewDeviceBootstrapFlow, que já cobre isso explicitamente com
+      // confirmação do usuário). Mesma regra: só publica se syncDirty.
       fbSyncing = false;
-      await pushToFirebaseNow();
+      if(!skipTrailingPush && syncDirty) await pushToFirebaseNow();
     }
   }catch(e){
     fbSyncing = false;
     console.error('Firebase sync falhou — usando dados locais por enquanto.', e);
     setSyncStatus(false, 'não foi possível confirmar sincronização com a nuvem ao abrir — ' + (e.message||e));
+  }
+  // ALTERAÇÃO 069 — REGRA ABSOLUTA: nenhuma alteração local feita ENQUANTO
+  // fbSyncing era true pode ficar só marcada localmente pra sempre. Se algum
+  // saveData()/pushToFirebaseNow() foi bloqueado durante esta reconciliação
+  // (ver pushToFirebaseNow — agora marca syncPushPending em vez de descartar
+  // silenciosamente), ele é reenviado agora, com o DATA já mesclado (união
+  // da nuvem + a edição concorrente, nunca só o lado local desatualizado).
+  // Cobre também o caminho do catch acima (rede falhou): sem isto, uma
+  // edição feita durante um pull que falhou ficava presa só localmente até
+  // a próxima edição/F5 empurrar por acaso. skipTrailingPush também suprime
+  // este flush — quem chamou com o sinal ligado (writeShardedStateWithConflictRetry)
+  // é quem vai tentar escrever em seguida, com o estado já mesclado.
+  if(!skipTrailingPush && syncPushPending){
+    try{ await pushToFirebaseNow(); }catch(_e){}
   }
 }
 
@@ -3375,8 +3780,18 @@ async function loadSRS(){
   try{ const r = await storage.get(SRS_KEY, false); SRS = JSON.parse(r.value); }
   catch(e){ SRS = {}; }
 }
-async function saveSRS(){
+// ALTERAÇÃO 072 (2026-09-23) — `internal=true` é usado SÓ pelas 3 migrações
+// automáticas de boot que já persistem SRS por outro motivo que não uma
+// ação real do usuário (deduplicateV171/dupResult/postSyncDupV208 dentro de
+// loadData()) — nesse caso persiste local mas NÃO marca syncDirty nem
+// publica sozinha (ver a REGRA ABSOLUTA no topo do arquivo, perto de
+// syncPushPending). Toda chamada SEM o parâmetro (grade do Quiz via
+// srsGradeLevel, e o resto do app) continua marcando dirty e publicando
+// exatamente como antes.
+async function saveSRS(internal){
   try{ await storage.set(SRS_KEY, JSON.stringify(SRS), false); }catch(e){}
+  if(internal) return;
+  await markSyncDirty();
   pushToFirebase();
 }
 function isDue(id){
@@ -3424,8 +3839,13 @@ async function loadSessionLog(){
   try{ const r = await storage.get(SESSIONLOG_KEY, false); SESSIONLOG = JSON.parse(r.value); }
   catch(e){ SESSIONLOG = {}; }
 }
-async function saveSessionLog(){
+// ALTERAÇÃO 072: mesmo raciocínio de saveSRS() acima (internal=true pula
+// dirty/push) — nenhuma chamada interna de boot usa isto hoje, mas o
+// parâmetro existe pra consistência com as outras 3 funções de save real.
+async function saveSessionLog(internal){
   try{ await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false); }catch(e){}
+  if(internal) return;
+  await markSyncDirty();
   pushToFirebase();
 }
 function todayKey(d){
@@ -3445,9 +3865,14 @@ function logSessionResult(right, wrong){
 function getReview(id){ return REVIEW[id] || 0; }
 function setReview(id, status){ REVIEW[id] = status; saveReview(); }
 function cycleReview(id){ setReview(id, (getReview(id)+1)%3); }
-async function saveReview(){
+// ALTERAÇÃO 072: mesmo raciocínio de saveSRS() acima — internal=true (só a
+// migração dupResult dentro de loadData()) persiste local sem marcar dirty
+// nem publicar.
+async function saveReview(internal){
   try{ await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false); }
   catch(e){ console.error('storage error', e); }
+  if(internal) return;
+  await markSyncDirty();
   pushToFirebase();
 }
 
@@ -5963,7 +6388,11 @@ async function migrateLegacyLocalImagesToCloudinary(){
       migrated+=uploaded.length; changed=true;
     }
   }
-  if(changed) await saveData();
+  // ALTERAÇÃO 072: chamada tanto pelo boot (loadData) quanto por ações
+  // explícitas (syncThisDeviceToCloud, que faz seu PRÓPRIO push depois) —
+  // internal=true evita marcar dirty/publicar duas vezes; nenhum caminho
+  // perde a persistência local.
+  if(changed) await saveData(true);
   return {migrated, failed};
 }
 /* imagens externas ficam no próprio registro e entram no backup; locais antigos continuam compatíveis */
@@ -6629,8 +7058,13 @@ async function deduplicateV171(){
   remove.forEach(id=>{ if(REVIEW) delete REVIEW[id]; if(SRS) delete SRS[id]; });
   try{ await storage.set(STORAGE_KEY,JSON.stringify(DATA),false); }catch(_e){}
   try{ await storage.set(REVIEW_KEY,JSON.stringify(REVIEW),false); }catch(_e){}
-  await saveSRS();
-  await pushToFirebaseNow();
+  // ALTERAÇÃO 072: chamada tanto pelo boot (migração automática, nunca deve
+  // publicar sozinha) quanto pela importação de backup (ação real do
+  // usuário, que já chamou saveData() — REAL — antes desta função, deixando
+  // syncDirty=true) — internal=true aqui + o gate por syncDirty cobrem os
+  // dois casos corretamente sem duplicar lógica.
+  await saveSRS(true);
+  if(syncDirty) await pushToFirebaseNow();
   console.info(`[Atlas] v189: ${merged} duplicata(s) semântica(s) consolidada(s), preservando imagens, metadados e progresso.`);
   return merged;
 }
@@ -8884,7 +9318,7 @@ async function loadData(){
     });
     if(runTagCleanup()) migrated = true;
     DATA.forEach(e=>{ if(typeof e.inc !== 'number'){ ensureInc(e); migrated = true; } });
-    if(migrated) await saveData();
+    if(migrated) await saveData(true); // ALTERAÇÃO 072: migração automática de boot, nunca marca dirty
   }catch(e){
     // v252: DISPOSITIVO NOVO/SEM CATÁLOGO LOCAL — não decide sozinho e não
     // persiste/envia nada ainda. O SEED aqui é só uma base de trabalho EM
@@ -8920,6 +9354,17 @@ async function loadData(){
     const r3 = await storage.get(REVIEW_KEY, false);
     REVIEW = JSON.parse(r3.value);
   }catch(e){ REVIEW = {}; }
+  // ALTERAÇÃO 072 (2026-09-23) — carrega o marcador PERSISTENTE de dirty
+  // (sobrevive a reload/offline — ver declaração de syncDirty perto de
+  // syncPushPending). Se a chave nunca existiu (dispositivo novo, ou
+  // qualquer dispositivo já inicializado ANTES desta alteração existir —
+  // nesse caso o que já estava salvo localmente já tinha sido publicado
+  // pelo antigo push incondicional), assume false: não há motivo pra supor
+  // uma edição pendente que este código nunca chegou a marcar.
+  try{
+    const rDirty = await storage.get(SYNC_DIRTY_KEY, false);
+    syncDirty = rDirty.value === 'true';
+  }catch(e){ syncDirty = false; }
   await loadSRS();
   await loadSessionLog();
   await loadLesionRevisions();
@@ -8942,32 +9387,58 @@ async function loadData(){
   // lesão foi criada manualmente num dispositivo que ainda não tinha essa lesão
   // canônica sincronizada. Roda aqui porque já precisa de REVIEW/SRS carregados.
   const dupResult = runDuplicateCleanup();
-  if(dupResult.changed) await saveData();
-  if(dupResult.reviewOrSrsChanged){ await saveReview(); await saveSRS(); }
+  // ALTERAÇÃO 072: fusão automática de duplicata exata no boot — migração,
+  // não edição do usuário; persiste local, nunca marca dirty/publica sozinha.
+  if(dupResult.changed) await saveData(true);
+  if(dupResult.reviewOrSrsChanged){ await saveReview(true); await saveSRS(true); }
 
   // v190: snapshot compacto e versionado ANTES de qualquer sincronização.
   try{ createSafetySnapshot('abertura do Atlas antes do Firebase'); }catch(_e){}
 
   // Só a partir daqui REVIEW/SRS/SESSIONLOG já foram carregados.
   appStateReady = true;
-  // ALTERACAO 008 (2026-09-19) — sincronizacao automatica NUVEM->LOCAL
-  // DESATIVADA de proposito neste call site. syncFromFirebase() lia o
-  // Firestore e fazia merge POR ID contra o DATA local a cada abertura/F5
-  // (auditoria read-only desta mesma sessao confirmou: o merge por ID, sem
-  // checar identidade semantica, reintroduz qualquer registro/REVIEW/SRS
-  // que ainda exista na nuvem sob um ID que a reconciliacao V2 ja
-  // consolidou localmente — exatamente o duplicado/ownership antigo que a
-  // reconciliacao acabou de eliminar). O catalogo LOCAL agora e' a fonte
-  // primaria: loadData() carrega exclusivamente o estado local (storage)
-  // e o SEED, igual a arquitetura atual sempre previu, sem buscar o
-  // Firebase sozinho. A funcao syncFromFirebase() continua definida e
-  // INALTERADA (ver linha ~2005) para uso manual/controlado explicito no
-  // futuro — so' este disparo automatico da inicializacao foi desativado.
-  // Os outros dois call sites manuais (btn-export, antes de gerar backup;
-  // btn-reset, antes de restaurar padrao de fabrica) nao fazem parte do
-  // fluxo de abertura/F5/login e permanecem como estavam, fora do escopo
-  // desta alteracao.
-  // await syncFromFirebase();
+  // ALTERAÇÃO 068 (2026-09-23) — sincronização automática NUVEM->LOCAL
+  // REATIVADA neste call site, só para dispositivo JÁ INICIALIZADO
+  // (isNewLocalDevice===false — dispositivo novo já resolveu isso de forma
+  // explícita alguns passos acima, em runNewDeviceBootstrapFlow(); repetir
+  // aqui pisaria na escolha "usar vazio mesmo assim" que o usuário acabou de
+  // confirmar no modal).
+  //
+  // Causa raiz do "PC do hospital abriu com metade das imagens": um
+  // dispositivo com catálogo local (IndexedDB) de semanas atrás nunca
+  // consultava a nuvem de novo — só EMPURRAVA (pushToFirebaseNow() roda
+  // incondicionalmente no fim desta função e a cada saveData()) o que tinha
+  // localmente. Como writeShardedState() faz .set() (substituição total do
+  // documento, não merge), o boot sozinho — sem o usuário editar nada — já
+  // sobrescrevia no Firestore qualquer imagem/lesão que só existisse na
+  // nuvem (adicionada por outro computador nesse meio tempo).
+  //
+  // Isto tinha sido desligado de propósito na Alteração 008 (2026-09-19)
+  // porque, NAQUELA época, o merge de syncFromFirebase() reintroduzia
+  // duplicatas/ownership que a reconciliação V2 recém tinha consolidado.
+  // Essa causa específica está coberta hoje por proteções que não existiam
+  // em 2026-09-19, todas já usadas e testadas pelos 3 call sites explícitos
+  // que nunca deixaram de existir (exportar backup, restaurar padrão de
+  // fábrica, "⬇ atualizar deste backup/nuvem") e pela escolha "carregar" do
+  // bootstrap de dispositivo novo:
+  //  - SUPPRESSED_DUPLICATE_IDS_V172 filtra dos DOIS lados (local E remoto)
+  //    qualquer id de duplicata do SEED atual antes do merge (ver logo
+  //    acima de mergeEntryNonDestructive, dentro da própria syncFromFirebase);
+  //  - mergeEntryNonDestructive() nunca perde imagem local nem remota (união
+  //    aditiva por identidade estável) e nunca move ownership
+  //    (canChangeImageOwnership exige contexto manual; um conflito vira
+  //    registro em IMAGE_OWNERSHIP_CONFLICTS, nunca resolução silenciosa —
+  //    ver seção 5 do CONTEXTO_MESTRE);
+  //  - mergeReviewPreservingProgress/mergeSRSPreservingNewest/
+  //    mergeSessionLogPreservingProgress nunca regridem progresso.
+  // syncFromFirebase() é a MESMA função, intocada — nenhuma lógica de merge
+  // nova foi criada aqui. Se a nuvem estiver indisponível (offline/erro),
+  // ela não altera nada local (fbDb ausente) ou cai no próprio catch e só
+  // marca o aviso de sincronização (setSyncStatus) — o boot sempre continua
+  // com o estado local, nunca trava nem mostra tela vazia.
+  if(!isNewLocalDevice){
+    await syncFromFirebase();
+  }
   await applyAltPlacementsAudit20260918();
   await applyClassificationAudit20260918();
 
@@ -8979,18 +9450,27 @@ async function loadData(){
   // apagando imagens corretas silenciosamente. Agora, uma imagem só é
   // removida quando você aperta ✕ manualmente, ou confirma uma correção na
   // tela de auditoria — nunca mais sozinha, em segundo plano.
+  // ALTERAÇÃO 072 (2026-09-23) — REGRA ABSOLUTA: nenhuma migração automática
+  // de boot (fusão de duplicata, upgrades de descrição, dedup v171, barreira
+  // de suprimidos) marca dirty nem publica sozinha, mesmo quando muda DATA/
+  // REVIEW/SRS de verdade — só persiste local. A ÚNICA coisa que decide se
+  // este boot publica é `syncDirty` (ver declaração perto de syncPushPending):
+  // só fica true por uma ação REAL do usuário (saveData/saveReview/saveSRS/
+  // saveSessionLog chamados SEM o parâmetro `internal`) persistida em
+  // QUALQUER momento — inclusive antes deste boot (sobrevive a reload,
+  // carregado logo depois de REVIEW/SRS/SESSIONLOG, ver acima). Isso troca a
+  // heurística anterior (comparar conteúdo local×remoto — Alteração 071, que
+  // um teste manual real provou insuficiente: REVIEW/SRS podem legitimamente
+  // divergir um pouco só de uso normal do Quiz, sem significar "publique
+  // agora") por um marcador explícito e persistente, exatamente como pedido.
   const postSyncDupV208 = runDuplicateCleanup();
   if(postSyncDupV208.changed){
     try{ await storage.set(STORAGE_KEY,JSON.stringify(DATA),false); }catch(_e){}
   }
   if(postSyncDupV208.reviewOrSrsChanged){
     try{ await storage.set(REVIEW_KEY,JSON.stringify(REVIEW),false); }catch(_e){}
-    await saveSRS();
+    await saveSRS(true);
   }
-  if(postSyncDupV208.changed || postSyncDupV208.reviewOrSrsChanged){
-    await pushToFirebaseNow();
-  }
-
   await upgradeDescriptionsV169();
   await upgradeDescriptionsV170();
   await upgradeDescriptionsV173();
@@ -9005,22 +9485,39 @@ async function loadData(){
   // v187: barreira final contra dados antigos do localStorage/Firebase reintroduzirem aliases suprimidos.
   DATA = DATA.filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
   try{ await storage.set(STORAGE_KEY,JSON.stringify(DATA),false); }catch(_e){}
-  await pushToFirebaseNow();
+  if(syncDirty) await pushToFirebaseNow();
   const recoveredImgs = await migrateLegacyLocalImagesToCloudinary();
   if(recoveredImgs.migrated) console.info(`[Atlas] v166 recuperou ${recoveredImgs.migrated} imagem(ns) locais e enviou ao Cloudinary.`);
 
-  // Restaura as preferências LOCAIS de navegação (localStorage), independentes:
-  // sidebar e Quiz. Validadas contra as seções/sites atuais; preferência inválida
-  // ou localStorage indisponível cai no padrão (Todas as seções), sem quebrar o boot.
-  scope = loadSidebarScopePref();
+  // Estado padrão de fábrica dos filtros (2026-09-22): reload SEMPRE nasce
+  // limpo — Todas as seções, sem tags, Revisões=Todas. A preferência antiga de
+  // seção/sítio NO localStorage NÃO é mais lida aqui (loadSidebarScopePref e
+  // a escrita continuam existindo por compatibilidade, mas o boot as ignora).
+  // Quiz (quizScope) e demais preferências continuam como antes. activeTags,
+  // reviewFilter e searchTerm já nascem limpos por declaração.
+  scope = {section:null, site:null};
   quizScope = loadQuizScopePref();
+  // searchTerm já é '' por declaração; limpa também o input (o navegador
+  // pode restaurar texto digitado antes do reload). Guarda typeof para
+  // ambientes sem DOM (testes isolados).
+  if(typeof document !== 'undefined'){
+    const bootSearch = document.getElementById('search');
+    if(bootSearch) bootSearch.value = '';
+  }
   renderAll();
 }
-async function saveData(){
+// ALTERAÇÃO 072: mesmo raciocínio de saveSRS() acima — internal=true (só as
+// migrações automáticas de boot dentro de loadData()/
+// migrateLegacyLocalImagesToCloudinary) persiste local sem marcar dirty nem
+// publicar sozinha. Toda edição real do usuário (~15 call sites em todo o
+// app) chama saveData() sem argumento, comportamento idêntico a antes.
+async function saveData(internal){
   try{ createSafetySnapshot('antes de salvar alterações'); }catch(_e){}
   try{
     await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
   }catch(e){ console.error('storage error', e); }
+  if(internal) return;
+  await markSyncDirty();
   await pushToFirebaseNow();
 }
 async function saveOrder(){
@@ -9272,17 +9769,23 @@ function renderTagbar(){
   bar.appendChild(label);
 
   // botão de limpar vem logo aqui no início — sempre visível, mesmo com a lista de tags
-  // muito longa e uma tag ativa "escondida" lá no final/embaixo.
-  if(activeTags.size>0){
+  // muito longa e uma tag ativa "escondida" lá no final/embaixo. Aparece sempre
+  // que QUALQUER filtro estiver ativo (tags, Revisões, escopo ou busca) e
+  // restaura o estado padrão de fábrica: Todas as seções, sem tags,
+  // Revisões=Todas. Não toca em dados/SRS/imagens/preferências.
+  const hasScopeFilter = !!(scope.section || scope.site);
+  const activeFilterCount = activeTags.size + (reviewFilter!==null?1:0) + (hasScopeFilter?1:0) + (searchTerm.trim()?1:0);
+  if(activeFilterCount>0){
     const clr = document.createElement('button');
     clr.id='clear-tags';
-    clr.textContent = `limpar filtro${activeTags.size>1?'s':''} (${activeTags.size}) ✕`;
+    clr.textContent = `limpar filtros (${activeFilterCount}) ✕`;
     clr.onclick = ()=>{
       activeTags.clear();
       searchTerm = '';
       const searchInput = document.getElementById('search');
       if(searchInput) searchInput.value = '';
       scope = {section:null, site:null};
+      reviewFilter = null;
       saveSidebarScopePref();
       renderAll();
     };
@@ -11959,9 +12462,93 @@ async function buildSystemDiagnosticReport(){
   push('--- SINCRONIZAÇÃO ---');
   const syncEl = document.getElementById('sync-status');
   const syncOk = !syncEl || syncEl.style.display === 'none';
-  push('Status atual: ' + (syncOk ? 'OK (sem aviso ativo)' : (syncEl.textContent||'erro sem detalhe')));
+  push('Status atual (último envio/pull): ' + (syncOk ? 'OK (sem aviso ativo)' : (syncEl.textContent||'erro sem detalhe')));
   push('recoveryVersion: ' + (localStorage.getItem(LOCAL_PREFIX+'atlas:recoveryVersion') || '(vazio)'));
   push('Firebase conectado: ' + (typeof fbDb !== 'undefined' && !!fbDb));
+  // ALTERAÇÃO 068/069 (2026-09-23): expõe o mesmo estado usado pelo retry
+  // automático ao reconectar (syncPushPending), a barreira de reconciliação
+  // (fbSyncing) e os timestamps do último sucesso/erro — sem criar painel
+  // novo, só mais linhas de texto aqui.
+  const reconciling = typeof fbSyncing !== 'undefined' && fbSyncing;
+  push('Reconciliação em andamento agora (pull/merge): ' + (reconciling ? 'SIM' : 'NÃO'));
+  push('Envio pendente (bloqueado por reconciliação, offline ou aguardando reconexão): ' + (typeof syncPushPending !== 'undefined' && syncPushPending ? 'SIM' : 'NÃO'));
+  // ALTERAÇÃO 072 (2026-09-23): dirty agora é o marcador PERSISTENTE e
+  // explícito (syncDirty) — só true por uma ação real do usuário salva sem
+  // confirmação de chegada na nuvem, nunca inferido por comparação de
+  // conteúdo. syncPushPending continua sendo "um envio foi tentado e
+  // bloqueado" (retry automático), mostrado à parte.
+  push('Dirty local (edição real salva, ainda sem confirmação de chegada na nuvem): ' + (typeof syncDirty !== 'undefined' && syncDirty ? 'SIM' : 'NÃO'));
+  push('Último envio/pull confirmado: ' + (typeof lastSyncOkAt !== 'undefined' && lastSyncOkAt ? new Date(lastSyncOkAt).toLocaleString('pt-BR') : '(nenhum nesta sessão)'));
+  if(typeof lastSyncErrorAt !== 'undefined' && lastSyncErrorAt){
+    push('Último erro de sincronização: ' + new Date(lastSyncErrorAt).toLocaleString('pt-BR') + ' — ' + (lastSyncErrorDetail || '(sem detalhe)'));
+  }
+  // ALTERAÇÃO 070 (2026-09-23): controle de revisão / concorrência otimista.
+  push('Revisão da nuvem conhecida por este dispositivo: ' + (typeof lastKnownCloudRevision !== 'undefined' && lastKnownCloudRevision !== null ? lastKnownCloudRevision : '(nunca confirmada nesta sessão)'));
+  push('Última escrita bloqueada por conflito de revisão: ' + (typeof lastWriteRefusedReason !== 'undefined' && lastWriteRefusedReason === 'cloud_revision_conflict' ? 'SIM' : 'NÃO'));
+  push('Último conflito de revisão: ' + (typeof lastRevisionConflictAt !== 'undefined' && lastRevisionConflictAt ? new Date(lastRevisionConflictAt).toLocaleString('pt-BR') : '(nenhum nesta sessão)'));
+  // ALTERAÇÃO 071 (2026-09-23): conflitos de OWNERSHIP bloqueados durante
+  // pull/push já eram registrados (registerImageOwnershipConflict,
+  // getImageOwnershipConflicts) mas nunca apareciam em lugar nenhum da UI —
+  // investigando o relatório de "imagens que não chegam no pull", nenhum
+  // dado real estava disponível pra confirmar se era exatamente isso. Agora
+  // fica visível: se uma imagem existe de verdade na nuvem mas nunca chega
+  // a um dispositivo que puxa, isto aqui mostra se foi bloqueada por
+  // ownership (etiqueta interna divergente da lesão-alvo) NESTA sessão —
+  // nunca resolvido automaticamente, só apontado pra revisão manual.
+  if(typeof getImageOwnershipConflicts === 'function'){
+    const conflicts = getImageOwnershipConflicts();
+    push('Conflitos de ownership bloqueados nesta sessão (pull/push/canônico): ' + conflicts.length);
+    if(conflicts.length){
+      conflicts.slice(0, 10).forEach((c) => push('  ' + (c.kind || 'conflito') + ' — de "' + (c.fromLesionId || '?') + '" para "' + (c.toLesionId || c.preservedLesionId || '?') + '" (' + (c.stableKey || '') + ')'));
+      if(conflicts.length > 10) push('  ... e mais ' + (conflicts.length - 10));
+    }
+  }
+  // Comparação local × nuvem (read-only, reaproveita buildSyncAudit — a
+  // mesma função dos botões "☁ sincronizar"/"⬇ atualizar"). Só tenta quando
+  // o app já terminou de carregar e o Firebase está disponível, pra não
+  // disparar leitura de rede sem necessidade nem quebrar o diagnóstico
+  // quando chamado cedo demais. Se uma reconciliação estiver em andamento
+  // NESTE EXATO instante, a leitura ainda é feita (é 100% read-only — nunca
+  // grava nada), mas o rótulo deixa claro que o número pode mudar em
+  // segundos, em vez de soar como um problema definitivo.
+  if(typeof appStateReady !== 'undefined' && appStateReady && typeof buildSyncAudit === 'function' && typeof fbDb !== 'undefined' && fbDb){
+    if(reconciling) push('(reconciliação em andamento — a comparação abaixo pode mudar assim que ela terminar; gere o diagnóstico de novo depois)');
+    try{
+      const audit = await buildSyncAudit();
+      if(audit.cloudError){
+        push('Nuvem (servidor): não foi possível ler agora — ' + audit.cloudError);
+      } else if(audit.cloud){
+        push('Local × Nuvem — lesões: ' + audit.local.lesions + ' × ' + audit.cloud.lesions +
+             ' | registros com imagem: ' + audit.local.entriesWithImages + ' × ' + audit.cloud.entriesWithImages +
+             ' | imagens: ' + audit.local.totalImages + ' × ' + audit.cloud.totalImages +
+             ' | altPlacements: ' + audit.local.altPlacements + ' × ' + audit.cloud.altPlacements +
+             ' | SRS: ' + audit.local.srs + ' × ' + audit.cloud.srs);
+        push('Divergente: ' + (audit.divergent ? 'SIM' : 'NÃO') + (audit.crossDivergent ? ' (cruzada — imagens locais à frente e SRS da nuvem à frente)' : ''));
+        // ALTERAÇÃO 069: quando a contagem de imagens diverge, roda também a
+        // auditoria de IDENTIDADE (read-only) — confirma se as imagens que só
+        // aparecem de um lado são distintas de verdade ou duplicatas exatas,
+        // em vez de só mostrar um número. Só quando diverge de verdade, pra
+        // não pagar o custo dessa comparação mais fina em todo diagnóstico.
+        if(audit.local.totalImages !== audit.cloud.totalImages && typeof buildImageIdentityDivergenceAuditFromServer === 'function'){
+          try{
+            const idAudit = await buildImageIdentityDivergenceAuditFromServer();
+            push('Identidade das imagens divergentes — só local: ' + idAudit.totals.localOnly +
+                 ' | só nuvem: ' + idAudit.totals.remoteOnly +
+                 ' | duplicatas exatas (mesma imagem 2x no mesmo lado) — local: ' + idAudit.totals.localDuplicates +
+                 ' | nuvem: ' + idAudit.totals.remoteDuplicates);
+            if(idAudit.perLesion.length){
+              idAudit.perLesion.slice(0,10).forEach(p=> push('  "' + p.name + '" (' + p.id + ') — só local: ' + p.localOnlyCount + ', só nuvem: ' + p.remoteOnlyCount + ', dup. local: ' + p.localDuplicateCount + ', dup. nuvem: ' + p.remoteDuplicateCount));
+              if(idAudit.perLesion.length > 10) push('  ... e mais ' + (idAudit.perLesion.length - 10) + ' lesão(ões) com divergência de identidade');
+            }
+          }catch(e){ push('Identidade das imagens: falha ao comparar — ' + ((e && e.message) || e)); }
+        }
+      } else {
+        push('Nuvem (servidor): nunca sincronizada por nenhum dispositivo ainda (documento vazio).');
+      }
+    }catch(e){
+      push('Nuvem (servidor): falha ao comparar — ' + ((e && e.message) || e));
+    }
+  }
   push('');
 
   // --- Navegador ---
@@ -15755,6 +16342,49 @@ function imagesHistoryListHtml(days){
   const list = Array.isArray(days) ? days : [];
   if (!list.length) return `<div style="color:var(--muted-2);font-size:13px;padding:12px 0;">Nenhuma imagem neste período.</div>`;
   return list.map(imagesHistoryDayGroupHtml).join('');
+}
+
+/* ALTERAÇÃO 072 (2026-09-23) — NORMALIZAÇÃO SEGURA DE ETIQUETA LEGADA DE
+   DONO (img.lesionId). Casos reais comprovados: imagens DENTRO do array da
+   lesão-alvo correta cujo img.lesionId aponta para um seed_N histórico
+   (seed_8→seed_7, seed_11→seed_10, seed_21→seed_18, seed_413→seed_404,
+   seed_414→seed_405, seed_477→seed_464).
+   Reescreve SOMENTE img.lesionId, e SOMENTE quando TODAS estas condições
+   valem ao mesmo tempo (senão registra em skipped e não toca em nada):
+   1. a imagem está no array da própria lesão-alvo;
+   2. tem assetId ou publicId (identidade forte, nunca o fallback "json:");
+   3. a identidade estável é ÚNICA no catálogo (não existe em nenhuma outra
+      lesão atual — conflito real continua BLOQUEADO);
+   4. o dono divergente casa com /^seed_\d+$/ (etiqueta histórica; dono
+      divergente de outro formato continua bloqueado);
+   5. NADA sai/entrar em arrays — só o campo lesionId é normalizado.
+   Cada normalização é REGISTRADA (legacy_image_owner_label_normalized) no
+   registro existente de conflitos. canChangeImageOwnership() NÃO foi
+   relaxado: continua exigindo contexto manual para qualquer troca real.
+   Função de console/manutenção que delega a decisão ao MESMO helper usado
+   pelo merge/pull (tryNormalizeLegacyPullImage) — mesma tabela de decisão,
+   mesmo formato de retorno. */
+function normalizeLegacyImageOwnerLabel(targetEntry, catalog){
+  const out = { ok: false, normalized: [], skipped: [], reason: '' };
+  if(!targetEntry || typeof targetEntry.id !== 'string' || !targetEntry.id){
+    out.reason = 'lesão-alvo inválida'; return out;
+  }
+  const holdersByKey = legacyImageHoldersByKey(Array.isArray(catalog) ? catalog : []);
+  const targetImgs = Array.isArray(targetEntry.images) ? targetEntry.images : [];
+  for(const img of targetImgs){
+    if(!img || typeof img !== 'object') continue;
+    const owner = imageOwnerIdV1(img);
+    if(!owner || owner === targetEntry.id) continue;
+    const attempt = tryNormalizeLegacyPullImage(img, imageIdentityKeys(img), targetEntry.id, holdersByKey, 'console', targetEntry.name || '');
+    if(!attempt.ok){
+      out.skipped.push({ stableKey: stableImageKeyV208(img) || null, owner, reason: attempt.reason });
+      continue;
+    }
+    img.lesionId = targetEntry.id;
+    out.normalized.push({ stableKey: attempt.stableKey, from: attempt.from, to: attempt.to });
+  }
+  out.ok = true;
+  return out;
 }
 
 </script>

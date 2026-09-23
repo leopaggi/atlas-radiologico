@@ -446,12 +446,24 @@ test('SYNC UI: "atualizar deste backup/nuvem" exige confirmação, cria snapshot
   assert.match(html, /(?:async\s+)?function openUpdateFromCloudModal\(/);
 });
 
-test('SYNC: nenhuma sincronização automática destrutiva no boot (F5/login continuam seguros)', () => {
+test('SYNC: pull automático no boot (F5/login) é GUARDADO e usa só o merge não destrutivo já existente (ALTERAÇÃO 068, 2026-09-23)', () => {
   const loadData = extractFunction(html, 'loadData');
-  // remove linhas de comentário (a menção antiga continua comentada, nunca ativa)
+  // remove linhas de comentário antes de checar chamadas ATIVAS — o próprio
+  // comentário que documenta esta alteração menciona "syncFromFirebase()"
+  // várias vezes de propósito.
   const activeCode = loadData.body.split('\n').filter(l=>!/^\s*\/\//.test(l)).join('\n');
-  assert.doesNotMatch(activeCode, /syncFromFirebase\(/, 'loadData não pode puxar a nuvem sozinho');
-  assert.match(loadData.body, /\/\/ await syncFromFirebase\(\);/, 'a chamada antiga continua comentada, nunca reativada');
+  const activeCalls = [...activeCode.matchAll(/syncFromFirebase\(\)/g)];
+  assert.equal(activeCalls.length, 1, 'loadData() precisa ter exatamente UMA chamada ativa a syncFromFirebase()');
+  // Guardado por !isNewLocalDevice: dispositivo novo já resolveu a decisão
+  // explicitamente no modal do bootstrap alguns passos antes — repetir aqui
+  // pisaria nessa escolha (inclusive "usar vazio mesmo assim").
+  assert.match(loadData.body, /if\(!isNewLocalDevice\)\{\s*\n\s*await syncFromFirebase\(\);\s*\n\s*\}/, 'a chamada automática precisa ficar dentro do guard !isNewLocalDevice');
+  // Nenhuma lógica de merge paralela: continua sendo a MESMA syncFromFirebase()
+  // usada pelos botões explícitos, com snapshot antes/depois e merge não
+  // destrutivo (mergeEntryNonDestructive) — nunca um overwrite cego.
+  const syncFn = extractFunction(html, 'syncFromFirebase');
+  assert.match(syncFn.body, /createSafetySnapshot\('antes da sincronização Firebase'\)/, 'syncFromFirebase precisa continuar criando snapshot antes de reconciliar');
+  assert.match(syncFn.body, /mergeEntryNonDestructive/, 'precisa continuar usando o merge não destrutivo, nunca overwrite cego');
 });
 
 test('SYNC BACKUP FALLBACK: backup completo inclui DATA/imagens/revisões/SRS e não embute binários', () => {
@@ -542,8 +554,12 @@ test('SYNC UI: a auditoria pode reler o servidor sem reutilizar o resultado ante
 });
 
 test('SYNC PATHS: escrita e leitura usam os MESMOS caminhos (atlas_state/main + data_chunk_i)', () => {
-  assert.match(writeShardedStateFullFn.body, /FB_META_REF\(\)\.set/);
-  assert.match(writeShardedStateFullFn.body, /FB_CHUNK_REF\(i\)\.set/);
+  // ALTERAÇÃO 070 (2026-09-23): a escrita passou a ser feita dentro de uma
+  // transação (tx.set(ref, dados) em vez de ref.set(dados)) para permitir a
+  // verificação de revisão — os CAMINHOS (FB_META_REF/FB_CHUNK_REF) são os
+  // mesmos de sempre, só a forma de escrever neles mudou.
+  assert.match(writeShardedStateFullFn.body, /tx\.set\(FB_META_REF\(\)/);
+  assert.match(writeShardedStateFullFn.body, /tx\.set\(FB_CHUNK_REF\(i\)/);
   assert.match(readShardedStateFn.body, /FB_META_REF\(\)\.get/);
   assert.match(readShardedStateFn.body, /FB_CHUNK_REF\(i\)\.get/);
   assert.match(html, /const FB_META_REF = \(\) => fbDb\.collection\('atlas_state'\)\.doc\('main'\);/);

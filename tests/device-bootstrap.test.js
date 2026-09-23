@@ -131,12 +131,22 @@ test('BOOTSTRAP DETECÇÃO: nuvem com estado real (mesmo contadores baixos) -> e
 // 2) BLOQUEIO DE PUSH AMPLO ENQUANTO PENDENTE (writeShardedState = chokepoint)
 // ===========================================================================
 
-function makeWriteShardedStateContext({ deviceBootstrapPending, data }) {
+function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevision = 0 }) {
+  // ALTERAÇÃO 070 (2026-09-23): writeShardedState() agora escreve dentro de
+  // uma transação do Firestore (verificação de revisão — ver CONTEXTO_MESTRE
+  // seção 29). O mock de fbDb.runTransaction simula uma nuvem SEMPRE vazia
+  // (metaSnap.exists=false -> revisão do servidor = 0), o que junto com
+  // knownRevision=0 (padrão) faz a escrita ser aceita nestes testes
+  // estruturais, que não são sobre controle de revisão em si.
   const calls = [];
-  const metaRef = { set: async (payload) => { calls.push({ kind: 'meta', payload }); } };
-  const chunkRef = (i) => ({ set: async (payload) => { calls.push({ kind: 'chunk', i, payload }); }, delete: async () => { calls.push({ kind: 'delete', i }); } });
+  const metaRef = { __kind: 'meta' };
+  const chunkRef = (i) => ({ __kind: 'chunk', __i: i, delete: async () => { calls.push({ kind: 'delete', i }); } });
   const ctx = {
     deviceBootstrapPending: !!deviceBootstrapPending,
+    CLOUD_REVISION_FIELD: 'revision',
+    lastKnownCloudRevision: knownRevision,
+    lastWriteRefusedReason: null,
+    lastRevisionConflictAt: null,
     DATA: data || [],
     REVIEW: {}, SRS: {}, SESSIONLOG: {}, sectionOrder: [], siteOrder: {},
     DATA_CHUNK_SIZE: 150,
@@ -145,6 +155,15 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data }) {
     withFirebaseTimeout: (p) => p,
     setSyncStatus: () => {},
     firebase: { firestore: { FieldValue: { serverTimestamp: () => 'TS' } } },
+    fbDb: {
+      runTransaction: async (fn) => {
+        const tx = {
+          get: async (ref) => ({ exists: false, data: () => ({}) }),
+          set: (ref, payload) => { calls.push({ kind: ref.__kind, i: ref.__i, payload }); }
+        };
+        return fn(tx);
+      }
+    },
     Blob: class { constructor(parts) { this.size = JSON.stringify(parts).length; } },
     window: {},
     console,
@@ -176,7 +195,7 @@ test('BOOTSTRAP BLOQUEIO: writeShardedState() funciona normalmente quando device
 });
 
 test('BOOTSTRAP BLOQUEIO: o guard é a PRIMEIRA verificação em writeShardedState (antes de qualquer stripUndefinedDeep/leitura de DATA)', () => {
-  const idxGuard = writeShardedStateFn.body.indexOf('if(deviceBootstrapPending) return false;');
+  const idxGuard = writeShardedStateFn.body.indexOf("if(deviceBootstrapPending){ lastWriteRefusedReason = 'device_bootstrap_pending'; return false; }");
   const idxClean = writeShardedStateFn.body.indexOf('stripUndefinedDeep(DATA)');
   assert.notEqual(idxGuard, -1);
   assert.ok(idxGuard < idxClean, 'o bloqueio precisa vir antes de qualquer preparação de envio');
@@ -385,6 +404,9 @@ test('loadData() real: dispositivo NOVO (storage.get lança) aciona o bootstrap 
       runDuplicateCleanup: () => ({ changed: false, reviewOrSrsChanged: false }),
       deduplicateV171: async () => {},
       runNewDeviceBootstrapFlow: async () => { calls.push('runNewDeviceBootstrapFlow'); },
+      // ALTERACAO 068 (2026-09-23): dispositivo JA inicializado (storage.get
+      // NAO lanca) agora puxa a nuvem automaticamente — ver asserts abaixo.
+      syncFromFirebase: async () => { calls.push('syncFromFirebase'); },
       renderAll: () => { calls.push('renderAll'); },
       console: { error: () => {}, info: () => {}, log: () => {}, warn: () => {} }
     });
@@ -399,9 +421,24 @@ test('loadData() real: dispositivo NOVO (storage.get lança) aciona o bootstrap 
     newDeviceCalls.indexOf('runNewDeviceBootstrapFlow') < newDeviceCalls.indexOf('renderAll'),
     'o bootstrap precisa terminar ANTES de desenhar a UI'
   );
+  // Dispositivo novo já resolveu a decisão explicitamente dentro do próprio
+  // bootstrap (modal) — loadData() NÃO chama syncFromFirebase() de novo por
+  // cima, senão pisaria na escolha "usar vazio mesmo assim" do usuário.
+  assert.ok(!newDeviceCalls.includes('syncFromFirebase'), 'dispositivo novo não deve acionar o pull automático — o bootstrap já decidiu');
 
   const existingDeviceCalls = await run(false);
-  assert.ok(!existingDeviceCalls.includes('runNewDeviceBootstrapFlow'), 'dispositivo já inicializado não deve acionar o bootstrap');
+  assert.ok(!existingDeviceCalls.includes('runNewDeviceBootstrapFlow'), 'dispositivo já inicializado não deve acionar o bootstrap de dispositivo NOVO');
+  // ALTERACAO 068 (2026-09-23): dispositivo já inicializado (catálogo local
+  // existente) agora aciona o pull automático — é exatamente essa ausência
+  // que deixava um PC com IndexedDB antigo (ex.: o do hospital) sem nunca
+  // consultar a nuvem de novo, e cujo push incondicional no fim do boot
+  // sobrescrevia (writeShardedState faz .set(), não merge) imagens que só
+  // existiam na nuvem.
+  assert.ok(existingDeviceCalls.includes('syncFromFirebase'), 'dispositivo já inicializado precisa acionar syncFromFirebase() automaticamente no boot');
+  assert.ok(
+    existingDeviceCalls.indexOf('syncFromFirebase') < existingDeviceCalls.indexOf('renderAll'),
+    'o pull precisa terminar ANTES de desenhar a UI'
+  );
   assert.ok(existingDeviceCalls.includes('renderAll'));
 });
 
@@ -411,6 +448,7 @@ test('loadData() real: reload DEPOIS do bootstrap não repete o fluxo (storage j
   // sempre fez. 2ª chamada (reload) já encontra a chave e não repete nada.
   const backing = {};
   const calls = [];
+  const syncCalls = [];
   const seed = [{ id: 'seed_0', name: 'L0', s: 'S', site: 'T', images: [] }];
   function makeContext() {
     return vm.createContext({
@@ -447,6 +485,11 @@ test('loadData() real: reload DEPOIS do bootstrap não repete o fluxo (storage j
       runDuplicateCleanup: () => ({ changed: false, reviewOrSrsChanged: false }),
       deduplicateV171: async () => {},
       runNewDeviceBootstrapFlow: async () => { calls.push('runNewDeviceBootstrapFlow'); },
+      // ALTERACAO 068 (2026-09-23): rastreado à parte de `calls` — o ponto
+      // deste teste é a NÃO repetição do bootstrap; o pull automático (que
+      // SÓ roda quando o dispositivo já é considerado inicializado, ou seja,
+      // a partir do 2º loadData()) é verificado abaixo separadamente.
+      syncFromFirebase: async () => { syncCalls.push('syncFromFirebase'); },
       renderAll: () => {},
       console: { error: () => {}, info: () => {}, log: () => {}, warn: () => {} }
     });
@@ -457,11 +500,17 @@ test('loadData() real: reload DEPOIS do bootstrap não repete o fluxo (storage j
   await ctx1.loadData();
   assert.equal(calls.length, 1, 'primeira abertura (dispositivo novo) aciona o bootstrap uma vez');
   assert.ok(Object.prototype.hasOwnProperty.call(backing, 'data'), 'o catálogo precisa ter sido persistido ao final do boot');
+  assert.equal(syncCalls.length, 0, 'dispositivo novo não aciona o pull automático — o bootstrap acabou de decidir isso');
 
   const ctx2 = makeContext();
   vm.runInContext(loadDataFn.source, ctx2, { filename: 'load-data-2.js' });
   await ctx2.loadData();
   assert.equal(calls.length, 1, 'reload seguinte não pode repetir o bootstrap — o catálogo já existe localmente');
+  // ALTERACAO 068: é exatamente este reload (dispositivo já inicializado,
+  // catálogo persistido pelo boot anterior) que precisa consultar a nuvem
+  // de novo — antes desta alteração, um PC com catálogo local antigo nunca
+  // mais verificava a nuvem, e foi isso que deixou o PC do hospital stale.
+  assert.equal(syncCalls.length, 1, 'reload com catálogo já existente precisa acionar o pull automático');
 });
 
 // ===========================================================================

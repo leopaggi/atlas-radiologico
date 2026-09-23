@@ -322,10 +322,81 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // de hoje, 22/09/2026): contexto returnTo em openDetail + botão + fiação —
   // tudo dentro de openDetail, depois de loadData(). Sem mudar chamadas
   // existentes nem outros fluxos.
-  assert.equal(recovery.line, 6267);
-  assert.equal(brokenArtifacts.line, 6257);
-  assert.equal(loadData.line, 8809);
-  assert.equal(importHandler.line, 12237);
+  // +0 nas 3 primeiras âncoras / +11 só no importHandler (estado padrão de
+  // filtros, 22/09/2026): boot ignora seção/sítio antigos + botão Limpar
+  // cobre tags/busca/escopo/Revisões — em loadData/renderTagbar, depois de
+  // loadData(). Sem tocar em dados, sync ou outras prefs.
+  // +5 só no importHandler: guarda typeof document no boot (testes isolados
+  // sem DOM).
+  // +23 nas quatro âncoras (Alteração 068, reativação do pull automático,
+  // 2026-09-23): syncPushPending/lastSyncOkAt/lastSyncErrorAt/
+  // lastSyncErrorDetail + comentário em setSyncStatus() e o listener
+  // 'online' de retry logo após pushToFirebaseNow() — tudo antes das quatro
+  // âncoras. +56 só em loadData() (comentário completo da causa raiz +
+  // `if(!isNewLocalDevice){ await syncFromFirebase(); }`, dentro do corpo de
+  // loadData(), por isso só desloca o que vem depois dela) e +23 nas linhas
+  // de sincronização do diagnóstico (buildSystemDiagnosticReport, antes do
+  // importHandler) — juntos deslocam só o importHandler (79 no total).
+  // +48 nas quatro âncoras (Alteração 069, barreira de reconciliação,
+  // 2026-09-23): guard de reentrância + comentário no topo de
+  // syncFromFirebase(), o flush de syncPushPending no fim dela, os guards
+  // de fbSyncing em pushToFirebase()/pushToFirebaseNow() (comentado +
+  // reescrito) e em syncThisDeviceToCloud()/mergeThisDeviceImagesToCloud()
+  // — tudo antes das quatro âncoras. +12 só nas linhas de sincronização do
+  // diagnóstico (reconciliando/dirty local, antes do importHandler).
+  // +70 nas quatro âncoras (Alteração 069, auditoria read-only de
+  // identidade de imagens local×nuvem): imageIdentityDivergenceForEntry +
+  // buildImageIdentityDivergenceReport + buildImageIdentityDivergenceAuditFromServer,
+  // inseridas antes de syncCountersMatch — tudo antes das quatro âncoras.
+  // +18 só nas linhas de sincronização do diagnóstico (chamada da auditoria
+  // de identidade quando diverge, antes do importHandler).
+  // +106 nas quatro âncoras (Alteração 070, controle de revisão / concorrência
+  // otimista, 2026-09-23): CLOUD_REVISION_FIELD/lastKnownCloudRevision/
+  // lastWriteRefusedReason/lastRevisionConflictAt + writeShardedState()
+  // reescrita como transação com verificação de revisão + comentário
+  // completo da causa raiz + writeShardedStateWithConflictRetry() +
+  // syncFromFirebaseSkipTrailingPush — tudo antes das quatro âncoras. +3
+  // só nas linhas de sincronização do diagnóstico (revisão da nuvem/último
+  // conflito, antes do importHandler).
+  // +23 nas quatro âncoras (Alteração 071, separa pull de push, 2026-09-23):
+  // guard !appStateReady sem side-effect em pushToFirebase()/pushToFirebaseNow()
+  // + a checagem localHasExclusiveContent (reaproveita buildImageIdentityDivergenceReport)
+  // dentro de syncFromFirebase() — tudo antes das quatro âncoras. +43 só em
+  // loadData() (comparação preMigrations*/migrationsChangedSomething, dentro
+  // do corpo de loadData(), só desloca o que vem depois dela) e +13 nas
+  // linhas de diagnóstico de conflitos de ownership, antes do importHandler.
+  // +50 nas quatro âncoras (Alteração 072, syncDirty persistente + zero
+  // writes no boot, 2026-09-23): bloco SYNC_DIRTY_KEY/let syncDirty/
+  // markSyncDirty/clearSyncDirty + parâmetro internal + comentários em
+  // saveReview()/saveSRS()/saveSessionLog() + guardas de escrita em
+  // writeShardedState()/pushToFirebase()/syncThisDeviceToCloud()/
+  // mergeThisDeviceImagesToCloud()/syncFromFirebase() + saveData(true) na
+  // migração legacy — tudo antes das quatro âncoras. +5 só em loadData()
+  // (saveData(true) interno em deduplicateV171(), entre as âncoras e
+  // loadData) e +153 só no importHandler (cargas internas de boot/migração
+  // + comentários de causa raiz dentro de loadData() e +84 nas linhas de
+  // sincronização do diagnóstico, antes do importHandler). A função
+  // normalizeLegacyImageOwnerLabel() fica no fim do script (depois do
+  // importHandler) e não desloca nenhuma âncora. Deltas conferidos hunk a
+  // hunk contra o git diff (+323/+323/+328/+481 vs HEAD) — deslocamento
+  // totalmente explicado, sem duplicação de função. Valores remedidos com
+  // o algoritmo do próprio teste (lineNumberAt).
+  // +94 nas quatro âncoras (Alteração 072b, normalização de etiqueta legada
+  // NO pull, 2026-09-23): legacyImageHoldersByKey() + tryNormalizeLegacyPullImage()
+  // + comentários antes de unionEntryImages(), o ramo de normalização dentro
+  // do loop do pull, o parâmetro legacyCatalog em mergeEntryNonDestructive()
+  // com o gate de mesmo-id e o comentário no loop do syncFromFirebase() —
+  // tudo antes da primeira âncora, por isso o deslocamento é uniforme.
+  // Deltas reconferidos hunk a hunk contra o git diff (+417/+417/+422/+575
+  // vs HEAD) — deslocamento totalmente explicado, sem duplicação de função.
+  // +12 nas quatro âncoras (Alteração 072c, holders por stable key única +
+  // campo conflictingHolders no evento de bloqueio, 2026-09-23): tudo antes
+  // da primeira âncora, deslocamento uniforme. Deltas reconferidos
+  // (+429/+429/+434/+587 vs HEAD) — totalmente explicado.
+  assert.equal(recovery.line, 6696);
+  assert.equal(brokenArtifacts.line, 6686);
+  assert.equal(loadData.line, 9243);
+  assert.equal(importHandler.line, 12824);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -349,17 +420,29 @@ test('SEGURANCA: loadData nao deve chamar recuperacao do SEED automaticamente', 
 });
 
 // ===========================================================================
-// ALTERACAO 008 (2026-09-19) — sincronizacao automatica NUVEM->LOCAL foi
-// desativada dentro de loadData() (a auditoria read-only desta mesma sessao
-// encontrou que syncFromFirebase(), chamada sem condicao a cada F5/login,
-// fazia merge POR ID contra DATA local e reintroduzia duplicatas/ownership
-// antigo que a reconciliacao V2 ja tinha eliminado). syncFromFirebase()
-// continua definida e INTACTA — so' este call site automatico foi removido.
+// ALTERACAO 008 (2026-09-19) — sincronizacao automatica NUVEM->LOCAL tinha
+// sido desativada dentro de loadData() porque syncFromFirebase(), chamada
+// sem condicao a cada F5/login, fazia merge POR ID contra DATA local e
+// reintroduzia duplicatas/ownership antigo que a reconciliacao V2 tinha
+// acabado de eliminar.
+//
+// ALTERACAO 068 (2026-09-23) — REATIVADA, com guarda, para corrigir o "PC do
+// hospital abriu com metade das imagens": um dispositivo JA inicializado
+// (catalogo local existente havia semanas) nunca consultava a nuvem de novo
+// — so empurrava (push incondicional a cada saveData() e no fim do proprio
+// boot) o que tinha localmente, e como writeShardedState() faz .set() (nao
+// merge), isso apagava do Firestore qualquer imagem/lesao que so existisse
+// na nuvem. A causa especifica da Alteracao 008 (merge por ID reintroduzindo
+// duplicata/ownership antigo) esta coberta hoje por protecoes que nao
+// existiam em 2026-09-19 (SUPPRESSED_DUPLICATE_IDS_V172 filtrando os DOIS
+// lados do merge, mergeEntryNonDestructive/canChangeImageOwnership) — ver o
+// comentario completo em loadData(), no proprio index.html. A chamada so
+// acontece quando isNewLocalDevice e falso (dispositivo novo ja resolveu a
+// decisao explicitamente no modal do bootstrap, alguns passos antes).
 // Os testes abaixo sao comment-aware (usam isInsideComment, nao apenas um
-// regex cru) porque o comentario que documenta a desativacao MENCIONA
-// "syncFromFirebase()" varias vezes de proposito, inclusive numa linha
-// comentada (`// await syncFromFirebase();`) — um teste ingenuo baseado em
-// regex simples acusaria falso positivo nessas mencoes.
+// regex cru) porque o comentario que documenta a alteracao MENCIONA
+// "syncFromFirebase()" varias vezes de proposito — um teste ingenuo baseado
+// em regex simples acusaria falso positivo nessas mencoes.
 // ===========================================================================
 
 function isInsideComment(source, index) {
@@ -389,51 +472,60 @@ function extractOnAuthStateChanged(source) {
 }
 const onAuthStateChangedBlock = extractOnAuthStateChanged(html);
 
-test('ALTERACAO 008: loadData() NAO chama syncFromFirebase() (nem mesmo em comentario/mencao ativa)', () => {
+test('ALTERACAO 068: loadData() chama syncFromFirebase() exatamente uma vez, guardado por !isNewLocalDevice', () => {
   const active = activeCallLocations(loadData.source, 'syncFromFirebase');
-  assert.deepEqual(active, [], 'loadData() nao pode ter nenhuma chamada ATIVA a syncFromFirebase()');
-  // Confirma que o comentario de desativacao realmente esta ali (prova que a
-  // remocao foi deliberada e documentada, nao um apagamento silencioso).
-  assert.match(loadData.source, /\/\/ await syncFromFirebase\(\);/, 'a chamada precisa continuar visivel, so comentada — nunca apagada silenciosamente');
+  assert.equal(active.length, 1, 'loadData() precisa ter exatamente UMA chamada ATIVA a syncFromFirebase()');
+  assert.match(loadData.source, /if\(!isNewLocalDevice\)\{\s*\n\s*await syncFromFirebase\(\);\s*\n\s*\}/, 'a chamada automatica precisa ficar dentro de um guard !isNewLocalDevice — dispositivo novo ja decidiu explicitamente no modal do bootstrap');
+  // A chamada guardada precisa vir DEPOIS do bootstrap de dispositivo novo
+  // (isNewLocalDevice ja esta decidido) e ANTES do primeiro push incondicional
+  // do fim do boot — senao o push levaria o estado local desatualizado.
+  const idxBootstrapCall = loadData.source.indexOf('await runNewDeviceBootstrapFlow();');
+  const idxAutoSync = loadData.source.indexOf('if(!isNewLocalDevice){');
+  const idxFirstUnconditionalPush = loadData.source.indexOf('await pushToFirebaseNow();');
+  assert.ok(idxBootstrapCall !== -1 && idxAutoSync !== -1 && idxFirstUnconditionalPush !== -1);
+  assert.ok(idxBootstrapCall < idxAutoSync, 'a decisao do dispositivo novo precisa estar tomada antes do pull automatico');
+  assert.ok(idxAutoSync < idxFirstUnconditionalPush, 'o pull precisa acontecer antes de qualquer push incondicional do boot — senao o push levaria dados desatualizados');
 });
 
-test('ALTERACAO 008: showApp() nao chama syncFromFirebase() diretamente — so chama loadData()', () => {
+test('ALTERACAO 068: showApp() nao chama syncFromFirebase() diretamente — so chama loadData()', () => {
   const activeInShowApp = activeCallLocations(showApp.source, 'syncFromFirebase');
   assert.deepEqual(activeInShowApp, []);
   assert.match(showApp.source, /\bloadData\(\)/, 'showApp() precisa continuar chamando loadData() normalmente');
 });
 
-test('ALTERACAO 008: onAuthStateChanged (login) nao chama syncFromFirebase() diretamente', () => {
+test('ALTERACAO 068: onAuthStateChanged (login) nao chama syncFromFirebase() diretamente', () => {
   const activeInAuth = activeCallLocations(onAuthStateChangedBlock.source, 'syncFromFirebase');
   assert.deepEqual(activeInAuth, []);
   assert.match(onAuthStateChangedBlock.source, /\bshowApp\(\)/, 'onAuthStateChanged precisa continuar chamando showApp() pro usuario autorizado');
 });
 
-test('ALTERACAO 008: cadeia completa onAuthStateChanged -> showApp -> loadData nao tem NENHUM caminho ativo ate syncFromFirebase (F5/login seguros)', () => {
+test('ALTERACAO 068: cadeia completa onAuthStateChanged -> showApp -> loadData tem EXATAMENTE UM caminho ativo ate syncFromFirebase (o pull guardado de loadData)', () => {
   const combined = onAuthStateChangedBlock.source + '\n' + showApp.source + '\n' + loadData.source;
   const active = activeCallLocations(combined, 'syncFromFirebase');
-  assert.deepEqual(active, [], 'nenhum ponto do fluxo de abertura/F5/login pode chamar syncFromFirebase automaticamente');
+  assert.equal(active.length, 1, 'o unico caminho ativo do fluxo de abertura/F5/login ate syncFromFirebase precisa ser o pull guardado dentro de loadData()');
 });
 
-test('ALTERACAO 008: syncFromFirebase() continua definida, intacta, e disponivel para uso manual/controlado', () => {
+test('ALTERACAO 068: syncFromFirebase() continua definida, intacta, e e a MESMA funcao usada em todos os call sites', () => {
   const fn = extractFunction(html, 'syncFromFirebase');
   assert.ok(fn.source.length > 500, 'a funcao precisa continuar com sua logica completa, nao virar um stub vazio');
   assert.match(fn.source, /readShardedState/, 'precisa continuar lendo o estado remoto de verdade');
   assert.match(fn.source, /mergeEntryNonDestructive/, 'precisa continuar com a logica de merge original, intocada');
 
-  // Continua alcancavel apenas por ACOES EXPLICITAS do usuario: exportar backup,
-  // restaurar padrao de fabrica, "Atualizar deste backup/nuvem" e (2026-09-21)
-  // a escolha "Carregar meus dados da nuvem" no bootstrap de dispositivo novo
-  // (applyNewDeviceBootstrapChoice() — só executa depois que o usuário clica
-  // no modal de openNewDeviceBootstrapModal(), nunca sozinha). Nenhuma delas e
-  // automatica no boot/F5/login (os testes acima garantem isso, incluindo o
-  // teste seguinte, que cobre especificamente esse novo call site).
+  // Call sites esperados: loadData() (automatico, guardado por
+  // !isNewLocalDevice), exportar backup, restaurar padrao de fabrica,
+  // "Atualizar deste backup/nuvem", a escolha "Carregar meus dados da
+  // nuvem" no bootstrap de dispositivo novo (applyNewDeviceBootstrapChoice()
+  // — só executa depois que o usuário clica no modal), e (ALTERACAO 070,
+  // 2026-09-23) writeShardedStateWithConflictRetry() — reconcilia UMA vez
+  // antes de repetir uma escrita que colidiu por revisao (nunca escreve às
+  // cegas por cima de uma nuvem que mudou). Nenhuma logica de merge
+  // paralela foi criada — todos delegam pra esta mesma funcao.
   // Exclui mencoes DENTRO do proprio corpo da funcao (o rotulo de string
   // "syncFromFirebase (leitura)" usado em withFirebaseTimeout, linha 2013,
   // bate no regex ingenuo de invocationLocations mas nao e uma chamada).
   const allCalls = activeCallLocations(html, 'syncFromFirebase')
     .filter((m) => m.index < fn.index || m.index >= fn.index + fn.source.length);
-  assert.equal(allCalls.length, 4, 'syncFromFirebase() so pode ser chamada por acoes EXPLICITAS: exportar backup, restaurar padrao de fabrica, "Atualizar deste backup/nuvem" e a confirmacao de bootstrap em dispositivo novo — nenhum call site automatico');
+  assert.equal(allCalls.length, 6, 'syncFromFirebase() so pode ser chamada por: loadData() (automatico, guardado), exportar backup, restaurar padrao de fabrica, "Atualizar deste backup/nuvem", a confirmacao de bootstrap em dispositivo novo, e o retry de conflito de revisao — nenhum outro call site');
 });
 
 test('BOOTSTRAP SEGURO: a chamada a syncFromFirebase() do bootstrap fica DENTRO de applyNewDeviceBootstrapChoice(), só depois da escolha do usuário no modal', () => {
@@ -526,6 +618,11 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
     // preferências locais de navegação (localStorage) — stub seguro no teste
     loadSidebarScopePref: () => ({ section: null, site: null }),
     loadQuizScopePref: () => ({ section: null, site: null }),
+    // ALTERACAO 068: dispositivo ja inicializado (isNewLocalDevice=false, ver
+    // storage.get acima) chama syncFromFirebase() automaticamente — stub
+    // inerte aqui (sem side effects) so pra loadData() real nao quebrar; o
+    // pull em si esta coberto por testes dedicados em multi-device-sync.test.js.
+    syncFromFirebase: async () => {},
     renderAll: () => {},
     console: { error: () => {}, info: () => {}, log: () => {} }
   });

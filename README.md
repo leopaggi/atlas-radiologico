@@ -771,8 +771,12 @@ ganhou uma **auditoria read-only** local × nuvem (lesões, registros com imagen
 total de imagens, altPlacements, SRS) e duas ações explícitas na barra lateral:
 `☁ sincronizar este dispositivo` (envia o estado local para a nuvem, com
 snapshot antes e sem puxar de volta) e `⬇ atualizar deste backup/nuvem` (traz da
-nuvem com confirmação e snapshot, merge não destrutivo). Nada é automático no
-boot. As imagens já estão no Cloudinary — só metadados/URLs são sincronizados,
+nuvem com confirmação e snapshot, merge não destrutivo). **Atualização
+(2026-09-23, ver "Sincronização multi-PC" mais abaixo): o pull nuvem→local
+passou a rodar automaticamente também no boot normal** (dispositivo já
+inicializado), usando o mesmo merge não destrutivo — não é mais preciso
+clicar em "atualizar deste backup/nuvem" todo dia para um PC ficar em dia.
+As imagens já estão no Cloudinary — só metadados/URLs são sincronizados,
 sem reenviar binários. Revisões são locais por dispositivo; para movê-las, use o
 backup (`Salvar backup` → `Importar backup`).
 
@@ -793,16 +797,20 @@ Testes: `tests/snapshots-ownership.test.js` com **38 PASS**.
 
 ### Última seção/site lembrados (2026-09-20)
 
-Depois de F5/reabrir, o Atlas volta para a última seção/site que você escolheu —
-na **sidebar** e no **Quiz**, de forma **independente**. Fica salvo só neste
+Depois de F5/reabrir, o catálogo SEMPRE nasce limpo — Todas as seções, sem
+tags, Revisões=Todas (estado de fábrica; a seção/sítio guardados no
+localStorage não são mais restaurados no boot). Só o **Quiz** volta para a
+última seção/site escolhida, de forma independente. Fica salvo só neste
 navegador (localStorage, chaves `atlas:v1:lastSidebarScope` e
 `atlas:v1:lastQuizScope`), sem Firebase/IndexedDB e sem entrar no backup. A
 sessão personalizada do Quiz ganhou seletores de seção/sítio próprios. A
 preferência é validada contra as seções/sites existentes (seção inexistente é
 ignorada; sítio inexistente cai para a seção) e só é gravada quando você muda a
-navegação manualmente — render, F5, sync e importação não a sobrescrevem.
+navegação manualmente — render, F5, sync e importação não a sobrescrevem. O
+botão "limpar filtros" aparece com qualquer filtro ativo e restaura o mesmo
+estado de fábrica (inclui Revisões=Todas).
 
-Testes: `tests/local-scope-prefs.test.js` com **14 PASS**.
+Testes: `tests/local-scope-prefs.test.js` com **20 PASS**.
 
 ### Sidebar mais limpa — "⚙ Ferramentas avançadas" (2026-09-20)
 
@@ -1019,8 +1027,10 @@ uma decisão explícita: carregar esses dados (reaproveita o mesmo mecanismo
 seguro de "atualizar deste backup/nuvem") ou confirmar (com aviso claro) que
 quer mesmo começar vazio. Enquanto essa decisão não é tomada, nenhum envio
 para a nuvem acontece — nem o automático, nem os botões manuais de
-sincronizar. Um computador que já tinha o Atlas configurado não muda em
-nada. Ver `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` e `AI.md` para os
+sincronizar. Um computador que já tinha o Atlas configurado **não passa por
+este modal** (isso continua igual); desde 2026-09-23 ele passa a consultar a
+nuvem automaticamente por outro caminho — ver "Sincronização multi-PC" mais
+abaixo. Ver `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` e `AI.md` para os
 detalhes técnicos completos.
 
 Testes: `tests/device-bootstrap.test.js` (32 PASS).
@@ -1194,3 +1204,142 @@ também explica a causa real em vez de uma mensagem genérica.
 Testes: `tests/site-taxonomy.test.js` (31 PASS, +6 usando o mecanismo de
 snapshot real, não um mock), `tests/critical-flows.test.js` (21 PASS,
 âncoras atualizadas) e `tests/snapshots-ownership.test.js` (47 PASS).
+
+### Sincronização multi-PC — pull automático reativado (2026-09-23)
+
+Corrigido: um computador que já tinha o Atlas configurado há semanas (ex.:
+o do hospital) nunca mais consultava a nuvem sozinho — só enviava o que
+tinha localmente, todo boot. Se a nuvem já tinha imagens novas de outro
+computador, esse PC desatualizado simplesmente não recebia (e, ao abrir de
+novo, arriscava sobrescrever na nuvem o que só existia lá). Agora, todo
+boot de um dispositivo **já inicializado** também consulta a nuvem
+automaticamente e faz o mesmo merge não destrutivo de sempre (nunca perde
+imagem local nem remota, nunca troca dono de imagem) — antes de qualquer
+envio automático do fim do boot. Um dispositivo **novo** (primeira vez
+nesse navegador) continua passando pelo modal de bootstrap descrito acima,
+sem mudanças.
+
+Nada precisa ser feito manualmente: abrir o Atlas em qualquer computador
+autenticado passa a bastar para ele ficar em dia com a nuvem. Se a conexão
+cair no meio de um envio, o Atlas tenta de novo sozinho assim que a conexão
+volta (sem precisar recarregar a página). O diagnóstico do sistema (dentro
+de "⚙ Ferramentas avançadas") passou a mostrar se há um envio pendente, a
+hora do último sucesso/erro e uma comparação rápida local × nuvem.
+
+Testes: `tests/critical-flows.test.js`, `tests/device-bootstrap.test.js` e
+`tests/snapshots-ownership.test.js` atualizados, mais o novo
+`tests/multi-device-sync.test.js` (5 testes, simulando dois computadores
+com armazenamento local separado e uma nuvem compartilhada, usando o
+código real de sincronização). Suíte completa: 992 PASS.
+
+### Barreira de reconciliação (2026-09-23)
+
+No primeiro teste manual real da sincronização multi-PC, o usuário viu um
+caso onde a nuvem "caiu" de 116 para 107 imagens depois de salvar 1 imagem
+nova num computador desatualizado. Investigação encontrou uma falha real:
+enquanto o Atlas estava consultando a nuvem automaticamente (a novidade
+acima), qualquer tentativa de envio — automática ou pelos botões manuais
+"☁ sincronizar este dispositivo"/"🔀 mesclar imagens" — podia ser
+silenciosamente ignorada, sem aviso e sem tentar de novo depois. Corrigido:
+agora nenhum envio pode mais acontecer enquanto uma consulta à nuvem está
+em andamento; se você editar algo bem nesse momento, a edição fica marcada
+e é enviada automaticamente assim que a consulta terminar — nunca perdida,
+nunca escrevendo por cima da nuvem com dados desatualizados. O diagnóstico
+do sistema ganhou "reconciliação em andamento" e uma auditoria read-only
+que confirma se imagens que aparecem só de um lado (local ou nuvem) são
+realmente diferentes ou duplicatas.
+
+Testes: novo teste de concorrência em `tests/multi-device-sync.test.js`
+reproduz o cenário relatado (nuvem com mais imagens que o local, edição
+feita durante a consulta) e confirma que o resultado final é sempre a soma
+completa, nunca a perda relatada — verificado revertendo a correção de
+propósito para confirmar que o teste realmente falha sem ela. Suíte
+completa: 996 PASS.
+
+### Controle de revisão da nuvem (2026-09-23)
+
+Um segundo teste manual real (já com a correção acima) mostrou o mesmo tipo
+de problema por outro caminho: um computador mostrou 108 imagens, e um
+minuto depois outro mostrou 118 — a nuvem estava simplesmente assumindo o
+que o ÚLTIMO computador a salvar tinha localmente, em vez de somar os dois.
+Corrigido de verdade: a nuvem agora tem uma "versão" (revisão) que sobe a
+cada gravação. Antes de qualquer computador enviar dados, o Atlas confere
+se a versão que ele conhece ainda é a mais atual — se algum outro
+computador gravou algo nesse meio tempo, o envio é recusado automaticamente
+e o Atlas busca o que mudou, mescla com a sua edição e tenta enviar de
+novo, sozinho, sem perder nada de nenhum dos dois lados. Essa checagem
+acontece dentro de uma transação do banco de dados (Firestore), que é a
+forma correta e à prova de corrida de fazer isso — não uma simples
+conferência que poderia ser furada por coincidência de tempo.
+
+Testes: novo cenário em `tests/multi-device-sync.test.js` reproduzindo
+exatamente esse caso (dois computadores na mesma versão, um publica
+primeiro, o outro é recusado e se corrige sozinho, terminando com as
+edições dos dois lados presentes). Suíte completa: 998 PASS.
+
+### Boot nunca mais publica sem necessidade (2026-09-23)
+
+Um terceiro teste manual mostrou o mesmo tipo de problema, de outra forma:
+um computador com menos imagens localmente reduziu a nuvem só de ABRIR o
+Atlas — sem editar nada. Causa: o Atlas sempre reenviava o estado local
+depois de consultar a nuvem, mesmo quando não havia nada de novo pra
+enviar. Corrigido: agora, abrir o Atlas sem fazer nenhuma alteração nunca
+publica nada — o Atlas só busca o que tem na nuvem e atualiza a tela.
+Publicar só acontece quando você realmente tem algo que a nuvem ainda não
+tem (uma imagem nova, uma revisão marcada, etc.).
+
+Também foi investigado (sem confirmar, por falta de acesso aos dados
+reais) um possível motivo para algumas imagens não chegarem entre
+computadores: o Atlas protege imagens já associadas a uma lesão para que
+nada automático troque essa associação — se uma imagem antiga guarda uma
+associação incorreta por dentro (de uma correção passada), essa proteção
+pode impedir que ela seja trazida automaticamente pro outro computador. O
+diagnóstico do sistema agora mostra quando isso acontece ("Conflitos de
+ownership bloqueados"), pra você poder corrigir manualmente pelo editor da
+lesão se for o caso — o Atlas nunca faz essa correção sozinho.
+
+Testes: 3 cenários novos em `tests/multi-device-sync.test.js` (computador
+desatualizado sem edição = zero publicações; computador desatualizado com
+1 imagem própria = recebe tudo e publica só essa imagem; teste específico
+provando o mecanismo de proteção de imagem acima). Suíte completa: 1001 PASS.
+
+### Pendência de sincronização + correção segura de associações antigas (2026-09-23)
+
+Evolução do item acima: o Atlas ganhou uma "bandeira de pendência" — ela
+só é levantada quando você edita algo de verdade, e só é abaixada quando
+a nuvem confirma que recebeu. Abrir o Atlas, migrar dados antigos ou
+reconciliar com a nuvem nunca levanta essa bandeira, então nada é
+publicado nessas horas. Na prática: abrir sem editar = zero escritas na
+nuvem; editar sem internet = a pendência aguarda e envia ao reconectar.
+
+Para as associações antigas citadas acima, existe agora um caminho de
+correção manual seguro (via console, nunca automático): ele só corrige a
+etiqueta interna quando prova que a imagem está na lesão certa, tem
+identificação forte, é única no acervo e a etiqueta antiga é histórica —
+cada caso é registrado, e conflito de verdade continua bloqueado.
+
+Testes: `tests/multi-device-sync.test.js` com 23 cenários. Suíte completa:
+1015 PASS (3 falhas pré-existentes de dados de teste, sem relação com a
+sincronização).
+
+### Correção automática segura no pull (2026-09-23)
+
+Evolução do item acima: ao buscar da nuvem, se uma imagem está na lesão
+certa mas guarda uma etiqueta interna antiga (de uma correção passada),
+o Atlas agora verifica se é seguro corrigir só a etiqueta (identificação
+forte + imagem única no acervo) — se for, corrige, traz a imagem e
+registra o evento; se a mesma imagem existir em outra lesão (conflito de
+verdade), continua bloqueando e avisando no diagnóstico. A correção vale
+só na leitura da nuvem; publicar, importar backup e recuperar dados
+antigos continuam como antes. Testes: 27 cenários. Suíte: 1019 PASS
+(3 falhas pré-existentes, sem relação).
+
+### Correção de um falso bloqueio (2026-09-23)
+
+Duas imagens legítimas foram bloqueadas por engano: o Atlas considerava
+conflito qualquer pedaço de identificação em comum com outra imagem (por
+exemplo, mesmo nome de arquivo de um reenvio). Agora a comparação usa a
+identidade completa de cada imagem — igual ao auditor e ao diagnóstico —
+então só o MESMO arquivo em duas lesões continua bloqueando. E quando
+bloquear, o registro diz exatamente qual lesão tem o arquivo. Testes: 29
+cenários. Suíte: 1021 PASS (3 falhas pré-existentes, sem relação).

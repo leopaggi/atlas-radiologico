@@ -2563,18 +2563,24 @@ restauração de questão **não** chamam `saveSidebarScopePref`/`saveQuizScopeP
 ### Independência
 
 Alterar o Quiz não muda a sidebar e vice-versa (chaves e estados separados).
-Ex.: sidebar em `Neurorradiologia → Região selar` e Quiz em `Tórax → Pulmão`
-continuam assim após F5.
+
+### Estado padrão de fábrica (2026-09-22)
+
+Reload e "Limpar filtros" sempre resultam em Todas as seções, sem tags,
+Revisões=Todas. O boot NÃO lê mais a seção/sítio guardados
+(`loadSidebarScopePref` e a escrita continuam existindo, mas o boot as
+ignora); só o Quiz restaura a sua preferência. Botão Limpar aparece com
+qualquer filtro ativo e também zera Revisões.
 
 ### Testes
 
-Novo `tests/local-scope-prefs.test.js` (**14 PASS**): chaves versionadas
-independentes; salvar/restaurar sidebar e Quiz; independência; seção inexistente
-ignorada; site inexistente com fallback; JSON inválido; `localStorage`
-indisponível; ausência de Firebase/IndexedDB/`DATA`; gravação só em mudança
-manual; import/sync não sobrescrevem; gravação nos handlers manuais da sidebar e
-nos seletores do Quiz; seleção do Quiz usando `quizScope`. Âncoras de
-`tests/critical-flows.test.js`: 5869/5859/8172/11141.
+`tests/local-scope-prefs.test.js` (**20 PASS**): o acima + chaves
+versionadas independentes; salvar/restaurar sidebar e Quiz; seção
+inexistente ignorada; site inexistente com fallback; JSON inválido;
+`localStorage` indisponível; ausência de Firebase/IndexedDB/`DATA`;
+gravação só em mudança manual; import/sync não sobrescrevem; gravação nos
+handlers manuais da sidebar e nos seletores do Quiz; seleção do Quiz usando
+`quizScope`. Âncoras de `tests/critical-flows.test.js`: 5869/5859/8172/11141.
 
 ## Alteração 037 — Limpeza visual da sidebar (ações técnicas fora da UI)
 
@@ -3237,3 +3243,321 @@ completa: 874 PASS, 5 TODO + 1 FAIL histórico em
 `duplicate-detection.test.js` (fora de escopo). **A migração real de
 "Fossa ilíaca direita" continua não executada** — fica para o usuário
 rodar manualmente depois desta correção estar publicada.
+
+## Alteração 068 — Sincronização multi-PC: pull automático reativado (2026-09-23)
+
+**Motivo:** o usuário abriu o Atlas num computador do hospital e ele mostrou
+só ~50 imagens, enquanto a máquina principal já tinha bem mais. Pedido:
+investigar e corrigir com cuidado, sem apagar dados de nenhum lado, sem
+comandos manuais no console e sem remover as proteções contra overwrite já
+existentes (`isNewLocalDevice`/`deviceBootstrapPending`).
+
+### Investigação (antes de qualquer mudança)
+
+`loadData()` tinha dois caminhos até a nuvem: (1) push incondicional
+(`pushToFirebaseNow()`, a cada `saveData()` e no fim de todo boot) e (2) o
+bootstrap de dispositivo **NOVO** (Alteração 055), que só dispara quando o
+IndexedDB local está genuinamente vazio. Um dispositivo **já inicializado**
+(catálogo local de semanas atrás) não passa por (2) — nunca mais consultava
+a nuvem depois da primeira vez. Como `writeShardedState()` faz `.set()`
+(substituição total, não merge), o push incondicional do fim de todo boot já
+sobrescrevia no Firestore qualquer imagem que só existisse na nuvem, mesmo
+sem o usuário editar nada — foi isso que deixou o PC do hospital com menos
+imagens (e, sem esta correção, o mero fato de abrir esse PC de novo
+arriscava apagar da nuvem o que só existia lá).
+
+O pull automático tinha sido desligado de propósito na Alteração 008
+(2026-09-19) porque, naquela época, o merge de `syncFromFirebase()`
+reintroduzia duplicatas/ownership que a reconciliação V2 tinha acabado de
+consolidar. Essa causa específica está coberta hoje por proteções que não
+existiam em 2026-09-19 (`SUPPRESSED_DUPLICATE_IDS_V172` filtrando os dois
+lados do merge, `mergeEntryNonDestructive`/`canChangeImageOwnership`
+protegendo imagens/ownership) — todas já usadas e testadas pelos 3 call
+sites explícitos que nunca deixaram de existir.
+
+### O que foi implementado
+
+- `loadData()`: `await syncFromFirebase();` reativado, dentro de
+  `if(!isNewLocalDevice){ … }` — dispositivo novo já decidiu no modal do
+  bootstrap (Alteração 055); repetir o pull ali pisaria nessa escolha. Roda
+  logo após `appStateReady=true` e ANTES de qualquer push incondicional do
+  resto do boot, para que esse push leve o estado já mesclado.
+- `setSyncStatus()`: passou a manter `syncPushPending`/`lastSyncOkAt`/
+  `lastSyncErrorAt`/`lastSyncErrorDetail` em memória (nunca persistidos).
+- Retry automático: `window.addEventListener('online', …)` reenvia sozinho
+  quando a última tentativa tinha falhado e a conexão volta — sem isso, uma
+  edição feita offline só subia na próxima edição/F5 por acaso.
+- `buildSystemDiagnosticReport()`: a seção de sincronização ganhou envio
+  pendente SIM/NÃO, último sucesso/erro e comparação local × nuvem
+  (reaproveita `buildSyncAudit()`, read-only) — sem painel novo.
+
+### Segurança — nada removido
+
+`deviceBootstrapPending`, o modal de bootstrap, o bloqueio de push em
+`writeShardedState()`, a proteção de ownership e os snapshots
+automáticos/verificação pós-envio de `syncFromFirebase()` continuam
+intactos. Nenhuma lógica de merge nova: é a MESMA `syncFromFirebase()` de
+sempre, com mais um call site (automático, guardado) além dos 4 que já
+existiam.
+
+### Testes
+
+`tests/critical-flows.test.js` (5 testes "ALTERACAO 008" reescritos como
+"ALTERACAO 068"; âncoras recalculadas), `tests/device-bootstrap.test.js`
+(2 testes de `loadData()` real com asserts novos), `tests/snapshots-
+ownership.test.js` (1 teste reescrito) e o novo `tests/multi-device-sync.test.js`
+(5 testes: dois "computadores" com storage local separado + uma nuvem falsa
+compartilhada, rodando `loadData`/`syncFromFirebase`/`writeShardedState`/
+`readShardedState` REAIS — cobre PC stale recebendo o que só existia na
+nuvem sem perda, edição de B chegando em A num boot seguinte, divergência
+cruzada virando união sem perda de nenhum lado, sync repetido sem duplicar,
+ownership preservado no round-trip, e boot offline não travando nem
+perdendo o local). Suíte completa: **992 PASS**, 0 FAIL novo (as mesmas 3
+falhas pré-existentes/fora de escopo de sempre: 1 em
+`duplicate-detection.test.js`, 2 em `images-history.test.js` dependentes da
+data do sistema — confirmadas presentes mesmo sem nenhuma mudança de
+código, via `git stash`).
+
+Sem commit/push (tarefa pediu para testar primeiro no localhost). Teste
+manual com dois computadores reais ainda não foi feito.
+
+## Alteração 069 — Barreira de reconciliação (bug real do teste manual, 2026-09-23)
+
+**Motivo:** no primeiro teste manual real da Alteração 068, o usuário viu o
+Chrome com local=106/cloud=116 (`Divergente: SIM`). Ao salvar 1 imagem nova
+no Chrome, a nuvem **caiu** para 107 — perdeu as 10 imagens exclusivas. O
+Edge (aberto depois) ficou correto (117). Pedido: investigar a corrida/ordem
+async real, sem assumir nada, e implementar uma barreira explícita.
+
+### Achado real (comprovado no código, não suposição)
+
+`pushToFirebase()`/`pushToFirebaseNow()` retornavam silenciosamente quando
+`fbSyncing` (reconciliação em andamento) era `true` — sem marcar nada, sem
+erro, sem retry. Uma edição salva nessa janela ficava só local até a
+PRÓXIMA edição empurrar por acaso. Além disso, `syncThisDeviceToCloud()`,
+`mergeThisDeviceImagesToCloud()` e os 5 call sites de `syncFromFirebase()`
+não tinham NENHUM guard contra rodar concorrentemente com uma reconciliação
+já em andamento. Uma análise formal (JS single-thread, sem `await` entre os
+pontos críticos) não encontrou um caminho, DENTRO de uma mesma aba, que
+reproduza exatamente "116 → 107" — o que aponta a aba do Chrome não
+recarregada (ainda rodando o código anterior à 068) como explicação mais
+provável — mas as falhas acima são reais e foram corrigidas como defesa em
+profundidade, comprovadas por um teste que falha sem a correção.
+
+### O que foi implementado
+
+1. `syncFromFirebase()`: `if(!fbDb || fbSyncing) return;` no topo — fecha a
+   reentrância nos 5 call sites de uma vez, sem duplicar o guard em cada um.
+2. `pushToFirebase()`/`pushToFirebaseNow()`: nunca mais retornam em
+   silêncio — marcam `syncPushPending=true` sempre que o envio não pode
+   acontecer de verdade (offline, boot ainda não pronto, ou reconciliação
+   em andamento).
+3. `syncFromFirebase()` ganhou um flush no fim (sucesso OU falha): se
+   `syncPushPending` continuar `true`, reenvia — sempre com o estado já
+   MESCLADO, nunca só o local desatualizado.
+4. `syncThisDeviceToCloud()`/`mergeThisDeviceImagesToCloud()` ganharam
+   `if(fbSyncing){...return {reason:'sync_in_progress'}}` — mesmo mutex
+   (`fbSyncing`) já usado no resto do projeto, nenhum flag paralelo.
+5. Diagnóstico: "Reconciliação em andamento", "Dirty local", e uma auditoria
+   read-only NOVA de identidade de imagens (`buildImageIdentityDivergenceReport`)
+   que classifica imagens divergentes como exclusivas de verdade ou
+   duplicatas exatas — só roda quando a contagem de imagens diverge.
+
+### Teste da barreira (prova, não só afirmação)
+
+`tests/multi-device-sync.test.js`: nova nuvem com 13 imagens, dispositivo
+local com 3 (stale), edição concorrente feita exatamente durante o pull
+(via um portão controlável na leitura do Firestore, determinístico, sem
+`setTimeout`). Resultado obrigatório: união completa (14), nunca "só a
+edição" (4, proporcional ao 107 relatado). **Sanity-check**: revertendo só
+a correção de `pushToFirebaseNow()` de propósito, o teste FALHA — prova que
+ele realmente captura o defeito. Suíte completa: **996 PASS**, 0 FAIL novo.
+
+### Não implementado (decisão consciente)
+
+Uma verificação de "a nuvem mudou desde o último pull → aborta o push,
+reconcilia de novo, tenta de novo" (proteção contra DOIS dispositivos
+publicando quase ao mesmo tempo, sem saber um do outro) foi considerada e
+descartada nesta entrega: é uma mudança bem maior, com risco de introduzir
+um novo defeito, e a barreira de reconciliação acima já fecha o caminho
+comprovado. Fica como possível trabalho futuro.
+
+## Alteração 070 — Controle de revisão / concorrência otimista (2026-09-23)
+
+**Motivo:** com o código da Alteração 069 já rodando (hard-refresh
+confirmado), o usuário provou o bug de outro jeito: Chrome mostrou
+local=nuvem=108 e, um minuto depois, Edge mostrou local=nuvem=118 — a nuvem
+estava assumindo o estado do ÚLTIMO dispositivo a publicar, não convergindo.
+Pedido explícito: implementar controle de revisão (compare-and-swap real,
+sem TOCTOU) antes de qualquer escrita destrutiva.
+
+### Cadeia exata localizada
+
+`loadData()` tem dois pontos de push incondicional (o interno de
+`syncFromFirebase()` e o final de `loadData()`) e nenhum deles conferia se
+a nuvem ainda era a versão que o dispositivo tinha lido por último —
+`writeShardedState()` sempre fazia `.set()` cego. Um pull que falhasse
+silenciosamente ou não trouxesse nada novo não impedia o push seguinte de
+escrever do mesmo jeito.
+
+### O que foi implementado
+
+- `revision` (inteiro) no documento principal; `readShardedState()` grava
+  toda leitura em `lastKnownCloudRevision` (`null` = nunca lido com sucesso).
+- `writeShardedState()`: recusa se `lastKnownCloudRevision===null`; senão,
+  escreve dentro de uma **transação real do Firestore**
+  (`fbDb.runTransaction`) que relê a revisão e só comita se bater — a
+  transação em si fecha o TOCTOU (Firestore detecta e aborta se outro
+  dispositivo comitar entre a leitura e o commit desta).
+- `writeShardedStateWithConflictRetry()`: em conflito, reconcilia
+  (`syncFromFirebase()`, com push próprio suprimido via
+  `syncFromFirebaseSkipTrailingPush` pra evitar reentrância) e tenta
+  escrever UMA vez mais, já com o estado mesclado.
+
+### Segurança
+
+Sem cloud-wins/local-wins: o merge continua `mergeEntryNonDestructive`/
+`unionEntryImages`, intocado. `deviceBootstrapPending`, `fbSyncing`
+(Alteração 069) e ownership continuam intactos.
+
+### Testes
+
+`tests/multi-device-sync.test.js`: teste do cenário exato pedido (A e B na
+mesma revisão, B publica, escrita crua de A é recusada, `saveData()` de A
+se autocura sozinho — união completa local e na nuvem) + teste de boots
+repetidos com número de escritas ESTÁVEL (nunca crescente). Demais
+arquivos (`critical-flows`, `device-bootstrap`, `snapshots-ownership`)
+atualizados para a nova assinatura transacional. Suíte completa: **998
+PASS**, 0 FAIL novo.
+
+**Nota lateral:** durante a implementação, dois comentários novos
+(um apóstrofo em "marca d'água", uma citação literal de
+`async function syncFromFirebase(){` dentro de um comentário) confundiram
+parsers de teste ingênuos que contam chaves sem reconhecer `//` — corrigido
+reescrevendo o texto sem mudar o sentido. Lição registrada: nunca citar a
+assinatura literal de uma função dentro de um comentário no mesmo arquivo.
+
+### Não implementado (escopo)
+
+Pular o push quando o merge não trouxe/levou nada de novo — a barreira de
+revisão já garante que um push "desnecessário" nunca sobrescreve algo mais
+novo (só teria êxito se a revisão bater), então é uma ineficiência de rede,
+não um risco de dados. Implementar certo exigiria comparar se o LOCAL tem
+conteúdo exclusivo não presente no remoto (comparação sutil, com risco de
+pular um push necessário se malfeita) — não implementado nesta entrega.
+
+## Alteração 071 — Separa pull de push no boot + investigação de ownership (2026-09-23)
+
+**Motivo:** terceiro teste manual real. Edge 14:25:30 com local=nuvem=118
+(revisão 2); Chrome, aberto 28s depois, com local=nuvem=108 (revisão 4) —
+**sem nenhum conflito de revisão registrado**. O simples BOOT do Chrome
+reduziu a nuvem, de forma "legítima" pra barreira de revisão (a escrita
+batia com a revisão recém-lida). Confirmava: o problema não era mais
+concorrência entre PCs, era o próprio boot empurrando sem necessidade.
+Depois de edições em ambos, a proteção de revisão funcionou num conflito
+real (Edge 82/120, registrando o conflito corretamente). Chrome ficou
+stale e a auditoria de identidade (071 usa a mesma função de 069) listou
+**11 imagens reais exclusivas da nuvem**, não duplicatas, em 7 lesões.
+
+### O que foi implementado
+
+- `syncFromFirebase()`: calcula `localHasExclusiveContent` depois do merge
+  (reaproveita `buildImageIdentityDivergenceReport`, sem lógica nova) — só
+  publica se o local realmente tiver lesão/imagem/REVIEW/SRS/SESSIONLOG
+  exclusivos que a nuvem ainda não tem.
+- `loadData()`: o push final do boot também virou condicional — só dispara
+  se as migrações locais (upgrades de descrição, dedup v171) realmente
+  mudaram algo.
+- **Correção lateral real**: `pushToFirebase()`/`pushToFirebaseNow()`
+  marcavam `syncPushPending=true` mesmo quando bloqueadas ANTES de
+  `appStateReady` (plumbing interno de boot como `saveOrder()`, nunca uma
+  intenção real) — isso fazia o flush de `syncFromFirebase()` reenviar sem
+  necessidade. Corrigido: só marca pendente quando o bloqueio acontece
+  depois do app pronto.
+- **Investigação de ownership × pull (não uma correção)**: provado com
+  teste real que `unionEntryImages()`/`canChangeImageOwnership()` bloqueiam
+  uma imagem remota cuja etiqueta interna (`lesionId`) diverge da
+  lesão-alvo, mesmo guardada dentro do array certo na nuvem — mecanismo
+  documentado (Alteração 059). NÃO relaxado (reintroduziria o bug que essa
+  proteção previne). Ficou visível: `getImageOwnershipConflicts()` (já
+  existia, nunca aparecia em lugar nenhum) agora sai no diagnóstico.
+
+### Testes
+
+`tests/multi-device-sync.test.js`: cenário exato — PC stale sem edição
+recebe tudo (várias lesões) com **ZERO** escritas; PC stale com 1 imagem
+exclusiva recebe tudo E publica só essa imagem (**UMA** escrita, união
+completa); teste de ownership × pull com controle. **Bug de teste
+encontrado e corrigido**: o motor (`makeDevice()`) esquecera de incluir as
+duas funções de auditoria de identidade no `vm` — a chamada lançava
+`ReferenceError`, capturado pelo catch de `syncFromFirebase()`, que
+mascarava o problema disparando o push pelo caminho de erro em vez do
+caminho pretendido. Corrigido; suíte completa: **1001 PASS**, 0 FAIL novo.
+
+### Pendência
+
+Sem acesso aos dados reais, não foi possível confirmar se ownership é a
+causa das 11 imagens do caso relatado — só que é um mecanismo real e
+reproduzível que produz exatamente esse padrão. O usuário pode confirmar
+no diagnóstico do sistema real ("Conflitos de ownership bloqueados"). Se
+confirmado, a correção é sempre MANUAL (reassociar pelo editor da lesão).
+
+## Alteração 072 — syncDirty persistente + zero escritas no boot + normalização segura de etiqueta legada (2026-09-23)
+
+**Motivo:** fechar a última brecha do boot — rotinas internas
+(migrações, dedup, reconciliação) chamavam os saves normais e publicavam
+sem edição do usuário. E dar caminho seguro às 6 etiquetas legadas
+`seed_8→seed_7`, `seed_11→seed_10`, `seed_21→seed_18`,
+`seed_413→seed_404`, `seed_414→seed_405`, `seed_477→seed_464`.
+
+### O que foi implementado
+
+- `syncDirty` persistente (`atlas:syncDirty`): só save REAL levanta; só
+  push confirmado abaixa; `syncFromFirebase()` decide por ela.
+- `saveData()/saveReview()/saveSRS()/saveSessionLog()` com
+  `internal=true` (só local, sem dirty/push); boot/migração/dedup usam o
+  modo interno; pushes de boot/migração viraram `if(syncDirty)`.
+- `normalizeLegacyImageOwnerLabel()` no fim do script (não desloca
+  âncoras): reescreve SÓ `img.lesionId`, SÓ com 6 condições provadas;
+  registra `legacy_image_owner_label_normalized`; nunca chamada
+  automaticamente; `canChangeImageOwnership()` intacto.
+
+### Testes
+
+`tests/multi-device-sync.test.js`: 23 PASS (A–F). Âncoras remedidas em
+`critical-flows` (6580/6590/9137/12718, deltas conferidos hunk a hunk).
+Marcadores `saveData(` atualizados em `local-scope-prefs`/`lesion-review`
+(assinatura virou `saveData(internal)`). Suíte completa: **1015 PASS**,
+3 FAIL pré-existentes da 071, sem relação com a 072.
+
+## Alteração 072b — Normalização de etiqueta legada dentro do pull (2026-09-23)
+
+**Motivo:** a 072 deixou a normalização sem chamar em fluxo automático —
+PC desatualizado bloquearia para sempre as imagens legítimas com
+etiqueta histórica. Integração SOMENTE ao pull, mesmas condições.
+
+- `tryNormalizeLegacyPullImage()` compartilhado (console + merge, mesma
+  tabela de decisão); tentado em `unionEntryImages()` só com
+  `sourceLabel 'pull'` + catálogo; `mergeEntryNonDestructive()` repassa
+  só com mesmo id local/remoto; só `syncFromFirebase()` informa
+  `localData`. Push/importação/recuperação: bloqueio puro (testes provam).
+- Normaliza SÓ `lesionId` (cópia), `lesionName` intacto, registra
+  `legacy_image_owner_label_normalized`; conflito real bloqueado; sem
+  hardcode (6 pares reais + 1 sintético no teste).
+- Testes: `multi-device-sync` 27 PASS (4 novos de integração com merge
+  real + 2 antigos ajustados para dono não-histórico); âncoras
+  6674/6684/9231/12812 (+94 uniforme, conferido hunk a hunk); suíte
+  **1019 PASS**, 3 FAIL pré-existentes.
+
+## Alteração 072c — Falso positivo: holders por stable key única (2026-09-23)
+
+**Motivo:** caso real 118/120 — 2 assets (seed_10, etiqueta seed_11)
+bloqueados embora o MESMO asset não existisse em outra lesão. A 072b
+tratava qualquer chave parcial (mesmo publicId de re-upload) como
+conflito real.
+**Correção:** holders por `stableImageKeyV208` (noção do
+auditor/diagnóstico) + `conflictingHolders` no evento de bloqueio.
+`canChangeImageOwnership()` intacto; sem hardcode de assets/pares.
+**Testes:** `multi-device-sync` 29 PASS (o teste do falso positivo
+FALHAVA antes da correção); âncoras 6686/6696/9243/12824 (+12 uniforme);
+suíte **1021 PASS**, 3 FAIL pré-existentes.
