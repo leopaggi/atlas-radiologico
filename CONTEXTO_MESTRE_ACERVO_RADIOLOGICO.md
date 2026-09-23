@@ -321,7 +321,7 @@ Destino: `https://ntfy.sh/acervo-leo-7k29-radiologia`. Detalhes em `AGENTS.md`.
 | `tests/form-collapse.test.js` | **11 PASS**, 0 FAIL |
 | `tests/form-layout-desktop.test.js` | **10 PASS**, 0 FAIL |
 | `tests/image-handling.test.js` | **18 PASS**, 0 FAIL |
-| Total (suíte completa) | **777 testes, 771 PASS, 5 TODO, 0 FAIL** |
+| Total (suíte completa) | **784 testes, 778 PASS, 5 TODO, 0 FAIL** |
 
 - `tests/duplicate-detection.test.js` tem 1 FAIL **histórico e fora de escopo**
   (`DUPLICATE_PAIRS_V171`, 28 entradas malformadas). Não corrigir sem pedido.
@@ -431,7 +431,9 @@ pull, a proteção de ownership e a verificação server-only.
   com zeros, subtítulo `Imagens no acervo: X · Lesões com imagem: Y / Z`
   com Z=`DATA.length`). Empilha em telas menores pelos breakpoints
   existentes. Refresh ao vivo via `refreshStudyDashboardLive()` chamado nos
-  2 saves (sem listeners novos).
+  2 saves (sem listeners novos). O KPI abre o modal "Imagens adicionadas
+  hoje"; abrir lesão dali mostra "← Voltar para imagens de hoje" no detalhe
+  (`openDetail` com `returnTo`, demais fluxos inalterados).
 - **Âncoras:** `critical-flows.test.js` atualizadas para 6056/6066/8608/11602
   (+5 union, +5 save do editor; CSS do grid editado in-place, resto após
   11592). Testes: `tests/image-productivity.test.js`, **20 PASS**.

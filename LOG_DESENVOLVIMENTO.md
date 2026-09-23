@@ -4411,3 +4411,44 @@ Log denso e legível; painel não desloca mais a sidebar.
 ### Commit após aprovação
 
 Ainda não criado (tarefa pediu sem commit/push).
+
+**Número da alteração:** 066
+**Data:** 22/09/2026
+
+### Objetivo
+
+"← Voltar para imagens de hoje" no detalhe aberto pelo modal do KPI,
+sem mexer nos demais fluxos.
+
+### Estado antes
+
+Abrir lesão pelo modal destruía a lista sem volta (só fechando tudo).
+
+### Arquivos modificados
+
+- `index.html` (`openDetail(id, opts)` + botão + fiação; `openLesion`
+  passa `{ returnTo: 'images-today' }`)
+- `tests/images-today-modal.test.js` (+7 testes do Voltar)
+- `tests/critical-flows.test.js` (âncora importHandler 12237)
+
+### O que foi alterado
+
+- Contexto opcional allowlist; Voltar remove só o detalhe e reabre a
+  lista recalculada; Fechar/ESC inalterados; sem stack global, sem
+  history, sem reload.
+
+### Testes realizados
+
+- `node tests/images-today-modal.test.js`: 31 PASS, 0 FAIL;
+- `modal-cleanup`: 14 PASS; `critical-flows`: 21 PASS;
+  `collage-desc`: 15 PASS; `quiz-image-desc`: 8 PASS;
+  `image-productivity`: 20 PASS;
+- `git diff --check`: sem erros de espaço em branco.
+
+### Resultado
+
+Ciclo lista → detalhe → voltar repetível, Dashboard/Quiz intactos.
+
+### Commit após aprovação
+
+Ainda não criado (tarefa pediu sem commit/push).

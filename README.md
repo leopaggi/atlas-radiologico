@@ -957,7 +957,8 @@ confiável a partir desta versão). No `Quiz & Progresso`: card
 `🖼️ N imagens hoje`, gráfico `Imagens atribuídas na última semana` (7 dias,
 linha com pontos, entre Evolução — reduzida à metade — e Estado do acervo)
 e totais `Imagens no acervo: X · Lesões com imagem: Y / TOTAL`, com refresh
-ao vivo ao salvar.
+ao vivo ao salvar. O card abre o modal "Imagens adicionadas hoje"; o detalhe
+aberto dali tem "← Voltar para imagens de hoje".
 
 Testes: `tests/image-productivity.test.js` com **20 PASS**.
 

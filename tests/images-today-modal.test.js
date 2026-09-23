@@ -259,9 +259,9 @@ test('11. dentro de uma lesão com várias imagens, usa a MAIS recente para dese
 // 12/13. CLICAR ABRE openDetail; MODAL FECHA ANTES
 // ===========================================================================
 
-test('12. clicar na linha ou no link "Abrir lesão" chama openLesion(id) -> closeThis() + openDetail(id)', () => {
+test('12. clicar na linha ou no link "Abrir lesão" chama openLesion(id) -> closeThis() + openDetail(id, returnTo)', () => {
   const src = stripJsComments(extractFunction(html, 'openImagesTodayModal').source);
-  assert.match(src, /const openLesion = \(id\) => \{ closeThis\(\); openDetail\(id\); \};/, 'fecha o modal ANTES de abrir a lesão');
+  assert.match(src, /const openLesion = \(id\) => \{ closeThis\(\); openDetail\(id, \{ returnTo: 'images-today' \}\); \};/, 'fecha o modal ANTES e passa o contexto de retorno');
   assert.match(src, /row\.onclick = \(\) => openLesion\(row\.getAttribute\('data-lesion-id'\)\);/);
   assert.match(src, /a\.onclick = \(ev\) => \{ ev\.preventDefault\(\); ev\.stopPropagation\(\); openLesion\(a\.getAttribute\('data-lesion-id'\)\); \};/);
 });
@@ -351,4 +351,141 @@ test('FONTE DE VERDADE: imagesAssignedTodayByLesion nunca infere pela lesão nem
   const src = extractFunction(html, 'imagesAssignedTodayByLesion').source;
   assert.doesNotMatch(src, /e\.createdAt|e\._userUpdatedAt|\.uploadedAt|\.createdAt\b/);
   assert.match(src, /imageAssignedDayLocal\(img\.assignedAt\)/);
+});
+
+// ===========================================================================
+// VOLTAR PARA IMAGENS DE HOJE (22/09/2026) — contexto returnTo em openDetail
+// ===========================================================================
+
+function loadDetail() {
+  const src = extractFunction(html, 'openDetail').source;
+  const els = {};
+  let anonSeq = 0;
+  function mkEl(id) {
+    if (!els[id]) {
+      els[id] = {
+        id, innerHTML: '', textContent: '', onclick: null, style: {},
+        dataset: {}, className: '',
+        querySelector() { return null; },
+        querySelectorAll() { return []; },
+        appendChild() {},
+        remove() { this.removed = true; },
+        addEventListener() {},
+        getAttribute() { return null; },
+        setAttribute() {},
+        removed: false
+      };
+    }
+    return els[id];
+  }
+  function mkAnon() {
+    anonSeq += 1;
+    return mkEl('anon-' + anonSeq);
+  }
+  let appendedOv = null;
+  const calls = { openImagesTodayModal: 0, closeOverlay: 0, openForm: 0 };
+  const lesion = { id: 'L1', name: 'Lesão Teste', s: 'S', site: 'T', tags: [], notes: '', links: [], classification: null, images: [] };
+  const ctx = vm.createContext({
+    DATA: [lesion],
+    document: {
+      createElement: () => mkAnon(),
+      getElementById: (id) => mkEl(id),
+      body: { appendChild: (el) => { appendedOv = el; } },
+      querySelector: () => null
+    },
+    ensureLinks: () => [],
+    filterReferenceLinksForDisplay: (l) => l,
+    hasEntryImgs: () => false,
+    incColor: () => '',
+    incLabel: () => '',
+    CLASSIFICATION_SYSTEMS: {},
+    renderClassificationBox: () => '',
+    clinicalCasesSectionHtml: () => '',
+    getEntryImgs: async () => [],
+    getReview: () => 0,
+    REVIEW_COLORS: {},
+    REVIEW_ICONS: {},
+    REVIEW_LABELS: {},
+    setReview: () => {},
+    renderReviewBar: () => {},
+    renderResults: () => {},
+    wireClinicalCasesToggle: () => {},
+    closeOverlay: () => { calls.closeOverlay++; },
+    openForm: () => { calls.openForm++; },
+    openImagesTodayModal: () => { calls.openImagesTodayModal++; },
+    esc: (v) => v,
+    console: { warn: () => {}, log: () => {}, error: () => {} }
+  });
+  vm.runInContext(src + '\nthis.__d = { openDetail };', ctx);
+  return { openDetail: ctx.__d.openDetail, els, getOv: () => appendedOv, calls, lesion };
+}
+
+test('VOLTAR: detalhe recebe contexto de retorno (returnTo allowlist)', () => {
+  const src = stripJsComments(extractFunction(html, 'openDetail').source);
+  assert.match(src, /function openDetail\(id, opts\)/);
+  assert.match(src, /opts && opts\.returnTo === 'images-today'/, 'só o valor conhecido ativa');
+});
+
+test('VOLTAR: botão "Voltar para imagens de hoje" aparece SÓ nesse fluxo', () => {
+  const { openDetail, els, getOv } = loadDetail();
+  openDetail('L1');
+  assert.doesNotMatch(getOv().innerHTML, /btn-back-today/, 'fluxo normal: sem botão Voltar');
+  assert.match(getOv().innerHTML, /id="btn-close"/);
+  const { openDetail: open2, els: els2, getOv: getOv2 } = loadDetail();
+  open2('L1', { returnTo: 'images-today' });
+  assert.match(getOv2().innerHTML, /id="btn-back-today"/);
+  assert.match(getOv2().innerHTML, /Voltar para imagens de hoje/);
+  assert.ok(els2['btn-back-today'], 'botão fia via getElementById');
+});
+
+test('VOLTAR: clicar fecha SÓ o detalhe e reabre a lista (sem closeOverlay)', () => {
+  const { openDetail, els, getOv, calls } = loadDetail();
+  openDetail('L1', { returnTo: 'images-today' });
+  const ov = getOv();
+  assert.equal(typeof els['btn-back-today'].onclick, 'function');
+  els['btn-back-today'].onclick();
+  assert.equal(ov.removed, true, 'detalhe removido');
+  assert.equal(calls.openImagesTodayModal, 1, 'lista reaberta');
+  assert.equal(calls.closeOverlay, 0, 'Dashboard/Quiz de fundo intactos (sem closeOverlay)');
+});
+
+test('VOLTAR: fechar normal continua funcionando (btn-close -> closeOverlay)', () => {
+  const { openDetail, els, calls } = loadDetail();
+  openDetail('L1', { returnTo: 'images-today' });
+  els['btn-close'].onclick();
+  assert.equal(calls.closeOverlay, 1);
+  assert.equal(calls.openImagesTodayModal, 0, 'fechar não reabre nada');
+});
+
+test('VOLTAR: ESC e overlays intactos (sem body/scroll hacks, sem stack global)', () => {
+  const src = stripJsComments(extractFunction(html, 'openDetail').source);
+  assert.doesNotMatch(src, /addEventListener\('keydown'/, 'ESC mantém comportamento atual (sem handler novo)');
+  assert.doesNotMatch(src, /style\.overflow|modal-open|history\.back|location\.reload/, 'sem trava de scroll nem navegação');
+  const backIdx = src.indexOf('btn-back-today');
+  assert.ok(backIdx !== -1);
+  assert.doesNotMatch(src.slice(backIdx, backIdx + 400), /closeOverlay/, 'volta nunca chama closeOverlay');
+});
+
+test('VOLTAR: contagens vêm do DATA ao reabrir (sem cache) + ciclo repetível', () => {
+  const { openDetail, els, calls, lesion } = loadDetail();
+  for (let i = 0; i < 3; i++) {
+    openDetail('L1', { returnTo: 'images-today' });
+    els['btn-back-today'].onclick();
+  }
+  assert.equal(calls.openImagesTodayModal, 3, 'lista → detalhe → voltar repete sem acumular');
+  assert.equal(calls.closeOverlay, 0);
+  assert.equal(JSON.stringify(lesion), JSON.stringify({ id: 'L1', name: 'Lesão Teste', s: 'S', site: 'T', tags: [], notes: '', links: [], classification: null, images: [] }), 'lesão intacta');
+});
+
+test('VOLTAR: outros fluxos não ganham botão (só o modal do KPI passa returnTo)', () => {
+  const hits = [];
+  const re = /openDetail\(([^)]*)\)/g;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const before = html.slice(Math.max(0, m.index - 60), m.index);
+    if (/function openDetail/.test(before)) continue;
+    if (/openDetail\(id, \{ returnTo: 'images-today' \}\)/.test(m[0])) continue;
+    if (/returnTo/.test(m[0])) hits.push(m[0].slice(0, 60));
+  }
+  assert.deepEqual(hits, [], 'nenhum outro call site passa contexto');
 });

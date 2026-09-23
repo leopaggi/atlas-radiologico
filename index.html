@@ -9506,9 +9506,13 @@ function getStudyOverlay(){
   return ov;
 }
 
-function openDetail(id){
+function openDetail(id, opts){
   const e = DATA.find(x=>x.id===id);
   if(!e) return;
+  // Contexto opcional de origem (ex: { returnTo: 'images-today' }): mostra um
+  // botão "← Voltar" que fecha SÓ este detalhe e reabre a origem. Chamadas
+  // existentes openDetail(id) continuam idênticas (sem botão, sem mudança).
+  const returnTo = (opts && opts.returnTo === 'images-today') ? 'images-today' : null;
   // Ajuste UX 22/09/2026: um link de referência com a MESMA URL de um caso
   // clínico vinculado não aparece de novo aqui (o card de clinicalCases já
   // mostra "Abrir caso") — só na EXIBIÇÃO; o DATA/links não é tocado.
@@ -9537,6 +9541,7 @@ function openDetail(id){
       <div class="modal-actions">
         <button class="btn btn-danger" id="btn-del">excluir</button>
         <div style="display:flex;gap:8px;">
+          ${returnTo ? `<button class="btn btn-ghost" id="btn-back-today">← Voltar para imagens de hoje</button>` : ''}
           <button class="btn btn-ghost" id="btn-close">fechar</button>
           <button class="btn btn-primary" id="btn-edit">editar</button>
         </div>
@@ -9576,6 +9581,11 @@ function openDetail(id){
   renderReviewButtons();
   wireClinicalCasesToggle(ov, e);
   document.getElementById('btn-close').onclick = closeOverlay;
+  const backTodayBtn = document.getElementById('btn-back-today');
+  // Voltar fecha SOMENTE o detalhe (ov.remove, nunca closeOverlay — o
+  // Dashboard/Quiz de fundo fica intacto) e reabre a lista, recalculada do
+  // DATA (mesmo dia, mesmas contagens atualizadas). Sem history/reload.
+  if(backTodayBtn) backTodayBtn.onclick = ()=>{ try{ ov.remove(); }catch(_e){} openImagesTodayModal(); };
   document.getElementById('btn-edit').onclick = ()=>{ closeOverlay(); openForm(e.id); };
   document.getElementById('btn-del').onclick = async ()=>{
     if(confirm(`Excluir "${e.name}" do seu banco?`)){
@@ -15620,7 +15630,7 @@ function openImagesTodayModal(){
   document.body.appendChild(ov);
   const closeBtn = document.getElementById('images-today-close');
   if (closeBtn) closeBtn.onclick = closeThis;
-  const openLesion = (id) => { closeThis(); openDetail(id); };
+  const openLesion = (id) => { closeThis(); openDetail(id, { returnTo: 'images-today' }); };
   ov.querySelectorAll('.images-today-open-link').forEach(a => {
     a.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); openLesion(a.getAttribute('data-lesion-id')); };
   });

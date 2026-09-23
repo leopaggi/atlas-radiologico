@@ -318,10 +318,14 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // cópia duplicada do painel de dentro de #advanced-tools (IDs duplicados);
   // mantida a ocorrência da sidebar, acima de "configurar Cloudinary".
   // Valores remedidos com o algoritmo do próprio teste (lineNumberAt).
+  // +0 nas 3 primeiras âncoras / +10 só no importHandler (Voltar p/ imagens
+  // de hoje, 22/09/2026): contexto returnTo em openDetail + botão + fiação —
+  // tudo dentro de openDetail, depois de loadData(). Sem mudar chamadas
+  // existentes nem outros fluxos.
   assert.equal(recovery.line, 6267);
   assert.equal(brokenArtifacts.line, 6257);
   assert.equal(loadData.line, 8809);
-  assert.equal(importHandler.line, 12227);
+  assert.equal(importHandler.line, 12237);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
