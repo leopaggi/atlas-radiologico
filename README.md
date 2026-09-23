@@ -1343,3 +1343,31 @@ identidade completa de cada imagem — igual ao auditor e ao diagnóstico —
 então só o MESMO arquivo em duas lesões continua bloqueando. E quando
 bloquear, o registro diz exatamente qual lesão tem o arquivo. Testes: 29
 cenários. Suíte: 1021 PASS (3 falhas pré-existentes, sem relação).
+
+### Exclusões agora sincronizam entre computadores (2026-09-23)
+
+Antes, se você apagava uma imagem num PC, o outro PC mantinha a cópia
+antiga para sempre (o sistema nunca apagava nada sozinho por segurança).
+Agora, ao confirmar a remoção (Salvar/Concluído), o Atlas anota a
+exclusão e envia junto na sincronização — o outro computador apaga a
+cópia ao sincronizar. Vale inclusive offline (envia ao reconectar) e
+para PCs desatualizados. Só exclusão confirmada por você gera esse
+efeito; sumiço sem aviso continua nunca apagando nada. Testes: 37
+cenários. Suíte: 1029 PASS (3 falhas pré-existentes, sem relação).
+
+### Exclusão vale por lesão (2026-09-23)
+
+Refino: apagar uma imagem de uma lesão só afeta aquela lesão nos outros
+computadores — se a mesma imagem existir em outra lesão, ela fica
+intacta lá. Anotações antigas sem essa marcação continuam valendo para
+tudo, como antes. Testes: 47 cenários. Suíte: 1039 PASS (3 falhas
+pré-existentes, sem relação).
+
+### Salvar reconcilia antes de enviar (2026-09-23)
+
+Correção de um caso real em que salvar reduziu a nuvem (118→116): a
+versão da nuvem batia, mas o computador estava sem 2 imagens que só a
+nuvem tinha. Agora, antes de enviar, o Atlas confere a nuvem atual,
+traz o que faltava e só então publica a união — sem apagar nada que
+só existia lá. Sem internet, ele guarda local e tenta depois. Testes:
+54 cenários. Suíte: 1046 PASS (3 falhas pré-existentes, sem relação).

@@ -149,6 +149,9 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
     lastRevisionConflictAt: null,
     DATA: data || [],
     REVIEW: {}, SRS: {}, SESSIONLOG: {}, sectionOrder: [], siteOrder: {},
+    // ALTERAÇÃO 073: writeShardedState() real leva tombstones no documento
+    // principal (vazio aqui, mesmo padrão dos demais estados).
+    IMAGE_TOMBSTONES: {},
     DATA_CHUNK_SIZE: 150,
     FB_META_REF: () => metaRef,
     FB_CHUNK_REF: chunkRef,
@@ -387,6 +390,9 @@ test('loadData() real: dispositivo NOVO (storage.get lança) aciona o bootstrap 
       saveData: async () => { calls.push('saveData'); },
       saveOrder: async () => {}, saveSiteOrder: async () => {},
       loadSRS: async () => {}, loadSessionLog: async () => {},
+      // ALTERAÇÃO 073: loadData() real carrega tombstones (stub, mesmo padrão).
+      loadImageTombstones: async () => {},
+      IMAGE_TOMBSTONES: {},
       loadLesionRevisions: async () => {}, loadClassificationReviewDecisions: async () => {},
       saveReview: async () => {}, saveSRS: async () => {},
       createSafetySnapshot: () => null,
@@ -470,6 +476,9 @@ test('loadData() real: reload DEPOIS do bootstrap não repete o fluxo (storage j
       runTagCleanup: () => false, ensureInc: (e) => { e.inc = 1; },
       saveData: async () => {}, saveOrder: async () => {}, saveSiteOrder: async () => {},
       loadSRS: async () => {}, loadSessionLog: async () => {},
+      // ALTERAÇÃO 073: loadData() real carrega tombstones (stub, mesmo padrão;
+      // a varredura é try/catch no próprio loadData e não precisa de stub).
+      loadImageTombstones: async () => {},
       loadLesionRevisions: async () => {}, loadClassificationReviewDecisions: async () => {},
       saveReview: async () => {}, saveSRS: async () => {}, createSafetySnapshot: () => null,
       applyAltPlacementsAudit20260918: async () => false, applyClassificationAudit20260918: async () => false,

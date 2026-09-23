@@ -84,6 +84,26 @@ const buildImageIdentityDivergenceReportFn = extractFunction(html, 'buildImageId
 const writeShardedStateWithConflictRetryFn = extractFunction(html, 'writeShardedStateWithConflictRetry');
 const markSyncDirtyFn = extractFunction(html, 'markSyncDirty');
 const clearSyncDirtyFn = extractFunction(html, 'clearSyncDirty');
+// ALTERAÇÃO 073 (2026-09-23): tombstones de imagem excluída — reais no motor.
+const tombTimeFn = extractFunction(html, 'tombstoneTime');
+const isValidTombFn = extractFunction(html, 'isValidImageTombstone');
+const mergeTombFn = extractFunction(html, 'mergeImageTombstones');
+const isTombstonedFn = extractFunction(html, 'isImageTombstoned');
+const applyTombFn = extractFunction(html, 'applyImageTombstonesToList');
+const recordTombFn = extractFunction(html, 'recordImageTombstone');
+const loadTombFn = extractFunction(html, 'loadImageTombstones');
+const saveTombFn = extractFunction(html, 'saveImageTombstones');
+const sweepTombFn = extractFunction(html, 'sweepImageTombstonesFromData');
+// ALTERAÇÃO 074: reconciliação pré-envio — reais no motor.
+const reconcileCoreFn = extractFunction(html, 'reconcileStateWithRemote');
+const reconcilePrePushFn = extractFunction(html, 'reconcileBeforePush');
+const countAdoptedFn = extractFunction(html, 'countRemoteOnlyAdopted');
+const persistLocalFn = extractFunction(html, 'persistLocalStateNow');
+// ALTERAÇÃO 073b: escopo por lesão + compatibilidade com global legado.
+const tombScopeFn = extractFunction(html, 'tombstoneScopeKey');
+const normalizeTombFn = extractFunction(html, 'normalizeTombstoneMap');
+// Auditoria read-only de holders físicos (resolver os 2 assets do Abscesso).
+const auditHoldersFn = extractFunction(html, 'auditImageHoldersByStableKey');
 const normalizeLegacyOwnerFn = extractFunction(html, 'normalizeLegacyImageOwnerLabel');
 // ALTERAÇÃO 072b: helper compartilhado da normalização no pull (mesma tabela
 // de decisão da função de console) — precisa entrar nos motores `vm`.
@@ -279,6 +299,27 @@ function makeDevice(cloud, { seed = [] } = {}) {
     ${canChangeOwnershipFn.source}
     ${legacyHoldersFn.source}
     ${tryNormalizeFn.source}
+    const IMAGE_TOMBSTONES_KEY = 'atlas:imageTombstones';
+    let IMAGE_TOMBSTONES = {};
+    let PULL_TOMBSTONES_NEW = 0;
+    let PULL_TOMBSTONES_REMOVED = 0;
+    ${tombTimeFn.source}
+    ${isValidTombFn.source}
+    ${tombScopeFn.source}
+    ${normalizeTombFn.source}
+    ${mergeTombFn.source}
+    ${isTombstonedFn.source}
+    ${applyTombFn.source}
+    ${recordTombFn.source}
+    ${loadTombFn.source}
+    ${saveTombFn.source}
+    ${sweepTombFn.source}
+    let lastPrePushReconcileAt = null;
+    let lastPrePushPreserved = 0;
+    ${countAdoptedFn.source}
+    ${reconcileCoreFn.source}
+    ${persistLocalFn.source}
+    ${reconcilePrePushFn.source}
     let PULL_IMAGE_OWNERSHIP_CONFLICTS = [];
     ${unionFn.source}
     ${dedupeFn.source}
@@ -1193,7 +1234,7 @@ test('072b ESCOPO estático: só o pull (syncFromFirebase) repassa catálogo ao 
     .map((m) => m[1].trim())
     .filter((a) => !a.startsWith('localEntry')); // fora a declaração
   const withCatalog = calls.filter((a) => a.split(',').length >= 3);
-  assert.deepEqual(withCatalog, ['l,r,localData'], 'só o syncFromFirebase (pull) repassa catálogo');
+  assert.deepEqual(withCatalog, ['l,r,localData,IMAGE_TOMBSTONES'], 'só o syncFromFirebase (pull) repassa catálogo + tombstones');
 });
 
 // ===========================================================================
@@ -1268,6 +1309,697 @@ test('072c PULL REAL: MESMO asset fisicamente em seed_11 continua BLOQUEADO (con
   assert.ok((blocked[0].conflictingHolders || []).includes('seed_11'), 'evento informa exatamente qual lesão detém o asset');
   assert.equal(cloud.peekRevision(), revBefore, 'ZERO writes');
   assert.equal(deviceB.context.syncDirty, false, 'boot não sujou');
+});
+
+// ===========================================================================
+// ALTERAÇÃO 073 (2026-09-23) — TOMBSTONES DE IMAGEM EXCLUÍDA. O merge é
+// aditivo: ausência simples na nuvem NUNCA apaga local. Só um tombstone
+// explícito (exclusão confirmada pelo usuário) remove do outro lado.
+// Motor acima roda as funções REAIS (record/merge/apply/load/save/sweep +
+// syncFromFirebase/writeShardedState/loadData reais).
+// ===========================================================================
+
+// Simula a exclusão EXPLÍCITA do usuário no dispositivo: calcula a chave
+// ANTES de remover (função real), remove a referência, persiste o
+// tombstone. O save/push posterior leva tudo à nuvem pelo fluxo seguro.
+async function explicitDelete(device, lesionId, matchFn) {
+  const entry = device.context.DATA.find((e) => e.id === lesionId);
+  assert.ok(entry, 'fixture: lesão precisa existir');
+  const idx = entry.images.findIndex(matchFn);
+  assert.ok(idx !== -1, 'fixture: imagem X precisa existir antes de excluir');
+  const key = await device.context.stableImageKeyV208(JSON.parse(JSON.stringify(entry.images[idx])));
+  const rec = await device.context.recordImageTombstone(JSON.parse(JSON.stringify(entry.images[idx])), lesionId);
+  assert.ok(rec && rec.key === key, 'tombstone registrado para a identidade correta');
+  entry.images.splice(idx, 1);
+  await device.context.saveImageTombstones();
+  return key;
+}
+
+function deviceTombstones(device) {
+  return JSON.parse(vm.runInContext('JSON.stringify(IMAGE_TOMBSTONES)', device.context));
+}
+
+function deviceImagesByAsset(device, lesionId) {
+  const entry = device.context.DATA.find((e) => e.id === lesionId);
+  return new Set((entry.images || []).map((i) => i.assetId));
+}
+
+test('073 DELETE ENTRE PCS: A exclui X → tombstone na nuvem → B remove X no pull, sem reintroduzir; todos convergem', async () => {
+  const cloud = makeFakeCloud();
+  const seedX = [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' }), img({ publicId: 'atlas-radiologico/KEEP', assetId: 'KEEP' })] })];
+  const deviceA = makeDevice(cloud, { seed: seedX });
+  await deviceA.markDirty();
+  await deviceA.boot(); // nuvem com X + KEEP
+  const deviceB = makeDevice(cloud, { seed: JSON.parse(JSON.stringify(seedX)) });
+  await deviceB.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(['X', 'KEEP']));
+
+  // A exclui X explicitamente e salva (fluxo real: tombstone + dirty + push).
+  const keyX = await explicitDelete(deviceA, 'seed_1', (i) => i.assetId === 'X');
+  await deviceA.save();
+  assert.deepEqual(deviceImagesByAsset(deviceA, 'seed_1'), new Set(['KEEP']));
+  assert.ok(deviceTombstones(deviceA)[scopedKey(deviceA, 'seed_1', keyX)], 'tombstone persiste em A');
+
+  // Nuvem: X sumiu, tombstone presente (verificado por 3º dispositivo limpo).
+  const deviceC = makeDevice(cloud, { seed: [makeSeedEntry({ images: [] })] });
+  await deviceC.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceC, 'seed_1'), new Set(['KEEP']), 'nuvem sem X');
+  assert.ok(deviceTombstones(deviceC)[scopedKey(deviceC, 'seed_1', keyX)], 'nuvem carrega o tombstone');
+
+  // B ainda tem X → pull remove, sem reintroduzir; segundo boot idempotente.
+  await deviceB.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(['KEEP']), 'B removeu X no pull');
+  assert.ok(deviceTombstones(deviceB)[scopedKey(deviceB, 'seed_1', keyX)], 'B adotou o tombstone');
+  await deviceB.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(['KEEP']), 'sem ressurreição no boot seguinte');
+  assert.deepEqual(deviceImagesByAsset(deviceA, 'seed_1'), new Set(['KEEP']), 'A convergido');
+});
+
+test('073 PC STALE: B semanas desatualizado com X volta e remove X pelo tombstone (zero ressurreição)', async () => {
+  const cloud = makeFakeCloud();
+  const seedX = [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] })];
+  const deviceA = makeDevice(cloud, { seed: seedX });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  // B inicializado há semanas com X, sem nenhum boot desde então.
+  const deviceB = makeDevice(cloud, { seed: JSON.parse(JSON.stringify(seedX)) });
+
+  await explicitDelete(deviceA, 'seed_1', (i) => i.assetId === 'X');
+  await deviceA.save();
+
+  // B volta agora: primeiro boot já remove X e adota o tombstone.
+  await deviceB.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(), 'stale remove X no primeiro pull');
+  assert.equal(Object.keys(deviceTombstones(deviceB)).length, 1, 'tombstone adotado');
+  await deviceB.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(), 'X não volta nunca');
+});
+
+test('073 CONCORRÊNCIA: A exclui X enquanto B adiciona Y — X continua excluída, Y preservada', async () => {
+  const cloud = makeFakeCloud();
+  const seedX = [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] })];
+  const deviceA = makeDevice(cloud, { seed: seedX });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  const revBase = cloud.peekRevision();
+  // B desatualizado (revisão antiga conhecida) com X.
+  const deviceB = makeDevice(cloud, { seed: JSON.parse(JSON.stringify(seedX)) });
+  await deviceB.boot();
+
+  // A exclui X e publica (revisão avança).
+  await explicitDelete(deviceA, 'seed_1', (i) => i.assetId === 'X');
+  await deviceA.save();
+  assert.ok(cloud.peekRevision() > revBase, 'push de A confirmado');
+
+  // B, ainda com a revisão antiga, adiciona Y e salva: a escrita direta
+  // seria recusada pela barreira de revisão; o retry reconcilia (puxa o
+  // tombstone, remove X, mantém Y) e só então escreve a união.
+  deviceB.context.DATA.find((e) => e.id === 'seed_1').images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
+  await deviceB.save();
+
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(['Y']), 'B: X fora, Y dentro');
+  const deviceC = makeDevice(cloud, { seed: [makeSeedEntry({ images: [] })] });
+  await deviceC.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceC, 'seed_1'), new Set(['Y']), 'nuvem: X excluída, Y preservada (sem overwrite do stale)');
+  assert.equal(Object.keys(deviceTombstones(deviceC)).length, 1, 'tombstone sobreviveu à escrita concorrente (sem wipe)');
+});
+
+test('073 AUSÊNCIA SEM TOMBSTONE: cloud sem X + local com X, sem tombstone → NÃO apaga, ZERO writes', async () => {
+  const cloud = makeFakeCloud();
+  // Nuvem só com KEEP.
+  const deviceA = makeDevice(cloud, { seed: [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/KEEP', assetId: 'KEEP' })] })] });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  const revBase = cloud.peekRevision();
+  // B tem KEEP + X local (sem nenhum tombstone em lugar nenhum).
+  const deviceB = makeDevice(cloud, { seed: [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/KEEP', assetId: 'KEEP' }), img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] })] });
+  await deviceB.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(['KEEP', 'X']), 'ausência simples NUNCA apaga local');
+  assert.equal(cloud.peekRevision(), revBase, 'ZERO writes no boot sem tombstone');
+  assert.equal(deviceB.context.syncDirty, false, 'boot não sujou');
+});
+
+test('073 SYNC REPETIDO: tombstone aplicado várias vezes é idempotente (sem writes extras)', async () => {
+  const cloud = makeFakeCloud();
+  const seedX = [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] })];
+  const deviceA = makeDevice(cloud, { seed: seedX });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  await explicitDelete(deviceA, 'seed_1', (i) => i.assetId === 'X');
+  await deviceA.save();
+  const revBase = cloud.peekRevision();
+
+  const deviceB = makeDevice(cloud, { seed: JSON.parse(JSON.stringify(seedX)) });
+  await deviceB.boot();
+  await deviceB.boot();
+  await deviceB.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(), 'convergido e estável');
+  assert.equal(cloud.peekRevision(), revBase, 'boots repetidos sem edição não escrevem');
+});
+
+test('073 OFFLINE DELETE: A remove X sem rede → tombstone+dirty persistem → reconnect publica → outro PC remove', async () => {
+  const cloud = makeFakeCloud();
+  const seedX = [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] })];
+  const seedBoot = makeDevice(cloud, { seed: seedX });
+  await seedBoot.markDirty();
+  await seedBoot.boot();
+  const revBase = cloud.peekRevision();
+
+  const device = makeDevice(cloud, { seed: JSON.parse(JSON.stringify(seedX)) });
+  await device.boot();
+  device.context.fbDb = null; // offline
+  const keyX = await explicitDelete(device, 'seed_1', (i) => i.assetId === 'X');
+  await device.save(); // saveData real: dirty + push falha (offline)
+  assert.equal(device.context.syncDirty, true, 'exclusão offline continua marcada');
+  assert.equal(cloud.peekRevision(), revBase, 'nada chega na nuvem offline');
+  assert.ok(deviceTombstones(device)[scopedKey(device, 'seed_1', keyX)], 'tombstone persiste local offline');
+
+  // Reconecta e reabre: o boot com dirty publica o estado + tombstone.
+  device.context.fbDb = { runTransaction: cloud.runTransaction };
+  device.context.appStateReady = false;
+  await device.boot();
+  assert.ok(cloud.peekRevision() > revBase, 'reconnect publicou');
+  assert.equal(device.context.syncDirty, false, 'push confirmado limpou o dirty');
+
+  const deviceC = makeDevice(cloud, { seed: JSON.parse(JSON.stringify(seedX)) });
+  await deviceC.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceC, 'seed_1'), new Set(), 'outro PC remove X pelo tombstone');
+  assert.ok(deviceTombstones(deviceC)[scopedKey(deviceC, 'seed_1', keyX)], 'tombstone chegou ao outro PC');
+});
+
+test('073 UNIDADE: merge de tombstones une pelo deletedAt mais recente e ignora inválidos', async () => {
+  const ctx = {};
+  vm.createContext(ctx);
+  vm.runInContext(
+    tombTimeFn.source + '\n' + isValidTombFn.source + '\n' + tombScopeFn.source + '\n' + normalizeTombFn.source + '\n' +
+    mergeTombFn.source + '\n' +
+    applyTombFn.source + '\n' + isTombstonedFn.source + '\n' +
+    stableKeyFn.source + '\n' +
+    'this.__t = { mergeImageTombstones, applyImageTombstonesToList, isImageTombstoned, normalizeTombstoneMap, tombstoneScopeKey };',
+    ctx, { filename: 'tombstone-unit.js' }
+  );
+  const T = ctx.__t;
+  const SK = (lid, k) => T.tombstoneScopeKey(k, lid);
+  const old = { key: 'asset:X', lesionId: 'seed_1', deletedAt: '2026-01-01T00:00:00.000Z' };
+  const newer = { key: 'asset:X', lesionId: 'seed_1', deletedAt: '2026-09-23T00:00:00.000Z' };
+  const merged = JSON.parse(JSON.stringify(T.mergeImageTombstones({ 'asset:X': old }, { 'asset:X': newer, 'asset:Y': { key: 'asset:Y', lesionId: 'seed_2', deletedAt: '2026-05-01T00:00:00.000Z' } })));
+  assert.equal(merged[SK('seed_1', 'asset:X')].deletedAt, newer.deletedAt, 'mais recente vence no mesmo par (key, lesionId)');
+  assert.ok(merged[SK('seed_2', 'asset:Y')], 'pares distintos unem');
+  // Global legado (sem lesionId) coexiste com scoped do mesmo asset.
+  const coexistence = JSON.parse(JSON.stringify(T.mergeImageTombstones(
+    {}, { 'asset:X': { key: 'asset:X', lesionId: '', deletedAt: '2026-02-01T00:00:00.000Z' } }
+  )));
+  assert.ok(coexistence['asset:X'], 'legado sem lesionId continua global (chave nua)');
+  const withInvalid = JSON.parse(JSON.stringify(T.mergeImageTombstones({}, { 'asset:Z': { key: 'asset:Z' }, 'nada': 42 })));
+  assert.deepEqual(Object.keys(withInvalid).filter((k) => k !== 'asset:Z'), [], 'inválidos ignorados (só global sem lesionId passa)');
+  const list = JSON.parse(JSON.stringify(T.applyImageTombstonesToList(
+    [{ assetId: 'X', publicId: 'p', data: 'u' }, { assetId: 'KEEP' }], 'seed_1', { [SK('seed_1', 'asset:X')]: newer }
+  )));
+  assert.equal(list.removed, 1, 'filtra o tombstonado da lesão certa');
+  assert.equal(list.images.length, 1, 'mantém o resto');
+  // Escopo: mesmo asset em OUTRA lesão não é filtrado.
+  const scoped = JSON.parse(JSON.stringify(T.applyImageTombstonesToList(
+    [{ assetId: 'X', publicId: 'p', data: 'u' }], 'seed_2', { [SK('seed_1', 'asset:X')]: newer }
+  )));
+  assert.equal(scoped.removed, 0, 'tombstone de seed_1 não remove de seed_2');
+  assert.equal(scoped.images.length, 1);
+});
+
+test('073 BACKUP: export inclui imageTombstones; import une pelo mais recente sem descartar os atuais', () => {
+  assert.match(html, /imageTombstones:\s*IMAGE_TOMBSTONES/, 'export leva tombstones');
+  assert.match(html, /IMAGE_TOMBSTONES\s*=\s*mergeImageTombstones\(IMAGE_TOMBSTONES,\s*parsed\.imageTombstones\)/, 'import une sem descartar');
+});
+
+// ===========================================================================
+// CASO REAL 118/118 — os 2 assets do Abscesso cerebral (seed_10) com
+// etiqueta seed_11, fisicamente também em seed_11 (Oligodendroglioma).
+// Evidência congelada: snapshot-catalogo-completo-readonly.json (19/09) +
+// auditoria CRITICAL de 21/09 (contaminação 059 comprovada: nome reescrito
+// de "Abscesso cerebral" para "Oligodendroglioma"). Fixture com os
+// assetIds/publicIds/URLs/nomes REAIS. Resultado esperado: BLOQUEIO
+// (conflito real — mesmo asset em duas lesões), nunca normalização.
+// ===========================================================================
+
+function realAbscessoImage(assetId, publicId, version) {
+  return {
+    data: 'https://res.cloudinary.com/soegtip6/image/upload/v' + version + '/atlas-radiologico/' + publicId + '.jpg',
+    publicId: 'atlas-radiologico/' + publicId,
+    assetId, lesionId: 'seed_11', lesionName: 'Abscesso cerebral',
+    source: 'cloudinary', label: '',
+    assignedAt: '2026-08-01T10:00:00.000Z'
+  };
+}
+
+test('CASO REAL: os 2 assets do Abscesso em seed_10-remoto + seed_11-local BLOQUEIAM (conflito real, sem normalizar)', async () => {
+  const cloud = makeFakeCloud();
+  const remoteAbscesso = {
+    id: 'seed_10', name: 'Abscesso cerebral', s: 'Neurorradiologia', site: 'T', images: [
+      realAbscessoImage('48266481f0c336b5932d5e1116a5add1', 'o0ykul2z1qp00pp6yxel', '1789387821'),
+      realAbscessoImage('1f173ab3e75da101bd7a04d3f05b2ba1', 'n5oyigvmkpb8zpqykd3g', '1789387640')
+    ], links: [], inc: 1
+  };
+  const deviceA = makeDevice(cloud, { seed: [remoteAbscesso] });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  const revBefore = cloud.peekRevision();
+
+  // Chrome: seed_10 SEM as imagens; seed_11 (Oligodendroglioma) contém
+  // FISICAMENTE os mesmos 2 assets (estado do snapshot 19/09).
+  const localOligo = {
+    id: 'seed_11', name: 'Oligodendroglioma', s: 'Neurorradiologia', site: 'T', images: [
+      realAbscessoImage('48266481f0c336b5932d5e1116a5add1', 'o0ykul2z1qp00pp6yxel', '1789387821'),
+      realAbscessoImage('1f173ab3e75da101bd7a04d3f05b2ba1', 'n5oyigvmkpb8zpqykd3g', '1789387640')
+    ], links: [], inc: 1
+  };
+  const deviceB = makeDevice(cloud, { seed: [{ id: 'seed_10', name: 'Abscesso cerebral', s: 'Neurorradiologia', site: 'T', images: [], links: [], inc: 1 }, localOligo] });
+  await deviceB.boot();
+
+  const entryB = deviceB.context.DATA.find((e) => e.id === 'seed_10');
+  assert.equal(entryB.images.length, 0, 'mesmo asset em duas lesões: nada adotado em seed_10');
+  const events = deviceOwnershipEvents(deviceB);
+  assert.equal(events.filter((e) => e.kind === 'legacy_image_owner_label_normalized').length, 0, 'nenhuma normalização em conflito real');
+  const blocked = events.filter((e) => e.kind === 'image_merge_ownership_conflict_blocked');
+  assert.equal(blocked.length, 2, 'os 2 assets bloqueados e registrados');
+  assert.ok(blocked.every((e) => (e.conflictingHolders || []).includes('seed_11')), 'evento aponta seed_11 como detentora');
+  assert.equal(cloud.peekRevision(), revBefore, 'ZERO writes');
+  assert.equal(deviceB.context.syncDirty, false, 'boot não sujou');
+});
+
+test('AUDIT FN: auditImageHoldersByStableKey lista holders físicos sem modificar nada', () => {
+  const ctx = { DATA: [] };
+  vm.createContext(ctx);
+  vm.runInContext(
+    stableKeyFn.source + '\n' + auditHoldersFn.source + '\n' +
+    'this.__a = { auditImageHoldersByStableKey };',
+    ctx, { filename: 'audit-holders.js' }
+  );
+  ctx.DATA = [
+    { id: 'seed_10', name: 'Abscesso cerebral', s: 'S', site: 'T', images: [realAbscessoImage('48266481f0c336b5932d5e1116a5add1', 'o0ykul2z1qp00pp6yxel', '1789387821')] },
+    { id: 'seed_11', name: 'Oligodendroglioma', s: 'S', site: 'T', images: [realAbscessoImage('48266481f0c336b5932d5e1116a5add1', 'o0ykul2z1qp00pp6yxel', '1789387821')] }
+  ];
+  const before = JSON.stringify(ctx.DATA);
+  const out = JSON.parse(JSON.stringify(ctx.__a.auditImageHoldersByStableKey(['48266481f0c336b5932d5e1116a5add1', 'asset:INEXISTENTE'])));
+  assert.equal(JSON.stringify(ctx.DATA), before, 'read-only: DATA intacto');
+  assert.equal(out.length, 2);
+  assert.equal(out[0].assetId, '48266481f0c336b5932d5e1116a5add1');
+  assert.equal(out[0].stableKey, 'asset:48266481f0c336b5932d5e1116a5add1');
+  assert.equal(out[0].holders.length, 2, 'mesmo asset em duas lesões');
+  assert.deepEqual(out[0].holders.map((h) => h.lesionId).sort(), ['seed_10', 'seed_11']);
+  assert.equal(out[0].holders[1].lesionName, 'Oligodendroglioma');
+  assert.equal(out[0].holders[1].imgLesionId, 'seed_11');
+  assert.equal(out[1].holders.length, 0, 'asset ausente = holders vazio');
+});
+
+// ===========================================================================
+// ALTERAÇÃO 073b — TOMBSTONE SCOPED POR LESÃO. Modelo: "imagem X removida
+// DA lesão Y" (chave de escopo Y+key), nunca "apagada do universo".
+// Tombstone legado sem lesionId mantém semântica global histórica.
+// ===========================================================================
+
+function scopedKey(device, lesionId, key) {
+  // Assinatura real: tombstoneScopeKey(key, lesionId) → "lesionId + key".
+  return vm.runInContext('tombstoneScopeKey(' + JSON.stringify(key) + ', ' + JSON.stringify(lesionId) + ')', device.context);
+}
+
+function seed10Entry(images) {
+  return { id: 'seed_10', name: 'Abscesso cerebral', s: 'Neurorradiologia', site: 'T', images, links: [], inc: 1 };
+}
+
+function seed11Entry(images) {
+  return { id: 'seed_11', name: 'Oligodendroglioma', s: 'Neurorradiologia', site: 'T', images, links: [], inc: 1 };
+}
+
+test('073b CASO EXATO seed_10/seed_11: remove as 2 de seed_11 → seed_10 mantém, cloud converge, sem tocar seed_10', async () => {
+  const cloud = makeFakeCloud();
+  const both = () => [
+    realAbscessoImage('48266481f0c336b5932d5e1116a5add1', 'o0ykul2z1qp00pp6yxel', '1789387821'),
+    realAbscessoImage('1f173ab3e75da101bd7a04d3f05b2ba1', 'n5oyigvmkpb8zpqykd3g', '1789387640')
+  ];
+  // A (Chrome): seed_10 e seed_11 com os 2 assets; usuário remove os 2 de seed_11.
+  const deviceA = makeDevice(cloud, { seed: [seed10Entry(both()), seed11Entry(both())] });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  await explicitDelete(deviceA, 'seed_11', (i) => i.assetId === '48266481f0c336b5932d5e1116a5add1');
+  await explicitDelete(deviceA, 'seed_11', (i) => i.assetId === '1f173ab3e75da101bd7a04d3f05b2ba1');
+  await deviceA.save();
+  assert.deepEqual(deviceImagesByAsset(deviceA, 'seed_10'), new Set(['48266481f0c336b5932d5e1116a5add1', '1f173ab3e75da101bd7a04d3f05b2ba1']), 'seed_10 de A intacta');
+  assert.deepEqual(deviceImagesByAsset(deviceA, 'seed_11'), new Set(), 'seed_11 de A sem as 2');
+  const tombsA = deviceTombstones(deviceA);
+  assert.ok(tombsA[scopedKey(deviceA, 'seed_11', 'asset:48266481f0c336b5932d5e1116a5add1')], 'tombstone scoped (482664, seed_11)');
+  assert.ok(tombsA[scopedKey(deviceA, 'seed_11', 'asset:1f173ab3e75da101bd7a04d3f05b2ba1')], 'tombstone scoped (1f173, seed_11)');
+
+  // B stale com as 2 em ambas: após pull, seed_11 perde, seed_10 preserva.
+  const deviceB = makeDevice(cloud, { seed: [seed10Entry(both()), seed11Entry(both())] });
+  await deviceB.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_10'), new Set(['48266481f0c336b5932d5e1116a5add1', '1f173ab3e75da101bd7a04d3f05b2ba1']), 'seed_10 de B preservada — nenhum tombstone a remove');
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_11'), new Set(), 'seed_11 de B sem as 2');
+
+  // Cloud converge igual (3º dispositivo limpo).
+  const deviceC = makeDevice(cloud, { seed: [seed10Entry([]), seed11Entry([])] });
+  await deviceC.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceC, 'seed_10'), new Set(['48266481f0c336b5932d5e1116a5add1', '1f173ab3e75da101bd7a04d3f05b2ba1']), 'cloud mantém seed_10');
+  assert.deepEqual(deviceImagesByAsset(deviceC, 'seed_11'), new Set(), 'cloud sem as 2 em seed_11');
+});
+
+test('073b ADICIONAL 1: mesma imagem em duas lesões, delete em A → só A perde', async () => {
+  const cloud = makeFakeCloud();
+  const mkBoth = () => [
+    makeSeedEntry({ id: 'seed_1', name: 'L1', images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] }),
+    makeSeedEntry({ id: 'seed_2', name: 'L2', images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] })
+  ];
+  const deviceA = makeDevice(cloud, { seed: mkBoth() });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  await explicitDelete(deviceA, 'seed_1', (i) => i.assetId === 'X');
+  await deviceA.save();
+
+  const deviceB = makeDevice(cloud, { seed: mkBoth() });
+  await deviceB.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(), 'seed_1 de B perdeu X');
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_2'), new Set(['X']), 'seed_2 de B mantém X');
+});
+
+test('073b ADICIONAL 2: tombstone scoped repetido é idempotente (sem writes extras)', async () => {
+  const cloud = makeFakeCloud();
+  const deviceA = makeDevice(cloud, { seed: [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] })] });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  await explicitDelete(deviceA, 'seed_1', (i) => i.assetId === 'X');
+  await deviceA.save();
+  const revBase = cloud.peekRevision();
+
+  const deviceB = makeDevice(cloud, { seed: [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] })] });
+  await deviceB.boot();
+  await deviceB.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(), 'estável');
+  assert.equal(cloud.peekRevision(), revBase, 'sem writes extras');
+});
+
+test('073b ADICIONAL 3: tombstone global legado (sem lesionId) continua removendo em todas as lesões', async () => {
+  const cloud = makeFakeCloud();
+  const mkBoth = () => [
+    makeSeedEntry({ id: 'seed_1', name: 'L1', images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] }),
+    makeSeedEntry({ id: 'seed_2', name: 'L2', images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] })
+  ];
+  const deviceA = makeDevice(cloud, { seed: mkBoth() });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  // Injeta legado global (compatibilidade histórica): sem lesionId.
+  await vm.runInContext(
+    "IMAGE_TOMBSTONES['asset:X'] = { key: 'asset:X', lesionId: '', deletedAt: new Date().toISOString() };",
+    deviceA.context
+  );
+  await deviceA.context.saveImageTombstones();
+  await deviceA.save();
+
+  const deviceB = makeDevice(cloud, { seed: mkBoth() });
+  await deviceB.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(), 'global remove em seed_1');
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_2'), new Set(), 'global remove em seed_2');
+});
+
+test('073b ADICIONAL 4: offline — delete scoped persiste e propaga só naquela lesão', async () => {
+  const cloud = makeFakeCloud();
+  const mkBoth = () => [
+    makeSeedEntry({ id: 'seed_1', name: 'L1', images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] }),
+    makeSeedEntry({ id: 'seed_2', name: 'L2', images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] })
+  ];
+  const seedBoot = makeDevice(cloud, { seed: mkBoth() });
+  await seedBoot.markDirty();
+  await seedBoot.boot();
+  const revBase = cloud.peekRevision();
+
+  const device = makeDevice(cloud, { seed: mkBoth() });
+  await device.boot();
+  device.context.fbDb = null;
+  await explicitDelete(device, 'seed_1', (i) => i.assetId === 'X');
+  await device.save();
+  assert.equal(device.context.syncDirty, true, 'dirty persiste offline');
+  assert.equal(cloud.peekRevision(), revBase, 'nada na nuvem offline');
+
+  device.context.fbDb = { runTransaction: cloud.runTransaction };
+  device.context.appStateReady = false;
+  await device.boot();
+  assert.ok(cloud.peekRevision() > revBase, 'reconnect publicou');
+
+  const deviceC = makeDevice(cloud, { seed: mkBoth() });
+  await deviceC.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceC, 'seed_1'), new Set(), 'seed_1 sem X');
+  assert.deepEqual(deviceImagesByAsset(deviceC, 'seed_2'), new Set(['X']), 'seed_2 com X');
+});
+
+test('073b ADICIONAL 5: concorrência — A remove X de lesionA, B adiciona Y em lesionB', async () => {
+  const cloud = makeFakeCloud();
+  const mkA = () => [
+    makeSeedEntry({ id: 'seed_1', name: 'L1', images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] }),
+    makeSeedEntry({ id: 'seed_2', name: 'L2', images: [] })
+  ];
+  const deviceA = makeDevice(cloud, { seed: mkA() });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  const deviceB = makeDevice(cloud, { seed: mkA() });
+  await deviceB.boot();
+
+  await explicitDelete(deviceA, 'seed_1', (i) => i.assetId === 'X');
+  await deviceA.save();
+
+  deviceB.context.DATA.find((e) => e.id === 'seed_2').images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
+  await deviceB.save();
+
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(), 'X removida em B');
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_2'), new Set(['Y']), 'Y preservada em B');
+  const deviceC = makeDevice(cloud, { seed: mkA() });
+  await deviceC.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceC, 'seed_1'), new Set(), 'nuvem sem X em seed_1');
+  assert.deepEqual(deviceImagesByAsset(deviceC, 'seed_2'), new Set(['Y']), 'nuvem com Y em seed_2');
+});
+
+test('073b ADICIONAL 6: backup/import preserva lesionId do tombstone scoped', () => {
+  assert.match(html, /imageTombstones:\s*IMAGE_TOMBSTONES/, 'export leva o mapa (chaves de escopo + lesionId nos registros)');
+  assert.match(html, /IMAGE_TOMBSTONES\s*=\s*mergeImageTombstones\(IMAGE_TOMBSTONES,\s*parsed\.imageTombstones\)/, 'import une sem descartar');
+});
+
+test('073b ADICIONAL 7: merge do mesmo par (key, lesionId) usa deletedAt mais novo; global+scoped coexistem', async () => {
+  const ctx = {};
+  vm.createContext(ctx);
+  vm.runInContext(
+    tombTimeFn.source + '\n' + isValidTombFn.source + '\n' + tombScopeFn.source + '\n' + normalizeTombFn.source + '\n' +
+    mergeTombFn.source + '\n' +
+    'this.__t = { mergeImageTombstones, tombstoneScopeKey };',
+    ctx, { filename: 'tombstone-scope-unit.js' }
+  );
+  const T = ctx.__t;
+  const SK = (lid, k) => T.tombstoneScopeKey(k, lid);
+  const oldRec = { key: 'asset:X', lesionId: 'seed_11', deletedAt: '2026-01-01T00:00:00.000Z' };
+  const newRec = { key: 'asset:X', lesionId: 'seed_11', deletedAt: '2026-09-23T00:00:00.000Z' };
+  const merged = JSON.parse(JSON.stringify(T.mergeImageTombstones({ [SK('seed_11', 'asset:X')]: oldRec }, { [SK('seed_11', 'asset:X')]: newRec })));
+  assert.equal(merged[SK('seed_11', 'asset:X')].deletedAt, newRec.deletedAt, 'mesmo par: mais novo vence');
+  const coexist = JSON.parse(JSON.stringify(T.mergeImageTombstones(
+    { 'asset:X': { key: 'asset:X', lesionId: '', deletedAt: '2026-02-01T00:00:00.000Z' } },
+    { [SK('seed_10', 'asset:X')]: { key: 'asset:X', lesionId: 'seed_10', deletedAt: '2026-03-01T00:00:00.000Z' } }
+  )));
+  assert.ok(coexist['asset:X'], 'global preservado');
+  assert.ok(coexist[SK('seed_10', 'asset:X')], 'scoped preservado junto');
+  assert.equal(Object.keys(coexist).length, 2, 'sem mesclar escopos diferentes');
+});
+
+// ===========================================================================
+// ALTERAÇÃO 074 — PRE-PUSH RECONCILIATION (bug real 118→116 provado).
+// REVISION MATCH != ESTADO LOCAL COMPLETO: um save escreveu o snapshot
+// local (sem 2 imagens cloud-only) com revisão válida e a nuvem perdeu o
+// que só ela tinha. Agora todo SAVE real faz: reler nuvem ATUAL → merge
+// conservador (união + tombstones + normalização) → escrever a UNIÃO.
+// ===========================================================================
+
+// Total de imagens na nuvem, lido por um dispositivo limpo (só leitura,
+// sem dirty → nenhum write; mesmo padrão dos testes de verificação).
+async function cloudImageTotal(cloud) {
+  const checker = makeDevice(cloud, { seed: [] });
+  await checker.boot();
+  return checker.context.DATA.reduce((n, e) => n + (Array.isArray(e.images) ? e.images.length : 0), 0);
+}
+
+function prePushInfo(device) {
+  return JSON.parse(vm.runInContext(
+    'JSON.stringify({ at: lastPrePushReconcileAt, preserved: lastPrePushPreserved })',
+    device.context
+  ));
+}
+
+test('074 CENÁRIO EXATO 118→116: delete scoped + save faz pre-pull — seed_10 preserva A+B, cloud NÃO cai', async () => {
+  const cloud = makeFakeCloud();
+  const AB = () => [
+    realAbscessoImage('48266481f0c336b5932d5e1116a5add1', 'o0ykul2z1qp00pp6yxel', '1789387821'),
+    realAbscessoImage('1f173ab3e75da101bd7a04d3f05b2ba1', 'n5oyigvmkpb8zpqykd3g', '1789387640')
+  ];
+  // Cloud rev15: seed_10 [A,B] (etiqueta legada seed_11), seed_11 [], seed_9 [K].
+  const deviceA = makeDevice(cloud, { seed: [seed10Entry(AB()), seed11Entry([]), makeSeedEntry({ id: 'seed_9', name: 'L9', images: [img({ publicId: 'atlas-radiologico/K', assetId: 'K' })] })] });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  const revBase = cloud.peekRevision();
+  assert.equal(await cloudImageTotal(cloud), 3, 'nuvem com A+B+K');
+
+  // Chrome: seed_10 SEM A+B, seed_11 COM A+B (cópias erradas), seed_9 [K].
+  const deviceB = makeDevice(cloud, { seed: [seed10Entry([]), seed11Entry(AB()), makeSeedEntry({ id: 'seed_9', name: 'L9', images: [img({ publicId: 'atlas-radiologico/K', assetId: 'K' })] })] });
+  await deviceB.boot();
+  const preB = deviceB.context.DATA.find((e) => e.id === 'seed_10');
+  assert.equal(preB.images.length, 0, 'antes do delete: A+B bloqueadas (holders em seed_11), nada adotado');
+  assert.equal(cloud.peekRevision(), revBase, 'boot sem edição: zero writes');
+
+  // Usuário remove A+B de seed_11 (explícito) e salva.
+  await explicitDelete(deviceB, 'seed_11', (i) => i.assetId === '48266481f0c336b5932d5e1116a5add1');
+  await explicitDelete(deviceB, 'seed_11', (i) => i.assetId === '1f173ab3e75da101bd7a04d3f05b2ba1');
+  await deviceB.save();
+
+  // Pre-push reconcile: holders sumiram → normaliza+adota A+B em seed_10
+  // ANTES de escrever. A nuvem NUNCA cai para 116-analógico.
+  const entryB = deviceB.context.DATA.find((e) => e.id === 'seed_10');
+  assert.equal(entryB.images.length, 2, 'seed_10 local adotou A+B no pre-pull');
+  assert.ok(entryB.images.every((i) => i.lesionId === 'seed_10'), 'só lesionId normalizado');
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_11'), new Set(), 'seed_11 local vazia');
+  assert.equal(await cloudImageTotal(cloud), 3, 'CLOUD NÃO CAIU (antes da correção caía para 1)');
+  assert.equal(cloud.peekRevision() - revBase, 1, 'exatamente UM write (reconcile lê, não escreve)');
+  assert.equal(deviceB.context.syncDirty, false, 'save confirmado limpou dirty');
+  const info = prePushInfo(deviceB);
+  assert.ok(info.at > 0, 'reconcile registrado');
+  assert.equal(info.preserved, 2, '2 cloud-only preservadas antes do write');
+});
+
+test('074 MESMA REVISION, LOCAL INCOMPLETO: preflight detecta cloud-only e preserva mesmo com revisão igual', async () => {
+  const cloud = makeFakeCloud();
+  const deviceA = makeDevice(cloud, { seed: [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' }), img({ publicId: 'atlas-radiologico/K', assetId: 'K' })] })] });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  const deviceB = makeDevice(cloud, { seed: [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' }), img({ publicId: 'atlas-radiologico/K', assetId: 'K' })] })] });
+  await deviceB.boot();
+
+  // Simula estado local semanticamente incompleto COM a revisão em dia
+  // (ex.: conteúdo bloqueado/não-adotado no passado, sem tombstone):
+  // remove X do DATA de B sem tombstone e sem salvar.
+  const entryB = deviceB.context.DATA.find((e) => e.id === 'seed_1');
+  entryB.images = entryB.images.filter((i) => i.assetId !== 'X');
+  // B edita outra coisa (Y) e salva — sem preflight, o write levaria [K,Y]
+  // e a nuvem PERDERIA X mesmo com revisão válida.
+  entryB.images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
+  await deviceB.save();
+
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(['K', 'X', 'Y']), 'preflight re-adotou X + manteve Y');
+  assert.equal(await cloudImageTotal(cloud), 3, 'nuvem com X+K+Y (nada perdido)');
+});
+
+test('074 OFFLINE EDIT: sem rede salva local + dirty, sem reconcile; reconnect reconcilia antes do write', async () => {
+  const cloud = makeFakeCloud();
+  const deviceA = makeDevice(cloud, { seed: [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] })] });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  const revBase = cloud.peekRevision();
+
+  const device = makeDevice(cloud, { seed: [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] })] });
+  await device.boot();
+  device.context.fbDb = null; // offline
+  device.context.DATA.find((e) => e.id === 'seed_1').images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
+  await device.save();
+  assert.equal(device.context.syncDirty, true, 'dirty persiste offline');
+  assert.equal(cloud.peekRevision(), revBase, 'nada escrito offline');
+  assert.equal(prePushInfo(device).at, null, 'sem reconcile offline');
+
+  device.context.fbDb = { runTransaction: cloud.runTransaction };
+  device.context.appStateReady = false;
+  await device.boot(); // dirty → reconcile + push no fim do boot
+  assert.ok(cloud.peekRevision() > revBase, 'reconnect publicou após reconciliar');
+  assert.equal(device.context.syncDirty, false, 'confirmado limpou');
+  assert.ok(prePushInfo(device).at > 0, 'reconcile rodou no caminho de volta');
+  assert.equal(await cloudImageTotal(cloud), 2, 'X+Y convergidos');
+});
+
+test('074 TOMBSTONE SCOPED PRESERVADO: pre-push não ressuscita o que o tombstone tirou', async () => {
+  const cloud = makeFakeCloud();
+  const mkBoth = () => [
+    makeSeedEntry({ id: 'seed_1', name: 'L1', images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] }),
+    makeSeedEntry({ id: 'seed_2', name: 'L2', images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] })
+  ];
+  const deviceA = makeDevice(cloud, { seed: mkBoth() });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  // Delete scoped em seed_1 (seed_2 mantém X).
+  await explicitDelete(deviceA, 'seed_1', (i) => i.assetId === 'X');
+  await deviceA.save();
+
+  const deviceC = makeDevice(cloud, { seed: mkBoth() });
+  await deviceC.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceC, 'seed_1'), new Set(), 'seed_1 sem X');
+  assert.deepEqual(deviceImagesByAsset(deviceC, 'seed_2'), new Set(['X']), 'seed_2 com X (scoped não vaza)');
+  assert.equal(await cloudImageTotal(cloud), 1, 'só a cópia de seed_2');
+});
+
+test('074 CONCORRÊNCIA: stale salva após outro push — preflight evita o conflito e une tudo', async () => {
+  const cloud = makeFakeCloud();
+  const deviceA = makeDevice(cloud, { seed: [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/M', assetId: 'M' })] })] });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  const deviceB = makeDevice(cloud, { seed: [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/M', assetId: 'M' })] })] });
+  await deviceB.boot();
+
+  // A adiciona N1 e publica (revisão avança).
+  deviceA.context.DATA.find((e) => e.id === 'seed_1').images.push(img({ publicId: 'atlas-radiologico/N1', assetId: 'N1' }));
+  await deviceA.save();
+  const revAfterA = cloud.peekRevision();
+
+  // B, com revisão antiga, adiciona N2 e salva: o preflight relê (vê N1),
+  // mescla e escreve a união — sem conflito de revisão sequer.
+  deviceB.context.DATA.find((e) => e.id === 'seed_1').images.push(img({ publicId: 'atlas-radiologico/N2', assetId: 'N2' }));
+  await deviceB.save();
+
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(['M', 'N1', 'N2']), 'união completa em B');
+  assert.equal(await cloudImageTotal(cloud), 3, 'união completa na nuvem');
+  assert.ok(cloud.peekRevision() > revAfterA, 'write de B confirmado');
+  const deviceC = makeDevice(cloud, { seed: [makeSeedEntry({ images: [] })] });
+  await deviceC.boot();
+  assert.deepEqual(deviceImagesByAsset(deviceC, 'seed_1'), new Set(['M', 'N1', 'N2']), 'terceiro PC converge');
+});
+
+test('074 ZERO WRITE BOOT após saves: boot dirty=false continua sem escrever', async () => {
+  const cloud = makeFakeCloud();
+  const deviceA = makeDevice(cloud, { seed: [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] })] });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  deviceA.context.DATA.find((e) => e.id === 'seed_1').images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
+  await deviceA.save();
+  const revBase = cloud.peekRevision();
+  await deviceA.boot();
+  await deviceA.boot();
+  assert.equal(cloud.peekRevision(), revBase, 'boots puros pós-save não escrevem (pre-push só em save)');
+});
+
+test('074 OWNERSHIP REAL: save com conflito genuíno não aborta; asset sobrevive na lesion detentora', async () => {
+  const cloud = makeFakeCloud();
+  // Nuvem: seed_8 [Z, dono seed_9] + seed_9 [Z, dono seed_9].
+  const mkZ = (lid) => ({ data: 'https://res.cloudinary.com/soegtip6/image/upload/v1/atlas-radiologico/ZZZ.jpg', publicId: 'atlas-radiologico/ZZZ', assetId: 'ZZZ', lesionId: lid, lesionName: 'L', assignedAt: '2026-08-01T10:00:00.000Z' });
+  const deviceA = makeDevice(cloud, { seed: [
+    makeSeedEntry({ id: 'seed_8', name: 'L8', images: [mkZ('seed_9')] }),
+    makeSeedEntry({ id: 'seed_9', name: 'L9', images: [mkZ('seed_9')] })
+  ] });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  // Local igual à nuvem; usuário edita só o nome de seed_8 e salva.
+  const deviceB = makeDevice(cloud, { seed: [
+    makeSeedEntry({ id: 'seed_8', name: 'L8', images: [] }),
+    makeSeedEntry({ id: 'seed_9', name: 'L9', images: [mkZ('seed_9')] })
+  ] });
+  await deviceB.boot();
+  // seed_8 de B: Z bloqueada (mesmo asset em seed_9) — documenta o residual:
+  // sem adoção opaca; o asset sobrevive na detentora e o save não aborta.
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_8'), new Set(), 'Z bloqueada em seed_8 (conflito real)');
+  deviceB.context.DATA.find((e) => e.id === 'seed_8').name = 'L8 editada';
+  await deviceB.save();
+  const entryC8 = deviceB.context.DATA.find((e) => e.id === 'seed_8');
+  assert.equal(entryC8.name, 'L8 editada', 'edição do usuário preservada');
+  assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_9'), new Set(['ZZZ']), 'detentora intacta');
+  const deviceC = makeDevice(cloud, { seed: [makeSeedEntry({ id: 'seed_8', name: 'L8', images: [] }), makeSeedEntry({ id: 'seed_9', name: 'L9', images: [] })] });
+  await deviceC.boot();
+  assert.ok(deviceImagesByAsset(deviceC, 'seed_9').has('ZZZ'), 'asset sobrevive na nuvem via detentora');
+  const blocked = deviceOwnershipEvents(deviceB).filter((e) => e.kind === 'image_merge_ownership_conflict_blocked');
+  assert.ok(blocked.length >= 1, 'bloqueio registrado, nunca silencioso');
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');

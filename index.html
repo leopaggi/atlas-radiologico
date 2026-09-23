@@ -1979,6 +1979,10 @@ async function writeShardedState(ms=15000){
     sessionLog: stripUndefinedDeep(SESSIONLOG),
     sectionOrder: stripUndefinedDeep(sectionOrder),
     siteOrder: stripUndefinedDeep(siteOrder),
+    // ALTERAÇÃO 073 — tombstones de imagem excluída viajam no documento
+    // principal (pequenos, sem binário), protegidos pela mesma transação/
+    // revisão de todo o resto.
+    tombstones: stripUndefinedDeep(IMAGE_TOMBSTONES),
     chunkCount: chunks.length,
     stateSchemaVersion: 4, // v4 = estado dividido em pedaços (chunks)
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -2066,7 +2070,8 @@ async function readShardedState(ms=15000){
   }
 
   return { data: combinedData, review: meta.review, srs: meta.srs, sessionLog: meta.sessionLog,
-    sectionOrder: meta.sectionOrder, siteOrder: meta.siteOrder };
+    sectionOrder: meta.sectionOrder, siteOrder: meta.siteOrder,
+    tombstones: (meta.tombstones && typeof meta.tombstones === 'object' && !Array.isArray(meta.tombstones)) ? meta.tombstones : {} };
 }
 
 /* envia o estado atual pra nuvem (com pequeno atraso pra juntar mudanças rápidas em uma escrita só) */
@@ -2108,7 +2113,21 @@ async function pushToFirebaseNow(){
   if(!appStateReady) return;
   if(!fbDb || fbSyncing){ syncPushPending = true; return; }
   clearTimeout(fbPushTimer);
+  // ALTERAÇÃO 074 — pre-push reconciliation (bug real 118→116: revision
+  // match NÃO prova conteúdo completo; o snapshot local pode estar sem
+  // imagens cloud-only). Antes de escrever, relê a nuvem ATUAL e mescla
+  // (união conservadora + tombstones + normalização legada), preservando
+  // as edições locais (timestamp/união) e o conteúdo só-da-nuvem. Se a
+  // releitura falhar, NÃO escreve às cegas: marca pendente e tenta depois
+  // (dirty preservado). Sem reentrância: reconcile usa fbSyncing e o
+  // libera antes da escrita (o conflict-retry precisa do sync livre).
   try{
+    const recon = await reconcileBeforePush('push');
+    if(!recon.ok){
+      setSyncStatus(false, 'não foi possível confirmar a nuvem antes de enviar — tentando de novo em seguida.');
+      syncPushPending = true;
+      return;
+    }
     const ok = await writeShardedStateSerialized(15000);
     setSyncStatus(!!ok);
     if(!ok) toast('⚠ Não foi possível sincronizar: algum pedaço dos dados ainda ficou grande demais. Veja o aviso na barra lateral.');
@@ -2318,6 +2337,22 @@ async function syncThisDeviceToCloud(opts){
     try{ await storage.set(SITEORDER_KEY,JSON.stringify(siteOrder),false); }catch(_e){}
 
     clearTimeout(fbPushTimer);
+    // ALTERAÇÃO 074 — preflight/reconcile também no envio manual (bug real
+    // 118→116: escrever o snapshot local com revisão válida apagou conteúdo
+    // só-da-nuvem). Relê a nuvem ATUAL e mescla antes de escrever a união.
+    // Exceção explícita: forceThisDeviceToCloud (opts.skipPreflight) é a
+    // ferramenta "forçar substituir", com aviso próprio — fora dela, toda
+    // escrita whole-state reconcilia antes.
+    if(!(opts && opts.skipPreflight)){
+      onStep(3, 'reconciliando com a nuvem antes de enviar');
+      let recon = { ok:false };
+      try{ recon = await reconcileBeforePush('manual-send'); }catch(_e){ recon = { ok:false }; }
+      if(!recon.ok){
+        setSyncStatus(false, 'não foi possível confirmar a nuvem antes de enviar — nada foi escrito.');
+        toast('⚠ Não foi possível confirmar a nuvem antes de enviar. Nada foi escrito — tente de novo.');
+        return { ok:false, reason:'reconcile_failed' };
+      }
+    }
     onStep(3, 'enviando para Firestore');
     const ok = await writeShardedStateSerialized(20000);
     if(!ok){
@@ -2351,13 +2386,16 @@ async function syncThisDeviceToCloud(opts){
   }
 }
 /* v193: ação manual (mantida para uso interno/console) para quando ESTE
-   dispositivo contém o estado mais completo. */
+   dispositivo contém o estado mais completo. ÚNICA ferramenta "forçar
+   substituir" — pula o preflight de propósito (opts.skipPreflight), com
+   aviso explícito; fora dela, toda escrita whole-state reconcilia antes
+   (ALTERAÇÃO 074). */
 async function forceThisDeviceToCloud(){
   if(!fbDb){ toast('Firebase indisponível neste navegador.'); return; }
   if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return; }
-  const ok=confirm('Forçar o envio do estado DESTE dispositivo para a nuvem agora?\n\nUse esta opção somente no dispositivo que contém as imagens/progresso mais completos. O Atlas fará um snapshot local antes do envio.');
+  const ok=confirm('FORÇAR o envio do estado DESTE dispositivo para a nuvem agora, SEM reconciliar antes?\n\nIsso SUBSTITUI a nuvem pelo que está aqui, mesmo que a nuvem tenha algo que este dispositivo não tem. Use somente no dispositivo que contém as imagens/progresso mais completos. O Atlas fará um snapshot local antes do envio.');
   if(!ok) return;
-  await syncThisDeviceToCloud();
+  await syncThisDeviceToCloud({ skipPreflight:true });
 }
 /* Linhas da tabela de contadores (reaproveitadas no resumo e no erro pós-envio). */
 function syncAuditRowsHtml(l, c){
@@ -2863,6 +2901,148 @@ function preserveLocalImageOwnershipOnImport(importedData, localData){
   return conflicts;
 }
 
+/* ============================================================
+   TOMBSTONES DE IMAGEM EXCLUÍDA (ALTERAÇÃO 073, 2026-09-23)
+   Problema: o merge é aditivo/conservador — se uma imagem existe
+   localmente mas não na nuvem, é impossível distinguir "excluída de
+   propósito em outro PC" de "só ainda não chegou". Por isso AUSÊNCIA
+   SIMPLES na nuvem NUNCA vira delete automático (regra permanente).
+   Solução: a exclusão EXPLÍCITA pelo usuário (botão remover + Salvar/
+   Concluído confirmados) registra um tombstone {key, lesionId, deletedAt}
+   por identidade estável (stableImageKeyV208 — a mesma do auditor).
+   Sem binário, sem destruir nada no Cloudinary, sem tocar ownership
+   (não passa por canChangeImageOwnership nem mexe em etiqueta legada).
+   Tombstones viajam no documento principal do Firestore, no storage
+   local e no backup; cada merge os une pelo mais recente e os aplica
+   (não adota a imagem do outro lado + remove localmente se ainda
+   existir). Um PC antigo/stale nunca reintroduz o que foi excluído.
+   ALTERAÇÃO 073b — ESCOPO POR LESÃO: o tombstone representa "esta imagem
+   foi removida DESTA lesão" — chave de escopo (lesionId + stableKey) —
+   nunca "apagada do universo". Apagar X de seed_11 remove X de seed_11
+   em todo PC, mas preserva X de seed_10 (correção segura de ownership
+   duplicado). Tombstone antigo sem lesionId mantém a semântica global
+   histórica (nunca se inventa lesionId para ele).
+   Ressurreição: NÃO implementada nesta rodada — re-adicionar a mesma
+   identidade depois do tombstone salva localmente, mas o próximo pull
+   remove de novo (tombstone vence). Sem GC agressivo: alguns bytes
+   extras valem mais que ressuscitar uma exclusão explícita.
+   ============================================================ */
+const IMAGE_TOMBSTONES_KEY = 'atlas:imageTombstones';
+let IMAGE_TOMBSTONES = {}; // { [stableKey]: { key, lesionId, deletedAt ISO } }
+let PULL_TOMBSTONES_NEW = 0;     // tombstones inéditos vindos neste pull
+let PULL_TOMBSTONES_REMOVED = 0; // imagens removidas por tombstone neste pull
+function tombstoneTime(t){
+  if(typeof t === 'number' && Number.isFinite(t)) return t;
+  if(typeof t === 'string' && t){
+    const ms = Date.parse(t);
+    return Number.isFinite(ms) ? ms : 0;
+  }
+  return 0;
+}
+// ALTERAÇÃO 073b — chave de escopo do tombstone: "lesionId + stableKey"
+// (scoped, o padrão de todo tombstone novo) ou só "stableKey" (legado
+// global sem lesionId — compatibilidade histórica, nunca se inventa
+// lesionId para ele). '\u0001' como separador: impossível em ids/URLs reais.
+function tombstoneScopeKey(key, lesionId){
+  return lesionId ? String(lesionId) + '\u0001' + String(key) : String(key);
+}
+function isValidImageTombstone(t){
+  return !!(t && typeof t === 'object' && typeof t.key === 'string' && t.key &&
+    (t.lesionId === undefined || typeof t.lesionId === 'string'));
+}
+// Re-indexa qualquer mapa pela chave de escopo calculada do próprio
+// registro (migração transparente de mapas antigos indexados só pela
+// stable key; entradas inválidas caem fora). Puro.
+function normalizeTombstoneMap(map){
+  const out = {};
+  if(!map || typeof map !== 'object' || Array.isArray(map)) return out;
+  for(const k of Object.keys(map)){
+    const t = map[k];
+    if(!isValidImageTombstone(t)) continue;
+    const lid = (typeof t.lesionId === 'string') ? t.lesionId : '';
+    const sk = tombstoneScopeKey(t.key, lid);
+    const cur = out[sk];
+    if(!cur || tombstoneTime(t.deletedAt) > tombstoneTime(cur.deletedAt)){
+      out[sk] = { key: t.key, lesionId: lid, deletedAt: t.deletedAt };
+    }
+  }
+  return out;
+}
+// Une dois mapas pelo deletedAt mais recente POR PAR (key, lesionId) —
+// global e scoped do mesmo asset coexistem sem se anularem. Puro.
+function mergeImageTombstones(local, remote){
+  const out = {};
+  for(const src of [normalizeTombstoneMap(local), normalizeTombstoneMap(remote)]){
+    for(const sk of Object.keys(src)){
+      const t = src[sk];
+      const cur = out[sk];
+      if(!cur || tombstoneTime(t.deletedAt) > tombstoneTime(cur.deletedAt)) out[sk] = t;
+    }
+  }
+  return out;
+}
+// Vale para a imagem X na lesão Y se: existe tombstone legado global de X
+// (sem lesionId) OU existe tombstone scoped (X, Y.id).
+function isImageTombstoned(img, lesionId, tombstones){
+  if(!img || !tombstones) return false;
+  const k = stableImageKeyV208(img);
+  if(!k) return false;
+  const g = tombstones[k];
+  if(g && !g.lesionId) return true;
+  return !!tombstones[tombstoneScopeKey(k, lesionId)];
+}
+// Filtra a lista de UMA lesão removendo referências tombstonadas para ELA.
+// Puro. Devolve { images, removed }.
+function applyImageTombstonesToList(images, lesionId, tombstones){
+  if(!Array.isArray(images)) return { images: [], removed: 0 };
+  if(!tombstones) return { images: images.slice(), removed: 0 };
+  const out = [];
+  let removed = 0;
+  for(const img of images){
+    if(img && isImageTombstoned(img, lesionId, tombstones)){ removed++; continue; }
+    out.push(img);
+  }
+  return { images: out, removed };
+}
+// Registra exclusão EXPLÍCITA do usuário DE UMA LESÃO. Chamar com o objeto
+// da imagem ANTES de removê-la (a chave é calculada aqui) + o id atual da
+// lesão — sempre scoped. Sem lesionId (nunca acontece nos fluxos do app),
+// legado global. Persiste local; quem chama decide dirty/push.
+async function recordImageTombstone(img, lesionId){
+  const k = stableImageKeyV208(img);
+  if(!k) return null;
+  const lid = String(lesionId || '');
+  const sk = tombstoneScopeKey(k, lid);
+  const rec = { key: k, lesionId: lid, deletedAt: new Date().toISOString() };
+  const cur = IMAGE_TOMBSTONES[sk];
+  if(cur && tombstoneTime(cur.deletedAt) >= tombstoneTime(rec.deletedAt)) return cur;
+  IMAGE_TOMBSTONES[sk] = rec;
+  try{ await storage.set(IMAGE_TOMBSTONES_KEY, JSON.stringify(IMAGE_TOMBSTONES), false); }catch(_e){}
+  return rec;
+}
+async function loadImageTombstones(){
+  try{
+    const r = await storage.get(IMAGE_TOMBSTONES_KEY, false);
+    IMAGE_TOMBSTONES = normalizeTombstoneMap(JSON.parse(r.value));
+  }catch(e){ IMAGE_TOMBSTONES = {}; }
+}
+async function saveImageTombstones(){
+  try{ await storage.set(IMAGE_TOMBSTONES_KEY, JSON.stringify(IMAGE_TOMBSTONES), false); }catch(_e){}
+}
+// Varre o catálogo removendo referências tombstonadas (convergência local,
+// ex.: boot com tombstone já conhecido). Devolve { removed }. Reconciliação:
+// não marca dirty (igual aos merges).
+function sweepImageTombstonesFromData(){
+  if(!IMAGE_TOMBSTONES || !Object.keys(IMAGE_TOMBSTONES).length) return { removed: 0 };
+  let removed = 0;
+  for(const e of (Array.isArray(DATA) ? DATA : [])){
+    if(!e || !Array.isArray(e.images) || !e.images.length) continue;
+    const r = applyImageTombstonesToList(e.images, e.id, IMAGE_TOMBSTONES);
+    if(r.removed){ e.images = r.images; removed += r.removed; }
+  }
+  return { removed };
+}
+
 let canonicalImageOwnersV208 = null;
 function getCanonicalImageOwnersV208(){
   if(canonicalImageOwnersV208) return canonicalImageOwnersV208;
@@ -3076,7 +3256,7 @@ function unionEntryImages(baseImgs, addImgs, targetEntry, conflictSink, sourceLa
   try{ adoptOldestAssignedAt(out, baseImgs, addImgs); }catch(_e){}
   return out;
 }
-function mergeEntryNonDestructive(localEntry, remoteEntry, legacyCatalog){
+function mergeEntryNonDestructive(localEntry, remoteEntry, legacyCatalog, tombstones){
   const local = localEntry || {};
   const remote = remoteEntry || {};
   const lt = Number(local._userUpdatedAt)||0;
@@ -3110,6 +3290,18 @@ function mergeEntryNonDestructive(localEntry, remoteEntry, legacyCatalog){
   // aqui antes e causava perda silenciosa de imagens legítimas recuperadas
   // de backups/Cloudinary com etiqueta de um id anterior a uma fusão.
   dedupeEntryImagesOnly(merged);
+  // ALTERAÇÃO 073 — tombstones: a imagem tombstonada não é adotada do outro
+  // lado e é removida daqui se ainda existir. Quem não informa tombstones
+  // (push, importação, recuperação) mantém o comportamento de antes.
+  // Ausência simples SEM tombstone continua não apagando nada (regra).
+  if(tombstones){
+    // 073b: escopo por lesão — merged.id é o id comum dos dois lados aqui.
+    const tombed = applyImageTombstonesToList(merged.images, merged.id, tombstones);
+    if(tombed.removed){
+      merged.images = tombed.images;
+      try{ PULL_TOMBSTONES_REMOVED += tombed.removed; }catch(_e){}
+    }
+  }
   merged.localImg = !!(local.localImg || remote.localImg);
   if(!merged.img) merged.img = local.img || remote.img || '';
 
@@ -3175,6 +3367,17 @@ async function mergeThisDeviceImagesToCloud(opts){
     for(const canonical of activeCanonicalSeedV172()){
       if(!present.has(canonical.id)) merged.push(JSON.parse(JSON.stringify(canonical)));
     }
+    // ALTERAÇÃO 073 — tombstones no merge de envio: une local+nuvem pelo
+    // mais recente, adota, persiste local e aplica no resultado (inclusive
+    // em lesão só-remota: a nuvem não pode reintroduzir o que este PC
+    // excluiu de propósito). Sem isso, publicar a união ressuscitaria deletes.
+    IMAGE_TOMBSTONES = mergeImageTombstones(IMAGE_TOMBSTONES, (remote && remote.tombstones && typeof remote.tombstones === 'object' && !Array.isArray(remote.tombstones)) ? remote.tombstones : {});
+    try{ await storage.set(IMAGE_TOMBSTONES_KEY, JSON.stringify(IMAGE_TOMBSTONES), false); }catch(_e){}
+    for(const e of merged){
+      if(!e || !Array.isArray(e.images) || !e.images.length) continue;
+      const tr = applyImageTombstonesToList(e.images, e.id, IMAGE_TOMBSTONES);
+      if(tr.removed) e.images = tr.images;
+    }
     // SRS/REVIEW/SESSIONLOG/ordens: remoto é a base; local só soma o que for mais novo.
     DATA = merged.filter(Boolean);
     REVIEW = mergeReviewPreservingProgress(REVIEW, remote && remote.review);
@@ -3213,6 +3416,152 @@ async function mergeThisDeviceImagesToCloud(opts){
   }
 }
 
+/* ALTERAÇÃO 074 (2026-09-23) — RECONCILIAÇÃO COMPARTILHADA (núcleo do pull
+   e do pre-push). Prova do bug 118→116: REVISION MATCH != ESTADO LOCAL
+   COMPLETO — um save escreveu o snapshot local (sem 2 imagens cloud-only
+   bloqueadas na época) com revisão válida e a nuvem perdeu o que só ela
+   tinha. Por isso, antes de QUALQUER escrita whole-state, o dispositivo
+   relê a nuvem atual e mescla de forma conservadora (união + tombstones +
+   normalização legada segura), preservando as edições locais (timestamp/
+   união) E o conteúdo cloud-only. O merge em si nunca remove sem
+   tombstone e nunca move ownership — as mesmas garantias do pull.
+   Contadores PULL_TOMBSTONES_* são zerados aqui (cada reconciliação). */
+let lastPrePushReconcileAt = null; // Date.now() do último pre-push reconcile
+let lastPrePushPreserved = 0;      // cloud-only incorporadas nele
+function countRemoteOnlyAdopted(localData, remoteData, mergedData){
+  // Chaves presentes no mergeado, ausentes no local pré-merge e presentes
+  // no remoto da mesma lesão = vieram da nuvem e foram preservadas.
+  // Exclui o que o tombstone tirou (não está no mergeado) e o que o
+  // ownership bloqueou (também não está) — contagem exata, sem chute.
+  const keysOf = (arr) => {
+    const s = new Set();
+    for(const img of (Array.isArray(arr) ? arr : [])){
+      const k = stableImageKeyV208(img);
+      if(k) s.add(k);
+    }
+    return s;
+  };
+  const localById = new Map(), remoteById = new Map();
+  for(const e of (Array.isArray(localData) ? localData : [])){
+    if(e && e.id) localById.set(e.id, keysOf(e.images));
+  }
+  for(const e of (Array.isArray(remoteData) ? remoteData : [])){
+    if(e && e.id) remoteById.set(e.id, keysOf(e.images));
+  }
+  let n = 0;
+  for(const m of (Array.isArray(mergedData) ? mergedData : [])){
+    if(!m || !m.id) continue;
+    const lk = localById.get(m.id) || new Set();
+    const rk = remoteById.get(m.id);
+    if(!rk) continue;
+    const mk = keysOf(m.images);
+    for(const k of rk){ if(!lk.has(k) && mk.has(k)) n++; }
+  }
+  return n;
+}
+// Reconcilia o estado local (DATA/REVIEW/SRS/SESSIONLOG/tombstones) com um
+// estado remoto JÁ LIDO. Não faz push, não toca syncDirty, não persiste
+// (quem chama persiste). Devolve { preservedCloudOnly }.
+function reconcileStateWithRemote(remote){
+  const remoteData = (Array.isArray(remote && remote.data) ? remote.data : [])
+    .filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+
+  const localData = (Array.isArray(DATA)?DATA:[])
+    .filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+
+  const localById = new Map(localData.map(e=>[e.id,e]));
+  const remoteById = new Map(remoteData.map(e=>[e.id,e]));
+  const allIds = new Set([...localById.keys(), ...remoteById.keys()]);
+  const reconciled = [];
+
+  PULL_TOMBSTONES_NEW = 0;
+  PULL_TOMBSTONES_REMOVED = 0;
+  const remoteTombstones = (remote && remote.tombstones && typeof remote.tombstones === 'object' && !Array.isArray(remote.tombstones)) ? remote.tombstones : {};
+  const mergedTombstones = mergeImageTombstones(IMAGE_TOMBSTONES, remoteTombstones);
+  for(const tk of Object.keys(mergedTombstones)){
+    if(!Object.prototype.hasOwnProperty.call(IMAGE_TOMBSTONES, tk)) PULL_TOMBSTONES_NEW++;
+  }
+  IMAGE_TOMBSTONES = mergedTombstones;
+
+  for(const id of allIds){
+    const l = localById.get(id);
+    const r = remoteById.get(id);
+    if(l && r) reconciled.push(mergeEntryNonDestructive(l,r,localData,IMAGE_TOMBSTONES));
+    else {
+      const solo = l || r;
+      const sf = applyImageTombstonesToList(solo && solo.images, solo && solo.id, IMAGE_TOMBSTONES);
+      if(sf.removed){ PULL_TOMBSTONES_REMOVED += sf.removed; reconciled.push({ ...solo, images: sf.images }); }
+      else reconciled.push(solo);
+    }
+  }
+
+  // Garante lesões canônicas novas sem recriar nem empobrecer registros existentes.
+  const present = new Set(reconciled.map(e=>e&&e.id));
+  for(const canonical of activeCanonicalSeedV172()){
+    if(!present.has(canonical.id)) reconciled.push(JSON.parse(JSON.stringify(canonical)));
+  }
+
+  DATA = reconciled.filter(Boolean);
+  REVIEW = mergeReviewPreservingProgress(REVIEW, remote && remote.review);
+  SRS = mergeSRSPreservingNewest(SRS, remote && remote.srs);
+  SESSIONLOG = mergeSessionLogPreservingProgress(SESSIONLOG, remote && remote.sessionLog);
+
+  // Ordem local é preservada quando válida; remoto só preenche ausência.
+  if((!Array.isArray(sectionOrder) || !sectionOrder.length) &&
+     Array.isArray(remote.sectionOrder) && remote.sectionOrder.length){
+    sectionOrder = remote.sectionOrder;
+  }
+  // Ordem local dos sítios também é preservada quando válida; remoto só preenche ausência.
+  if((!siteOrder || typeof siteOrder!=='object' || !Object.keys(siteOrder).length) &&
+     remote.siteOrder && typeof remote.siteOrder==='object' && Object.keys(remote.siteOrder).length){
+    siteOrder = remote.siteOrder;
+  }
+
+  const preservedCloudOnly = countRemoteOnlyAdopted(localData, remoteData, DATA);
+  return { preservedCloudOnly };
+}
+async function persistLocalStateNow(){
+  try{ await storage.set(STORAGE_KEY, JSON.stringify(DATA), false); }catch(_e){}
+  try{ await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false); }catch(_e){}
+  try{ await storage.set(SRS_KEY, JSON.stringify(SRS), false); }catch(_e){}
+  try{ await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false); }catch(_e){}
+  try{ await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false); }catch(_e){}
+  try{ await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false); }catch(_e){}
+  try{ await storage.set(IMAGE_TOMBSTONES_KEY, JSON.stringify(IMAGE_TOMBSTONES), false); }catch(_e){}
+}
+/* ALTERAÇÃO 074 — RECONCILIAÇÃO PRÉ-ENVIO (pre-push reconciliation).
+   Fluxo novo obrigatório antes de qualquer escrita whole-state:
+   LOCAL EDIT → relê a nuvem ATUAL → merge conservador → escreve a UNIÃO.
+   Sem reentrância: usa fbSyncing como mutex e o libera ANTES da escrita
+   (o conflict-retry do write precisa do syncFromFirebase livre); nunca
+   chama saveData/push (só lê+mescla). Offline/bootstrap/ocupado: devolve
+   {ok:false} e quem chama mantém o comportamento local-only de antes
+   (dirty/pending preservados, nada escrito às cegas). */
+async function reconcileBeforePush(reason){
+  if(!fbDb || fbSyncing || deviceBootstrapPending || !appStateReady){
+    return { ok:false, reason: !fbDb ? 'offline' : 'busy' };
+  }
+  fbSyncing = true;
+  try{
+    const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'reconciliação pré-envio (' + (reason || 'save') + ')');
+    if(!remote){
+      // Nuvem nunca escrita: nada a preservar; o write cuidará da revisão 0→1.
+      lastPrePushReconcileAt = Date.now();
+      lastPrePushPreserved = 0;
+      return { ok:true, preservedCloudOnly: 0, emptyCloud: true };
+    }
+    const r = reconcileStateWithRemote(remote);
+    await persistLocalStateNow();
+    lastPrePushReconcileAt = Date.now();
+    lastPrePushPreserved = r.preservedCloudOnly;
+    return { ok:true, preservedCloudOnly: r.preservedCloudOnly };
+  }catch(e){
+    return { ok:false, reason:'read_failed', error:(e && e.message) || String(e) };
+  }finally{
+    fbSyncing = false;
+  }
+}
+
 async function syncFromFirebase(){
   // ALTERAÇÃO 069 (2026-09-23) — BARREIRA DE REENTRÂNCIA: syncFromFirebase()
   // tem 5 call sites (pull automático do boot, "⬇ atualizar deste backup/
@@ -3240,50 +3589,10 @@ async function syncFromFirebase(){
   try{
     const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'syncFromFirebase (leitura)');
     if(remote){
-      const remoteData = (Array.isArray(remote.data) ? remote.data : [])
-        .filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
-
-      const localData = (Array.isArray(DATA)?DATA:[])
-        .filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
-
-      const localById = new Map(localData.map(e=>[e.id,e]));
-      const remoteById = new Map(remoteData.map(e=>[e.id,e]));
-      const allIds = new Set([...localById.keys(), ...remoteById.keys()]);
-      const reconciled = [];
-
-      for(const id of allIds){
-        const l = localById.get(id);
-        const r = remoteById.get(id);
-        // ALTERAÇÃO 072b: repassa o catálogo atual (pré-merge) para que o
-        // pull normalize etiquetas legadas seguras (só lesionId, com registro)
-        // e adote as imagens — sem isso um PC stale bloquearia para sempre as
-        // imagens legítimas com etiqueta histórica. Conflito real continua
-        // bloqueado dentro do próprio merge.
-        if(l && r) reconciled.push(mergeEntryNonDestructive(l,r,localData));
-        else reconciled.push(l || r);
-      }
-
-      // Garante lesões canônicas novas sem recriar nem empobrecer registros existentes.
-      const present = new Set(reconciled.map(e=>e&&e.id));
-      for(const canonical of activeCanonicalSeedV172()){
-        if(!present.has(canonical.id)) reconciled.push(JSON.parse(JSON.stringify(canonical)));
-      }
-
-      DATA = reconciled.filter(Boolean);
-      REVIEW = mergeReviewPreservingProgress(REVIEW, remote.review);
-      SRS = mergeSRSPreservingNewest(SRS, remote.srs);
-      SESSIONLOG = mergeSessionLogPreservingProgress(SESSIONLOG, remote.sessionLog);
-
-      // Ordem local é preservada quando válida; remoto só preenche ausência.
-      if((!Array.isArray(sectionOrder) || !sectionOrder.length) &&
-         Array.isArray(remote.sectionOrder) && remote.sectionOrder.length){
-        sectionOrder = remote.sectionOrder;
-      }
-      // Ordem local dos sítios também é preservada quando válida; remoto só preenche ausência.
-      if((!siteOrder || typeof siteOrder!=='object' || !Object.keys(siteOrder).length) &&
-         remote.siteOrder && typeof remote.siteOrder==='object' && Object.keys(remote.siteOrder).length){
-        siteOrder = remote.siteOrder;
-      }
+      // ALTERAÇÃO 074 — mesmo núcleo do pre-push (reconcileStateWithRemote):
+      // pull = reler + mesclar conservadoramente (união + tombstones +
+      // normalização legada). Nada aqui decide push (isso vem depois).
+      reconcileStateWithRemote(remote);
 
       await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
       await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
@@ -3291,6 +3600,7 @@ async function syncFromFirebase(){
       await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
       await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
       await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false);
+      try{ await storage.set(IMAGE_TOMBSTONES_KEY, JSON.stringify(IMAGE_TOMBSTONES), false); }catch(_e){}
 
       fbSyncing = false;
 
@@ -9367,6 +9677,9 @@ async function loadData(){
   }catch(e){ syncDirty = false; }
   await loadSRS();
   await loadSessionLog();
+  // ALTERAÇÃO 073 — tombstones de imagem excluída (exclusão explícita
+  // sincronizável; ver bloco TOMBSTONES). Sem a chave: catálogo vazio.
+  await loadImageTombstones();
   await loadLesionRevisions();
   await loadClassificationReviewDecisions();
 
@@ -9439,6 +9752,14 @@ async function loadData(){
   if(!isNewLocalDevice){
     await syncFromFirebase();
   }
+  // ALTERAÇÃO 073 — convergência local por tombstone (ex.: boot offline ou
+  // com tombstone já conhecido e imagem ainda presente): remove referências
+  // tombstonadas do catálogo. Reconciliação: persiste local via save
+  // interno, nunca marca dirty nem publica sozinha (regra do boot).
+  try{
+    const tombSweep = sweepImageTombstonesFromData();
+    if(tombSweep.removed) await saveData(true);
+  }catch(_e){}
   await applyAltPlacementsAudit20260918();
   await applyClassificationAudit20260918();
 
@@ -10909,6 +11230,25 @@ function openForm(id, opts){
       // confirmadas neste Salvar. Mantidas/históricas ficam como estão —
       // sem timestamp inventado. Falha de upload acima já abortou o save.
       try{ stampNewImagesAssignedAt(existing && Array.isArray(existing.images) ? existing.images : [], remoteImgs, new Date().toISOString()); }catch(_e){}
+      // ALTERAÇÃO 073 — tombstone de exclusão EXPLÍCITA: o que existia antes
+      // do Salvar e sumiu do conjunto final foi removido de propósito pelo
+      // usuário (✕ na galeria + Salvar confirmado). Só em edição de lesão
+      // existente (lesão nova não tem "antes"); cancelar a edição nunca
+      // chega aqui, então nada é registrado à toa. A escrita abaixo leva os
+      // tombstones no documento principal; se ela não for confirmada, o
+      // dirty garante nova tentativa depois (nunca perde a intenção).
+      if(existing && Array.isArray(existing.images) && existing.images.length){
+        try{
+          const finalKeys = new Set();
+          for(const x of remoteImgs){ const k = stableImageKeyV208(x); if(k) finalKeys.add(k); }
+          let tombstonedHere = 0;
+          for(const prev of existing.images){
+            const k = stableImageKeyV208(prev);
+            if(k && !finalKeys.has(k) && await recordImageTombstone(prev, entryId)) tombstonedHere++;
+          }
+          if(tombstonedHere) await markSyncDirty();
+        }catch(_e){}
+      }
       await deleteLocalImg(entryId); localImgFlag=false;
     }
     if(existing){
@@ -10960,12 +11300,28 @@ function openForm(id, opts){
     try{
       try{ createSafetySnapshot('antes de salvar alterações'); }catch(_e){}
       try{ await storage.set(STORAGE_KEY, JSON.stringify(DATA), false); }catch(e){ console.error('storage error', e); }
-      cloudOk = await withFirebaseTimeout(writeShardedStateSerialized(6000), 25000, 'salvar lesão').catch(e=>{
-        console.error('Firebase push falhou ao salvar lesão (ficou salvo só localmente por enquanto).', e);
-        setSyncStatus(false, 'falha ao sincronizar — ficou salvo só neste dispositivo: ' + (e.message||e));
-        return false;
-      });
-      if(cloudOk) setSyncStatus(true);
+      // ALTERAÇÃO 074 — pre-push reconciliation também aqui (esta escrita é
+      // direta, não passa pelo pushToFirebaseNow): relê a nuvem ATUAL e
+      // mescla antes de escrever a união, para nunca publicar um snapshot
+      // local semanticamente incompleto (bug real 118→116). Se a releitura
+      // falhar, mantém o comportamento local-only de antes (sem dirty novo,
+      // sem escrita às cegas).
+      let editorRecon = { ok:true, preservedCloudOnly:0 };
+      try{ editorRecon = await reconcileBeforePush('editor-save'); }catch(_e){ editorRecon = { ok:false }; }
+      if(!editorRecon.ok){
+        setSyncStatus(false, 'não foi possível confirmar a nuvem antes de enviar — ficou salvo só neste dispositivo.');
+        cloudOk = false;
+      }else{
+        cloudOk = await withFirebaseTimeout(writeShardedStateSerialized(6000), 25000, 'salvar lesão').catch(e=>{
+          console.error('Firebase push falhou ao salvar lesão (ficou salvo só localmente por enquanto).', e);
+          setSyncStatus(false, 'falha ao sincronizar — ficou salvo só neste dispositivo: ' + (e.message||e));
+          return false;
+        });
+      }
+      // ALTERAÇÃO 073 — escrita integral CONFIRMADA confirma tudo o que
+      // estava pendente (inclusive tombstones de exclusão e qualquer edição
+      // anterior ainda suja): mesma semântica do pushToFirebaseNow().
+      if(cloudOk){ setSyncStatus(true); try{ await clearSyncDirty(); }catch(_e){} }
     }finally{
       formSaving = false; // libera a trava em qualquer desfecho (o form fecha aqui)
       saveBtn.textContent = originalBtnText;
@@ -12503,6 +12859,20 @@ async function buildSystemDiagnosticReport(){
       if(conflicts.length > 10) push('  ... e mais ' + (conflicts.length - 10));
     }
   }
+  // ALTERAÇÃO 073 — tombstones de imagem excluída (exclusão explícita
+  // sincronizável; ver bloco TOMBSTONES). Só contadores, sem poluir a UI.
+  try{
+    const tombCount = (typeof IMAGE_TOMBSTONES !== 'undefined' && IMAGE_TOMBSTONES && typeof IMAGE_TOMBSTONES === 'object') ? Object.keys(IMAGE_TOMBSTONES).length : 0;
+    push('Tombstones de imagem (exclusões explícitas sincronizadas): ' + tombCount);
+    push('Aplicados neste pull (tombstones inéditos vindos da nuvem): ' + (typeof PULL_TOMBSTONES_NEW !== 'undefined' ? PULL_TOMBSTONES_NEW : 0) +
+      ' | Imagens removidas por tombstone neste pull: ' + (typeof PULL_TOMBSTONES_REMOVED !== 'undefined' ? PULL_TOMBSTONES_REMOVED : 0));
+  }catch(_e){}
+  // ALTERAÇÃO 074 — pre-push reconciliation (bug real 118→116). Só linhas,
+  // sem poluir a UI.
+  try{
+    push('Último pre-push reconcile (releitura+merge antes de escrever): ' + (typeof lastPrePushReconcileAt !== 'undefined' && lastPrePushReconcileAt ? new Date(lastPrePushReconcileAt).toLocaleString('pt-BR') : '(nenhum nesta sessão)'));
+    push('Cloud-only preservados antes do último write: ' + (typeof lastPrePushPreserved !== 'undefined' ? lastPrePushPreserved : 0));
+  }catch(_e){}
   // Comparação local × nuvem (read-only, reaproveita buildSyncAudit — a
   // mesma função dos botões "☁ sincronizar"/"⬇ atualizar"). Só tenta quando
   // o app já terminou de carregar e o Firebase está disponível, pra não
@@ -12804,7 +13174,11 @@ document.getElementById('btn-export').onclick = async ()=>{
     sessionLog: SESSIONLOG,
     sectionOrder: sectionOrder,
     siteOrder: siteOrder,
-    lesionRevisions: LESION_REVISIONS
+    lesionRevisions: LESION_REVISIONS,
+    // ALTERAÇÃO 073 — tombstones de imagem excluída fazem parte do estado
+    // persistente (sem eles, restaurar um backup antigo ressuscitaria
+    // exclusões sem deixar rastro).
+    imageTombstones: IMAGE_TOMBSTONES
   };
   const blob = new Blob([JSON.stringify(backup,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
@@ -12881,6 +13255,13 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
       : [...DEFAULT_SECTION_ORDER];
     siteOrder = (parsed.siteOrder && typeof parsed.siteOrder==='object') ? parsed.siteOrder : {};
     LESION_REVISIONS = (parsed.lesionRevisions && typeof parsed.lesionRevisions==='object' && !Array.isArray(parsed.lesionRevisions)) ? parsed.lesionRevisions : {};
+    // ALTERAÇÃO 073 — tombstones do backup unidos pelo mais recente (nunca
+    // descartados: o backup pode ser anterior a uma exclusão explícita).
+    // O DATA importado NÃO é filtrado aqui (usuário restaurou de propósito);
+    // o próximo pull converge pelo que for mais novo. Backups antigos sem o
+    // campo unem com {} = mantém os atuais.
+    IMAGE_TOMBSTONES = mergeImageTombstones(IMAGE_TOMBSTONES, parsed.imageTombstones);
+    await saveImageTombstones();
 
     // Proteção de ownership: imagem que já existia localmente NÃO troca de dono
     // silenciosamente pelo backup (conflito é registrado, não resolvido sozinho).
@@ -13689,6 +14070,17 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
     // Só agora o rascunho vira estado real da lesão.
     const prevQuizImgs = Array.isArray(lesion.images) ? lesion.images : [];
     lesion.images = draftImgs.map(x=>({...x, lesionId:lesion.id, lesionName:lesion.name}));
+    // ALTERAÇÃO 073 — tombstone de exclusão explícita também no Quiz: o que
+    // estava na lesão e sumiu do rascunho confirmado foi removido de
+    // propósito. O salvamento real abaixo (dirty+push) leva os tombstones.
+    try{
+      const finalQuizKeys = new Set();
+      for(const x of lesion.images){ const k = stableImageKeyV208(x); if(k) finalQuizKeys.add(k); }
+      for(const prev of prevQuizImgs){
+        const k = stableImageKeyV208(prev);
+        if(k && !finalQuizKeys.has(k)) await recordImageTombstone(prev, lesion.id);
+      }
+    }catch(_e){}
     // Produtividade: assignedAt SÓ nas novas confirmadas no Concluído.
     try{ stampNewImagesAssignedAt(prevQuizImgs, lesion.images, new Date().toISOString()); }catch(_e){}
     lesion._userUpdatedAt = Date.now();
@@ -16385,6 +16777,51 @@ function normalizeLegacyImageOwnerLabel(targetEntry, catalog){
   }
   out.ok = true;
   return out;
+}
+
+/* AUDITORIA READ-ONLY DE HOLDERS FÍSICOS (2026-09-23) — investigar um
+   bloqueio de ownership sem adivinhar: para cada assetId/stableKey
+   informado, lista TODAS as lesões cujo array entry.images contém
+   fisicamente uma imagem com aquela identidade, com os campos da cópia.
+   Uso no console do navegador (nada é criado, movido, apagado ou
+   registrado — só leitura de DATA):
+     auditImageHoldersByStableKey(['48266481f0c336b5932d5e1116a5add1'])
+   Aceita assetId puro (32-hex), 'asset:...' ou qualquer stable key.
+   Devolve [{ assetId, stableKey, holders:[{ lesionId, lesionName, lesionS,
+   lesionSite, imgIndex, imgLesionId, imgLesionName, publicId, assetId,
+   url }] }]. Se holders tiver 2+ lesões = conflito real (mesmo asset em
+   dois lugares — correção sempre manual). Se tiver 1 = etiqueta a
+   normalizar pelo pull. Se vazio = asset ausente deste dispositivo. */
+function auditImageHoldersByStableKey(queries){
+  const list = (Array.isArray(queries) ? queries : [queries]).map((q) => String(q == null ? '' : q));
+  return list.map((q) => {
+    const wanted = q.indexOf(':') === -1 ? 'asset:' + q : q;
+    const bare = wanted.indexOf('asset:') === 0 ? wanted.slice('asset:'.length) : '';
+    let assetId = bare;
+    const holders = [];
+    for(const e of (Array.isArray(DATA) ? DATA : [])){
+      if(!e || !Array.isArray(e.images)) continue;
+      e.images.forEach((img, idx) => {
+        if(!img || typeof img !== 'object') return;
+        const k = stableImageKeyV208(img);
+        if(k !== wanted && (!bare || String(img.assetId || '') !== bare)) return;
+        if(!assetId && img.assetId) assetId = String(img.assetId);
+        holders.push({
+          lesionId: String(e.id || ''),
+          lesionName: e.name || '',
+          lesionS: e.s || '',
+          lesionSite: e.site || '',
+          imgIndex: idx,
+          imgLesionId: String((img && img.lesionId) || ''),
+          imgLesionName: (img && img.lesionName) || '',
+          publicId: (img && img.publicId) || '',
+          assetId: (img && img.assetId) || '',
+          url: (img && img.data) || ''
+        });
+      });
+    }
+    return { assetId, stableKey: wanted, holders };
+  });
 }
 
 </script>

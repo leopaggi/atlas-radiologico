@@ -463,7 +463,11 @@ test('SYNC: pull automático no boot (F5/login) é GUARDADO e usa só o merge n�
   // destrutivo (mergeEntryNonDestructive) — nunca um overwrite cego.
   const syncFn = extractFunction(html, 'syncFromFirebase');
   assert.match(syncFn.body, /createSafetySnapshot\('antes da sincronização Firebase'\)/, 'syncFromFirebase precisa continuar criando snapshot antes de reconciliar');
-  assert.match(syncFn.body, /mergeEntryNonDestructive/, 'precisa continuar usando o merge não destrutivo, nunca overwrite cego');
+  // ALTERAÇÃO 074: merge mora no núcleo compartilhado (pull e pre-push) —
+  // mesma lógica, sem overwrite cego e sem merge paralelo.
+  assert.match(syncFn.body, /reconcileStateWithRemote\(remote\)/, 'pull usa o núcleo de reconciliação compartilhado');
+  const syncCore = extractFunction(html, 'reconcileStateWithRemote');
+  assert.match(syncCore.body, /mergeEntryNonDestructive/, 'o núcleo precisa continuar usando o merge não destrutivo, nunca overwrite cego');
 });
 
 test('SYNC BACKUP FALLBACK: backup completo inclui DATA/imagens/revisões/SRS e não embute binários', () => {

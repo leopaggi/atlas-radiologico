@@ -134,6 +134,13 @@ const recovery = extractFunction(html, 'recoverCanonicalBaseV154');
 const brokenArtifacts = extractFunction(html, 'hasBrokenMigrationArtifacts');
 const loadData = extractFunction(html, 'loadData');
 const importHandler = extractImportHandler(html);
+// ALTERAÇÃO 073: o handler de importação une tombstones (reais, extraídos).
+const tombTimeFnCF = extractFunction(html, 'tombstoneTime');
+const isValidTombFnCF = extractFunction(html, 'isValidImageTombstone');
+const tombScopeFnCF = extractFunction(html, 'tombstoneScopeKey');
+const normalizeTombFnCF = extractFunction(html, 'normalizeTombstoneMap');
+const mergeTombFnCF = extractFunction(html, 'mergeImageTombstones');
+const saveTombFnCF = extractFunction(html, 'saveImageTombstones');
 
 test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // Todas as 4 ancoras sobem depois da Central de Revisoes + Solucoes
@@ -393,10 +400,32 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // campo conflictingHolders no evento de bloqueio, 2026-09-23): tudo antes
   // da primeira âncora, deslocamento uniforme. Deltas reconferidos
   // (+429/+429/+434/+587 vs HEAD) — totalmente explicado.
-  assert.equal(recovery.line, 6696);
-  assert.equal(brokenArtifacts.line, 6686);
-  assert.equal(loadData.line, 9243);
-  assert.equal(importHandler.line, 12824);
+  // +158 nas quatro âncoras (Alteração 073, tombstones de imagem excluída,
+  // 2026-09-23): módulo TOMBSTONES + payload meta + merges + sync (tudo
+  // antes da primeira âncora) — valores 6844/6854/9401/13027.
+  // +35 nas quatro âncoras (Alteração 073b, escopo por lesão, 2026-09-23):
+  // chave de escopo + normalize + matching scoped + comentários (tudo antes
+  // da primeira âncora, deslocamento uniforme). Valores remedidos com o
+  // algoritmo do próprio teste (lineNumberAt) — eram 6879/6889/9436/13062.
+  // +117 nas quatro âncoras (Alteração 074, pre-push reconciliation,
+  // 2026-09-23): núcleo reconcileStateWithRemote() + reconcileBeforePush()
+  // + contadores + persistLocalStateNow() antes da primeira âncora
+  // (deslocamento uniforme); +19 só no importHandler: hook de reconcile
+  // no Salvar do editor (+13) + linhas de diagnóstico (+6) — depois de
+  // loadData, antes do handler. Deltas conferidos hunk a hunk contra o
+  // git diff (+310/+310/+310/+374 vs c11f54d) — totalmente explicado
+  // (o resto dos hunks é 073/073b, já contabilizado). Valores remedidos
+  // com o algoritmo do próprio teste (lineNumberAt).
+  // +45 só no importHandler (073): carga/varredura no corpo
+  // de loadData() (+11), hook de tombstone no Salvar do editor (+22) e
+  // linhas de diagnóstico (+8) + campo no export (+4) — depois de loadData,
+  // antes do handler de importação. Quiz/backup-import ficam depois do
+  // handler e não deslocam nada. Deltas conferidos hunk a hunk contra o git
+  // diff vs c11f54d (+158/+158/+158/+203) — totalmente explicado.
+  assert.equal(recovery.line, 7006);
+  assert.equal(brokenArtifacts.line, 6996);
+  assert.equal(loadData.line, 9553);
+  assert.equal(importHandler.line, 13198);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -509,7 +538,12 @@ test('ALTERACAO 068: syncFromFirebase() continua definida, intacta, e e a MESMA 
   const fn = extractFunction(html, 'syncFromFirebase');
   assert.ok(fn.source.length > 500, 'a funcao precisa continuar com sua logica completa, nao virar um stub vazio');
   assert.match(fn.source, /readShardedState/, 'precisa continuar lendo o estado remoto de verdade');
-  assert.match(fn.source, /mergeEntryNonDestructive/, 'precisa continuar com a logica de merge original, intocada');
+  // ALTERAÇÃO 074: o merge mora no núcleo compartilhado
+  // reconcileStateWithRemote() (mesma lógica, usada pelo pull E pelo
+  // pre-push) — syncFromFirebase() o chama, sem lógica de merge paralela.
+  assert.match(fn.source, /reconcileStateWithRemote\(remote\)/, 'pull usa o núcleo de reconciliação compartilhado');
+  const core = extractFunction(html, 'reconcileStateWithRemote');
+  assert.match(core.source, /mergeEntryNonDestructive/, 'o núcleo precisa continuar com a logica de merge original, intocada');
 
   // Call sites esperados: loadData() (automatico, guardado por
   // !isNewLocalDevice), exportar backup, restaurar padrao de fabrica,
@@ -596,6 +630,8 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
     saveSiteOrder: async () => {},
     loadSRS: async () => {},
     loadSessionLog: async () => {},
+    // ALTERAÇÃO 073: loadData() real carrega tombstones (stub, mesmo padrão).
+    loadImageTombstones: async () => {},
     loadLesionRevisions: async () => {},
     loadClassificationReviewDecisions: async () => {},
     saveReview: async () => {},
@@ -791,7 +827,9 @@ async function runImportScenario(raw, { confirmResult = true } = {}) {
     toast: () => {},
     console: { error: () => {}, info: () => {}, log: () => {} }
   });
-  new vm.Script(`globalThis.runImport = async function(ev) ${importHandler.body};`)
+  // ALTERAÇÃO 073: tombstones reais no cenário de importação.
+  context.IMAGE_TOMBSTONES = {};
+  new vm.Script(`${tombTimeFnCF.source}\n${isValidTombFnCF.source}\n${tombScopeFnCF.source}\n${normalizeTombFnCF.source}\n${mergeTombFnCF.source}\n${saveTombFnCF.source}\nglobalThis.runImport = async function(ev) ${importHandler.body};`)
     .runInContext(context);
   const before = snapshotImportState(context);
 

@@ -3561,3 +3561,46 @@ auditor/diagnóstico) + `conflictingHolders` no evento de bloqueio.
 **Testes:** `multi-device-sync` 29 PASS (o teste do falso positivo
 FALHAVA antes da correção); âncoras 6686/6696/9243/12824 (+12 uniforme);
 suíte **1021 PASS**, 3 FAIL pré-existentes.
+
+## Alteração 073 — Tombstones de imagem excluída (2026-09-23)
+
+**Motivo:** Edge excluiu (120→118), nuvem convergiu, Chrome manteve o
+antigo — merge aditivo não propaga delete; ausência simples nunca pode
+apagar.
+**Implementado:** `IMAGE_TOMBSTONES` (`atlas:imageTombstones`)
+`{key, lesionId, deletedAt}` por stable key; hooks no Salvar do editor
+(diff pré/pós + dirty, limpa após escrita confirmada) e no Concluído do
+Quiz; payload no documento principal (mesma transação/revisão); merges
+pull+envio unem pelo mais recente, não adotam, removem local (inclusive
+lesão só-remota); carga + varredura no boot (save interno, sem dirty);
+backup export/import (import une, não filtra); diagnóstico com 3
+contadores. Sem ressurreição automática (tombstone vence); sem GC;
+fora de escopo: exclusão de lesão inteira (não existe no app).
+**Testes:** `multi-device-sync` 37 PASS (6 cenários + unidade + backup);
+suíte **1029 PASS**, 3 FAIL pré-existentes.
+
+## Alteração 073b — Tombstone scoped por lesão (2026-09-23)
+
+**Motivo:** global por identidade apagaria a cópia boa junto no caso
+real seed_10(seed certa)/seed_11(cópia errada) do Abscesso.
+**Implementado:** chave `lesionId + stableKey` (separador impossível em
+ids reais); legado sem `lesionId` segue global; `normalizeTombstoneMap`
+migra mapas antigos; matching por lesão em merge pull/solo/envio/
+varredura; merge por par com mais novo; fluxos e proteções intocados;
+sem hardcode de assets/lesões.
+**Testes:** `multi-device-sync` 47 PASS (caso exato seed_10/seed_11 com
+assets reais + 7 adicionais); suíte **1039 PASS**, 3 FAIL pré-existentes.
+
+## Alteração 074 — Pre-push reconciliation (2026-09-23)
+
+**Motivo:** bug real 118→116 — save com revisão válida publicou
+snapshot local sem 2 imagens cloud-only; transação não protege contra
+estado local incompleto.
+**Implementado:** `reconcileStateWithRemote()` (núcleo extraído do
+pull) + `reconcileBeforePush()` (mutex sem reentrância, offline/busy
+abortam sem escrever) + `countRemoteOnlyAdopted()` (métrica exata) +
+`persistLocalStateNow()`; hooks em `pushToFirebaseNow`, Salvar do
+editor e "Enviar este dispositivo" (force com `skipPreflight` + aviso);
+diagnóstico com último reconcile e cloud-only preservados.
+**Testes:** `multi-device-sync` 54 PASS (7 novos incl. cenário exato);
+suíte **1046 PASS**, 3 FAIL pré-existentes.

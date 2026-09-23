@@ -5078,4 +5078,294 @@ evento agora diz exatamente qual lesão detém o asset.
 
 ### Commit após aprovação
 
+Criado na publicação 068–072c (commit c11f54d, push origin master:main).
+
+## ALTERAÇÃO 073 — Tombstones de imagem excluída (sincronizar deletes entre PCs)
+
+**Número da alteração:** 073
+**Data:** 23/09/2026
+
+### Objetivo
+
+Caso real: Edge excluiu imagens (120→118) e a nuvem convergiu, mas o
+Chrome manteve o conteúdo antigo — o merge é aditivo e ausência simples
+na nuvem nunca pode virar delete (não dá pra distinguir "excluído de
+propósito" de "ainda não chegou"). Criar tombstone explícito de exclusão.
+
+### O que foi alterado (linguagem simples)
+
+- Ao remover uma imagem e confirmar (Salvar no editor / Concluído no
+  Quiz), o Atlas anota "esta imagem foi excluída de propósito" (só a
+  identidade, sem binário) com data e hora.
+- Essa anotação viaja junto na sincronização (documento principal,
+  protegida pela mesma transação/revisão) e no backup.
+- Ao receber, cada computador une as anotações (vale a mais recente),
+  não traz de volta a imagem excluída e apaga a cópia local se ainda
+  tiver. Um computador antigo nunca reintroduz o que foi excluído.
+- Re-adicionar a mesma imagem depois salva localmente, mas o próximo
+  pull remove de novo (a anotação vence — sem ressurreição automática
+  nesta rodada, documentado).
+- O diagnóstico mostra: quantas anotações existem, quantas chegaram
+  neste pull e quantas imagens foram removidas por elas.
+
+### Arquivos modificados
+
+- `index.html` (módulo TOMBSTONES + hooks no Salvar/Concluído + merge no
+  pull e no envio + carga no boot + backup + diagnóstico)
+- `tests/multi-device-sync.test.js` (8 testes novos: 6 cenários
+  obrigatórios + unidade + backup)
+- `tests/critical-flows.test.js` (âncoras: 6844/6854/9401/13027 +
+  tombstones reais no cenário de importação)
+- `tests/device-bootstrap.test.js` (stubs de carga)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`,
+  `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### Segurança
+
+Nada apaga sem tombstone (regra permanente testada). Exclusão de lesão
+inteira não existe como ação no app (fora de escopo). Snapshots não
+incluem tombstones (restauração manual não perde nem ganha deletes
+sozinha). Cloudinary nunca tocado por este fluxo.
+
+### Testes realizados
+
+- `tests/multi-device-sync.test.js`: 37 PASS, 0 FAIL;
+- `tests/critical-flows.test.js` + `device-bootstrap` + `snapshots`:
+  100 PASS, 0 FAIL; `quiz-images`: 102 PASS, 0 FAIL;
+- Suíte completa: **1029 PASS**, 3 FAIL pré-existentes;
+- `git diff --check`: sem erros; sintaxe via `vm.Script`.
+
+### Resultado
+
+Deletes explícitos agora convergem entre PCs (Edge→nuvem→Chrome),
+inclusive offline/stale e concorrente com adições, sem ressurreição e
+sem quebrar zero-write no boot, dirty, revisão ou ownership.
+
+### 2 assets do Abscesso ainda bloqueados no Chrome (investigação, sem mexer)
+
+Evento `image_merge_ownership_conflict_blocked` seed_11→seed_10 para
+48266481… e 1f173ab… mesmo após a 072c. Análise objetiva do código:
+- o mapa de holders usa SÓ o id da lesão que contém fisicamente a
+  imagem (`e.id`) — o campo legado `img.lesionId` nunca entra no mapa;
+- com assetId conhecido e classificação "só-nuvem" por identidade
+  estável, o único ramo possível no código novo é holder real do MESMO
+  asset em outra lesão local;
+- o evento novo informa `conflictingHolders`; o relato não o menciona.
+Hipóteses em ordem: (1) Chrome com HTML em cache/anterior à publicação
+(verificar `view-source` por `conflictingHolders` + Ctrl+F5 + novo pull);
+(2) imagem sem assetId/publicId (regra exige identidade forte);
+(3) mesmo asset fisicamente em outra lesão local (conflito real → fix
+manual no editor). Este fluxo de tombstones não toca esse caminho
+(sem tombstones, varredura inerte).
+
+### Commit após aprovação
+
+Ainda não criado (tarefa pediu sem commit/push).
+
+## Consistência final — os 2 assets do Abscesso cerebral (só investigação + auditoria)
+
+**Data:** 23/09/2026
+
+### Estado real
+
+Chrome 118/118 em contagem, mas 82 registros locais vs 81 na nuvem
+(Divergente: SIM) + 2 bloqueios `image_merge_ownership_conflict_blocked`
+seed_11→seed_10 (assets 48266481… e 1f173ab…). Tombstones, syncDirty,
+transaction e demais ownerships intocados nesta rodada.
+
+### Auditoria determinística (sem inferência)
+
+Fontes congeladas somente-leitura do próprio repo:
+- `snapshot-catalogo-completo-readonly.json` (19/09): ambos os assets
+  fisicamente em `seed_11` = "Oligodendroglioma" (índices 0 e 1), com
+  `imgLesionId` seed_11 e `imgLesionName` "Abscesso cerebral"; `seed_10`
+  = "Metástase cerebral" (1 outra imagem). Nenhuma outra cópia em
+  nenhuma outra lesão nessa fonte.
+- Auditoria de 21/09 (casos CRITICAL): os 2 assets estavam em
+  "Abscesso cerebral" em 18/09 e tiveram o nome reescrito para
+  "Oligodendroglioma" no backup real de 20/09 — contaminação 059
+  comprovada; destino sugerido: a lesão atual "Abscesso cerebral".
+- Nuvem hoje: `seed_10` = "Abscesso cerebral" contém os 2 assets
+  (etiqueta seed_11 = id posicional da época em que o Abscesso ocupava
+  o slot 11 — etiqueta legada legítima).
+Conclusão: MESMO asset fisicamente em dois lugares (nuvem seed_10 +
+local seed_11) = CONFLITO REAL. O bloqueio está correto; o campo
+`img.lesionId` jamais entra no mapa de holders (só `entry.id`), então
+não há bug no helper para este caso. As outras 8 normalizaram porque
+não tinham segunda cópia — prova de que o caminho funciona.
+
+### Nova função read-only (console do navegador, zero escrita)
+
+`auditImageHoldersByStableKey(['4826…', 'asset:…'])` no fim do script
+(sem deslocar âncoras): devolve por asset `{assetId, stableKey,
+holders:[{lesionId, lesionName, imgLesionId, publicId, url…}]}`.
+Para confirmar no Chrome ao vivo + `getImageOwnershipConflicts()` (o
+evento novo traz `conflictingHolders`).
+
+### ALERTA — não excluir as cópias de seed_11 pelo editor ainda
+
+Descoberto ao auditar: o tombstone 073 é global por identidade. Excluir
+as cópias erradas de `seed_11` hoje criaria tombstone dos assets — e o
+próximo pull apagaria também as cópias BOAS de `seed_10` em todos os
+PCs (perda real). NÃO excluir até o tombstone ter escopo por
+(key, lesionId). Caminho seguro alternativo (sem código): após o wipe,
+re-anexar as imagens ao Abscesso com nova identidade (novo upload/URL
+sem o assetId tombstonado) — com perda de metadados; preferível o
+follow-up de escopo, que preserva os assets. Ressurreição com o MESMO
+assetId não funciona (tombstone vence — testado).
+
+### Arquivos modificados
+
+- `index.html` (só a função de auditoria, fim do script)
+- `tests/multi-device-sync.test.js` (fixture exata do estado real com
+  assetIds/publicIds/URLs/nomes reais + teste da função de auditoria)
+- `LOG_DESENVOLVIMENTO.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### Testes realizados
+
+- `tests/multi-device-sync.test.js`: 39 PASS, 0 FAIL;
+- Suíte completa: **1031 PASS**, 3 FAIL pré-existentes;
+- `git diff --check`: sem erros; sintaxe via `vm.Script`; âncoras
+  inalteradas (6844/6854/9401/13027).
+
+### Commit após aprovação
+
+Ainda não criado (tarefa pediu sem commit/push).
+
+## ALTERAÇÃO 073b — Tombstone scoped por lesão (2026-09-23)
+
+**Número da alteração:** 073b
+**Data:** 23/09/2026
+
+### Objetivo
+
+O tombstone 073 era global por identidade: apagar X de `seed_11`
+apagaria X de `seed_10` no próximo pull — perigoso para o caso real
+dos 2 assets do Abscesso (cópia certa em `seed_10`, errada em
+`seed_11`). Escopar por lesão para permitir a correção manual segura.
+
+### O que foi alterado (linguagem simples)
+
+- O tombstone agora diz "imagem X removida DA lesão Y" (chave
+  `lesionId + stableKey`, separador impossível em ids reais).
+- Apagar de uma lesão só afeta aquela lesão em todos os PCs; a mesma
+  imagem em outra lesão fica intacta.
+- Tombstone antigo sem `lesionId` continua valendo para todas (regra
+  histórica, sem inventar dono); mapas antigos são re-indexados
+  sozinhos ao carregar/unir.
+- Nada mais mudou: mesmos fluxos (Salvar/Concluído, pull, envio, boot,
+  backup, diagnóstico), mesma transação/revisão/dirty, ownership e
+  normalização intocados.
+
+### Arquivos modificados
+
+- `index.html` (chave de escopo + normalize + matching por lesão nos
+  4 pontos de aplicação)
+- `tests/multi-device-sync.test.js` (caso exato `seed_10`/`seed_11`
+  com os assets reais + 7 adicionais; unidade 073 ajustada às chaves)
+- `tests/critical-flows.test.js` (âncoras: 6879/6889/9436/13062 +
+  normalize no cenário de importação)
+- `tests/device-bootstrap.test.js` (stubs de carga)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`,
+  `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### Segurança
+
+Sem hardcode de assets/lesões no app. Conflito real continua
+bloqueado. Exclusão de lesão inteira segue fora de escopo (não existe
+no app). Ressurreição segue sem automática (tombstone vence).
+
+### Testes realizados
+
+- `tests/multi-device-sync.test.js`: 47 PASS, 0 FAIL;
+- `critical-flows` + `quiz-images`: 123 PASS, 0 FAIL;
+- Suíte completa: **1039 PASS**, 3 FAIL pré-existentes;
+- `git diff --check`: sem erros; sintaxe via `vm.Script`; zero
+  caractere de controle cru no fonte (separador como escape explícito).
+
+### Resultado
+
+Infraestrutura pronta para a correção manual dos 2 assets: remover as
+2 cópias de `seed_11`/Oligodendroglioma no editor gerará tombstones
+scoped que limpam `seed_11` em todo PC preservando `seed_10`/Abscesso.
+
+### Commit após aprovação
+
+Ainda não criado (tarefa pediu sem commit/push).
+
+## ALTERAÇÃO 074 — Pre-push reconciliation (bug real 118→116)
+
+**Número da alteração:** 074
+**Data:** 23/09/2026
+
+### Objetivo
+
+Bug comprovado em teste real: Chrome com revisão 15 (válida) salvou o
+snapshot local sem 2 imagens cloud-only e a nuvem caiu 118→116.
+REVISION MATCH não prova conteúdo completo. Todo SAVE real agora
+reconcilia antes de escrever.
+
+### Causa exata
+
+`saveData()` → `pushToFirebaseNow()` escrevia o snapshot local como
+estava. A revisão batia (o Chrome conhecia a 15), mas o DATA local
+estava semanticamente incompleto (as 2 de `seed_10`, bloqueadas na
+época por holders em `seed_11`, nunca tinham sido adotadas). A
+transação protege contra "nuvem mudou desde minha leitura" — não
+contra "meu estado está incompleto".
+
+### O que foi alterado (linguagem simples)
+
+- Novo fluxo de todo SAVE: persiste local + dirty → relê a nuvem ATUAL
+  → mescla conservadora (traz o que só a nuvem tem, mantém suas
+  edições, aplica tombstones, normaliza etiqueta legada) → escreve a
+  UNIÃO pela transação/revisão de sempre.
+- No caso real: ao salvar o delete de `seed_11`, o pre-pull readota
+  A+B em `seed_10` (holders sumiram) antes de escrever — a nuvem nunca
+  cai; `seed_11` esvazia como pedido.
+- Vale para `pushToFirebaseNow` (todo save), Salvar do editor e botão
+  "Enviar este dispositivo". O merge de envio e o retry de conflito já
+  reliam — inalterados. Exceção única e explícita: "forçar substituir"
+  (console, com aviso reforçado).
+- Sem internet/leitura: não escreve às cegas (mantém dirty/pending,
+  tenta depois). Sem reentrância (mutex liberado antes da escrita).
+- Diagnóstico: último pre-push reconcile + cloud-only preservados.
+
+### Residual documentado (sem perda silenciosa de asset)
+
+Conflito de ownership genuíno e não resolvido: o save não aborta; o
+asset sobrevive na lesão detentora (que sincroniza normal); a cópia
+duplicada do outro lado consolida para fora; o bloqueio segue
+registrado no diagnóstico. Alternativas piores: abortar todo save
+enquanto houver conflito, ou carregar cópia opaca por cima do guard.
+
+### Arquivos modificados
+
+- `index.html` (núcleo `reconcileStateWithRemote` extraído do pull +
+  `reconcileBeforePush` + hooks nos 3 caminhos de escrita + force
+  explícito + diagnóstico)
+- `tests/multi-device-sync.test.js` (7 testes: cenário exato 118→116,
+  mesma-revisão-incompleto, offline, scoped, concorrência, zero-write,
+  ownership genuíno)
+- `tests/critical-flows.test.js` (âncoras: 6996/7006/9553/13198 +
+  marcadores do núcleo compartilhado)
+- `tests/snapshots-ownership.test.js` (marcadores do núcleo)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`,
+  `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
+
+### Testes realizados
+
+- `tests/multi-device-sync.test.js`: 54 PASS, 0 FAIL;
+- Suíte completa: **1046 PASS**, 3 FAIL pré-existentes;
+- `git diff --check`: sem erros; sintaxe via `vm.Script`.
+
+### Resultado
+
+SAVE = LOCAL EDIT → PRE-PUSH RECONCILIATION → MERGE → TRANSACTION
+WRITE. Recuperação dos 2 assets: usar o Edge (não recarregado, com as
+cópias) após esta correção publicada — o pre-push do próprio Edge vai
+reconciliar antes de qualquer escrita dele.
+
+### Commit após aprovação
+
 Ainda não criado (tarefa pediu sem commit/push).

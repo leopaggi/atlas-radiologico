@@ -1222,3 +1222,61 @@ asset diferente) como conflito real. Correção: holders por
 `stableImageKeyV208` (mesma noção do auditor/diagnóstico) + evento de
 bloqueio informa `conflictingHolders`. `canChangeImageOwnership()`
 intacto; sem hardcode. Suíte: **1021 PASS**, 3 FAIL pré-existentes.
+
+## 37. Pre-push reconciliation (Alteração 074, 2026-09-23)
+
+Bug real 118→116: save com revisão válida escreveu snapshot local
+incompleto (2 cloud-only nunca adotadas) e a nuvem perdeu o que só ela
+tinha — REVISION MATCH != conteúdo completo. Novo fluxo de todo SAVE:
+persiste local+dirty → relê nuvem ATUAL → merge conservador (união +
+tombstones + normalização; edições locais por timestamp/união) → escreve
+a UNIÃO pela transação/revisão. Núcleo `reconcileStateWithRemote()`
+extraído do pull (mesma lógica, pull e pre-push). Hooks:
+`pushToFirebaseNow`, Salvar do editor, "Enviar este dispositivo";
+`mergeThisDeviceImagesToCloud` já relia; exceção única:
+`forceThisDeviceToCloud` (aviso reforçado). Offline/leitura-falha: não
+escreve às cegas (dirty/pending). Sem reentrância (mutex liberado antes
+da escrita). Diagnóstico: último reconcile + cloud-only preservados.
+Residual: conflito genuíno não aborta save; asset sobrevive na
+detentora; bloqueio registrado. Suíte: **1046 PASS**, 3 FAIL
+pré-existentes.
+
+## 35. Consistência final — 2 assets do Abscesso (investigação, sem fix) (2026-09-23)
+
+Auditoria determinística em fontes congeladas: ambos os assets
+fisicamente em `seed_11`="Oligodendroglioma" (snapshot 19/09) com nome
+clínico "Abscesso cerebral"; auditoria 21/09 prova contaminação 059
+(nome reescrito Abscesso→Oligodendroglioma 18/09→20/09); nuvem hoje
+`seed_10`="Abscesso cerebral" os contém (etiqueta seed_11 = slot
+posicional antigo — legada legítima). Mesmo asset em dois lugares =
+CONFLITO REAL; bloqueio correto; sem bug no helper (label nunca entra
+no mapa de holders). Nova `auditImageHoldersByStableKey()` read-only
+(fim do script, sem deslocar âncoras) para confirmar no Chrome ao vivo.
+ALERTA: tombstone 073 é global por identidade — excluir as cópias de
+`seed_11` pelo editor hoje apagaria também as boas de `seed_10` no
+próximo pull; NÃO excluir até escopo por (key, lesionId). Suíte:
+**1031 PASS**, 3 FAIL pré-existentes.
+
+## 34. Tombstones de imagem excluída (Alteração 073, 2026-09-23)
+
+Merge aditivo não propaga deletes (ausência simples nunca apaga —
+indistinguível de "ainda não chegou"). Exclusão explícita (Salvar/
+Concluído confirmados) registra tombstone `{key, lesionId, deletedAt}`
+por stable key; viaja no documento principal (mesma transação/revisão),
+storage local e backup; merges (pull e envio) unem pelo mais recente,
+não adotam e removem local; boot varre; sem GC; sem ressurreição
+automática (tombstone vence, documentado). Editor marca dirty e limpa
+após escrita confirmada. Diagnóstico: contadores de tombstones.
+Ownership/legacy intocados; snapshots sem tombstones; Cloudinary
+intocado. Suíte: **1029 PASS**, 3 FAIL pré-existentes.
+
+## 36. Tombstone scoped por lesão (Alteração 073b, 2026-09-23)
+
+Global por identidade apagaria a cópia boa junto (caso seed_10/
+seed_11). Novo modelo: chave `lesionId + stableKey` ("removida DESTA
+lesão"); legado sem `lesionId` segue global (sem inventar dono);
+`normalizeTombstoneMap` re-indexa mapas antigos ao carregar/unir;
+matching por lesão nos 4 pontos (merge pull, solo-remota, envio,
+varredura); merge por par com deletedAt mais novo; global+scoped
+coexistem. Fluxos, transação/revisão/dirty, ownership e normalização
+intocados; sem hardcode. Suíte: **1039 PASS**, 3 FAIL pré-existentes.
