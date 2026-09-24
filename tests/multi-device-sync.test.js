@@ -130,6 +130,14 @@ const tryNormalizeFn = extractFunction(html, 'tryNormalizeLegacyPullImage');
 // makeDevice() abaixo estuba loadSRS como no-op pra não afetar os testes
 // pré-existentes que não são sobre este load específico).
 const loadSRSFn = extractFunction(html, 'loadSRS');
+// ALTERAÇÃO 079c — caminhos de escrita manuais e os saves de progresso
+// reais, para provar que TODO caminho normal passa pela barreira final de
+// imagens stale dentro de writeShardedState().
+const syncThisDeviceToCloudFn = extractFunction(html, 'syncThisDeviceToCloud');
+const forceThisDeviceToCloudFn = extractFunction(html, 'forceThisDeviceToCloud');
+const saveSRSFn = extractFunction(html, 'saveSRS');
+const saveReviewFn = extractFunction(html, 'saveReview');
+const gateStaleImagesFn = extractFunction(html, 'gateStaleLocalOnlyImagesForWrite');
 
 // Nuvem falsa COMPARTILHADA entre "dispositivos" — simula um único projeto
 // Firestore (atlas_state/main + data_chunk_i) visto por computadores
@@ -319,6 +327,13 @@ function makeDevice(cloud, { seed = [] } = {}) {
     deduplicateV171: async () => {},
     runNewDeviceBootstrapFlow: async () => { throw new Error('runNewDeviceBootstrapFlow não deveria ser chamado neste teste (dispositivo já inicializado)'); },
     renderAll: () => {},
+    // ALTERAÇÃO 079c — stubs mínimos para syncThisDeviceToCloud()/
+    // forceThisDeviceToCloud() reais (verificação pós-envio e confirm()).
+    LESION_REVISIONS: {},
+    syncAuditCounters: () => ({}),
+    readCloudAuditFromServer: async () => null,
+    syncCountersMatch: () => false,
+    confirm: () => true,
     console: { error: () => {}, info: () => {}, log: () => {}, warn: () => {} }
   });
   vm.createContext(context);
@@ -376,6 +391,8 @@ function makeDevice(cloud, { seed = [] } = {}) {
     function checkChunkSize(){return true;}
     ${markSyncDirtyFn.source}
     ${clearSyncDirtyFn.source}
+    let lastWriteStaleImagesBlocked = 0;
+    ${gateStaleImagesFn.source}
     ${writeShardedStateFn.source}
     ${writeShardedStateWithConflictRetryFn.source}
     ${writeShardedStateSerializedFn.source}
@@ -391,6 +408,10 @@ function makeDevice(cloud, { seed = [] } = {}) {
     ${canonicalJsonStringFn.source}
     ${deepStableEqualFn.source}
     ${restoreCanonicalStateToCloudFn.source}
+    ${syncThisDeviceToCloudFn.source}
+    ${forceThisDeviceToCloudFn.source}
+    ${saveSRSFn.source}
+    ${saveReviewFn.source}
   `;
   new vm.Script(engine).runInContext(context);
   return {
@@ -2022,7 +2043,11 @@ test('074 CONCORRÊNCIA: stale salva após outro push — preflight evita o conf
   // mescla e escreve a união — sem conflito de revisão sequer.
   const entryB1 = deviceB.context.DATA.find((e) => e.id === 'seed_1');
   entryB1.images.push(img({ publicId: 'atlas-radiologico/N2', assetId: 'N2' }));
-  entryB1._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
+  // ALTERAÇÃO 079c — a edição de B acontece DEPOIS da de A (é o cenário);
+  // garante carimbo estritamente posterior mesmo quando os dois Date.now()
+  // caem no mesmo milissegundo (artefato de teste rápido): empate de
+  // _userUpdatedAt nunca é evidência de edição (barreira 079c).
+  entryB1._userUpdatedAt = Math.max(Date.now(), entryA1._userUpdatedAt + 1);
   await deviceB.save();
 
   assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(['M', 'N1', 'N2']), 'união completa em B');
@@ -2891,6 +2916,198 @@ test('PROTEÇÃO 079 - Parte D, Teste 9: push sem nenhuma mudança semântica é
   assert.equal(cloud.peekRevision(), revisionAfterFirstPush, 'revision não pode ter incrementado — nenhuma mudança semântica real pra publicar');
   assert.equal(deviceB.context.syncDirty, false, 'syncDirty precisa ser limpo mesmo no caminho no-op');
   assert.equal(deviceB.context.syncPushPending, false, 'no-op conta como sucesso, não como pendência');
+});
+
+
+// ===========================================================================
+// PROTEÇÃO 079c — reprodução do incidente rev27→rev28 (62 imagens stale
+// chegaram à nuvem com 079/079b já publicadas). Remoto limpo: lesão X com
+// [A]. Local stale (IndexedDB antigo): mesma lesão X com [A,B,C], SEM
+// _userUpdatedAt mais novo e SEM tombstone de B/C. Cada caminho real de
+// escrita é exercitado; a nuvem final precisa continuar [A] e a cópia local
+// pode continuar [A,B,C] (política 073).
+// ===========================================================================
+const T079C = 1789900000000;
+function img079c(id) { return img({ publicId: 'atlas-radiologico/' + id, assetId: id }); }
+async function seedCleanCloud079c(cloud, entries, { revision = 29, tombstones = {} } = {}) {
+  await cloud.FB_META_REF().set({
+    review: {}, srs: {}, sessionLog: {}, sectionOrder: [], siteOrder: {}, tombstones,
+    chunkCount: 1, stateSchemaVersion: 4, revision
+  });
+  await cloud.FB_CHUNK_REF(0).set({ items: JSON.parse(JSON.stringify(entries)) });
+}
+function cloudImageIds079c(cloud, id = 'seed_1') {
+  const e = Array.from(cloud.peekChunkItems(0)).find((x) => x.id === id);
+  return e ? Array.from(e.images || [], (i) => i.assetId).sort() : null;
+}
+function localImageIds079c(device, id = 'seed_1') {
+  const e = Array.from(device.context.DATA).find((x) => x.id === id);
+  return e ? Array.from(e.images || [], (i) => i.assetId).sort() : null;
+}
+async function waitForCloudRevision079c(cloud, from, ms = 3000) {
+  const t0 = Date.now();
+  while (cloud.peekRevision() === from && Date.now() - t0 < ms) await new Promise((r) => setTimeout(r, 25));
+}
+function remoteEntry079c(rt) {
+  const e = makeSeedEntry({ images: [img079c('A')] });
+  if (rt) e._userUpdatedAt = rt;
+  return e;
+}
+function staleLocalEntry079c(lt) {
+  const e = makeSeedEntry({ images: [img079c('A'), img079c('B'), img079c('C')] });
+  if (lt) e._userUpdatedAt = lt;
+  return e;
+}
+const STAMP_CASES_079C = [
+  { label: 'sem timestamp nos dois lados', lt: 0, rt: 0 },
+  { label: 'mesmo _userUpdatedAt nos dois lados (limpeza canônica sem carimbo novo)', lt: T079C, rt: T079C },
+  { label: 'local com _userUpdatedAt MAIS ANTIGO que o remoto', lt: T079C - 60000, rt: T079C },
+  { label: 'local SEM carimbo e remoto com carimbo', lt: 0, rt: T079C }
+];
+const WRITE_PATHS_079C = [
+  { label: 'boot com syncDirty persistido (trailing push de syncFromFirebase + push final do boot)', preBoot: async (d) => { await d.context.storage.set('atlas:syncDirty', 'true'); }, run: async () => {} },
+  { label: 'saveData() -> pushToFirebaseNow()', run: async (d) => { await d.save(); } },
+  { label: 'Salvar do editor (reconcileBeforePush + writeShardedStateSerialized direto)', run: async (d) => {
+      const recon = await d.context.reconcileBeforePush('editor-save');
+      assert.equal(recon.ok, true);
+      await d.context.writeShardedStateSerialized(6000);
+    } },
+  { label: 'saveSRS() -> pushToFirebase() debounced', run: async (d, cloud) => {
+      const rev = cloud.peekRevision();
+      d.context.SRS = { seed_1: { interval: 1, due: 1, streak: 1, updatedAt: Date.now() } };
+      await d.context.saveSRS();
+      await waitForCloudRevision079c(cloud, rev);
+    } },
+  { label: 'saveReview() -> pushToFirebase() debounced', run: async (d, cloud) => {
+      const rev = cloud.peekRevision();
+      d.context.REVIEW = { seed_1: 2 };
+      await d.context.saveReview();
+      await waitForCloudRevision079c(cloud, rev);
+    } },
+  { label: 'syncThisDeviceToCloud() (envio manual com preflight)', run: async (d) => { await d.context.syncThisDeviceToCloud(); } },
+  { label: 'forceThisDeviceToCloud() (skipPreflight:true)', run: async (d) => { await d.context.forceThisDeviceToCloud(); } },
+  { label: 'duas escritas diretas seguidas (writeChainV247; a 1a consome o mapa 079b)', run: async (d) => {
+      await d.context.writeShardedStateSerialized(5000);
+      d.context.REVIEW = { seed_1: 1 };
+      await d.context.writeShardedStateSerialized(5000);
+    } },
+  { label: 'retry de conflito de revisão (writeShardedStateWithConflictRetry)', run: async (d, cloud) => {
+      const meta = cloud.peekMeta();
+      await cloud.FB_META_REF().set({ ...meta, revision: meta.revision + 1 }); // outro device escreveu
+      await d.context.writeShardedStateSerialized(5000);
+    } }
+];
+for (const sc of STAMP_CASES_079C) {
+  for (const wp of WRITE_PATHS_079C) {
+    test(`PROTEÇÃO 079c: imagem stale só-local nunca chega à nuvem — ${sc.label} — via ${wp.label}`, async () => {
+      const cloud = makeFakeCloud();
+      await seedCleanCloud079c(cloud, [remoteEntry079c(sc.rt)]);
+      const device = makeDevice(cloud, { seed: [staleLocalEntry079c(sc.lt)] });
+      if (wp.preBoot) await wp.preBoot(device);
+      await device.boot();
+      await wp.run(device, cloud);
+      assert.deepEqual(cloudImageIds079c(cloud), ['A'], 'payload remoto final precisa ser exatamente [A]');
+      assert.deepEqual(localImageIds079c(device), ['A', 'B', 'C'], 'cópia local continua [A,B,C] (073: ausência sem tombstone nunca apaga localmente)');
+    });
+  }
+}
+
+test('PROTEÇÃO 079c: imagem legítima nova (lesão com _userUpdatedAt MAIS NOVO que o remoto) é enviada — [A,B]', async () => {
+  for (const wp of WRITE_PATHS_079C.filter((w) => !w.preBoot)) {
+    const cloud = makeFakeCloud();
+    await seedCleanCloud079c(cloud, [remoteEntry079c(T079C)]);
+    const local = makeSeedEntry({ images: [img079c('A'), img079c('B')], _userUpdatedAt: T079C + 5000 });
+    const device = makeDevice(cloud, { seed: [local] });
+    await device.boot();
+    await device.markDirty();
+    await wp.run(device, cloud);
+    assert.deepEqual(cloudImageIds079c(cloud), ['A', 'B'], 'edição real mais nova precisa chegar à nuvem via ' + wp.label);
+  }
+});
+
+test('PROTEÇÃO 079c: lesão nova só-local (sem contraparte remota) continua sendo enviada com suas imagens', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [remoteEntry079c(T079C)]);
+  const nova = makeSeedEntry({ id: 'custom_1', name: 'Nova', images: [img079c('N1')], _userUpdatedAt: T079C + 1 });
+  const device = makeDevice(cloud, { seed: [remoteEntry079c(T079C), nova] });
+  await device.boot();
+  await device.save();
+  assert.deepEqual(cloudImageIds079c(cloud, 'custom_1'), ['N1']);
+  assert.deepEqual(cloudImageIds079c(cloud), ['A']);
+});
+
+test('PROTEÇÃO 079c: tombstone REMOTO bloqueia ressurreição mesmo no force (sem reconcile) e com edição local mais nova; tombstones remotos nunca somem do payload', async () => {
+  const cloud = makeFakeCloud();
+  const bKey = 'asset:B';
+  const remoteTomb = { ['seed_1\u0001' + bKey]: { key: bKey, lesionId: 'seed_1', deletedAt: '2026-09-24T10:00:00.000Z' } };
+  await seedCleanCloud079c(cloud, [remoteEntry079c(T079C)], { tombstones: remoteTomb });
+  const device = makeDevice(cloud, { seed: [] });
+  // Estado montado direto (sem boot/pull): o force nunca reconcilia antes.
+  device.context.DATA = [makeSeedEntry({ images: [img079c('A'), img079c('B')], _userUpdatedAt: T079C + 5000 })];
+  device.context.appStateReady = true;
+  device.context.lastKnownCloudRevision = 29;
+  await device.context.forceThisDeviceToCloud();
+  assert.equal(cloud.peekRevision(), 30, 'o force escreveu');
+  assert.deepEqual(cloudImageIds079c(cloud), ['A'], 'B tombstonado na nuvem não pode ressuscitar');
+  const tombs = cloud.peekMeta().tombstones || {};
+  assert.ok(Object.values(tombs).some((t) => t && t.key === bKey && t.lesionId === 'seed_1'), 'tombstone remoto preservado no payload');
+});
+
+test('PROTEÇÃO 079c: tombstone LOCAL bloqueia ressurreição no envio normal', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry({ images: [img079c('A'), img079c('B')], _userUpdatedAt: T079C })]);
+  const device = makeDevice(cloud, { seed: [makeSeedEntry({ images: [img079c('A'), img079c('B')], _userUpdatedAt: T079C })] });
+  await device.boot();
+  const entry = device.context.DATA.find((e) => e.id === 'seed_1');
+  await device.context.recordImageTombstone(entry.images.find((i) => i.assetId === 'B'), 'seed_1');
+  entry.images = entry.images.filter((i) => i.assetId !== 'B');
+  entry._userUpdatedAt = T079C + 10000;
+  await device.save();
+  assert.deepEqual(cloudImageIds079c(cloud), ['A']);
+  // outro device stale com B, sem carimbo novo: nunca ressuscita
+  const stale = makeDevice(cloud, { seed: [makeSeedEntry({ images: [img079c('A'), img079c('B')], _userUpdatedAt: T079C })] });
+  await stale.context.storage.set('atlas:syncDirty', 'true');
+  await stale.boot();
+  await stale.context.forceThisDeviceToCloud();
+  assert.deepEqual(cloudImageIds079c(cloud), ['A']);
+});
+
+test('PROTEÇÃO 079c: no-op guard da 079 preservado — estado idêntico ao remoto não gasta revisão', async () => {
+  const cloud = makeFakeCloud();
+  // img/localImg explícitos: o merge sempre grava esses dois campos (mesmo
+  // artefato de fixture documentado no teste de no-op da 079 Parte D).
+  const same = () => ({ ...remoteEntry079c(T079C), img: '', localImg: false });
+  await seedCleanCloud079c(cloud, [same()]);
+  const device = makeDevice(cloud, { seed: [same()] });
+  await device.boot();
+  await device.markDirty();
+  await device.context.pushToFirebaseNow();
+  assert.equal(cloud.peekRevision(), 29);
+  assert.equal(device.context.syncDirty, false);
+});
+
+test('PROTEÇÃO 079c (residual documentado): edição concorrente com carimbo MAIS ANTIGO que o remoto fica só local — nunca perdida, nunca stale na nuvem', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [remoteEntry079c(T079C + 100000)]); // outro PC editou depois
+  const device = makeDevice(cloud, { seed: [remoteEntry079c(T079C + 100000)] });
+  await device.boot();
+  const e = device.context.DATA.find((x) => x.id === 'seed_1');
+  e.images.push(img079c('N'));
+  e._userUpdatedAt = T079C; // relógio/edição mais antiga que a versão remota
+  await device.save();
+  assert.deepEqual(cloudImageIds079c(cloud), ['A'], 'sem evidência mais nova, não sobe');
+  assert.deepEqual(localImageIds079c(device), ['A', 'N'], 'continua na cópia local (nada perdido)');
+});
+
+test('PROTEÇÃO 079c: no-op guard enxerga o payload filtrado — device stale sem nenhuma mudança publicável NÃO gasta revisão', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [{ ...remoteEntry079c(T079C), img: '', localImg: false }]);
+  const device = makeDevice(cloud, { seed: [{ ...staleLocalEntry079c(T079C), img: '', localImg: false }] });
+  await device.context.storage.set('atlas:syncDirty', 'true');
+  await device.boot();
+  assert.equal(cloud.peekRevision(), 29, 'nenhuma escrita: o que sobraria no payload já é idêntico à nuvem');
+  assert.equal(device.context.syncDirty, false, 'dirty limpo pelo no-op');
+  assert.deepEqual(cloudImageIds079c(cloud), ['A']);
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');

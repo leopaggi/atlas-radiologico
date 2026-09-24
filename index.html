@@ -1985,6 +1985,57 @@ let lastRevisionConflictAt = null; // Date.now() do último conflito de revisão
    propósito: não é parte do snapshot lógico que precisa ser atômico
    (chunkCount na meta já reflete o tamanho novo; um chunk extra que sobre,
    se a exclusão falhar, é só lixo inerte e nunca é lido de volta). */
+/* ALTERAÇÃO 079c (2026-09-24) — incidente rev27→rev28: com 079/079b
+   publicadas, um Chrome com IndexedDB antigo levou 62 referências de imagem
+   stale à nuvem. Causa: a 079b só marcava exclusões quando a lesão NÃO
+   tinha _userUpdatedAt em NENHUM dos lados (lt===0 && rt===0) — mas toda
+   lesão com imagem normalmente carrega carimbo (o Salvar/Quiz carimbam ao
+   mexer em imagem), e a limpeza canônica removeu imagens sem carimbo novo
+   (lt===rt). Nesses casos o merge unia [A]+[A,B,C] e nada filtrava. Além
+   disso o mapa 079b era uma variável global consumida por UMA escrita: a
+   escrita seguinte (sem reconcile novo) saía sem filtro.
+   Regra (pura, sem estado global): uma imagem presente no payload local e
+   AUSENTE (por identidade) na MESMA lesão do remoto lido na transação só
+   viaja se houver evidência explícita de edição local real e mais nova —
+   local._userUpdatedAt > remoto._userUpdatedAt. Sem evidência, fica só na
+   cópia local (073 preservado). Lesão sem contraparte remota (lesão nova)
+   segue inteira. Tombstones (local ∪ remoto) são aplicados ao payload.
+   Devolve { data, blocked, tombstoned } — nunca muta a entrada. */
+let lastWriteStaleImagesBlocked = 0; // diagnóstico: imagens barradas na última escrita confirmada
+function gateStaleLocalOnlyImagesForWrite(localData, remoteData, tombstones){
+  const remoteById = new Map();
+  for(const r of (Array.isArray(remoteData) ? remoteData : [])){
+    if(r && r.id) remoteById.set(String(r.id), r);
+  }
+  let blocked = 0, tombstoned = 0;
+  const data = (Array.isArray(localData) ? localData : []).map(e=>{
+    if(!e || !Array.isArray(e.images) || !e.images.length) return e;
+    let images = e.images;
+    const r = remoteById.get(String(e.id));
+    if(r){
+      const lt = Number(e._userUpdatedAt)||0;
+      const rt = Number(r._userUpdatedAt)||0;
+      if(!(lt > rt)){
+        const remoteKeys = new Set();
+        for(const im of (Array.isArray(r.images) ? r.images : [])){
+          if(im) imageIdentityKeys(im).forEach(k=>remoteKeys.add(k));
+        }
+        images = images.filter(im=>{
+          if(!im) return true;
+          const keep = imageIdentityKeys(im).some(k=>remoteKeys.has(k));
+          if(!keep) blocked++;
+          return keep;
+        });
+      }
+    }
+    if(tombstones){
+      const tr = applyImageTombstonesToList(images, e.id, tombstones);
+      if(tr.removed){ images = tr.images; tombstoned += tr.removed; }
+    }
+    return images.length === e.images.length ? e : { ...e, images };
+  });
+  return { data, blocked, tombstoned };
+}
 async function writeShardedState(ms=15000){
   // Bloqueia QUALQUER envio (debounced, imediato ou "sincronizar este
   // dispositivo") enquanto o dispositivo estiver pendente de bootstrap —
@@ -2053,6 +2104,7 @@ async function writeShardedState(ms=15000){
   if(!checkChunkSize(metaPayloadBase, 'documento principal (revisão/SRS/histórico)')){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
 
   let committedRevision = null;
+  let committedStaleImagesBlocked = 0;
   try{
     await withFirebaseTimeout(fbDb.runTransaction(async (tx)=>{
       const metaSnap = await tx.get(FB_META_REF());
@@ -2063,13 +2115,45 @@ async function writeShardedState(ms=15000){
         throw err;
       }
       const nextRevision = serverRevision + 1;
-      tx.set(FB_META_REF(), {...metaPayloadBase, [CLOUD_REVISION_FIELD]: nextRevision});
-      for(let i=0;i<chunks.length;i++){
-        tx.set(FB_CHUNK_REF(i), {items: chunks[i]});
+      // ALTERAÇÃO 079c — BARREIRA FINAL DE IMAGENS no choke-point de escrita.
+      // Lê a base remota (chunks) DENTRO da mesma transação da revisão e
+      // decide aqui, a partir do snapshot imutável `cleanData` (recalculado
+      // do zero a cada tentativa da transação), quais imagens podem viajar.
+      // Não depende de nenhum reconcile anterior nem de variável global
+      // transitória: vale para TODO caminho (push, debounce, editor,
+      // manual, force, trailing push, retry de conflito).
+      const remoteMeta = metaSnap.exists ? (metaSnap.data()||{}) : {};
+      const remoteChunkCount = Number(remoteMeta.chunkCount)||0;
+      let remoteData = [];
+      if(remoteChunkCount > 0){
+        const remoteChunkSnaps = await Promise.all(Array.from({length:remoteChunkCount}, (_,i)=> tx.get(FB_CHUNK_REF(i))));
+        remoteChunkSnaps.forEach(cs=>{
+          const items = cs && cs.exists ? (cs.data()||{}).items : null;
+          if(Array.isArray(items)) remoteData.push(...items);
+        });
+      }else if(Array.isArray(remoteMeta.data)){
+        remoteData = remoteMeta.data;
+      }
+      // Tombstones: união local ∪ remoto (o remoto nunca some do payload,
+      // nem num envio sem reconcile) e aplicados às imagens que saem.
+      const writeTombstones = mergeImageTombstones(metaPayloadBase.tombstones, remoteMeta.tombstones);
+      const gated = gateStaleLocalOnlyImagesForWrite(cleanData, remoteData, writeTombstones);
+      const gatedChunks = splitIntoChunks(gated.data, DATA_CHUNK_SIZE);
+      const metaPayload = {...metaPayloadBase, tombstones: stripUndefinedDeep(writeTombstones), chunkCount: gatedChunks.length};
+      if(!checkChunkSize(metaPayload, 'documento principal (revisão/SRS/histórico)')){
+        const err = new Error('documento principal grande demais');
+        err.code = 'chunk_too_large';
+        throw err;
+      }
+      tx.set(FB_META_REF(), {...metaPayload, [CLOUD_REVISION_FIELD]: nextRevision});
+      for(let i=0;i<gatedChunks.length;i++){
+        tx.set(FB_CHUNK_REF(i), {items: gatedChunks[i]});
       }
       committedRevision = nextRevision;
+      committedStaleImagesBlocked = gated.blocked;
     }), ms, 'gravar estado (transação com verificação de revisão)');
   }catch(e){
+    if(e && e.code === 'chunk_too_large'){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
     if(e && e.code === 'cloud_revision_conflict'){
       lastWriteRefusedReason = 'cloud_revision_conflict';
       lastRevisionConflictAt = Date.now();
@@ -2081,6 +2165,8 @@ async function writeShardedState(ms=15000){
 
   lastKnownCloudRevision = committedRevision;
   lastWriteRefusedReason = null;
+  lastWriteStaleImagesBlocked = committedStaleImagesBlocked;
+  if(committedStaleImagesBlocked) console.info(`[Atlas] 079c: ${committedStaleImagesBlocked} imagem(ns) só-local sem evidência de edição NÃO enviada(s) à nuvem (continuam na cópia local).`);
 
   // Limpa pedaços antigos que sobraram de uma lista maior no passado.
   const prevCount = Number(window.__lastKnownChunkCount || 0);
@@ -4107,8 +4193,16 @@ async function reconcileBeforePush(reason){
     // devolver, não há nada real pra publicar (evita o padrão observado nas
     // rev22/rev24 — revision sobe sem nenhuma mudança semântica). Reaproveita
     // deepStableEqual (077) e o mesmo `remote` já lido nesta chamada.
+    // ALTERAÇÃO 079c — compara o que a escrita REALMENTE enviaria (payload
+    // já passado pela barreira de imagens stale de writeShardedState), não a
+    // cópia local crua: um device stale cujas únicas diferenças são imagens
+    // só-local sem evidência não gasta uma revisão sem mudança real.
     const localSnapshot = {
-      data: (Array.isArray(DATA)?DATA:[]).filter(e=>e && !isQuarantinedSeedId(e.id)),
+      data: gateStaleLocalOnlyImagesForWrite(
+        (Array.isArray(DATA)?DATA:[]).filter(e=>e && !isQuarantinedSeedId(e.id)),
+        (Array.isArray(remote.data)?remote.data:[]).filter(e=>e && !isQuarantinedSeedId(e.id)),
+        IMAGE_TOMBSTONES
+      ).data,
       review: quarantineIndexedByLesionId(REVIEW), srs: quarantineIndexedByLesionId(SRS),
       sessionLog: SESSIONLOG, sectionOrder, siteOrder, tombstones: IMAGE_TOMBSTONES
     };

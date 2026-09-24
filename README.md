@@ -1371,3 +1371,13 @@ nuvem tinha. Agora, antes de enviar, o Atlas confere a nuvem atual,
 traz o que faltava e só então publica a união — sem apagar nada que
 só existia lá. Sem internet, ele guarda local e tenta depois. Testes:
 54 cenários. Suíte: 1046 PASS (3 falhas pré-existentes, sem relação).
+
+### Imagens antigas de um computador não sobem mais para a nuvem (2026-09-24)
+
+Correção de um caso real: um computador com dados antigos enviou 62
+imagens que já tinham sido removidas da nuvem. Agora, no momento exato
+de gravar, o Atlas confere a nuvem e só envia uma imagem que a nuvem não
+tem se você editou aquela lesão neste computador depois da versão da
+nuvem. Caso contrário a imagem fica só neste computador (nada é
+apagado). Exclusões anotadas continuam impedindo que imagens voltem.
+Vale para todos os jeitos de enviar, inclusive "forçar".

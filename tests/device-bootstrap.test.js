@@ -56,6 +56,11 @@ const writeShardedStateFn = extractFunction(html, 'writeShardedState');
 // ALTERAÇÃO 079b — writeShardedState() agora consome pendingWriteImageExclusionsById
 // e chama imageIdentityKeys() ao montar o payload.
 const imageIdentityKeysFn079b = extractFunction(html, 'imageIdentityKeys');
+// ALTERAÇÃO 079c — barreira final de imagens dentro da transação de
+// writeShardedState(): gate puro + união/aplicação de tombstones.
+const helpers079c = ['gateStaleLocalOnlyImagesForWrite', 'mergeImageTombstones', 'normalizeTombstoneMap',
+  'tombstoneScopeKey', 'isValidImageTombstone', 'tombstoneTime', 'applyImageTombstonesToList',
+  'isImageTombstoned', 'stableImageKeyV208'].map((n) => extractFunction(html, n).source).join('\n');
 const syncThisDeviceToCloudFn = extractFunction(html, 'syncThisDeviceToCloud');
 const mergeThisDeviceImagesToCloudFn = extractFunction(html, 'mergeThisDeviceImagesToCloud');
 const checkCloudFn = extractFunction(html, 'checkCloudForBootstrapV1');
@@ -199,6 +204,7 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
     'function splitIntoChunks(arr,size){const out=[];for(let i=0;i<arr.length;i+=size)out.push(arr.slice(i,i+size));return out;}\n' +
     'function checkChunkSize(){return true;}\n' +
     imageIdentityKeysFn079b.source + '\n' +
+    'let lastWriteStaleImagesBlocked = 0;\n' + helpers079c + '\n' +
     writeShardedStateFn.source,
     ctx, { filename: 'write-sharded-state.js' }
   );
