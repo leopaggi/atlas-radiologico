@@ -449,10 +449,15 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // si) inserido logo após forceThisDeviceToCloud() — tudo antes da
   // primeira âncora, deslocamento uniforme (nada entre loadData e
   // importHandler desta vez, por isso o mesmo +369 nos quatro).
-  assert.equal(recovery.line, 7417);
-  assert.equal(brokenArtifacts.line, 7407);
-  assert.equal(loadData.line, 9964);
-  assert.equal(importHandler.line, 13619);
+  // +7 nas quatro âncoras (Alteração 077b, 2026-09-24): correção do
+  // default REVIEW de validateCanonicalPayload (139 -> 138, seed_1282 era
+  // um high id residual no REVIEW cru do canônico que a quarentena
+  // corretamente remove) — comentário explicativo antes da própria linha,
+  // antes da primeira âncora, deslocamento uniforme.
+  assert.equal(recovery.line, 7424);
+  assert.equal(brokenArtifacts.line, 7414);
+  assert.equal(loadData.line, 9971);
+  assert.equal(importHandler.line, 13626);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

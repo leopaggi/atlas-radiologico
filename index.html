@@ -2535,7 +2535,14 @@ function validateCanonicalPayload(snapshot, expected){
   const exp = Object.assign({
     records: 1216, dupGroups: 0, highIds: 0,
     withImage: 80, imageRefs: 116, distinctStableKeys: 116,
-    review: 139, srs: 51, altPlacements: 20, tombstones: 5,
+    // ALTERAÇÃO 077b (2026-09-24) — o REVIEW cru do canônico
+    // (ATLAS_CANONICO_LIMPO_1216_116_FINAL.json) tem 139 chaves, mas UMA
+    // delas (seed_1282) é um high id residual que a reconciliação manual
+    // original não pegou (focou em DATA, não em REVIEW). Depois da
+    // quarentena (sanitizeCanonicalPayloadForQuarantine), o valor correto e
+    // esperado é 138 — nunca 139. DATA (1216) e SRS (51) não têm high ids
+    // nenhum, por isso ficam iguais antes e depois do sanitize.
+    review: 138, srs: 51, altPlacements: 20, tombstones: 5,
     zeroImageIds: ['seed_416', 'seed_248'],
     seedRangeMax: 1212, uCount: 3
   }, expected || {});

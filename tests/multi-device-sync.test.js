@@ -2296,6 +2296,54 @@ test('TESTE F (077): seed_1282 em SRS é removido pela quarentena — não chega
   assert.ok(!('seed_1282' in (rawMeta.data().srs || {})), 'seed_1282 não pode ter chegado ao servidor');
 });
 
+// ===========================================================================
+// ALTERAÇÃO 077b (2026-09-24) — achado real no Edge: o REVIEW CRU do
+// canônico (ATLAS_CANONICO_LIMPO_1216_116_FINAL.json, hash
+// 620f9bb6...685d86) tem 139 chaves, mas UMA delas (seed_1282) é um high id
+// residual que a reconciliação manual original não pegou (focou em DATA,
+// não em REVIEW). DATA (1216) e SRS (51) não têm high id nenhum. O valor
+// CORRETO esperado depois da quarentena é REVIEW=138 — não 139. Corrigido
+// o default de validateCanonicalPayload(). Este teste usa o ARQUIVO
+// CANÔNICO REAL (não uma fixture sintética) para provar isso fim a fim,
+// com os defaults (sem passar `expected`).
+// ===========================================================================
+test('TESTE F2 (077b): REVIEW do canônico REAL contém seed_1282 (high id residual) — sanitize remove, validação com defaults (138) passa, nunca chega à escrita', async () => {
+  const canonicalPath = path.resolve(__dirname, '..', 'ATLAS_CANONICO_LIMPO_1216_116_FINAL.json');
+  const rawPayload = JSON.parse(fs.readFileSync(canonicalPath, 'utf-8'));
+
+  // Confirma o fato relatado, direto do arquivo real, antes de qualquer
+  // sanitização — não confia em nenhum número de memória.
+  assert.equal(Object.keys(rawPayload.review).length, 139, 'setup: REVIEW cru do canônico precisa ter 139 chaves');
+  assert.equal(rawPayload.review.seed_1282, 1, 'setup: seed_1282 precisa estar presente no REVIEW cru');
+  assert.equal(Object.keys(rawPayload.srs).length, 51, 'setup: SRS cru precisa ter 51 (sem high id)');
+  assert.equal(rawPayload.data.length, 1216, 'setup: DATA cru precisa ter 1216 (sem high id)');
+
+  const cloud = makeFakeCloud();
+  const ctx = makeRestoreContext(cloud);
+
+  const sanitized = ctx.sanitizeCanonicalPayloadForQuarantine(rawPayload);
+  assert.equal(Object.keys(sanitized.review).length, 138, 'sanitize precisa remover seed_1282 e deixar REVIEW com 138');
+  assert.ok(!('seed_1282' in sanitized.review), 'seed_1282 não pode sobreviver ao sanitize');
+  assert.equal(Object.keys(sanitized.srs).length, 51, 'SRS não deve mudar (não tinha high id)');
+  assert.equal(sanitized.data.length, 1216, 'DATA não deve mudar (não tinha high id)');
+
+  // validateCanonicalPayload SEM `expected` — usa os defaults corrigidos.
+  const validation = ctx.validateCanonicalPayload(sanitized);
+  assert.equal(validation.ok, true, JSON.stringify(validation.failures));
+
+  // restoreCanonicalStateToCloud também SEM `expected` override — mesma
+  // prova fim a fim, com o payload real inteiro (1216 registros).
+  const result = await ctx.restoreCanonicalStateToCloud(rawPayload, { expectedRemoteRevision: 0 });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.records, 1216);
+  assert.ok(!('seed_1282' in ctx.REVIEW), 'seed_1282 não pode estar em REVIEW após o restore');
+  assert.equal(Object.keys(ctx.REVIEW).length, 138);
+
+  const rawMeta = await cloud.FB_META_REF().get();
+  assert.ok(!('seed_1282' in (rawMeta.data().review || {})), 'seed_1282 não pode ter chegado ao servidor');
+  assert.equal(Object.keys(rawMeta.data().review).length, 138, 'servidor precisa refletir REVIEW=138, nunca 139');
+});
+
 test('TESTE G (077): payload com contagem de imagens divergente da esperada aborta sem escrever', async () => {
   const cloud = makeFakeCloud();
   const ctx = makeRestoreContext(cloud);
