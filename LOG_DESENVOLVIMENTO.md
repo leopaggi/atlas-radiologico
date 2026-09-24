@@ -5434,3 +5434,58 @@ primeira escrita: a escrita seguinte saía sem filtro.
 
 Commit local "Protecao 079c: fecha bypass de imagens stale no write",
 sem push.
+
+## ALTERAÇÃO 079d — Imagem nova só sobe com intenção explícita
+
+**Data:** 24/09/2026
+
+### Risco que restava na 079c
+
+A 079c deixava subir uma imagem que só este computador tinha quando a
+data de edição da lesão aqui era mais nova que a da nuvem. Mas um
+restore canônico pode deixar a nuvem com uma data MAIS ANTIGA que a de
+um computador desatualizado — e aí as imagens antigas dele subiam.
+
+### O que mudou (linguagem simples)
+
+- Quando você realmente inclui uma imagem (Salvar no editor, inclusive
+  lesão nova; Concluído no Quiz; inclusão direta usada pela correção
+  manual de ownership), o Atlas grava uma anotação "inclusão pendente"
+  para aquela imagem naquela lesão, guardada no navegador (sobrevive a
+  recarregar, fechar a aba e ficar sem internet).
+- Na hora de gravar na nuvem, uma imagem que a nuvem não tem só vai se
+  tiver essa anotação. A data de edição da lesão não autoriza mais nada
+  sozinha (continua valendo só para os outros campos).
+- A anotação só é apagada quando a nuvem comprovadamente tem a imagem
+  (gravação confirmada ou leitura da nuvem). Erro de rede, falta de
+  permissão, conflito ou nova tentativa não apagam.
+- Abrir o Atlas, puxar da nuvem, importar backup ou migrar dados nunca
+  cria anotação. Imagens importadas de backup ficam só locais (não sobem
+  sozinhas) — decisão conservadora.
+- Exclusões anotadas continuam vencendo (inclusive no "forçar").
+- O limite da 079c (edição concorrente com data mais antiga ficava só
+  local) deixou de existir: a inclusão real sobe pela anotação.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/multi-device-sync.test.js` (18 testes novos; simulações de
+  "adicionar imagem" dos testes antigos passam a criar a anotação, como a
+  ação real faz; 2 testes da 079c reescritos para a regra nova; ajuste de
+  empate do teste "074 CONCORRÊNCIA" feito na 079c foi desfeito)
+- `tests/quiz-images.test.js` (1 teste novo; funções do marcador no vm)
+- `tests/device-bootstrap.test.js`, `tests/critical-flows.test.js`
+  (stubs/âncoras)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### Testes realizados
+
+- Teste essencial (data local mais nova, sem anotação): falha 9/9 no
+  código da 079c, passa 9/9 agora.
+- Suíte: 1142 testes, 1107 PASS, 30 FAIL, 5 todo — as mesmas 30 falhas
+  pré-existentes/ambientais.
+
+### Commit
+
+Commit local "Protecao 079d: exige intencao explicita para novas
+imagens", sem push.

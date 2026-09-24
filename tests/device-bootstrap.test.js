@@ -60,7 +60,10 @@ const imageIdentityKeysFn079b = extractFunction(html, 'imageIdentityKeys');
 // writeShardedState(): gate puro + união/aplicação de tombstones.
 const helpers079c = ['gateStaleLocalOnlyImagesForWrite', 'mergeImageTombstones', 'normalizeTombstoneMap',
   'tombstoneScopeKey', 'isValidImageTombstone', 'tombstoneTime', 'applyImageTombstonesToList',
-  'isImageTombstoned', 'stableImageKeyV208'].map((n) => extractFunction(html, n).source).join('\n');
+  'isImageTombstoned', 'stableImageKeyV208',
+  // ALTERAÇÃO 079d — marcadores de inclusão explícita (snapshot + confirmação pós-commit).
+  'normalizePendingLocalImageAdds', 'hasPendingLocalImageAdd', 'confirmPendingLocalImageAdds',
+  'savePendingLocalImageAdds'].map((n) => extractFunction(html, n).source).join('\n');
 const syncThisDeviceToCloudFn = extractFunction(html, 'syncThisDeviceToCloud');
 const mergeThisDeviceImagesToCloudFn = extractFunction(html, 'mergeThisDeviceImagesToCloud');
 const checkCloudFn = extractFunction(html, 'checkCloudForBootstrapV1');
@@ -204,7 +207,9 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
     'function splitIntoChunks(arr,size){const out=[];for(let i=0;i<arr.length;i+=size)out.push(arr.slice(i,i+size));return out;}\n' +
     'function checkChunkSize(){return true;}\n' +
     imageIdentityKeysFn079b.source + '\n' +
-    'let lastWriteStaleImagesBlocked = 0;\n' + helpers079c + '\n' +
+    'let lastWriteStaleImagesBlocked = 0;\n' +
+    "const PENDING_LOCAL_IMAGE_ADDS_KEY = 'atlas:pendingLocalImageAdds';\nlet PENDING_LOCAL_IMAGE_ADDS = {};\n" +
+    helpers079c + '\n' +
     writeShardedStateFn.source,
     ctx, { filename: 'write-sharded-state.js' }
   );
@@ -424,6 +429,7 @@ test('loadData() real: dispositivo NOVO (storage.get lança) aciona o bootstrap 
       loadSRS: async () => {}, loadSessionLog: async () => {},
       // ALTERAÇÃO 073: loadData() real carrega tombstones (stub, mesmo padrão).
       loadImageTombstones: async () => {},
+      loadPendingLocalImageAdds: async () => {}, // ALTERAÇÃO 079d
       IMAGE_TOMBSTONES: {},
       loadLesionRevisions: async () => {}, loadClassificationReviewDecisions: async () => {},
       saveReview: async () => {}, saveSRS: async () => {},
@@ -513,6 +519,7 @@ test('loadData() real: reload DEPOIS do bootstrap não repete o fluxo (storage j
       // ALTERAÇÃO 073: loadData() real carrega tombstones (stub, mesmo padrão;
       // a varredura é try/catch no próprio loadData e não precisa de stub).
       loadImageTombstones: async () => {},
+      loadPendingLocalImageAdds: async () => {}, // ALTERAÇÃO 079d
       loadLesionRevisions: async () => {}, loadClassificationReviewDecisions: async () => {},
       saveReview: async () => {}, saveSRS: async () => {}, createSafetySnapshot: () => null,
       applyAltPlacementsAudit20260918: async () => false, applyClassificationAudit20260918: async () => false,

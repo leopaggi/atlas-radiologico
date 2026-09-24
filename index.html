@@ -1994,15 +1994,91 @@ let lastRevisionConflictAt = null; // Date.now() do último conflito de revisão
    (lt===rt). Nesses casos o merge unia [A]+[A,B,C] e nada filtrava. Além
    disso o mapa 079b era uma variável global consumida por UMA escrita: a
    escrita seguinte (sem reconcile novo) saía sem filtro.
-   Regra (pura, sem estado global): uma imagem presente no payload local e
-   AUSENTE (por identidade) na MESMA lesão do remoto lido na transação só
-   viaja se houver evidência explícita de edição local real e mais nova —
-   local._userUpdatedAt > remoto._userUpdatedAt. Sem evidência, fica só na
-   cópia local (073 preservado). Lesão sem contraparte remota (lesão nova)
-   segue inteira. Tombstones (local ∪ remoto) são aplicados ao payload.
+   Regra (pura): uma imagem presente no payload local e AUSENTE (por
+   identidade) na MESMA lesão do remoto lido na transação só viaja se
+   houver marcador explícito de inclusão pendente (ALTERAÇÃO 079d — antes,
+   079c, bastava local._userUpdatedAt > remoto). Sem marcador, fica só na
+   cópia local (073 preservado). Tombstones (local ∪ remoto) são aplicados
+   ao payload.
    Devolve { data, blocked, tombstoned } — nunca muta a entrada. */
+/* ALTERAÇÃO 079d (2026-09-24) — INTENÇÃO EXPLÍCITA DE ADICIONAR IMAGEM.
+   A 079c ainda aceitava `_userUpdatedAt` local mais novo como autorização
+   para imagem só-local — mas um restore canônico pode deixar a nuvem com
+   carimbo MAIS ANTIGO que um device stale, e aí as imagens stale subiam.
+   Agora a única autorização é um marcador persistente (IndexedDB, mesma
+   camada storage) criado SÓ quando o usuário realmente inclui uma imagem
+   neste device (Salvar do editor, Concluído do Quiz, addImageToLesionData)
+   e removido SÓ quando a nuvem comprovadamente contém a imagem (escrita
+   confirmada ou leitura do remoto). Chave = stableImageKeyV208 (a mesma
+   dos tombstones). Formato: { [lesionId]: { [stableKey]: addedAtMs } }.
+   Nunca criado por boot/pull/importação/migração. */
+const PENDING_LOCAL_IMAGE_ADDS_KEY = 'atlas:pendingLocalImageAdds';
+let PENDING_LOCAL_IMAGE_ADDS = {};
+function normalizePendingLocalImageAdds(map){
+  const out = {};
+  if(!map || typeof map !== 'object' || Array.isArray(map)) return out;
+  for(const lid of Object.keys(map)){
+    const keys = map[lid];
+    if(!lid || !keys || typeof keys !== 'object' || Array.isArray(keys)) continue;
+    for(const k of Object.keys(keys)){
+      if(!k) continue;
+      (out[lid] = out[lid] || {})[k] = Number(keys[k]) || 0;
+    }
+  }
+  return out;
+}
+function hasPendingLocalImageAdd(adds, lesionId, img){
+  const k = stableImageKeyV208(img);
+  const byLesion = k && adds ? adds[String(lesionId)] : null;
+  return !!(byLesion && Object.prototype.hasOwnProperty.call(byLesion, k));
+}
+// Marca as imagens de `nextImages` ausentes de `prevImages` (por identidade
+// estável) como inclusão pendente DESTA lesão. Devolve quantas marcou.
+// Imagem que já existia antes da ação do usuário nunca é marcada.
+function markPendingLocalImageAdds(lesionId, prevImages, nextImages){
+  const lid = String(lesionId || '');
+  if(!lid) return 0;
+  const prevKeys = new Set();
+  for(const im of (Array.isArray(prevImages) ? prevImages : [])){
+    const k = im ? stableImageKeyV208(im) : null;
+    if(k) prevKeys.add(k);
+  }
+  let marked = 0;
+  const now = Date.now();
+  for(const im of (Array.isArray(nextImages) ? nextImages : [])){
+    const k = im ? stableImageKeyV208(im) : null;
+    if(!k || prevKeys.has(k)) continue;
+    const byLesion = PENDING_LOCAL_IMAGE_ADDS[lid] = PENDING_LOCAL_IMAGE_ADDS[lid] || {};
+    if(!Object.prototype.hasOwnProperty.call(byLesion, k)){ byLesion[k] = now; marked++; }
+  }
+  return marked;
+}
+// Remove os marcadores das imagens que `confirmedData` (payload gravado e
+// confirmado, ou estado remoto lido) comprovadamente contém na MESMA lesão.
+function confirmPendingLocalImageAdds(confirmedData){
+  let removed = 0;
+  for(const e of (Array.isArray(confirmedData) ? confirmedData : [])){
+    const byLesion = e && e.id ? PENDING_LOCAL_IMAGE_ADDS[String(e.id)] : null;
+    if(!byLesion) continue;
+    for(const im of (Array.isArray(e.images) ? e.images : [])){
+      const k = im ? stableImageKeyV208(im) : null;
+      if(k && Object.prototype.hasOwnProperty.call(byLesion, k)){ delete byLesion[k]; removed++; }
+    }
+    if(!Object.keys(byLesion).length) delete PENDING_LOCAL_IMAGE_ADDS[String(e.id)];
+  }
+  return removed;
+}
+async function loadPendingLocalImageAdds(){
+  try{
+    const r = await storage.get(PENDING_LOCAL_IMAGE_ADDS_KEY, false);
+    PENDING_LOCAL_IMAGE_ADDS = normalizePendingLocalImageAdds(JSON.parse(r.value));
+  }catch(e){ PENDING_LOCAL_IMAGE_ADDS = {}; }
+}
+async function savePendingLocalImageAdds(){
+  try{ await storage.set(PENDING_LOCAL_IMAGE_ADDS_KEY, JSON.stringify(PENDING_LOCAL_IMAGE_ADDS), false); }catch(_e){}
+}
 let lastWriteStaleImagesBlocked = 0; // diagnóstico: imagens barradas na última escrita confirmada
-function gateStaleLocalOnlyImagesForWrite(localData, remoteData, tombstones){
+function gateStaleLocalOnlyImagesForWrite(localData, remoteData, tombstones, pendingAdds){
   const remoteById = new Map();
   for(const r of (Array.isArray(remoteData) ? remoteData : [])){
     if(r && r.id) remoteById.set(String(r.id), r);
@@ -2011,23 +2087,22 @@ function gateStaleLocalOnlyImagesForWrite(localData, remoteData, tombstones){
   const data = (Array.isArray(localData) ? localData : []).map(e=>{
     if(!e || !Array.isArray(e.images) || !e.images.length) return e;
     let images = e.images;
+    // ALTERAÇÃO 079d — `_userUpdatedAt` NÃO autoriza mais imagem só-local
+    // (continua valendo só para campos escalares no merge). Imagem ausente
+    // da mesma lesão remota — inclusive quando a lesão inteira não existe
+    // no remoto — só viaja com marcador explícito de inclusão pendente.
     const r = remoteById.get(String(e.id));
-    if(r){
-      const lt = Number(e._userUpdatedAt)||0;
-      const rt = Number(r._userUpdatedAt)||0;
-      if(!(lt > rt)){
-        const remoteKeys = new Set();
-        for(const im of (Array.isArray(r.images) ? r.images : [])){
-          if(im) imageIdentityKeys(im).forEach(k=>remoteKeys.add(k));
-        }
-        images = images.filter(im=>{
-          if(!im) return true;
-          const keep = imageIdentityKeys(im).some(k=>remoteKeys.has(k));
-          if(!keep) blocked++;
-          return keep;
-        });
-      }
+    const remoteKeys = new Set();
+    for(const im of (r && Array.isArray(r.images) ? r.images : [])){
+      if(im) imageIdentityKeys(im).forEach(k=>remoteKeys.add(k));
     }
+    images = images.filter(im=>{
+      if(!im) return true;
+      if(imageIdentityKeys(im).some(k=>remoteKeys.has(k))) return true;
+      if(hasPendingLocalImageAdd(pendingAdds, e.id, im)) return true;
+      blocked++;
+      return false;
+    });
     if(tombstones){
       const tr = applyImageTombstonesToList(images, e.id, tombstones);
       if(tr.removed){ images = tr.images; tombstoned += tr.removed; }
@@ -2082,6 +2157,10 @@ async function writeShardedState(ms=15000){
     const filteredImages = e.images.filter(im=>!imageIdentityKeys(im).some(k=>excludeSet.has(k)));
     return filteredImages.length === e.images.length ? e : { ...e, images: filteredImages };
   }));
+  // ALTERAÇÃO 079d — snapshot imutável dos marcadores, tirado junto com o
+  // cleanData (antes do 1º await): a transação (e cada re-tentativa dela)
+  // decide com este snapshot, nunca com o estado global mutável.
+  const pendingAddsSnapshot = normalizePendingLocalImageAdds(JSON.parse(JSON.stringify(PENDING_LOCAL_IMAGE_ADDS)));
   const chunks = splitIntoChunks(cleanData, DATA_CHUNK_SIZE);
   for(let i=0;i<chunks.length;i++){
     if(!checkChunkSize(chunks[i], `pedaço ${i+1}/${chunks.length}`)){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
@@ -2105,6 +2184,7 @@ async function writeShardedState(ms=15000){
 
   let committedRevision = null;
   let committedStaleImagesBlocked = 0;
+  let committedPayloadData = null;
   try{
     await withFirebaseTimeout(fbDb.runTransaction(async (tx)=>{
       const metaSnap = await tx.get(FB_META_REF());
@@ -2137,7 +2217,11 @@ async function writeShardedState(ms=15000){
       // Tombstones: união local ∪ remoto (o remoto nunca some do payload,
       // nem num envio sem reconcile) e aplicados às imagens que saem.
       const writeTombstones = mergeImageTombstones(metaPayloadBase.tombstones, remoteMeta.tombstones);
-      const gated = gateStaleLocalOnlyImagesForWrite(cleanData, remoteData, writeTombstones);
+      // ALTERAÇÃO 079d — nuvem nunca escrita (sem documento principal): não
+      // há estado remoto a proteger contra stale; só tombstones se aplicam.
+      const gated = metaSnap.exists
+        ? gateStaleLocalOnlyImagesForWrite(cleanData, remoteData, writeTombstones, pendingAddsSnapshot)
+        : gateStaleLocalOnlyImagesForWrite(cleanData, cleanData, writeTombstones, pendingAddsSnapshot);
       const gatedChunks = splitIntoChunks(gated.data, DATA_CHUNK_SIZE);
       const metaPayload = {...metaPayloadBase, tombstones: stripUndefinedDeep(writeTombstones), chunkCount: gatedChunks.length};
       if(!checkChunkSize(metaPayload, 'documento principal (revisão/SRS/histórico)')){
@@ -2151,6 +2235,7 @@ async function writeShardedState(ms=15000){
       }
       committedRevision = nextRevision;
       committedStaleImagesBlocked = gated.blocked;
+      committedPayloadData = gated.data;
     }), ms, 'gravar estado (transação com verificação de revisão)');
   }catch(e){
     if(e && e.code === 'chunk_too_large'){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
@@ -2166,6 +2251,10 @@ async function writeShardedState(ms=15000){
   lastKnownCloudRevision = committedRevision;
   lastWriteRefusedReason = null;
   lastWriteStaleImagesBlocked = committedStaleImagesBlocked;
+  // ALTERAÇÃO 079d — escrita CONFIRMADA: o remoto agora contém exatamente
+  // o payload gravado; só as imagens marcadas que estão nele saem da lista
+  // de pendentes (erro/conflito/recusa nunca chegam aqui).
+  if(confirmPendingLocalImageAdds(committedPayloadData)) await savePendingLocalImageAdds();
   if(committedStaleImagesBlocked) console.info(`[Atlas] 079c: ${committedStaleImagesBlocked} imagem(ns) só-local sem evidência de edição NÃO enviada(s) à nuvem (continuam na cópia local).`);
 
   // Limpa pedaços antigos que sobraram de uma lista maior no passado.
@@ -4078,6 +4167,11 @@ function reconcileStateWithRemote(remote){
   const allIds = new Set([...localById.keys(), ...remoteById.keys()]);
   const reconciled = [];
 
+  // ALTERAÇÃO 079d — imagem marcada como inclusão pendente que o remoto já
+  // contém (na mesma lesão) chegou lá: o marcador sai (persistido por quem
+  // chama — persistLocalStateNow/syncFromFirebase).
+  confirmPendingLocalImageAdds(remoteData);
+
   PULL_TOMBSTONES_NEW = 0;
   PULL_TOMBSTONES_REMOVED = 0;
   const remoteTombstones = (remote && remote.tombstones && typeof remote.tombstones === 'object' && !Array.isArray(remote.tombstones)) ? remote.tombstones : {};
@@ -4156,6 +4250,7 @@ async function persistLocalStateNow(){
   try{ await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false); }catch(_e){}
   try{ await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false); }catch(_e){}
   try{ await storage.set(IMAGE_TOMBSTONES_KEY, JSON.stringify(IMAGE_TOMBSTONES), false); }catch(_e){}
+  await savePendingLocalImageAdds(); // ALTERAÇÃO 079d
 }
 /* ALTERAÇÃO 074 — RECONCILIAÇÃO PRÉ-ENVIO (pre-push reconciliation).
    Fluxo novo obrigatório antes de qualquer escrita whole-state:
@@ -4201,7 +4296,8 @@ async function reconcileBeforePush(reason){
       data: gateStaleLocalOnlyImagesForWrite(
         (Array.isArray(DATA)?DATA:[]).filter(e=>e && !isQuarantinedSeedId(e.id)),
         (Array.isArray(remote.data)?remote.data:[]).filter(e=>e && !isQuarantinedSeedId(e.id)),
-        IMAGE_TOMBSTONES
+        IMAGE_TOMBSTONES,
+        PENDING_LOCAL_IMAGE_ADDS
       ).data,
       review: quarantineIndexedByLesionId(REVIEW), srs: quarantineIndexedByLesionId(SRS),
       sessionLog: SESSIONLOG, sectionOrder, siteOrder, tombstones: IMAGE_TOMBSTONES
@@ -4268,6 +4364,7 @@ async function syncFromFirebase(){
       await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
       await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false);
       try{ await storage.set(IMAGE_TOMBSTONES_KEY, JSON.stringify(IMAGE_TOMBSTONES), false); }catch(_e){}
+      await savePendingLocalImageAdds(); // ALTERAÇÃO 079d
 
       fbSyncing = false;
 
@@ -7395,6 +7492,9 @@ function addImageToLesionData(lesion, imgObj){
   lesion.images = Array.isArray(lesion.images) ? lesion.images : [];
   lesion.images.push(normalized);
   lesion._userUpdatedAt = Date.now();
+  // ALTERAÇÃO 079d — inclusão explícita: marcador persistente (única
+  // autorização para esta imagem só-local subir à nuvem).
+  if(markPendingLocalImageAdds(lesion.id, [], [normalized])) savePendingLocalImageAdds();
   return normalized;
 }
 /* Mesma operação de remoção usada pela galeria normal (splice por índice),
@@ -10378,6 +10478,7 @@ async function loadData(){
   // ALTERAÇÃO 073 — tombstones de imagem excluída (exclusão explícita
   // sincronizável; ver bloco TOMBSTONES). Sem a chave: catálogo vazio.
   await loadImageTombstones();
+  await loadPendingLocalImageAdds(); // ALTERAÇÃO 079d
   await loadLesionRevisions();
   await loadClassificationReviewDecisions();
 
@@ -11928,6 +12029,13 @@ function openForm(id, opts){
       // confirmadas neste Salvar. Mantidas/históricas ficam como estão —
       // sem timestamp inventado. Falha de upload acima já abortou o save.
       try{ stampNewImagesAssignedAt(existing && Array.isArray(existing.images) ? existing.images : [], remoteImgs, new Date().toISOString()); }catch(_e){}
+      // ALTERAÇÃO 079d — marcador explícito SÓ para imagens que não estavam
+      // na lesão antes deste Salvar (lesão nova: todas as do formulário).
+      // Imagens já existentes (inclusive stale do IndexedDB) nunca marcam.
+      try{
+        const prevForMark = existing ? existing.images : ((DATA.find(x=>x && x.id===entryId) || {}).images);
+        if(markPendingLocalImageAdds(entryId, prevForMark, remoteImgs)) await savePendingLocalImageAdds();
+      }catch(_e){}
       // ALTERAÇÃO 073 — tombstone de exclusão EXPLÍCITA: o que existia antes
       // do Salvar e sumiu do conjunto final foi removido de propósito pelo
       // usuário (✕ na galeria + Salvar confirmado). Só em edição de lesão
@@ -14794,6 +14902,8 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
     }catch(_e){}
     // Produtividade: assignedAt SÓ nas novas confirmadas no Concluído.
     try{ stampNewImagesAssignedAt(prevQuizImgs, lesion.images, new Date().toISOString()); }catch(_e){}
+    // ALTERAÇÃO 079d — marcador explícito das imagens incluídas neste Concluído.
+    try{ if(markPendingLocalImageAdds(lesion.id, prevQuizImgs, lesion.images)) await savePendingLocalImageAdds(); }catch(_e){}
     lesion._userUpdatedAt = Date.now();
     await saveData();
     try{ refreshStudyDashboardLive(); }catch(_e){} // dashboard reflete a nova imagem sem F5
