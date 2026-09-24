@@ -5369,3 +5369,68 @@ reconciliar antes de qualquer escrita dele.
 ### Commit após aprovação
 
 Ainda não criado (tarefa pediu sem commit/push).
+
+## ALTERAÇÃO 079c — Fecha o último caminho de imagens stale para a nuvem
+
+**Data:** 24/09/2026
+
+### Problema real
+
+Com 079/079b já publicadas, um Chrome com dados locais antigos levou a
+nuvem da revisão 27 (limpa) para a 28 com 62 referências de imagem a
+mais (confirmado lendo o servidor). REVIEW/SRS ficaram corretos — o
+problema era só de imagens.
+
+### Causa exata
+
+A proteção 079b só barrava imagem "só deste computador" quando a lesão
+não tinha data de edição em NENHUM dos lados. Mas lesões com imagem
+quase sempre têm essa data, e a limpeza canônica tirou imagens sem mudar
+a data (local e nuvem com a MESMA data). Nesses casos a mescla juntava
+[A] da nuvem com [A,B,C] locais e nada filtrava — por todos os caminhos
+de envio. Além disso, a lista de exclusões da 079b era "gasta" na
+primeira escrita: a escrita seguinte saía sem filtro.
+
+### O que mudou (linguagem simples)
+
+- A decisão final sobre imagens agora acontece no único ponto que grava
+  na nuvem, dentro da mesma transação que confere a versão: o Atlas lê o
+  que a nuvem tem naquele instante e só deixa subir uma imagem que a
+  nuvem não tem se a lesão foi editada neste computador DEPOIS da versão
+  da nuvem (data de edição local mais nova). Empate não conta.
+- Sem essa evidência, a imagem continua só neste computador (nada é
+  apagado localmente), mas não vai para a nuvem.
+- Exclusões anotadas (tombstones) deste computador e da nuvem são
+  somadas e sempre aplicadas ao envio; as da nuvem nunca somem.
+- Vale para todo envio: salvar, Quiz/progresso, editor, envio manual,
+  "forçar", envio ao abrir e nova tentativa após conflito.
+- O filtro "não há nada a publicar" (079) passou a comparar o que
+  realmente seria enviado, para não gastar revisão à toa.
+- Limite conhecido: se dois computadores editam a MESMA lesão e o que
+  salva por último tem data de edição mais antiga, a imagem dele fica só
+  local (não se perde) até a próxima edição dessa lesão.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/multi-device-sync.test.js` (43 testes novos: 4 variações de
+  data × 9 caminhos de envio, edição legítima, lesão nova, tombstones,
+  no-op, residual; fixture do teste "074 CONCORRÊNCIA" com data de B
+  estritamente posterior à de A — o empate no mesmo milissegundo era
+  artefato do teste)
+- `tests/device-bootstrap.test.js` (funções novas no ambiente de teste)
+- `tests/critical-flows.test.js` (âncoras +94)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### Testes realizados
+
+- Reprodução ANTES da correção: 30 dos novos testes falhavam (vazamento
+  por todos os 9 caminhos com data de edição; 1 caminho sem data).
+- Depois: suíte 1124 testes, 1089 PASS, 30 FAIL, 5 todo — as mesmas 30
+  falhas da linha de base 45aae37 (arquivos protegidos ausentes neste
+  ambiente, data do sistema, quebra de linha Windows, pares V171).
+
+### Commit
+
+Commit local "Protecao 079c: fecha bypass de imagens stale no write",
+sem push.

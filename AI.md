@@ -3604,3 +3604,25 @@ editor e "Enviar este dispositivo" (force com `skipPreflight` + aviso);
 diagnóstico com último reconcile e cloud-only preservados.
 **Testes:** `multi-device-sync` 54 PASS (7 novos incl. cenário exato);
 suíte **1046 PASS**, 3 FAIL pré-existentes.
+
+## Alteração 079c — Barreira final de imagens stale no write (2026-09-24)
+
+**Motivo:** incidente rev27→rev28 (+62 imagens stale na nuvem com
+079/079b publicadas). 079b só gerava exclusões com `lt===0 && rt===0`;
+com carimbo em qualquer lado (inclusive `lt===rt` da limpeza canônica)
+a união [A]+[A,B,C] ia inteira. O mapa `pendingWriteImageExclusionsById`
+era consumido por uma única escrita.
+**Implementado:** `gateStaleLocalOnlyImagesForWrite(local, remote,
+tombstones)` (pura) aplicada DENTRO da transação de
+`writeShardedState()`, com a base remota (chunks) lida na mesma
+transação: imagem local ausente na mesma lesão remota só viaja se
+`local._userUpdatedAt > remoto._userUpdatedAt`; lesão sem contraparte
+remota segue inteira; tombstones local ∪ remoto aplicados e gravados.
+Snapshot `cleanData` imutável, recalculado a cada tentativa da
+transação. O mapa 079b continua como camada extra. No-op guard de
+`reconcileBeforePush()` compara o payload já filtrado.
+`lastWriteStaleImagesBlocked` para diagnóstico/console.
+**Residual:** edição concorrente da mesma lesão com carimbo mais antigo
+que o remoto fica só local (sem perda) até nova edição.
+**Testes:** `multi-device-sync` 129 (128 PASS; F2 exige arquivo
+protegido); suíte 1124/1089 PASS/30 FAIL (mesmas da base)/5 todo.

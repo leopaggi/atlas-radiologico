@@ -473,10 +473,16 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // consumo em writeShardedState() — protege só o que é ENVIADO a nuvem,
   // nunca a copia local (Alteracao 073 preservada) — antes da primeira
   // ancora, deslocamento uniforme.
-  assert.equal(recovery.line, 7609);
-  assert.equal(brokenArtifacts.line, 7599);
-  assert.equal(loadData.line, 10156);
-  assert.equal(importHandler.line, 13812);
+  // +94 nas quatro ancoras (Alteracao 079c, 2026-09-24): barreira final de
+  // imagens stale no choke-point de escrita — gateStaleLocalOnlyImagesForWrite()
+  // (funcao pura) + leitura da base remota e uniao de tombstones DENTRO da
+  // transacao de writeShardedState() + no-op guard de reconcileBeforePush()
+  // comparando o payload ja filtrado — tudo antes da primeira ancora,
+  // deslocamento uniforme.
+  assert.equal(recovery.line, 7703);
+  assert.equal(brokenArtifacts.line, 7693);
+  assert.equal(loadData.line, 10250);
+  assert.equal(importHandler.line, 13906);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
