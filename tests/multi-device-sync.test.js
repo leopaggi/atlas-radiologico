@@ -244,6 +244,8 @@ function makeDevice(cloud, { seed = [] } = {}) {
     SRS_KEY: 'srs', SESSIONLOG_KEY: 'sessionlog',
     RECOVERY_KEY: 'recovery', RECOVERY_VERSION: 'test', DEFAULT_SECTION_ORDER: [], EN_TERMS: {},
     SUPPRESSED_DUPLICATE_IDS_V172: new Set(),
+    QUARANTINED_HIGH_IDS_20260924: new Set(),
+    isQuarantinedSeedId: (id) => false,
     activeCanonicalSeedV172: () => [],
     DATA_CHUNK_SIZE: 150,
     FB_META_REF: cloud.FB_META_REF,

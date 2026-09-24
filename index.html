@@ -2194,7 +2194,7 @@ async function buildSyncAudit(){
       const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'auditoria de sincronização');
       if(remote){
         const remoteData = (Array.isArray(remote.data) ? remote.data : [])
-          .filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+          .filter(e=>e && !isQuarantinedSeedId(e.id));
         cloud = syncAuditCounters(remoteData, null, remote.review, remote.srs);
         cloud.storesRevisions = false; // Firestore não guarda LESION_REVISIONS (é local por dispositivo)
       }
@@ -2222,7 +2222,7 @@ async function readCloudAuditFromServer(){
   const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'verificação pós-envio (servidor)');
   if(!remote) return null;
   const remoteData = (Array.isArray(remote.data) ? remote.data : [])
-    .filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+    .filter(e=>e && !isQuarantinedSeedId(e.id));
   const counters = syncAuditCounters(remoteData, null, remote.review, remote.srs);
   counters.storesRevisions = false;
   return counters;
@@ -2293,8 +2293,8 @@ async function buildImageIdentityDivergenceAuditFromServer(){
   if(!fbDb) throw new Error('Firebase indisponível neste navegador.');
   const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'auditoria de identidade de imagens (servidor)');
   const remoteData = (Array.isArray(remote && remote.data) ? remote.data : [])
-    .filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
-  const localData = (Array.isArray(DATA)?DATA:[]).filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+    .filter(e=>e && !isQuarantinedSeedId(e.id));
+  const localData = (Array.isArray(DATA)?DATA:[]).filter(e=>e && !isQuarantinedSeedId(e.id));
   return buildImageIdentityDivergenceReport(localData, remoteData);
 }
 /* Só considera "sincronizado" quando os contadores relevantes batem. */
@@ -3349,8 +3349,8 @@ async function mergeThisDeviceImagesToCloud(opts){
     createSafetySnapshot('antes de mesclar imagens deste dispositivo na nuvem');
     onStep(2, 'lendo a nuvem (servidor)');
     const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'merge de imagens (leitura do servidor)');
-    const remoteData = (Array.isArray(remote && remote.data) ? remote.data : []).filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
-    const localData = (Array.isArray(DATA)?DATA:[]).filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+    const remoteData = (Array.isArray(remote && remote.data) ? remote.data : []).filter(e=>e && !isQuarantinedSeedId(e.id));
+    const localData = (Array.isArray(DATA)?DATA:[]).filter(e=>e && !isQuarantinedSeedId(e.id));
     const localById = new Map(localData.map(e=>[e.id,e]));
     const remoteById = new Map(remoteData.map(e=>[e.id,e]));
     const allIds = new Set([...localById.keys(), ...remoteById.keys()]);
@@ -3464,10 +3464,10 @@ function countRemoteOnlyAdopted(localData, remoteData, mergedData){
 // (quem chama persiste). Devolve { preservedCloudOnly }.
 function reconcileStateWithRemote(remote){
   const remoteData = (Array.isArray(remote && remote.data) ? remote.data : [])
-    .filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+    .filter(e=>e && !isQuarantinedSeedId(e.id));
 
   const localData = (Array.isArray(DATA)?DATA:[])
-    .filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+    .filter(e=>e && !isQuarantinedSeedId(e.id));
 
   const localById = new Map(localData.map(e=>[e.id,e]));
   const remoteById = new Map(remoteData.map(e=>[e.id,e]));
@@ -6849,7 +6849,33 @@ const SUPPRESSED_DUPLICATE_IDS_V172 = new Set([
   ...computeDuplicateSeedIds(typeof SEED !== 'undefined' ? SEED : [])
 ]);
 
-function getActiveCanonicalSeed(){ return SEED.filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id)); }
+/* Quarentena permanente da contaminacao multi-PC de 2026-09-24: 70 ids
+   (seed_1213..seed_1282) que apareceram em DATA/nuvem vindos de um
+   device desatualizado, cada um copia duplicada de um registro canonico
+   ja existente (seed_1143..seed_1212 — ver
+   ATLAS_CANONICO_LIMPO_1216_116_DIFF.json, campo droppedHighIds).
+   Diferente de SUPPRESSED_DUPLICATE_IDS_V172 (calculado em runtime a
+   partir do SEED estatico, mantendo o maior id), esta lista e fixa e
+   explicita porque os 70 ids NAO pertencem ao SEED atual — so existem
+   em DATA/Firestore contaminados. Sem isto, qualquer device ou backup
+   antigo que ainda tenha esses ids pode reintroduzi-los via uniao
+   (reconcileStateWithRemote/reconcileBeforePush). Reversivel: remover
+   este bloco e o Set fica vazio de novo. */
+const QUARANTINED_HIGH_IDS_20260924 = new Set([
+  'seed_1213','seed_1214','seed_1215','seed_1216','seed_1217','seed_1218','seed_1219','seed_1220','seed_1221','seed_1222',
+  'seed_1223','seed_1224','seed_1225','seed_1226','seed_1227','seed_1228','seed_1229','seed_1230','seed_1231','seed_1232',
+  'seed_1233','seed_1234','seed_1235','seed_1236','seed_1237','seed_1238','seed_1239','seed_1240','seed_1241','seed_1242',
+  'seed_1243','seed_1244','seed_1245','seed_1246','seed_1247','seed_1248','seed_1249','seed_1250','seed_1251','seed_1252',
+  'seed_1253','seed_1254','seed_1255','seed_1256','seed_1257','seed_1258','seed_1259','seed_1260','seed_1261','seed_1262',
+  'seed_1263','seed_1264','seed_1265','seed_1266','seed_1267','seed_1268','seed_1269','seed_1270','seed_1271','seed_1272',
+  'seed_1273','seed_1274','seed_1275','seed_1276','seed_1277','seed_1278','seed_1279','seed_1280','seed_1281','seed_1282'
+]);
+
+function isQuarantinedSeedId(id){
+  return SUPPRESSED_DUPLICATE_IDS_V172.has(id) || QUARANTINED_HIGH_IDS_20260924.has(id);
+}
+
+function getActiveCanonicalSeed(){ return SEED.filter(e=>e && !isQuarantinedSeedId(e.id)); }
 // Nome antigo mantido como alias (chamado em mais 4 pontos do arquivo).
 function activeCanonicalSeedV172(){ return getActiveCanonicalSeed(); }
 
@@ -7000,7 +7026,7 @@ function hasBrokenMigrationArtifacts(data){
   const active = activeCanonicalSeedV172();
   if(active.some(e=>!present.has(e.id))) return true;
   // Duplicatas consolidadas não devem voltar a integrar a base ativa.
-  if(data.some(e=>e&&SUPPRESSED_DUPLICATE_IDS_V172.has(e.id))) return true;
+  if(data.some(e=>e&&isQuarantinedSeedId(e.id))) return true;
   return false;
 }
 async function recoverCanonicalBaseV154(){
@@ -9804,7 +9830,7 @@ async function loadData(){
   await upgradeDescriptionsV182();
   await deduplicateV171();
   // v187: barreira final contra dados antigos do localStorage/Firebase reintroduzirem aliases suprimidos.
-  DATA = DATA.filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+  DATA = DATA.filter(e=>e && !isQuarantinedSeedId(e.id));
   try{ await storage.set(STORAGE_KEY,JSON.stringify(DATA),false); }catch(_e){}
   if(syncDirty) await pushToFirebaseNow();
   const recoveredImgs = await migrateLegacyLocalImagesToCloudinary();
@@ -12721,7 +12747,7 @@ async function openRecoveryInspector(){
       const cur=byId.get(x.id);
       byId.set(x.id, cur ? mergeEntryNonDestructive(cur,x.entry) : x.entry);
     }
-    DATA=[...byId.values()].filter(e=>e&&!SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+    DATA=[...byId.values()].filter(e=>e&&!isQuarantinedSeedId(e.id));
     REVIEW=mergeReviewPreservingProgress(REVIEW,result.progress);
 
     fbSyncing=true;
@@ -13226,7 +13252,7 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
       preserveLocalImageOwnershipOnImport(DATA, localDataBeforeImport);
       await saveData();
       await deduplicateV171();
-      DATA = DATA.filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+      DATA = DATA.filter(e=>e && !isQuarantinedSeedId(e.id));
       await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
       renderAll();
       await pushToFirebaseNow();
@@ -13268,7 +13294,7 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
     const ownershipConflicts = preserveLocalImageOwnershipOnImport(DATA, localDataBeforeImport);
 
     await deduplicateV171();
-    DATA = DATA.filter(e=>e && !SUPPRESSED_DUPLICATE_IDS_V172.has(e.id));
+    DATA = DATA.filter(e=>e && !isQuarantinedSeedId(e.id));
 
     await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
     await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);

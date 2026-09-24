@@ -422,10 +422,19 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // antes do handler de importação. Quiz/backup-import ficam depois do
   // handler e não deslocam nada. Deltas conferidos hunk a hunk contra o git
   // diff vs c11f54d (+158/+158/+158/+203) — totalmente explicado.
-  assert.equal(recovery.line, 7006);
-  assert.equal(brokenArtifacts.line, 6996);
-  assert.equal(loadData.line, 9553);
-  assert.equal(importHandler.line, 13198);
+  // +26 nas quatro âncoras (quarentena estrutural dos 70 high ids da
+  // contaminação multi-PC de 2026-09-24): QUARANTINED_HIGH_IDS_20260924
+  // (Set fixo com seed_1213..seed_1282, ver ATLAS_CANONICO_LIMPO_1216_116_
+  // DIFF.json) + isQuarantinedSeedId() inseridos logo após
+  // SUPPRESSED_DUPLICATE_IDS_V172, antes de getActiveCanonicalSeed() — ou
+  // seja, antes da primeira âncora. Os ~14 call sites de
+  // SUPPRESSED_DUPLICATE_IDS_V172.has( foram trocados (mesma linha, sem
+  // ganho/perda) para isQuarantinedSeedId(, incluindo dentro do
+  // importHandler — por isso o deslocamento é uniforme nas quatro âncoras.
+  assert.equal(recovery.line, 7032);
+  assert.equal(brokenArtifacts.line, 7022);
+  assert.equal(loadData.line, 9579);
+  assert.equal(importHandler.line, 13224);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -800,6 +809,8 @@ async function runImportScenario(raw, { confirmResult = true } = {}) {
     siteOrder: { Original: [] },
     DEFAULT_SECTION_ORDER: ['Padrao'],
     SUPPRESSED_DUPLICATE_IDS_V172: new Set(),
+    QUARANTINED_HIGH_IDS_20260924: new Set(),
+    isQuarantinedSeedId: (id) => false,
     RECOVERY_KEY: 'recovery',
     RECOVERY_VERSION: 'test-version',
     STORAGE_KEY: 'data',

@@ -371,6 +371,8 @@ test('loadData() real: dispositivo NOVO (storage.get lança) aciona o bootstrap 
       STORAGE_KEY: 'data', ORDER_KEY: 'order', SITEORDER_KEY: 'site-order', REVIEW_KEY: 'review',
       RECOVERY_KEY: 'recovery', RECOVERY_VERSION: 'test', DEFAULT_SECTION_ORDER: [],
       SUPPRESSED_DUPLICATE_IDS_V172: new Set(),
+      QUARANTINED_HIGH_IDS_20260924: new Set(),
+      isQuarantinedSeedId: (id) => false,
       activeCanonicalSeedV172: () => seed,
       storage: {
         get: async (key) => {
@@ -464,6 +466,8 @@ test('loadData() real: reload DEPOIS do bootstrap não repete o fluxo (storage j
       STORAGE_KEY: 'data', ORDER_KEY: 'order', SITEORDER_KEY: 'site-order', REVIEW_KEY: 'review',
       RECOVERY_KEY: 'recovery', RECOVERY_VERSION: 'test', DEFAULT_SECTION_ORDER: [],
       SUPPRESSED_DUPLICATE_IDS_V172: new Set(),
+      QUARANTINED_HIGH_IDS_20260924: new Set(),
+      isQuarantinedSeedId: (id) => false,
       activeCanonicalSeedV172: () => seed,
       storage: {
         get: async (key) => {

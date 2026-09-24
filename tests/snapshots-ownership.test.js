@@ -344,6 +344,8 @@ function runBuildSyncAudit({ localData, cloudData, fb }){
     REVIEW: { a:1, b:1 },
     SRS: { s1:{} },
     SUPPRESSED_DUPLICATE_IDS_V172: new Set(),
+    QUARANTINED_HIGH_IDS_20260924: new Set(),
+    isQuarantinedSeedId: (id) => false,
     fbDb: (fb === undefined) ? {} : fb,
     withFirebaseTimeout: (p)=>p,
     readShardedState: async ()=> cloudData ? { data: cloudData, review:{}, srs:{ s1:{} } } : null,
