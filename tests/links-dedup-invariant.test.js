@@ -4,23 +4,23 @@ const fs = require('node:fs');
 
 const html = fs.readFileSync('index.html', 'utf8');
 
-test('081a - editor bloqueia link exatamente duplicado', () => {
+test('082a - editor bloqueia URL semanticamente duplicada', () => {
   assert.match(
     html,
-    /links\.some\(l=>l&&l\.url===url&&\(l\.label\|\|'Referência'\)===label\)/
+    /links\.some\(l=>l&&sameExternalUrl\(l\.url,url\)\)/
   );
 });
 
-test('081b - loadData saneia links exatamente duplicados', () => {
+test('082b - loadData saneia links pela URL normalizada', () => {
   assert.match(
     html,
-    /const clean=e\.links\.filter\(l=>\{ const k=JSON\.stringify\(l\); if\(seen\.has\(k\)\) return false;/
+    /const clean=e\.links\.filter\(l=>\{ const k=String\(l&&l\.url\|\|''\)\.trim\(\)\.replace\(\/\\\/\+\$\/,''\); if\(!k\) return true; if\(seen\.has\(k\)\) return false;/
   );
 });
 
-test('081c - reconcile saneia links antes de virar DATA', () => {
+test('082c - reconcile saneia links pela URL normalizada antes de virar DATA', () => {
   assert.match(
     html,
-    /for\(const e of reconciled\)\{ if\(!e\|\|!Array\.isArray\(e\.links\)\) continue; const seen=new Set\(\); e\.links=e\.links\.filter/
+    /for\(const e of reconciled\).*const k=String\(l&&l\.url\|\|''\)\.trim\(\)\.replace/
   );
 });

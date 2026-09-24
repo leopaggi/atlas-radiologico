@@ -4223,8 +4223,8 @@ function reconcileStateWithRemote(remote){
   // continua protegido.
   pendingWriteImageExclusionsById = Object.keys(untimedLocalOnlyImageKeysById).length ? untimedLocalOnlyImageKeysById : null;
 
-  for(const e of reconciled){ if(!e||!Array.isArray(e.links)) continue; const seen=new Set(); e.links=e.links.filter(l=>{ const k=JSON.stringify(l); if(seen.has(k)) return false; seen.add(k); return true; }); }
-  for(const e of reconciled){ if(!e||!Array.isArray(e.links)) continue; const seen=new Set(); e.links=e.links.filter(l=>{ const k=JSON.stringify(l); if(seen.has(k)) return false; seen.add(k); return true; }); } DATA = reconciled.filter(Boolean);   REVIEW = mergeReviewPreservingProgress(REVIEW, remote && remote.review);
+  for(const e of reconciled){ if(!e||!Array.isArray(e.links)) continue; const seen=new Set(); e.links=e.links.filter(l=>{ const k=String(l&&l.url||'').trim().replace(/\/+$/,''); if(!k) return true; if(seen.has(k)) return false; seen.add(k); return true; }); }
+  for(const e of reconciled){ if(!e||!Array.isArray(e.links)) continue; const seen=new Set(); e.links=e.links.filter(l=>{ const k=String(l&&l.url||'').trim().replace(/\/+$/,''); if(!k) return true; if(seen.has(k)) return false; seen.add(k); return true; }); } DATA = reconciled.filter(Boolean);   REVIEW = mergeReviewPreservingProgress(REVIEW, remote && remote.review);
   SRS = mergeSRSPreservingNewest(SRS, remote && remote.srs);
   SESSIONLOG = mergeSessionLogPreservingProgress(SESSIONLOG, remote && remote.sessionLog);
 
@@ -10416,7 +10416,7 @@ async function loadData(){
 
     let migrated = canonicalRefreshed > 0;
     DATA.forEach(e=>{
-      if(Array.isArray(e.links)){ const seen=new Set(); const clean=e.links.filter(l=>{ const k=JSON.stringify(l); if(seen.has(k)) return false; seen.add(k); return true; }); if(clean.length!==e.links.length){ e.links=clean; migrated=true; } } else { ensureLinks(e); migrated = true; }
+      if(Array.isArray(e.links)){ const seen=new Set(); const clean=e.links.filter(l=>{ const k=String(l&&l.url||'').trim().replace(/\/+$/,''); if(!k) return true; if(seen.has(k)) return false; seen.add(k); return true; }); if(clean.length!==e.links.length){ e.links=clean; migrated=true; } } else { ensureLinks(e); migrated = true; }
       if(e.links.length===1 && isAutoRadiopaediaLink(e.links[0]) && !e.links[0].userEdited){
         const term = EN_TERMS[e.name] || e.name;
         const correctUrl = radiopaediaSearchUrl(term);
@@ -11659,7 +11659,7 @@ function openForm(id, opts){
     const labelEl = document.getElementById('f-link-label');
     const url = urlEl.value.trim();
     if(!url){ toast('Cole a URL do link.'); return; }
-    const label=labelEl.value.trim()||'Referência'; if(links.some(l=>l&&l.url===url&&(l.label||'Referência')===label)){ toast('Esse link já foi adicionado.'); return; } links.push({label,url});
+    const label=labelEl.value.trim()||'Referência'; if(links.some(l=>l&&sameExternalUrl(l.url,url))){ toast('Esse link já foi adicionado.'); return; } links.push({label,url});
     urlEl.value=''; labelEl.value='';
     renderLinks();
   };
