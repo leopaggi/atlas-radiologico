@@ -1988,15 +1988,25 @@ async function writeShardedState(ms=15000){
     setSyncStatus(false, 'ainda não foi possível confirmar a versão atual da nuvem — reconciliando antes de enviar.');
     return false;
   }
-  const cleanData = stripUndefinedDeep(DATA);
+  // ALTERAÇÃO 079 (Parte A) — barreira FINAL de quarentena, obrigatória
+  // independente de qualquer proteção upstream: achado real (rev26) provou
+  // que REVIEW/SRS podiam carregar seed_1282 de volta por um IndexedDB
+  // nunca limpo (loadSRS()/o load de REVIEW em loadData() nunca filtravam,
+  // e mergeReviewPreservingProgress()/mergeSRSPreservingNewest() também
+  // não) — mesmo com DATA corretamente filtrada. writeShardedState() é o
+  // ÚNICO ponto que de fato escreve no Firestore em todo o pipeline normal
+  // (pushToFirebase/Now, syncThisDeviceToCloud, forceThisDeviceToCloud) —
+  // filtrar aqui garante a invariante mesmo que algum gap upstream ainda
+  // não descoberto exista.
+  const cleanData = stripUndefinedDeep(DATA.filter(e => e && !isQuarantinedSeedId(e.id)));
   const chunks = splitIntoChunks(cleanData, DATA_CHUNK_SIZE);
   for(let i=0;i<chunks.length;i++){
     if(!checkChunkSize(chunks[i], `pedaço ${i+1}/${chunks.length}`)){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
   }
 
   const metaPayloadBase = {
-    review: stripUndefinedDeep(REVIEW),
-    srs: stripUndefinedDeep(SRS),
+    review: stripUndefinedDeep(quarantineIndexedByLesionId(REVIEW)),
+    srs: stripUndefinedDeep(quarantineIndexedByLesionId(SRS)),
     sessionLog: stripUndefinedDeep(SESSIONLOG),
     sectionOrder: stripUndefinedDeep(sectionOrder),
     siteOrder: stripUndefinedDeep(siteOrder),
@@ -2133,6 +2143,10 @@ function pushToFirebase(){
         syncPushPending = true;
         return;
       }
+      // ALTERAÇÃO 079 (Parte D) — nada real pra publicar: o reconcile já
+      // confirmou que o estado bate com o que a nuvem tem. Limpa o dirty
+      // sem gastar um write (e sem incrementar revision à toa).
+      if(recon.noOp){ await clearSyncDirty(); setSyncStatus(true); return; }
       const ok = await writeShardedStateSerialized(15000);
       setSyncStatus(!!ok);
       // ALTERAÇÃO 072 — só confirmado (escrita real aceita pela nuvem) limpa
@@ -2170,6 +2184,8 @@ async function pushToFirebaseNow(){
       syncPushPending = true;
       return;
     }
+    // ALTERAÇÃO 079 (Parte D) — mesmo guard de no-op de pushToFirebase() acima.
+    if(recon.noOp){ await clearSyncDirty(); setSyncStatus(true); return; }
     const ok = await writeShardedStateSerialized(15000);
     setSyncStatus(!!ok);
     if(!ok) toast('⚠ Não foi possível sincronizar: algum pedaço dos dados ainda ficou grande demais. Veja o aviso na barra lateral.');
@@ -3164,8 +3180,12 @@ async function runNewDeviceBootstrapFlow(){
 
 /* reconciliação não destrutiva entre estado local e nuvem */
 function mergeReviewPreservingProgress(localReview, remoteReview){
-  const out = {...(remoteReview && typeof remoteReview==='object' ? remoteReview : {})};
-  const local = localReview && typeof localReview==='object' ? localReview : {};
+  // ALTERAÇÃO 079 (Parte A) — filtra a quarentena 075 dos DOIS lados ANTES
+  // do merge (mesmo padrão já usado por reconcileStateWithRemote() em DATA)
+  // — achado real: um REVIEW remoto ou local contaminado com seed_1282
+  // passava por aqui sem filtro nenhum (rev26).
+  const out = quarantineIndexedByLesionId(remoteReview && typeof remoteReview==='object' ? remoteReview : {});
+  const local = quarantineIndexedByLesionId(localReview && typeof localReview==='object' ? localReview : {});
   for(const [id, st] of Object.entries(local)){
     const lv = Number(st)||0;
     const rv = Number(out[id])||0;
@@ -3176,8 +3196,10 @@ function mergeReviewPreservingProgress(localReview, remoteReview){
 }
 
 function mergeSRSPreservingNewest(localSRS, remoteSRS){
-  const local = localSRS && typeof localSRS==='object' ? localSRS : {};
-  const remote = remoteSRS && typeof remoteSRS==='object' ? remoteSRS : {};
+  // ALTERAÇÃO 079 (Parte A) — mesmo raciocínio de mergeReviewPreservingProgress()
+  // acima: filtra a quarentena 075 dos dois lados antes do merge.
+  const local = quarantineIndexedByLesionId(localSRS && typeof localSRS==='object' ? localSRS : {});
+  const remote = quarantineIndexedByLesionId(remoteSRS && typeof remoteSRS==='object' ? remoteSRS : {});
   const out = {...remote};
   for(const [id, ls] of Object.entries(local)){
     const rs = out[id];
@@ -3672,16 +3694,33 @@ function unionEntryImages(baseImgs, addImgs, targetEntry, conflictSink, sourceLa
   try{ adoptOldestAssignedAt(out, baseImgs, addImgs); }catch(_e){}
   return out;
 }
-function mergeEntryNonDestructive(localEntry, remoteEntry, legacyCatalog, tombstones){
+function mergeEntryNonDestructive(localEntry, remoteEntry, legacyCatalog, tombstones, preferRemoteWhenUntimed){
   const local = localEntry || {};
   const remote = remoteEntry || {};
   const lt = Number(local._userUpdatedAt)||0;
   const rt = Number(remote._userUpdatedAt)||0;
+  // ALTERAÇÃO 079 (Parte B) — achado real (rev26): um "local" stale (IndexedDB
+  // nunca sincronizado desde um incidente anterior) sem NENHUMA evidência de
+  // edição (lt===0 && rt===0) vencia o remoto limpo em campos como
+  // images/links/classification/altPlacements, só por "existir localmente"
+  // — reintroduzindo 146 lesões com conteúdo antigo numa nuvem já corrigida.
+  // `preferRemoteWhenUntimed` (default false — preserva o comportamento
+  // exato de sempre para os outros 3 chamadores: mergeEntryForImagePush,
+  // e os dois merges manuais de openRecoveryInspector, onde "local vence
+  // sem timestamp" continua sendo a intenção correta — o usuário está
+  // explicitamente mesclando/recuperando conteúdo próprio) inverte a
+  // prioridade SÓ quando não há timestamp NENHUM dos dois lados — chamado
+  // com `true` apenas por reconcileStateWithRemote() (pull automático E
+  // reconcile-before-push, onde "local" pode legitimamente ser só um cache
+  // desatualizado, nunca uma edição real confirmada).
+  const untimed = (lt === 0 && rt === 0);
+  const remoteWinsUntimed = untimed && !!preferRemoteWhenUntimed;
 
   // Quando há timestamp de edição, a edição mais nova domina os campos mutáveis.
-  // Sem timestamp, prioriza o conteúdo local para não apagar trabalho existente.
+  // Sem timestamp, prioriza o conteúdo local para não apagar trabalho existente
+  // — EXCETO quando remoteWinsUntimed (ver ALTERAÇÃO 079 acima).
   let merged;
-  if(rt > lt) merged = {...local, ...remote};
+  if(rt > lt || remoteWinsUntimed) merged = {...local, ...remote};
   else merged = {...remote, ...local};
 
   // ALTERAÇÃO 072b: o catálogo atual só é repassado ao pull quando o merge é
@@ -3727,8 +3766,10 @@ function mergeEntryNonDestructive(localEntry, remoteEntry, legacyCatalog, tombst
   const unionedCases = unionClinicalCases(local.clinicalCases, remote.clinicalCases);
   if(unionedCases.length) merged.clinicalCases = unionedCases; else delete merged.clinicalCases;
 
-  // Para registros legados sem timestamp, campos não vazios locais têm prioridade.
-  if(lt===0 && rt===0){
+  // Para registros legados sem timestamp, campos não vazios locais têm
+  // prioridade — EXCETO quando o chamador pede prioridade ao remoto sem
+  // timestamp (ALTERAÇÃO 079, reconcile-before-push/pull).
+  if(untimed && !preferRemoteWhenUntimed){
     if(local.notes) merged.notes = local.notes;
     if(local.enTerm) merged.enTerm = local.enTerm;
     if(Array.isArray(local.tags) && local.tags.length) merged.tags = local.tags;
@@ -3902,7 +3943,11 @@ function reconcileStateWithRemote(remote){
   for(const id of allIds){
     const l = localById.get(id);
     const r = remoteById.get(id);
-    if(l && r) reconciled.push(mergeEntryNonDestructive(l,r,localData,IMAGE_TOMBSTONES));
+    // ALTERAÇÃO 079 (Parte B) — preferRemoteWhenUntimed=true: este é o
+    // núcleo do pull automático E do reconcile-before-push (074/076); um
+    // "local" sem timestamp aqui nunca é edição confirmada do usuário,
+    // então o remoto (nuvem) é autoritativo quando não há evidência.
+    if(l && r) reconciled.push(mergeEntryNonDestructive(l,r,localData,IMAGE_TOMBSTONES,true));
     else {
       const solo = l || r;
       const sf = applyImageTombstonesToList(solo && solo.images, solo && solo.id, IMAGE_TOMBSTONES);
@@ -3976,7 +4021,24 @@ async function reconcileBeforePush(reason){
     await persistLocalStateNow();
     lastPrePushReconcileAt = Date.now();
     lastPrePushPreserved = r.preservedCloudOnly;
-    return { ok:true, preservedCloudOnly: r.preservedCloudOnly };
+    // ALTERAÇÃO 079 (Parte D) — write no-op guard: se o estado já
+    // reconciliado for estruturalmente idêntico ao que a nuvem acabou de
+    // devolver, não há nada real pra publicar (evita o padrão observado nas
+    // rev22/rev24 — revision sobe sem nenhuma mudança semântica). Reaproveita
+    // deepStableEqual (077) e o mesmo `remote` já lido nesta chamada.
+    const localSnapshot = {
+      data: (Array.isArray(DATA)?DATA:[]).filter(e=>e && !isQuarantinedSeedId(e.id)),
+      review: quarantineIndexedByLesionId(REVIEW), srs: quarantineIndexedByLesionId(SRS),
+      sessionLog: SESSIONLOG, sectionOrder, siteOrder, tombstones: IMAGE_TOMBSTONES
+    };
+    const remoteSnapshot = {
+      data: (Array.isArray(remote.data)?remote.data:[]).filter(e=>e && !isQuarantinedSeedId(e.id)),
+      review: quarantineIndexedByLesionId(remote.review||{}), srs: quarantineIndexedByLesionId(remote.srs||{}),
+      sessionLog: remote.sessionLog||{}, sectionOrder: remote.sectionOrder||[], siteOrder: remote.siteOrder||{},
+      tombstones: remote.tombstones||{}
+    };
+    const noOp = deepStableEqual(localSnapshot, remoteSnapshot);
+    return { ok:true, preservedCloudOnly: r.preservedCloudOnly, noOp };
   }catch(e){
     return { ok:false, reason:'read_failed', error:(e && e.message) || String(e) };
   }finally{
@@ -4517,7 +4579,11 @@ let REVIEW = {};
 const SRS_KEY = 'atlas:srs';
 let SRS = {}; // { [id]: {interval:number(dias), due:number(timestamp ms), streak:number} }
 async function loadSRS(){
-  try{ const r = await storage.get(SRS_KEY, false); SRS = JSON.parse(r.value); }
+  // ALTERAÇÃO 079 (Parte A) — filtra a quarentena 075 já ao carregar do
+  // IndexedDB, pra lixo de high id nem entrar em memória (defesa em
+  // profundidade; a barreira final em writeShardedState() já garante que
+  // nada disso é escrito, mesmo se este load não filtrasse).
+  try{ const r = await storage.get(SRS_KEY, false); SRS = quarantineIndexedByLesionId(JSON.parse(r.value)); }
   catch(e){ SRS = {}; }
 }
 // ALTERAÇÃO 072 (2026-09-23) — `internal=true` é usado SÓ pelas 3 migrações
@@ -10118,7 +10184,8 @@ async function loadData(){
   }
   try{
     const r3 = await storage.get(REVIEW_KEY, false);
-    REVIEW = JSON.parse(r3.value);
+    // ALTERAÇÃO 079 (Parte A) — mesma quarentena de loadSRS() acima.
+    REVIEW = quarantineIndexedByLesionId(JSON.parse(r3.value));
   }catch(e){ REVIEW = {}; }
   // ALTERAÇÃO 072 (2026-09-23) — carrega o marcador PERSISTENTE de dirty
   // (sobrevive a reload/offline — ver declaração de syncDirty perto de
@@ -13713,8 +13780,11 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
     try{ createSafetySnapshot('antes de importar backup'); }catch(_e){}
     const localDataBeforeImport = DATA; // estado local atual, antes de substituir
     DATA = parsed.data;
-    REVIEW = (parsed.review && typeof parsed.review==='object') ? parsed.review : {};
-    SRS = (parsed.srs && typeof parsed.srs==='object') ? parsed.srs : {};
+    // ALTERAÇÃO 079 (Parte A) — mesma quarentena já aplicada a DATA neste
+    // handler, agora também em REVIEW/SRS (um backup antigo pode carregar
+    // high ids residuais).
+    REVIEW = quarantineIndexedByLesionId((parsed.review && typeof parsed.review==='object') ? parsed.review : {});
+    SRS = quarantineIndexedByLesionId((parsed.srs && typeof parsed.srs==='object') ? parsed.srs : {});
     SESSIONLOG = (parsed.sessionLog && typeof parsed.sessionLog==='object') ? parsed.sessionLog : {};
     sectionOrder = Array.isArray(parsed.sectionOrder) && parsed.sectionOrder.length
       ? parsed.sectionOrder

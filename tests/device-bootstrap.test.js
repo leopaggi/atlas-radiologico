@@ -179,7 +179,11 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
     Blob: class { constructor(parts) { this.size = JSON.stringify(parts).length; } },
     window: {},
     console,
-    JSON, Array, Object, Number
+    JSON, Array, Object, Number,
+    // ALTERAÇÃO 079 (Parte A) — writeShardedState() agora filtra DATA/REVIEW/SRS
+    // pela quarentena diretamente; nenhum id de teste é quarentenado por padrão.
+    isQuarantinedSeedId: (id) => false,
+    quarantineIndexedByLesionId: (obj) => (obj && typeof obj === 'object') ? obj : {}
   };
   vm.createContext(ctx);
   vm.runInContext(
@@ -208,7 +212,7 @@ test('BOOTSTRAP BLOQUEIO: writeShardedState() funciona normalmente quando device
 
 test('BOOTSTRAP BLOQUEIO: o guard é a PRIMEIRA verificação em writeShardedState (antes de qualquer stripUndefinedDeep/leitura de DATA)', () => {
   const idxGuard = writeShardedStateFn.body.indexOf("if(deviceBootstrapPending){ lastWriteRefusedReason = 'device_bootstrap_pending'; return false; }");
-  const idxClean = writeShardedStateFn.body.indexOf('stripUndefinedDeep(DATA)');
+  const idxClean = writeShardedStateFn.body.indexOf('stripUndefinedDeep(DATA.filter(');
   assert.notEqual(idxGuard, -1);
   assert.ok(idxGuard < idxClean, 'o bloqueio precisa vir antes de qualquer preparação de envio');
 });
@@ -613,12 +617,17 @@ test('BOOTSTRAP MERGE: SRS/REVIEW/SESSIONLOG remotos são adotados quando o disp
   // por referência) só quando primitivos; aqui passamos objetos literais do
   // realm externo, então o resultado mistura prototypes — normaliza via
   // JSON antes de comparar (mesmo padrão já usado em snapshots-ownership.test.js).
-  const ctxReview = vm.createContext({});
+  // ALTERAÇÃO 079 (Parte A) — as duas funções agora chamam
+  // quarantineIndexedByLesionId() internamente; sem id quarentenado nestes
+  // dados de teste, o stub é identidade (mesmo padrão do makeMergeContext).
+  const quarantineStub = (obj) => (obj && typeof obj === 'object') ? obj : {};
+
+  const ctxReview = vm.createContext({ quarantineIndexedByLesionId: quarantineStub });
   vm.runInContext(mergeReviewFn.source, ctxReview);
   const review = vm.runInContext('mergeReviewPreservingProgress', ctxReview)({}, { seed_1: 2, seed_2: 1 });
   assert.deepEqual(JSON.parse(JSON.stringify(review)), { seed_1: 2, seed_2: 1 });
 
-  const ctxSrs = vm.createContext({});
+  const ctxSrs = vm.createContext({ quarantineIndexedByLesionId: quarantineStub });
   vm.runInContext(mergeSRSFn.source, ctxSrs);
   const remoteSrs = { seed_1: { interval: 7, due: 123, streak: 2, updatedAt: 555 } };
   const srs = vm.runInContext('mergeSRSPreservingNewest', ctxSrs)({}, remoteSrs);

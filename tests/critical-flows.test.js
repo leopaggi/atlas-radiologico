@@ -459,10 +459,17 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // sem merge com o SEED-como-local) inserida logo antes de
   // applyNewDeviceBootstrapChoice() — antes da primeira âncora,
   // deslocamento uniforme.
-  assert.equal(recovery.line, 7462);
-  assert.equal(brokenArtifacts.line, 7452);
-  assert.equal(loadData.line, 10009);
-  assert.equal(importHandler.line, 13664);
+  // +66 nas tres primeiras ancoras, +67 em importHandler (Alteracao 079,
+  // 2026-09-24): barreira final de quarentena em writeShardedState()
+  // (bloco de comentario + filtro de DATA/REVIEW/SRS antes da escrita),
+  // guard de stale-merge em mergeEntryNonDestructive() e no-op detection em
+  // reconcileBeforePush() — tudo antes da primeira ancora, deslocamento
+  // quase uniforme (a diferenca de +1 em importHandler ja existia antes,
+  // ver "+10 a mais so em importHandler" na Alteracao 076 acima).
+  assert.equal(recovery.line, 7528);
+  assert.equal(brokenArtifacts.line, 7518);
+  assert.equal(loadData.line, 10075);
+  assert.equal(importHandler.line, 13731);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -851,6 +858,8 @@ async function runImportScenario(raw, { confirmResult = true } = {}) {
     SUPPRESSED_DUPLICATE_IDS_V172: new Set(),
     QUARANTINED_HIGH_IDS_20260924: new Set(),
     isQuarantinedSeedId: (id) => false,
+    // ALTERAÇÃO 079 (Parte A): import handler agora também quarentena REVIEW/SRS.
+    quarantineIndexedByLesionId: (obj) => (obj && typeof obj === 'object') ? obj : {},
     RECOVERY_KEY: 'recovery',
     RECOVERY_VERSION: 'test-version',
     STORAGE_KEY: 'data',

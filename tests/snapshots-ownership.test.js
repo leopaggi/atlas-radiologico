@@ -421,7 +421,7 @@ test('SYNC PUSH: cria snapshot ANTES de enviar e NÃO mexe em ownership', () => 
 });
 
 test('SYNC PUSH: writeShardedState envia DATA (metadados/imagens) e não reenvia binários ao Cloudinary', () => {
-  assert.match(writeShardedStateFn.body, /stripUndefinedDeep\(DATA\)/, 'serializa o catálogo inteiro (com imagens/URLs)');
+  assert.match(writeShardedStateFn.body, /stripUndefinedDeep\(DATA\.filter\(/, 'serializa o catálogo inteiro (com imagens/URLs), já filtrado da quarentena (079)');
   assert.doesNotMatch(writeShardedStateFn.body, /uploadToCloudinary|uploadPendingImage/, 'não faz upload de imagem no push');
 });
 

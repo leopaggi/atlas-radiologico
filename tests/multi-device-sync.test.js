@@ -126,6 +126,10 @@ const normalizeLegacyOwnerFn = extractFunction(html, 'normalizeLegacyImageOwnerL
 // de decisão da função de console) — precisa entrar nos motores `vm`.
 const legacyHoldersFn = extractFunction(html, 'legacyImageHoldersByKey');
 const tryNormalizeFn = extractFunction(html, 'tryNormalizeLegacyPullImage');
+// ALTERAÇÃO 079 — loadSRS() real, usada isoladamente no Teste 5b (a
+// makeDevice() abaixo estuba loadSRS como no-op pra não afetar os testes
+// pré-existentes que não são sobre este load específico).
+const loadSRSFn = extractFunction(html, 'loadSRS');
 
 // Nuvem falsa COMPARTILHADA entre "dispositivos" — simula um único projeto
 // Firestore (atlas_state/main + data_chunk_i) visto por computadores
@@ -219,6 +223,16 @@ function makeFakeCloud() {
     peekRevision() {
       const main = store.get('main');
       return main ? (Number(main.revision) || 0) : 0;
+    },
+    // ALTERAÇÃO 079 — inspeciona o payload cru gravado (review/srs/tombstones
+    // no documento principal, itens de um chunk) sem passar por nenhum
+    // device: prova diretamente O QUE de fato chegou no Firestore falso.
+    peekMeta() {
+      return store.get('main') || null;
+    },
+    peekChunkItems(i) {
+      const chunk = store.get('chunk_' + i);
+      return chunk && Array.isArray(chunk.items) ? chunk.items : [];
     }
   };
 }
@@ -1261,7 +1275,7 @@ test('072b ESCOPO estático: só o pull (syncFromFirebase) repassa catálogo ao 
     .map((m) => m[1].trim())
     .filter((a) => !a.startsWith('localEntry')); // fora a declaração
   const withCatalog = calls.filter((a) => a.split(',').length >= 3);
-  assert.deepEqual(withCatalog, ['l,r,localData,IMAGE_TOMBSTONES'], 'só o syncFromFirebase (pull) repassa catálogo + tombstones');
+  assert.deepEqual(withCatalog, ['l,r,localData,IMAGE_TOMBSTONES,true'], 'só o syncFromFirebase (pull) repassa catálogo + tombstones');
 });
 
 // ===========================================================================
@@ -2017,7 +2031,9 @@ test('074 OWNERSHIP REAL: save com conflito genuíno não aborta; asset sobreviv
   // seed_8 de B: Z bloqueada (mesmo asset em seed_9) — documenta o residual:
   // sem adoção opaca; o asset sobrevive na detentora e o save não aborta.
   assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_8'), new Set(), 'Z bloqueada em seed_8 (conflito real)');
-  deviceB.context.DATA.find((e) => e.id === 'seed_8').name = 'L8 editada';
+  const editedEntry8 = deviceB.context.DATA.find((e) => e.id === 'seed_8');
+  editedEntry8.name = 'L8 editada';
+  editedEntry8._userUpdatedAt = Date.now(); // edição real do usuário sempre carrega este timestamp (ver handler de salvar do editor)
   await deviceB.save();
   const entryC8 = deviceB.context.DATA.find((e) => e.id === 'seed_8');
   assert.equal(entryC8.name, 'L8 editada', 'edição do usuário preservada');
@@ -2453,6 +2469,252 @@ test('TESTE L (077): releitura pós-escrita divergente faz o restore reportar fa
   assert.equal(result.ok, false);
   assert.equal(result.stage, 'post_write_verification');
   assert.deepEqual(ctx.DATA, [], 'globais não podem ter sido atualizados — o restore não confirmou sucesso');
+});
+
+// ===========================================================================
+// PROTEÇÃO 079 (2026-09-24) — duas classes de falha provadas pela forense da
+// REV26 (Edge explicitamente limpo antes, contaminação real depois de
+// reabrir write):
+//
+// PARTE A — barreira final de quarentena obrigatória em writeShardedState()
+// (DATA/REVIEW/SRS), independente de qualquer proteção upstream, + filtro já
+// no LOAD do IndexedDB (loadSRS()/REVIEW em loadData()) e nos DOIS lados do
+// merge (mergeReviewPreservingProgress/mergeSRSPreservingNewest), pra lixo
+// de quarentena nem permanecer em memória.
+//
+// PARTE B — mergeEntryNonDestructive() ganhou o parâmetro
+// preferRemoteWhenUntimed (só usado por reconcileStateWithRemote, chamado
+// com true): quando NENHUM dos dois lados tem _userUpdatedAt (nenhuma
+// evidência de edição real), o REMOTO passa a ser autoritativo pra
+// links/classification/altPlacements/notes/tags — um "local" sem timestamp
+// não pode mais vencer/sobrescrever um remoto limpo só por existir. Imagens
+// continuam com a união aditiva pré-existente (ALTERAÇÃO 073/074), fora do
+// escopo deste bug.
+//
+// PARTE C — sem mudança de código: a captura do payload (cleanData/chunks/
+// metaPayloadBase) já acontece de forma síncrona, ANTES de qualquer await,
+// dentro do corpo de writeShardedState() — o Teste 8 abaixo prova isso
+// diretamente. writeChainV247 (serialização de escritas) já é reaproveitado
+// por writeShardedStateSerialized(), sem necessidade de mecanismo novo.
+//
+// PARTE D — reconcileBeforePush() ganhou detecção de no-op: se o snapshot
+// local pós-reconcile (DATA/REVIEW/SRS/etc., já filtrados da quarentena) é
+// estruturalmente idêntico ao remoto (deepStableEqual), pushToFirebase()/
+// pushToFirebaseNow() limpam syncDirty sem gastar um write nem incrementar
+// revision — evita repetição dos episódios de no-op-write das revisões
+// 22/24.
+// ===========================================================================
+
+test('PROTEÇÃO 079 - Parte A, Teste 1: REVIEW com seed_1282 nunca chega ao payload gravado no Firestore', async () => {
+  const cloud = makeFakeCloud();
+  const device = makeDevice(cloud, { seed: [makeSeedEntry({ id: 'seed_1', name: 'Lesão válida' })] });
+  device.context.isQuarantinedSeedId = (id) => id === 'seed_1282';
+  device.context.REVIEW = { seed_1: 2, seed_1282: 5 };
+  device.context.lastKnownCloudRevision = 0;
+  const ok = await device.context.writeShardedState(5000);
+  assert.equal(ok, true);
+  const meta = cloud.peekMeta();
+  assert.ok(meta, 'documento principal precisa ter sido gravado');
+  assert.equal(Object.prototype.hasOwnProperty.call(meta.review, 'seed_1282'), false, 'seed_1282 não pode aparecer no REVIEW gravado na nuvem');
+  assert.equal(meta.review.seed_1, 2, 'entrada válida continua presente');
+});
+
+test('PROTEÇÃO 079 - Parte A, Teste 2: SRS com seed_1282 nunca chega ao payload gravado no Firestore', async () => {
+  const cloud = makeFakeCloud();
+  const device = makeDevice(cloud, { seed: [makeSeedEntry({ id: 'seed_1', name: 'Lesão válida' })] });
+  device.context.isQuarantinedSeedId = (id) => id === 'seed_1282';
+  device.context.SRS = { seed_1: { interval: 3, due: 1, streak: 1 }, seed_1282: { interval: 9, due: 1, streak: 9 } };
+  device.context.lastKnownCloudRevision = 0;
+  const ok = await device.context.writeShardedState(5000);
+  assert.equal(ok, true);
+  const meta = cloud.peekMeta();
+  assert.equal(Object.prototype.hasOwnProperty.call(meta.srs, 'seed_1282'), false, 'seed_1282 não pode aparecer no SRS gravado na nuvem');
+  assert.ok(meta.srs.seed_1, 'entrada válida continua presente');
+});
+
+test('PROTEÇÃO 079 - Parte A, Teste 3: DATA com seed_1282 nunca chega ao payload gravado no Firestore', async () => {
+  const cloud = makeFakeCloud();
+  const device = makeDevice(cloud, { seed: [] });
+  device.context.isQuarantinedSeedId = (id) => id === 'seed_1282';
+  device.context.DATA = [
+    makeSeedEntry({ id: 'seed_1', name: 'Lesão válida' }),
+    makeSeedEntry({ id: 'seed_1282', name: 'Lixo quarentenado' })
+  ];
+  device.context.lastKnownCloudRevision = 0;
+  const ok = await device.context.writeShardedState(5000);
+  assert.equal(ok, true);
+  const ids = Array.from(cloud.peekChunkItems(0)).map((e) => e.id);
+  assert.ok(!ids.includes('seed_1282'), 'seed_1282 não pode aparecer no chunk gravado na nuvem');
+  assert.ok(ids.includes('seed_1'), 'entrada válida continua presente');
+});
+
+test('PROTEÇÃO 079 - Parte A, Teste 4: REVIEW/SRS remotos contaminados não reintroduzem seed_1282 nos globais via reconcileStateWithRemote', () => {
+  const cloud = makeFakeCloud();
+  const device = makeDevice(cloud, { seed: [] });
+  device.context.isQuarantinedSeedId = (id) => id === 'seed_1282';
+  device.context.DATA = [makeSeedEntry({ id: 'seed_1', name: 'Lesão válida' })];
+  device.context.REVIEW = { seed_1: 1 };
+  device.context.SRS = { seed_1: { interval: 2, due: 1, streak: 1 } };
+  const remote = {
+    data: [makeSeedEntry({ id: 'seed_1', name: 'Lesão válida' })],
+    review: { seed_1: 3, seed_1282: 9 },
+    srs: { seed_1: { interval: 4, due: 2, streak: 2 }, seed_1282: { interval: 9, due: 9, streak: 9 } },
+    sessionLog: {}, sectionOrder: [], siteOrder: {}, tombstones: {}
+  };
+  device.context.reconcileStateWithRemote(remote);
+  assert.equal(Object.prototype.hasOwnProperty.call(device.context.REVIEW, 'seed_1282'), false, 'REVIEW global não pode ter reincorporado seed_1282');
+  assert.equal(Object.prototype.hasOwnProperty.call(device.context.SRS, 'seed_1282'), false, 'SRS global não pode ter reincorporado seed_1282');
+  assert.equal(device.context.REVIEW.seed_1, 3, 'merge legítimo (max-wins de progresso) continua funcionando pro resto');
+});
+
+test('PROTEÇÃO 079 - Parte A, Teste 5a: REVIEW contaminado no IndexedDB não sobrevive ao boot (loadData real)', async () => {
+  const cloud = makeFakeCloud();
+  const device = makeDevice(cloud, { seed: [makeSeedEntry({ id: 'seed_1', name: 'Lesão válida' })] });
+  device.context.isQuarantinedSeedId = (id) => id === 'seed_1282';
+  // Simula um IndexedDB que já tinha seed_1282 salvo em REVIEW de um
+  // incidente anterior (achado real da REV26: DATA limpa, REVIEW nunca
+  // filtrada no load).
+  await device.context.storage.set('review', JSON.stringify({ seed_1: 2, seed_1282: 7 }), false);
+  await device.boot();
+  assert.equal(Object.prototype.hasOwnProperty.call(device.context.REVIEW, 'seed_1282'), false, 'boot não pode manter seed_1282 em REVIEW vindo do IndexedDB');
+  assert.equal(device.context.REVIEW.seed_1, 2, 'entrada válida sobrevive normalmente');
+});
+
+// Contexto isolado só pra loadSRS(): makeDevice() estuba loadSRS() como
+// no-op (não é sobre esse load nos outros cenários), então o Teste 5b
+// precisa da função REAL ligada diretamente.
+function makeLoadSRSContext(rawJson) {
+  const context = vm.createContext({
+    SRS: {},
+    SRS_KEY: 'srs',
+    isQuarantinedSeedId: (id) => id === 'seed_1282',
+    storage: {
+      get: async (key) => {
+        if (key === 'srs') return { value: rawJson };
+        throw new Error('key not found: ' + key);
+      }
+    },
+    console
+  });
+  const engine = `
+    ${quarantineIndexedByLesionIdFn.source}
+    ${loadSRSFn.source}
+  `;
+  new vm.Script(engine).runInContext(context);
+  return context;
+}
+
+test('PROTEÇÃO 079 - Parte A, Teste 5b: SRS contaminado no IndexedDB não sobrevive ao load real (loadSRS)', async () => {
+  const ctx = makeLoadSRSContext(JSON.stringify({ seed_1: { interval: 2, due: 1, streak: 1 }, seed_1282: { interval: 9, due: 9, streak: 9 } }));
+  await ctx.loadSRS();
+  assert.equal(Object.prototype.hasOwnProperty.call(ctx.SRS, 'seed_1282'), false, 'loadSRS() não pode manter seed_1282 vindo do IndexedDB');
+  assert.ok(ctx.SRS.seed_1, 'entrada válida sobrevive normalmente');
+});
+
+test('PROTEÇÃO 079 - Parte B, Teste 6: DATA remoto limpo não é sobrescrito por local stale sem timestamp em links/classification/altPlacements (reprodução REV26)', () => {
+  const cloud = makeFakeCloud();
+  const device = makeDevice(cloud, { seed: [] });
+  const cleanRemoteEntry = {
+    id: 'seed_1', name: 'Lesão 1', s: 'Seção', site: 'Sítio', inc: 1,
+    images: [img({ publicId: 'atlas-radiologico/clean', assetId: 'CLEAN' })],
+    links: ['https://exemplo.com/clean'],
+    classification: 'Correta',
+    altPlacements: ['Sítio B']
+    // sem _userUpdatedAt — exatamente o caso real (nuvem já corrigida, sem edição de editor)
+  };
+  const staleLocalEntry = {
+    id: 'seed_1', name: 'Lesão 1', s: 'Seção', site: 'Sítio', inc: 1,
+    images: [img({ publicId: 'atlas-radiologico/stale', assetId: 'STALE' })],
+    links: ['https://exemplo.com/stale'],
+    classification: 'Desatualizada',
+    altPlacements: []
+    // sem _userUpdatedAt — IndexedDB nunca sincronizado desde o incidente anterior
+  };
+  device.context.DATA = [staleLocalEntry];
+  const remote = { data: [cleanRemoteEntry], review: {}, srs: {}, sessionLog: {}, sectionOrder: [], siteOrder: {}, tombstones: {} };
+  device.context.reconcileStateWithRemote(remote);
+  const merged = device.context.DATA.find((e) => e.id === 'seed_1');
+
+  assert.deepEqual(Array.from(merged.links), ['https://exemplo.com/clean'], 'links stale locais não podem sobrescrever os remotos limpos');
+  assert.equal(merged.classification, 'Correta', 'classification stale local não pode sobrescrever a remota limpa');
+  assert.deepEqual(Array.from(merged.altPlacements), ['Sítio B'], 'altPlacements stale locais não podem sobrescrever os remotos limpos');
+  // Imagens seguem a união ADITIVA pré-existente (ALTERAÇÃO 073/074): nunca
+  // apagar imagem sem tombstone explícito — a imagem stale local é somada,
+  // não perdida. Comportamento intencional e INALTERADO pela 079 (só os
+  // campos escalares acima, sem essa proteção própria, sofriam o bug real).
+  const assetIds = new Set(Array.from(merged.images).map((i) => i.assetId));
+  assert.deepEqual(assetIds, new Set(['CLEAN', 'STALE']), 'união aditiva de imagens continua intacta (fora do escopo do bug de campos escalares)');
+});
+
+test('PROTEÇÃO 079 - Parte B, Teste 7: edição local REAL com _userUpdatedAt mais novo continua preservada no reconcile', () => {
+  const cloud = makeFakeCloud();
+  const device = makeDevice(cloud, { seed: [] });
+  const remoteEntry = {
+    id: 'seed_1', name: 'Lesão 1', s: 'Seção', site: 'Sítio', inc: 1,
+    images: [], links: ['https://exemplo.com/antigo'], classification: 'Antiga',
+    _userUpdatedAt: 1000
+  };
+  const editedLocalEntry = {
+    id: 'seed_1', name: 'Lesão 1', s: 'Seção', site: 'Sítio', inc: 1,
+    images: [], links: ['https://exemplo.com/editado'], classification: 'Editada pelo usuário',
+    _userUpdatedAt: 5000 // mais novo que o remoto — edição real feita no editor
+  };
+  device.context.DATA = [editedLocalEntry];
+  const remote = { data: [remoteEntry], review: {}, srs: {}, sessionLog: {}, sectionOrder: [], siteOrder: {}, tombstones: {} };
+  device.context.reconcileStateWithRemote(remote);
+  const merged = device.context.DATA.find((e) => e.id === 'seed_1');
+  assert.deepEqual(Array.from(merged.links), ['https://exemplo.com/editado'], 'edição local mais nova precisa prevalecer sobre o remoto mais antigo');
+  assert.equal(merged.classification, 'Editada pelo usuário', 'classification editada localmente precisa prevalecer');
+});
+
+test('PROTEÇÃO 079 - Parte C, Teste 8: mutar DATA global depois de chamar writeShardedState() não altera o que é gravado (snapshot síncrono antes do 1º await)', async () => {
+  const cloud = makeFakeCloud();
+  const device = makeDevice(cloud, { seed: [] });
+  device.context.DATA = [makeSeedEntry({ id: 'seed_1', name: 'Antes da mutação' })];
+  device.context.lastKnownCloudRevision = 0;
+  const writePromise = device.context.writeShardedState(5000);
+  // Muta os globais no MESMO tick síncrono, antes de qualquer await real
+  // resolver — simula um pull concorrente ou uma edição mutando DATA entre
+  // a chamada e a confirmação da escrita.
+  device.context.DATA[0].name = 'Mutado depois da chamada';
+  device.context.DATA.push(makeSeedEntry({ id: 'seed_pos_await', name: 'Não pode ser gravado' }));
+  const ok = await writePromise;
+  assert.equal(ok, true);
+  const items = cloud.peekChunkItems(0);
+  assert.equal(items.length, 1, 'a lesão adicionada depois da chamada não pode ter sido incluída na escrita');
+  assert.equal(items[0].name, 'Antes da mutação', 'o snapshot gravado precisa ser o de ANTES da mutação pós-chamada, não o de depois');
+});
+
+test('PROTEÇÃO 079 - Parte D, Teste 9: push sem nenhuma mudança semântica é no-op — revision não incrementa, dirty é limpo mesmo assim', async () => {
+  const cloud = makeFakeCloud();
+  // img/localImg explícitos (mesmos defaults que mergeEntryNonDestructive
+  // sempre grava em qualquer registro que passe por um merge de dois lados):
+  // sem isso, o reconcile-before-push do device B (que SEMPRE roda dentro de
+  // pushToFirebaseNow, mesmo quando o conteúdo é idêntico) acrescentaria
+  // essas duas chaves à sua cópia local e o comparativo estrutural do no-op
+  // nunca bateria com o remoto cru — um artefato do fixture, não do bug real.
+  const seed = [makeSeedEntry({ id: 'seed_1', name: 'Lesão 1', images: [img({ publicId: 'atlas-radiologico/1', assetId: 'A1' })], img: '', localImg: false })];
+  const deviceA = makeDevice(cloud, { seed });
+  await deviceA.markDirty();
+  await deviceA.boot(); // publica revision 1
+  const revisionAfterFirstPush = cloud.peekRevision();
+  assert.equal(revisionAfterFirstPush, 1);
+
+  // Device B: mesmo conteúdo EXATO já publicado na nuvem, montado direto
+  // (sem passar por boot()/pull).
+  const deviceB = makeDevice(cloud, { seed: [] });
+  deviceB.context.DATA = JSON.parse(JSON.stringify(seed));
+  deviceB.context.lastKnownCloudRevision = revisionAfterFirstPush;
+  deviceB.context.appStateReady = true;
+  // Simula "algo marcou dirty sem mudança semântica real" (ex.: uma migração
+  // idempotente de boot) — o cenário exato dos episódios de no-op das
+  // revisões 22/24 que a Parte D existe pra evitar.
+  await deviceB.markDirty();
+  await deviceB.context.pushToFirebaseNow();
+
+  assert.equal(cloud.peekRevision(), revisionAfterFirstPush, 'revision não pode ter incrementado — nenhuma mudança semântica real pra publicar');
+  assert.equal(deviceB.context.syncDirty, false, 'syncDirty precisa ser limpo mesmo no caminho no-op');
+  assert.equal(deviceB.context.syncPushPending, false, 'no-op conta como sucesso, não como pendência');
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');
