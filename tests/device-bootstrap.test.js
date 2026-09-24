@@ -53,6 +53,9 @@ function extractFunction(source, name) {
 }
 const loadDataFn = extractFunction(html, 'loadData');
 const writeShardedStateFn = extractFunction(html, 'writeShardedState');
+// ALTERAÇÃO 079b — writeShardedState() agora consome pendingWriteImageExclusionsById
+// e chama imageIdentityKeys() ao montar o payload.
+const imageIdentityKeysFn079b = extractFunction(html, 'imageIdentityKeys');
 const syncThisDeviceToCloudFn = extractFunction(html, 'syncThisDeviceToCloud');
 const mergeThisDeviceImagesToCloudFn = extractFunction(html, 'mergeThisDeviceImagesToCloud');
 const checkCloudFn = extractFunction(html, 'checkCloudForBootstrapV1');
@@ -183,13 +186,19 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
     // ALTERAÇÃO 079 (Parte A) — writeShardedState() agora filtra DATA/REVIEW/SRS
     // pela quarentena diretamente; nenhum id de teste é quarentenado por padrão.
     isQuarantinedSeedId: (id) => false,
-    quarantineIndexedByLesionId: (obj) => (obj && typeof obj === 'object') ? obj : {}
+    quarantineIndexedByLesionId: (obj) => (obj && typeof obj === 'object') ? obj : {},
+    // ALTERAÇÃO 079b — mesma variável real (declarada fora de qualquer
+    // função no index.html); nenhum teste deste arquivo simula um reconcile
+    // prévio, então fica null (sem exclusão) por padrão, igual ao caminho
+    // real de syncThisDeviceToCloud/forceThisDeviceToCloud.
+    pendingWriteImageExclusionsById: null
   };
   vm.createContext(ctx);
   vm.runInContext(
     'function stripUndefinedDeep(v){try{return JSON.parse(JSON.stringify(v));}catch(_e){return v;}}\n' +
     'function splitIntoChunks(arr,size){const out=[];for(let i=0;i<arr.length;i+=size)out.push(arr.slice(i,i+size));return out;}\n' +
     'function checkChunkSize(){return true;}\n' +
+    imageIdentityKeysFn079b.source + '\n' +
     writeShardedStateFn.source,
     ctx, { filename: 'write-sharded-state.js' }
   );

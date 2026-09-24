@@ -1816,6 +1816,23 @@ function writeShardedStateSerialized(ms=15000){
 // propósito: preserva a assinatura da função sem parênteses novos, que
 // testes existentes localizam procurando o texto exato da declaração.
 let syncFromFirebaseSkipTrailingPush = false;
+// ALTERAÇÃO 079b (2026-09-24) — achado real (rev26): 57 das 146 divergências
+// canônicas eram imagem só-local, sem NENHUMA evidência de edição, unida de
+// volta a um remoto já corrigido (a correção original removeu essas imagens
+// fora do app, sem tombstone). reconcileStateWithRemote() detecta esse caso
+// (ver mergeEntryNonDestructive) e grava aqui, como efeito colateral, quais
+// chaves de imagem por lesão NÃO podem viajar na PRÓXIMA escrita — nunca
+// remove a imagem da cópia local (ALTERAÇÃO 073 — ausência sem tombstone
+// nunca apaga localmente — continua intacta). writeShardedState() consome
+// (lê e zera) esta variável ao montar o payload; qualquer escrita que não
+// passe por um reconcile fresco antes (a maioria dos casos reais — ver
+// pushToFirebase/Now e o retry de conflito dentro de
+// writeShardedStateWithConflictRetry, que chama syncFromFirebase, que
+// também reconcilia) simplesmente não filtra nada, igual a antes. Mesmo
+// padrão de variável-em-vez-de-parâmetro já usado por
+// syncFromFirebaseSkipTrailingPush acima (preserva as assinaturas que
+// testes localizam pelo texto exato).
+let pendingWriteImageExclusionsById = null;
 /* ALTERAÇÃO 070 — trata o sinal de CONFLITO DE REVISÃO (ver writeShardedState):
    reconcilia com a nuvem (mesmo merge não destrutivo de sempre, sem push
    próprio) e tenta escrever UMA vez mais, já com o estado mesclado. Nunca
@@ -1998,7 +2015,22 @@ async function writeShardedState(ms=15000){
   // (pushToFirebase/Now, syncThisDeviceToCloud, forceThisDeviceToCloud) —
   // filtrar aqui garante a invariante mesmo que algum gap upstream ainda
   // não descoberto exista.
-  const cleanData = stripUndefinedDeep(DATA.filter(e => e && !isQuarantinedSeedId(e.id)));
+  // ALTERAÇÃO 079b — consome (lê e zera) o mapa de "imagem só-local sem
+  // evidência" deixado pelo reconcile mais recente (ver declaração de
+  // pendingWriteImageExclusionsById): a cópia local em DATA continua com a
+  // imagem (073 preservado), só o que sai daqui pra nuvem é que a exclui.
+  // Zera IMEDIATAMENTE — nunca pode vazar pra uma escrita futura não
+  // precedida por um reconcile fresco (ex.: syncThisDeviceToCloud/
+  // forceThisDeviceToCloud, que não passam por reconcileBeforePush).
+  const imageExclusionsById = pendingWriteImageExclusionsById;
+  pendingWriteImageExclusionsById = null;
+  const cleanData = stripUndefinedDeep(DATA.filter(e => e && !isQuarantinedSeedId(e.id)).map(e=>{
+    const excludeKeys = imageExclusionsById && imageExclusionsById[e.id];
+    if(!excludeKeys || !excludeKeys.length || !Array.isArray(e.images) || !e.images.length) return e;
+    const excludeSet = new Set(excludeKeys);
+    const filteredImages = e.images.filter(im=>!imageIdentityKeys(im).some(k=>excludeSet.has(k)));
+    return filteredImages.length === e.images.length ? e : { ...e, images: filteredImages };
+  }));
   const chunks = splitIntoChunks(cleanData, DATA_CHUNK_SIZE);
   for(let i=0;i<chunks.length;i++){
     if(!checkChunkSize(chunks[i], `pedaço ${i+1}/${chunks.length}`)){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
@@ -3739,6 +3771,35 @@ function mergeEntryNonDestructive(localEntry, remoteEntry, legacyCatalog, tombst
   // 072b: imagem remota com etiqueta legada segura é normalizada (só o
   // lesionId) e adotada normalmente; conflito real continua bloqueado.
   merged.images = unionEntryImages(local.images, remote.images, merged, PULL_IMAGE_OWNERSHIP_CONFLICTS, 'pull', pullCatalog);
+  // ALTERAÇÃO 079b — achado real (rev26): 57 das 146 divergências eram
+  // imagem só-local sendo unida de volta a um remoto já corrigido, sem
+  // NENHUMA evidência de edição (lt===0 && rt===0 — entradas herdadas do
+  // SEED, nunca passadas pelo Salvar/atalho do Quiz, os únicos dois lugares
+  // que gravam _userUpdatedAt ao mexer em imagens). A correção canônica que
+  // limpou essas imagens foi feita fora do app (sem tombstone), então a
+  // união cega as ressuscitava NA NUVEM.
+  // IMPORTANTE (decisão explícita): isto NÃO remove a imagem da própria
+  // cópia local (merged.images acima continua com a união completa — a
+  // ALTERAÇÃO 073 garante que ausência sem tombstone nunca apaga
+  // localmente, e essa garantia continua valendo integralmente aqui). Só
+  // marca, num campo transitório (nunca persistido — ver reconcileStateWithRemote
+  // e writeShardedState), QUAIS chaves de imagem só-local-sem-evidência não
+  // podem viajar no PRÓXIMO envio à nuvem. Imagem só-REMOTA nunca entra
+  // aqui (sempre segura). Só quando preferRemoteWhenUntimed=true
+  // (reconcileStateWithRemote); os outros 3 chamadores nem geram o campo.
+  if(remoteWinsUntimed){
+    const remoteImageKeys = new Set();
+    for(const im of (Array.isArray(remote.images)?remote.images:[])){
+      if(!im) continue;
+      imageIdentityKeys(im).forEach(k=>remoteImageKeys.add(k));
+    }
+    const untimedLocalOnlyKeys = [];
+    for(const im of merged.images){
+      const keys = imageIdentityKeys(im);
+      if(!keys.some(k=>remoteImageKeys.has(k))) untimedLocalOnlyKeys.push(...keys);
+    }
+    if(untimedLocalOnlyKeys.length) merged.__untimedLocalOnlyImageKeys = untimedLocalOnlyKeys;
+  }
   // v246: aqui só remove duplicata exata de imagem (mesma imagem aparecendo
   // duas vezes na lista) — NUNCA rejeita uma imagem por a etiqueta interna
   // (lesionId) não bater com o id atual. Essa checagem de posse era feita
@@ -3962,6 +4023,26 @@ function reconcileStateWithRemote(remote){
     if(!present.has(canonical.id)) reconciled.push(JSON.parse(JSON.stringify(canonical)));
   }
 
+  // ALTERAÇÃO 079b — coleta os hints transitórios de "imagem só-local sem
+  // evidência" (ver mergeEntryNonDestructive acima) num mapa à parte e
+  // REMOVE o campo de cada registro antes de virar DATA: ele nunca pode ser
+  // persistido (não é um campo real da lesão, só uma instrução de UMA
+  // escrita). Quem decide o que fazer com o mapa é reconcileBeforePush().
+  const untimedLocalOnlyImageKeysById = {};
+  for(const e of reconciled){
+    if(e && e.__untimedLocalOnlyImageKeys){
+      untimedLocalOnlyImageKeysById[e.id] = e.__untimedLocalOnlyImageKeys;
+      delete e.__untimedLocalOnlyImageKeys;
+    }
+  }
+  // ALTERAÇÃO 079b — efeito colateral proposital (ver declaração de
+  // pendingWriteImageExclusionsById): todo reconcile (pull OU pre-push)
+  // atualiza a MESMA variável compartilhada que writeShardedState() consome
+  // antes de escrever — garante que mesmo o retry de conflito (que chama
+  // syncFromFirebase, não reconcileBeforePush, antes de tentar de novo)
+  // continua protegido.
+  pendingWriteImageExclusionsById = Object.keys(untimedLocalOnlyImageKeysById).length ? untimedLocalOnlyImageKeysById : null;
+
   DATA = reconciled.filter(Boolean);
   REVIEW = mergeReviewPreservingProgress(REVIEW, remote && remote.review);
   SRS = mergeSRSPreservingNewest(SRS, remote && remote.srs);
@@ -3979,7 +4060,7 @@ function reconcileStateWithRemote(remote){
   }
 
   const preservedCloudOnly = countRemoteOnlyAdopted(localData, remoteData, DATA);
-  return { preservedCloudOnly };
+  return { preservedCloudOnly, untimedLocalOnlyImageKeysById };
 }
 async function persistLocalStateNow(){
   try{ await storage.set(STORAGE_KEY, JSON.stringify(DATA), false); }catch(_e){}

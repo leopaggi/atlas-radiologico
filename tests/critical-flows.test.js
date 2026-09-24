@@ -466,10 +466,17 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // reconcileBeforePush() — tudo antes da primeira ancora, deslocamento
   // quase uniforme (a diferenca de +1 em importHandler ja existia antes,
   // ver "+10 a mais so em importHandler" na Alteracao 076 acima).
-  assert.equal(recovery.line, 7528);
-  assert.equal(brokenArtifacts.line, 7518);
-  assert.equal(loadData.line, 10075);
-  assert.equal(importHandler.line, 13731);
+  // +81 nas quatro ancoras (Alteracao 079b, 2026-09-24, versao final):
+  // pendingWriteImageExclusionsById (variavel compartilhada, mesmo padrao de
+  // syncFromFirebaseSkipTrailingPush) + hint transitorio em
+  // mergeEntryNonDestructive() + coleta em reconcileStateWithRemote() +
+  // consumo em writeShardedState() — protege só o que é ENVIADO a nuvem,
+  // nunca a copia local (Alteracao 073 preservada) — antes da primeira
+  // ancora, deslocamento uniforme.
+  assert.equal(recovery.line, 7609);
+  assert.equal(brokenArtifacts.line, 7599);
+  assert.equal(loadData.line, 10156);
+  assert.equal(importHandler.line, 13812);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

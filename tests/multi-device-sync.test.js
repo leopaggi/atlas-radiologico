@@ -350,6 +350,10 @@ function makeDevice(cloud, { seed = [] } = {}) {
     ${sweepTombFn.source}
     let lastPrePushReconcileAt = null;
     let lastPrePushPreserved = 0;
+    // ALTERAÇÃO 079b — mesma variável compartilhada real (declarada fora de
+    // qualquer função no index.html); reconcileStateWithRemote() grava,
+    // writeShardedState() consome e zera.
+    let pendingWriteImageExclusionsById = null;
     ${countAdoptedFn.source}
     ${reconcileCoreFn.source}
     ${persistLocalFn.source}
@@ -452,8 +456,12 @@ test('CENARIO A: PC B (local desatualizado) abre e recebe automaticamente as ima
   const publicIdsB = new Set(entryB.images.map(i => i.publicId));
   assert.deepEqual(publicIdsB, new Set(['atlas-radiologico/1', 'atlas-radiologico/2', 'atlas-radiologico/3']));
 
-  // PC B adiciona uma 4ª imagem (simula upload novo) e salva — precisa subir pra nuvem.
+  // PC B adiciona uma 4ª imagem (simula upload novo) e salva — precisa subir
+  // pra nuvem. _userUpdatedAt: mesmo carimbo que addImageToLesionData()/o
+  // Salvar do editor sempre gravam numa adição real (ALTERAÇÃO 079b) — sem
+  // ele, o reconcile-before-push trataria como stale sem evidência.
   entryB.images.push(img({ publicId: 'atlas-radiologico/4', assetId: 'A4' }));
+  entryB._userUpdatedAt = Date.now();
   await deviceB.save();
 
   // PC A reabre (2º boot, storage local de A ainda só tem 3 imagens) —
@@ -476,7 +484,11 @@ test('CENARIO B: divergência cruzada (cada lado tem uma imagem exclusiva) resul
 
   // PC B (já inicializado) tem uma imagem LOCAL exclusiva (Y), que a nuvem
   // não conhece — mesmo raciocínio: markDirty() simula a edição real de Y.
-  const seedB = [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' })] })];
+  // _userUpdatedAt: ALTERAÇÃO 079b — markDirty() sozinho não é mais
+  // evidência suficiente de edição por lesão (é um flag de dispositivo
+  // inteiro); a imagem só-local precisa do MESMO carimbo que uma adição
+  // real via editor/Quiz sempre grava, ou o reconcile a trataria como stale.
+  const seedB = [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' })], _userUpdatedAt: Date.now() })];
   const deviceB = makeDevice(cloud, { seed: seedB });
   await deviceB.markDirty();
   await deviceB.boot();
@@ -529,6 +541,7 @@ test('CONCORRÊNCIA: edição local DURANTE a reconciliação (pull em andamento
   // real de qualquer edição (saveData -> pushToFirebaseNow).
   const entryDuringPull = deviceB.context.DATA.find((e) => e.id === 'seed_1');
   entryDuringPull.images.push(img({ publicId: 'atlas-radiologico/new-from-b', assetId: 'NEWB' }));
+  entryDuringPull._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
   await deviceB.save();
 
   // O push desta edição precisa ter sido BLOQUEADO (nunca perdido em
@@ -616,7 +629,11 @@ test('REVISÃO: dois dispositivos sincronizados, B publica primeiro, A com revis
   deviceB.context.DATA = JSON.parse(JSON.stringify(seedInicial));
 
   // B edita e salva primeiro (equivalente a "B publica revision 11").
-  deviceB.context.DATA.find((e) => e.id === 'seed_1').images.push(img({ publicId: 'atlas-radiologico/from-b', assetId: 'FROMB' }));
+  // _userUpdatedAt: ALTERAÇÃO 079b — mesmo carimbo que uma adição real via
+  // editor/Quiz sempre grava.
+  const entryB0 = deviceB.context.DATA.find((e) => e.id === 'seed_1');
+  entryB0.images.push(img({ publicId: 'atlas-radiologico/from-b', assetId: 'FROMB' }));
+  entryB0._userUpdatedAt = Date.now();
   await deviceB.save();
   const revisionAposB = cloud.peekRevision();
   assert.ok(revisionAposB > revisionCompartilhada, 'B precisa ter avançado a nuvem para uma revisão mais nova');
@@ -641,7 +658,9 @@ test('REVISÃO: dois dispositivos sincronizados, B publica primeiro, A com revis
   // edita algo próprio e salva; mesmo com a revisão desatualizada, o Atlas
   // reconcilia (pull da edição de B + merge com a edição de A) e tenta de
   // novo — "retry seguro -> revision mais nova ainda".
-  deviceA.context.DATA.find((e) => e.id === 'seed_1').images.push(img({ publicId: 'atlas-radiologico/from-a', assetId: 'FROMA' }));
+  const entryA0 = deviceA.context.DATA.find((e) => e.id === 'seed_1');
+  entryA0.images.push(img({ publicId: 'atlas-radiologico/from-a', assetId: 'FROMA' }));
+  entryA0._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
   await deviceA.save();
 
   assert.ok(cloud.peekRevision() > revisionAposB, 'o retry precisa ter avançado a nuvem mais uma vez, com o estado já mesclado');
@@ -803,7 +822,9 @@ test('BOOT COM ALTERAÇÃO LOCAL EXCLUSIVA: PC stale com 1 imagem própria (edi�
   // (chama saveData() real, que marca dirty e publica). É isto, não o
   // conteúdo já vir "de fábrica" no catálogo, que ALTERAÇÃO 072 exige para
   // considerar uma publicação necessária.
-  deviceStale.context.DATA.find((e) => e.id === 'seed_1').images.push(img({ publicId: 'atlas-radiologico/exclusiva-local', assetId: 'EXCLUSIVA' }));
+  const entryComEdicao = deviceStale.context.DATA.find((e) => e.id === 'seed_1');
+  entryComEdicao.images.push(img({ publicId: 'atlas-radiologico/exclusiva-local', assetId: 'EXCLUSIVA' }));
+  entryComEdicao._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
   await deviceStale.save();
 
   const entryStale = deviceStale.context.DATA.find((e) => e.id === 'seed_1');
@@ -869,7 +890,9 @@ test('DIRTY SOBREVIVE A RELOAD: edição real feita offline continua marcada ap�
   const device = makeDevice(cloud, { seed: JSON.parse(JSON.stringify(seedInicial)) });
   await device.boot();
   device.context.fbDb = null; // offline
-  device.context.DATA.find((e) => e.id === 'seed_1').images.push(img({ publicId: 'atlas-radiologico/offline-edit', assetId: 'OFFLINE' }));
+  const entryOffline = device.context.DATA.find((e) => e.id === 'seed_1');
+  entryOffline.images.push(img({ publicId: 'atlas-radiologico/offline-edit', assetId: 'OFFLINE' }));
+  entryOffline._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
   await device.save(); // saveData() real: marca dirty, tenta publicar (falha por estar offline)
 
   assert.equal(device.context.syncDirty, true, 'a edição real precisa continuar marcada como dirty enquanto não for confirmada na nuvem');
@@ -1455,7 +1478,9 @@ test('073 CONCORRÊNCIA: A exclui X enquanto B adiciona Y — X continua excluí
   // B, ainda com a revisão antiga, adiciona Y e salva: a escrita direta
   // seria recusada pela barreira de revisão; o retry reconcilia (puxa o
   // tombstone, remove X, mantém Y) e só então escreve a união.
-  deviceB.context.DATA.find((e) => e.id === 'seed_1').images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
+  const entryB1 = deviceB.context.DATA.find((e) => e.id === 'seed_1');
+  entryB1.images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
+  entryB1._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
   await deviceB.save();
 
   assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(['Y']), 'B: X fora, Y dentro');
@@ -1804,7 +1829,9 @@ test('073b ADICIONAL 5: concorrência — A remove X de lesionA, B adiciona Y em
   await explicitDelete(deviceA, 'seed_1', (i) => i.assetId === 'X');
   await deviceA.save();
 
-  deviceB.context.DATA.find((e) => e.id === 'seed_2').images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
+  const entryB2 = deviceB.context.DATA.find((e) => e.id === 'seed_2');
+  entryB2.images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
+  entryB2._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
   await deviceB.save();
 
   assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(), 'X removida em B');
@@ -1922,6 +1949,7 @@ test('074 MESMA REVISION, LOCAL INCOMPLETO: preflight detecta cloud-only e prese
   // B edita outra coisa (Y) e salva — sem preflight, o write levaria [K,Y]
   // e a nuvem PERDERIA X mesmo com revisão válida.
   entryB.images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
+  entryB._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
   await deviceB.save();
 
   assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(['K', 'X', 'Y']), 'preflight re-adotou X + manteve Y');
@@ -1938,7 +1966,9 @@ test('074 OFFLINE EDIT: sem rede salva local + dirty, sem reconcile; reconnect r
   const device = makeDevice(cloud, { seed: [makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/X', assetId: 'X' })] })] });
   await device.boot();
   device.context.fbDb = null; // offline
-  device.context.DATA.find((e) => e.id === 'seed_1').images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
+  const entryOfflineEdit = device.context.DATA.find((e) => e.id === 'seed_1');
+  entryOfflineEdit.images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
+  entryOfflineEdit._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
   await device.save();
   assert.equal(device.context.syncDirty, true, 'dirty persiste offline');
   assert.equal(cloud.peekRevision(), revBase, 'nada escrito offline');
@@ -1982,13 +2012,17 @@ test('074 CONCORRÊNCIA: stale salva após outro push — preflight evita o conf
   await deviceB.boot();
 
   // A adiciona N1 e publica (revisão avança).
-  deviceA.context.DATA.find((e) => e.id === 'seed_1').images.push(img({ publicId: 'atlas-radiologico/N1', assetId: 'N1' }));
+  const entryA1 = deviceA.context.DATA.find((e) => e.id === 'seed_1');
+  entryA1.images.push(img({ publicId: 'atlas-radiologico/N1', assetId: 'N1' }));
+  entryA1._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
   await deviceA.save();
   const revAfterA = cloud.peekRevision();
 
   // B, com revisão antiga, adiciona N2 e salva: o preflight relê (vê N1),
   // mescla e escreve a união — sem conflito de revisão sequer.
-  deviceB.context.DATA.find((e) => e.id === 'seed_1').images.push(img({ publicId: 'atlas-radiologico/N2', assetId: 'N2' }));
+  const entryB1 = deviceB.context.DATA.find((e) => e.id === 'seed_1');
+  entryB1.images.push(img({ publicId: 'atlas-radiologico/N2', assetId: 'N2' }));
+  entryB1._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
   await deviceB.save();
 
   assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(['M', 'N1', 'N2']), 'união completa em B');
@@ -2611,7 +2645,7 @@ test('PROTEÇÃO 079 - Parte A, Teste 5b: SRS contaminado no IndexedDB não sobr
   assert.ok(ctx.SRS.seed_1, 'entrada válida sobrevive normalmente');
 });
 
-test('PROTEÇÃO 079 - Parte B, Teste 6: DATA remoto limpo não é sobrescrito por local stale sem timestamp em links/classification/altPlacements (reprodução REV26)', () => {
+test('PROTEÇÃO 079 - Parte B, Teste 6: DATA remoto limpo não é sobrescrito por local stale sem timestamp em images/links/classification/altPlacements (reprodução REV26)', () => {
   const cloud = makeFakeCloud();
   const device = makeDevice(cloud, { seed: [] });
   const cleanRemoteEntry = {
@@ -2638,12 +2672,154 @@ test('PROTEÇÃO 079 - Parte B, Teste 6: DATA remoto limpo não é sobrescrito p
   assert.deepEqual(Array.from(merged.links), ['https://exemplo.com/clean'], 'links stale locais não podem sobrescrever os remotos limpos');
   assert.equal(merged.classification, 'Correta', 'classification stale local não pode sobrescrever a remota limpa');
   assert.deepEqual(Array.from(merged.altPlacements), ['Sítio B'], 'altPlacements stale locais não podem sobrescrever os remotos limpos');
-  // Imagens seguem a união ADITIVA pré-existente (ALTERAÇÃO 073/074): nunca
-  // apagar imagem sem tombstone explícito — a imagem stale local é somada,
-  // não perdida. Comportamento intencional e INALTERADO pela 079 (só os
-  // campos escalares acima, sem essa proteção própria, sofriam o bug real).
+  // ALTERAÇÃO 079b (decisão explícita) — imagens NÃO seguem a mesma regra
+  // dos escalares acima: a união aditiva pré-existente (ALTERAÇÃO 073 —
+  // ausência sem tombstone nunca apaga localmente) continua intacta na
+  // CÓPIA LOCAL. A proteção contra a imagem stale (57 das 146 divergências
+  // da REV26) atua só no que é ENVIADO à nuvem — ver Teste 6c abaixo.
   const assetIds = new Set(Array.from(merged.images).map((i) => i.assetId));
-  assert.deepEqual(assetIds, new Set(['CLEAN', 'STALE']), 'união aditiva de imagens continua intacta (fora do escopo do bug de campos escalares)');
+  assert.deepEqual(assetIds, new Set(['CLEAN', 'STALE']), 'cópia local mantém a união completa (073 preservado)');
+});
+
+test('PROTEÇÃO 079b - Teste 6c: imagem stale só-local sem evidência não é ENVIADA à nuvem (mas continua na cópia local — 073 preservado)', async () => {
+  const cloud = makeFakeCloud();
+  const device = makeDevice(cloud, { seed: [] });
+  const cleanRemoteEntry = {
+    id: 'seed_1', name: 'Lesão 1', s: 'Seção', site: 'Sítio', inc: 1,
+    images: [img({ publicId: 'atlas-radiologico/clean', assetId: 'CLEAN' })]
+  };
+  const staleLocalEntry = {
+    id: 'seed_1', name: 'Lesão 1', s: 'Seção', site: 'Sítio', inc: 1,
+    images: [img({ publicId: 'atlas-radiologico/stale', assetId: 'STALE' })]
+  };
+  device.context.DATA = [staleLocalEntry];
+  const remote = { data: [cleanRemoteEntry], review: {}, srs: {}, sessionLog: {}, sectionOrder: [], siteOrder: {}, tombstones: {} };
+  device.context.reconcileStateWithRemote(remote);
+  const merged = device.context.DATA.find((e) => e.id === 'seed_1');
+  const localAssetIds = new Set(Array.from(merged.images).map((i) => i.assetId));
+  assert.deepEqual(localAssetIds, new Set(['CLEAN', 'STALE']), 'cópia local mantém a união completa (073 preservado)');
+
+  device.context.lastKnownCloudRevision = 0;
+  const ok = await device.context.writeShardedState(5000);
+  assert.equal(ok, true);
+  const pushedItems = Array.from(cloud.peekChunkItems(0));
+  const pushedEntry = pushedItems.find((e) => e.id === 'seed_1');
+  const pushedAssetIds = new Set((pushedEntry.images || []).map((i) => i.assetId));
+  assert.deepEqual(pushedAssetIds, new Set(['CLEAN']), 'imagem stale só-local não pode ser enviada à nuvem sem evidência de edição');
+});
+
+test('PROTEÇÃO 079b - Teste 6d: imagem REALMENTE adicionada localmente (com _userUpdatedAt) continua no push — A+B preservados', async () => {
+  const cloud = makeFakeCloud();
+  const device = makeDevice(cloud, { seed: [] });
+  const cleanRemoteEntry = {
+    id: 'seed_1', name: 'Lesão 1', s: 'Seção', site: 'Sítio', inc: 1,
+    images: [img({ publicId: 'atlas-radiologico/A', assetId: 'A' })]
+  };
+  const localEntryComEdicaoReal = {
+    id: 'seed_1', name: 'Lesão 1', s: 'Seção', site: 'Sítio', inc: 1,
+    images: [img({ publicId: 'atlas-radiologico/A', assetId: 'A' }), img({ publicId: 'atlas-radiologico/B', assetId: 'B' })],
+    _userUpdatedAt: Date.now() // evidência real: usuário adicionou B via editor/Quiz
+  };
+  device.context.DATA = [localEntryComEdicaoReal];
+  const remote = { data: [cleanRemoteEntry], review: {}, srs: {}, sessionLog: {}, sectionOrder: [], siteOrder: {}, tombstones: {} };
+  device.context.reconcileStateWithRemote(remote);
+  const merged = device.context.DATA.find((e) => e.id === 'seed_1');
+  assert.deepEqual(new Set(Array.from(merged.images).map((i) => i.assetId)), new Set(['A', 'B']), 'cópia local com A+B');
+
+  device.context.lastKnownCloudRevision = 0;
+  const ok = await device.context.writeShardedState(5000);
+  assert.equal(ok, true);
+  const pushedEntry = Array.from(cloud.peekChunkItems(0)).find((e) => e.id === 'seed_1');
+  const pushedIds = new Set((pushedEntry.images || []).map((i) => i.assetId));
+  assert.deepEqual(pushedIds, new Set(['A', 'B']), 'B com evidência de edição real precisa ser enviado junto com A');
+});
+
+test('PROTEÇÃO 079b - Teste 6e: imagem tombstonada LOCALMENTE jamais ressuscita, mesmo sem evidência de edição em nenhum lado', async () => {
+  const cloud = makeFakeCloud();
+  const device = makeDevice(cloud, { seed: [makeSeedEntry({ id: 'seed_1', images: [img({ publicId: 'atlas-radiologico/A', assetId: 'A' }), img({ publicId: 'atlas-radiologico/B', assetId: 'B' })] })] });
+  await device.boot();
+  // Tombstone REAL, gerado pela função real (explicitDelete usa
+  // recordImageTombstone internamente — precisa ser assim, não um objeto
+  // atribuído de fora, porque IMAGE_TOMBSTONES é um `let` interno ao motor
+  // vm deste teste, desacoplado da propriedade externa do contexto).
+  await explicitDelete(device, 'seed_1', (i) => i.assetId === 'B');
+
+  // B "stale" reaparece localmente (ex.: snapshot antigo restaurado) — sem
+  // NENHUMA evidência de edição em nenhum lado.
+  const entry = device.context.DATA.find((e) => e.id === 'seed_1');
+  entry.images.push(img({ publicId: 'atlas-radiologico/B', assetId: 'B' }));
+
+  const remote = {
+    data: [{ id: 'seed_1', name: entry.name, s: entry.s, site: entry.site, images: [img({ publicId: 'atlas-radiologico/A', assetId: 'A' })] }],
+    review: {}, srs: {}, sessionLog: {}, sectionOrder: [], siteOrder: {}, tombstones: {}
+  };
+  device.context.reconcileStateWithRemote(remote);
+  const merged = device.context.DATA.find((e) => e.id === 'seed_1');
+  const ids = new Set(Array.from(merged.images).map((i) => i.assetId));
+  assert.deepEqual(ids, new Set(['A']), 'B tombstonada localmente não pode ressuscitar nem na cópia local');
+});
+
+test('PROTEÇÃO 079b - Teste 6f: tombstone vindo só do REMOTO também impede que imagem local stale seja reincorporada', () => {
+  const cloud = makeFakeCloud();
+  const device = makeDevice(cloud, { seed: [] });
+  const localEntry = {
+    id: 'seed_1', name: 'Lesão 1', s: 'Seção', site: 'Sítio', inc: 1,
+    images: [img({ publicId: 'atlas-radiologico/A', assetId: 'A' }), img({ publicId: 'atlas-radiologico/B', assetId: 'B' })]
+  };
+  device.context.DATA = [localEntry];
+  const remote = {
+    data: [{ id: 'seed_1', name: 'Lesão 1', s: 'Seção', site: 'Sítio', inc: 1, images: [img({ publicId: 'atlas-radiologico/A', assetId: 'A' })] }],
+    review: {}, srs: {}, sessionLog: {}, sectionOrder: [], siteOrder: {},
+    // tombstone só no lado remoto — nunca registrado neste device (outro
+    // dispositivo excluiu B explicitamente e publicou o tombstone).
+    tombstones: { 'seed_1asset:B': { key: 'asset:B', lesionId: 'seed_1', deletedAt: new Date().toISOString() } }
+  };
+  device.context.reconcileStateWithRemote(remote);
+  const merged = device.context.DATA.find((e) => e.id === 'seed_1');
+  const ids = new Set(Array.from(merged.images).map((i) => i.assetId));
+  assert.deepEqual(ids, new Set(['A']), 'tombstone remoto precisa impedir B mesmo vindo do local sem registro próprio');
+});
+
+test('PROTEÇÃO 079b - Teste 6g: metadados de uma imagem presente nos dois lados não são destruídos pelo filtro de evidência', () => {
+  const cloud = makeFakeCloud();
+  const device = makeDevice(cloud, { seed: [] });
+  const sharedImg = img({ publicId: 'atlas-radiologico/A', assetId: 'A', label: 'RM T2', assignedAt: '2026-01-01T00:00:00.000Z' });
+  const localEntry = {
+    id: 'seed_1', name: 'Lesão 1', s: 'Seção', site: 'Sítio', inc: 1,
+    images: [{ ...sharedImg }]
+  };
+  const remoteEntry = {
+    id: 'seed_1', name: 'Lesão 1', s: 'Seção', site: 'Sítio', inc: 1,
+    images: [{ ...sharedImg }]
+  };
+  device.context.DATA = [localEntry];
+  const remote = { data: [remoteEntry], review: {}, srs: {}, sessionLog: {}, sectionOrder: [], siteOrder: {}, tombstones: {} };
+  device.context.reconcileStateWithRemote(remote);
+  const merged = device.context.DATA.find((e) => e.id === 'seed_1');
+  assert.equal(merged.images.length, 1, 'imagem presente nos dois lados não pode duplicar');
+  assert.equal(merged.images[0].label, 'RM T2', 'label não pode ser perdido');
+  assert.equal(merged.images[0].assignedAt, '2026-01-01T00:00:00.000Z', 'assignedAt não pode ser perdido');
+});
+
+test('PROTEÇÃO 079b - Teste 6b: imagem só-REMOTA continua sempre incorporada no reconcile untimed (nunca perde o que já está confirmado na nuvem)', () => {
+  const cloud = makeFakeCloud();
+  const device = makeDevice(cloud, { seed: [] });
+  const remoteEntry = {
+    id: 'seed_1', name: 'Lesão 1', s: 'Seção', site: 'Sítio', inc: 1,
+    images: [img({ publicId: 'atlas-radiologico/so-remoto', assetId: 'REMOTO' })]
+    // sem _userUpdatedAt — mesmo caso untimed do Teste 6, só que agora a
+    // imagem exclusiva está do lado REMOTO, não do local.
+  };
+  const localEntry = {
+    id: 'seed_1', name: 'Lesão 1', s: 'Seção', site: 'Sítio', inc: 1,
+    images: []
+  };
+  device.context.DATA = [localEntry];
+  const remote = { data: [remoteEntry], review: {}, srs: {}, sessionLog: {}, sectionOrder: [], siteOrder: {}, tombstones: {} };
+  device.context.reconcileStateWithRemote(remote);
+  const merged = device.context.DATA.find((e) => e.id === 'seed_1');
+  const assetIds = new Set(Array.from(merged.images).map((i) => i.assetId));
+  assert.deepEqual(assetIds, new Set(['REMOTO']), 'imagem só-remota precisa ser incorporada mesmo sem nenhuma evidência de edição dos dois lados');
 });
 
 test('PROTEÇÃO 079 - Parte B, Teste 7: edição local REAL com _userUpdatedAt mais novo continua preservada no reconcile', () => {
