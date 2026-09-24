@@ -74,6 +74,14 @@ const adoptOldestFn = extractFunction(html, 'adoptOldestAssignedAt');
 const unionClinicalCasesFn = extractFunction(html, 'unionClinicalCases');
 const clinicalCaseIdentityKeyFn = extractFunction(html, 'clinicalCaseIdentityKey');
 const normalizeExternalTitleFn = extractFunction(html, 'normalizeExternalTitle');
+// ALTERAÇÃO 078 (2026-09-24): "carregar da nuvem" em device novo agora adota
+// 1:1, sem passar por mergeEntryNonDestructive/syncFromFirebase.
+const adoptRemoteFn = extractFunction(html, 'adoptRemoteStateForNewDevice');
+const readShardedStateFn = extractFunction(html, 'readShardedState');
+const normalizeTombstoneMapFn = extractFunction(html, 'normalizeTombstoneMap');
+const isValidTombFn2 = extractFunction(html, 'isValidImageTombstone');
+const saveTombFn2 = extractFunction(html, 'saveImageTombstones');
+const tombScopeFn2 = extractFunction(html, 'tombstoneScopeKey');
 
 // ===========================================================================
 // 1) DETECÇÃO — checkCloudForBootstrapV1 (server-only, nunca assume vazio)
@@ -222,10 +230,12 @@ test('BOOTSTRAP BLOQUEIO: merge de imagens local→nuvem (mergeThisDeviceImagesT
 // ===========================================================================
 
 function makeApplyChoiceContext() {
-  const calls = { syncFromFirebase: 0, markInit: 0 };
+  const calls = { adoptRemote: 0, markInit: 0 };
   const ctx = {
     deviceBootstrapPending: true,
-    syncFromFirebase: async () => { calls.syncFromFirebase += 1; },
+    // ALTERAÇÃO 078: 'load' agora delega para adoptRemoteStateForNewDevice()
+    // (adoção 1:1), não mais syncFromFirebase() (merge com o SEED-como-local).
+    adoptRemoteStateForNewDevice: async () => { calls.adoptRemote += 1; },
     markDeviceInitialized: () => { calls.markInit += 1; }
   };
   vm.createContext(ctx);
@@ -233,10 +243,10 @@ function makeApplyChoiceContext() {
   return { ctx, calls };
 }
 
-test('BOOTSTRAP DECISÃO: escolha "load" reaproveita syncFromFirebase() (merge não destrutivo já existente) e libera o dispositivo', async () => {
+test('BOOTSTRAP DECISÃO: escolha "load" chama adoptRemoteStateForNewDevice() (adoção 1:1, ALTERAÇÃO 078) e libera o dispositivo', async () => {
   const { ctx, calls } = makeApplyChoiceContext();
   await ctx.applyNewDeviceBootstrapChoice('load');
-  assert.equal(calls.syncFromFirebase, 1, 'precisa chamar syncFromFirebase exatamente uma vez');
+  assert.equal(calls.adoptRemote, 1, 'precisa chamar adoptRemoteStateForNewDevice exatamente uma vez');
   assert.equal(calls.markInit, 1);
   assert.equal(ctx.deviceBootstrapPending, false, 'só desbloqueia DEPOIS da escolha explícita');
 });
@@ -244,7 +254,7 @@ test('BOOTSTRAP DECISÃO: escolha "load" reaproveita syncFromFirebase() (merge n
 test('BOOTSTRAP DECISÃO: escolha "skip" NÃO toca a nuvem, mas libera o dispositivo (usuário já foi avisado no modal)', async () => {
   const { ctx, calls } = makeApplyChoiceContext();
   await ctx.applyNewDeviceBootstrapChoice('skip');
-  assert.equal(calls.syncFromFirebase, 0, 'skip não pode chamar syncFromFirebase');
+  assert.equal(calls.adoptRemote, 0, 'skip não pode chamar adoptRemoteStateForNewDevice');
   assert.equal(calls.markInit, 1);
   assert.equal(ctx.deviceBootstrapPending, false);
 });
@@ -252,7 +262,7 @@ test('BOOTSTRAP DECISÃO: escolha "skip" NÃO toca a nuvem, mas libera o disposi
 test('BOOTSTRAP DECISÃO: escolha "empty" (nuvem nunca inicializada) também libera sem tocar a nuvem', async () => {
   const { ctx, calls } = makeApplyChoiceContext();
   await ctx.applyNewDeviceBootstrapChoice('empty');
-  assert.equal(calls.syncFromFirebase, 0);
+  assert.equal(calls.adoptRemote, 0);
   assert.equal(calls.markInit, 1);
   assert.equal(ctx.deviceBootstrapPending, false);
 });
@@ -625,9 +635,162 @@ test('BOOTSTRAP MERGE: SRS/REVIEW/SESSIONLOG remotos são adotados quando o disp
 // 8) syncFromFirebase() em si continua intacta (o bootstrap reaproveita, não recria)
 // ===========================================================================
 
-test('BOOTSTRAP REAPROVEITAMENTO: applyNewDeviceBootstrapChoice chama a MESMA syncFromFirebase() já testada — nenhuma lógica de merge paralela foi criada', () => {
-  assert.doesNotMatch(applyChoiceFn.body, /readShardedState|mergeEntryNonDestructive|unionEntryImages/, 'não pode reimplementar merge — só delega para syncFromFirebase()');
-  assert.match(applyChoiceFn.body, /await syncFromFirebase\(\);/);
+test('BOOTSTRAP REAPROVEITAMENTO: applyNewDeviceBootstrapChoice delega para adoptRemoteStateForNewDevice() (ALTERAÇÃO 078) — nenhuma lógica de merge inline', () => {
+  assert.doesNotMatch(applyChoiceFn.body, /readShardedState|mergeEntryNonDestructive|unionEntryImages|reconcileStateWithRemote/, 'não pode reimplementar merge nem ler a nuvem direto aqui — só delega');
+  assert.match(applyChoiceFn.body, /await adoptRemoteStateForNewDevice\(\);/);
+});
+
+// ===========================================================================
+// 9) ALTERAÇÃO 078 (2026-09-24) — adoptRemoteStateForNewDevice(): bug real
+// corrigido. "load" reaproveitava syncFromFirebase()/reconcileStateWithRemote(),
+// cujo mergeEntryNonDestructive() trata `local` como conteúdo real a
+// proteger (regra "sem timestamp, local vence"). Mas o `local` de um device
+// novo, nesse momento, é só activeCanonicalSeedV172() (o SEED estático,
+// nunca tem _userUpdatedAt) — colocado em DATA só pra a tela ter algo pra
+// desenhar antes da escolha. Como boa parte da nuvem também não tem
+// _userUpdatedAt (conteúdo nunca tocado pelo editor depois de criado), a
+// regra reafirmava links/notes/tags/classification do SEED por cima do que
+// a nuvem tinha de mais completo — achado real: 99 lesões perderam links
+// extras da nuvem nesse fluxo exato. adoptRemoteStateForNewDevice() adota a
+// nuvem 1:1, sem merge nenhum — não existe estado local de verdade aqui.
+// ===========================================================================
+
+function makeAdoptContext({ localData, remoteMeta, remoteChunks } = {}) {
+  const store = { meta: remoteMeta, chunks: remoteChunks || [] };
+  const backing = {};
+  const ctx = {
+    DATA: localData || [], REVIEW: {}, SRS: {}, SESSIONLOG: {},
+    sectionOrder: [], siteOrder: {}, IMAGE_TOMBSTONES: {},
+    canonicalRestoreInProgress: false,
+    DEFAULT_SECTION_ORDER: ['Seção Padrão'],
+    STORAGE_KEY: 'data', REVIEW_KEY: 'review', SRS_KEY: 'srs', SESSIONLOG_KEY: 'sessionlog',
+    ORDER_KEY: 'order', SITEORDER_KEY: 'site-order', IMAGE_TOMBSTONES_KEY: 'tombstones',
+    isQuarantinedSeedId: (id) => false,
+    CLOUD_REVISION_FIELD: 'revision',
+    lastKnownCloudRevision: null,
+    window: {},
+    withFirebaseTimeout: (p) => p,
+    FB_META_REF: () => ({ get: async () => ({ exists: !!store.meta, data: () => store.meta }) }),
+    FB_CHUNK_REF: (i) => ({ get: async () => ({ exists: i < store.chunks.length, data: () => ({ items: store.chunks[i] }) }) }),
+    storage: {
+      get: async (key) => { if (Object.prototype.hasOwnProperty.call(backing, key)) return { value: backing[key] }; throw new Error('not found: ' + key); },
+      set: async (key, value) => { backing[key] = value; }
+    },
+    console
+  };
+  vm.createContext(ctx);
+  const engine = `
+    ${tombScopeFn2.source}
+    ${isValidTombFn2.source}
+    ${normalizeTombstoneMapFn.source}
+    ${saveTombFn2.source}
+    ${readShardedStateFn.source}
+    ${adoptRemoteFn.source}
+  `;
+  new vm.Script(engine).runInContext(ctx);
+  return { ctx, backing };
+}
+
+const cloudMetaBase = { review: {}, srs: {}, sessionLog: {}, sectionOrder: [], siteOrder: {}, tombstones: {} };
+
+test('ALTERAÇÃO 078: adoptRemoteStateForNewDevice() adota os links da nuvem 1:1, mesmo com o "local" (SEED) tendo menos', async () => {
+  const localSeedLike = [{ id: 'seed_1', name: 'L', s: 'S', site: 'T', links: [{ url: 'https://a', label: 'A' }] }];
+  const remoteEntry = { id: 'seed_1', name: 'L', s: 'S', site: 'T', links: [{ url: 'https://a', label: 'A' }, { url: 'https://b', label: 'B' }] };
+  const { ctx } = makeAdoptContext({
+    localData: localSeedLike,
+    remoteMeta: { ...cloudMetaBase, revision: 5, chunkCount: 1 },
+    remoteChunks: [[remoteEntry]]
+  });
+  await ctx.adoptRemoteStateForNewDevice();
+  assert.equal(ctx.DATA.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.DATA[0].links)), remoteEntry.links, 'links precisam ser EXATAMENTE os da nuvem (2), não os do SEED (1)');
+});
+
+test('ALTERAÇÃO 078: adoptRemoteStateForNewDevice() adota 3 links da nuvem mesmo com SEED tendo só 1', async () => {
+  const localSeedLike = [{ id: 'seed_1', links: [{ url: 'https://a' }] }];
+  const remoteEntry = { id: 'seed_1', links: [{ url: 'https://a' }, { url: 'https://b' }, { url: 'https://c' }] };
+  const { ctx } = makeAdoptContext({
+    localData: localSeedLike,
+    remoteMeta: { ...cloudMetaBase, revision: 1, chunkCount: 1 },
+    remoteChunks: [[remoteEntry]]
+  });
+  await ctx.adoptRemoteStateForNewDevice();
+  assert.equal(ctx.DATA[0].links.length, 3);
+});
+
+test('ALTERAÇÃO 078: adoptRemoteStateForNewDevice() não reimplementa merge — sem referência a mergeEntryNonDestructive/reconcileStateWithRemote/unionEntryImages', () => {
+  assert.doesNotMatch(adoptRemoteFn.body, /mergeEntryNonDestructive|reconcileStateWithRemote|unionEntryImages/);
+});
+
+test('ALTERAÇÃO 078: adoptRemoteStateForNewDevice() ainda filtra high ids (075) mesmo no caminho de device novo', async () => {
+  const remoteGood = { id: 'seed_1', name: 'Bom' };
+  const remoteHigh = { id: 'seed_1213', name: 'Contaminado' };
+  const { ctx } = makeAdoptContext({
+    localData: [],
+    remoteMeta: { ...cloudMetaBase, revision: 1, chunkCount: 1 },
+    remoteChunks: [[remoteGood, remoteHigh]]
+  });
+  ctx.isQuarantinedSeedId = (id) => id === 'seed_1213';
+  await ctx.adoptRemoteStateForNewDevice();
+  assert.deepEqual(Array.from(ctx.DATA).map(e => e.id), ['seed_1']);
+});
+
+test('ALTERAÇÃO 078: se a nuvem nunca foi escrita (remote null), mantém o SEED que já estava em DATA', async () => {
+  const localSeedLike = [{ id: 'seed_1', name: 'SEED' }];
+  const { ctx } = makeAdoptContext({ localData: localSeedLike, remoteMeta: null, remoteChunks: [] });
+  await ctx.adoptRemoteStateForNewDevice();
+  assert.deepEqual(ctx.DATA, localSeedLike);
+});
+
+test('ALTERAÇÃO 078: adoptRemoteStateForNewDevice() aborta (lock 077) se canonicalRestoreInProgress=true', async () => {
+  const localSeedLike = [{ id: 'seed_1' }];
+  const { ctx } = makeAdoptContext({
+    localData: localSeedLike,
+    remoteMeta: { ...cloudMetaBase, revision: 1, chunkCount: 1 },
+    remoteChunks: [[{ id: 'seed_1', name: 'NUVEM' }]]
+  });
+  ctx.canonicalRestoreInProgress = true;
+  await ctx.adoptRemoteStateForNewDevice();
+  assert.deepEqual(ctx.DATA, localSeedLike, 'não deve ter adotado nada da nuvem com o lock ligado');
+});
+
+test('ALTERAÇÃO 078 (canônico real): device novo com "local" truncado em links adota o rev21 completo — 0 divergências de links no resultado', async () => {
+  const canonicalPath = path.resolve(__dirname, '..', 'ATLAS_CANONICO_LIMPO_1216_116_FINAL.json');
+  const canon = JSON.parse(fs.readFileSync(canonicalPath, 'utf-8'));
+  const remoteData = canon.data; // 1216 registros reais, já validados (hash conhecido)
+
+  // Simula o "local" de um device novo: mesmos registros, mas com links
+  // truncados a no máximo 1 — aproxima o baseline do SEED estático (sem
+  // precisar do SEED real embutido no index.html, que não é extraível como
+  // fixture de teste separada).
+  const localSeedLike = remoteData.map(e => ({
+    ...e,
+    links: Array.isArray(e.links) && e.links.length ? [e.links[0]] : e.links
+  }));
+
+  const chunks = [];
+  for (let i = 0; i < remoteData.length; i += 150) chunks.push(remoteData.slice(i, i + 150));
+
+  const { ctx } = makeAdoptContext({
+    localData: localSeedLike,
+    remoteMeta: {
+      review: canon.review, srs: canon.srs, sessionLog: canon.sessionLog,
+      sectionOrder: canon.sectionOrder, siteOrder: canon.siteOrder,
+      tombstones: canon.imageTombstones, revision: 21, chunkCount: chunks.length
+    },
+    remoteChunks: chunks
+  });
+
+  await ctx.adoptRemoteStateForNewDevice();
+
+  assert.equal(ctx.DATA.length, 1216);
+  let divergentLinks = 0;
+  const byIdRemote = new Map(remoteData.map(e => [e.id, e]));
+  for (const e of ctx.DATA) {
+    const r = byIdRemote.get(e.id);
+    if (JSON.stringify(e.links || []) !== JSON.stringify(r.links || [])) divergentLinks++;
+  }
+  assert.equal(divergentLinks, 0, 'depois da correção, TODOS os links devem bater com o canônico — 0 divergências (antes: 99)');
 });
 
 console.log('device-bootstrap.test.js carregado — nenhuma dependência de rede/DOM real usada.');

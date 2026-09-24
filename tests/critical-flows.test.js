@@ -454,10 +454,15 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // um high id residual no REVIEW cru do canônico que a quarentena
   // corretamente remove) — comentário explicativo antes da própria linha,
   // antes da primeira âncora, deslocamento uniforme.
-  assert.equal(recovery.line, 7424);
-  assert.equal(brokenArtifacts.line, 7414);
-  assert.equal(loadData.line, 9971);
-  assert.equal(importHandler.line, 13626);
+  // +38 nas quatro âncoras (Alteração 078, 2026-09-24): função nova
+  // adoptRemoteStateForNewDevice() (adoção 1:1 da nuvem pra device novo,
+  // sem merge com o SEED-como-local) inserida logo antes de
+  // applyNewDeviceBootstrapChoice() — antes da primeira âncora,
+  // deslocamento uniforme.
+  assert.equal(recovery.line, 7462);
+  assert.equal(brokenArtifacts.line, 7452);
+  assert.equal(loadData.line, 10009);
+  assert.equal(importHandler.line, 13664);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -579,31 +584,43 @@ test('ALTERACAO 068: syncFromFirebase() continua definida, intacta, e e a MESMA 
 
   // Call sites esperados: loadData() (automatico, guardado por
   // !isNewLocalDevice), exportar backup, restaurar padrao de fabrica,
-  // "Atualizar deste backup/nuvem", a escolha "Carregar meus dados da
-  // nuvem" no bootstrap de dispositivo novo (applyNewDeviceBootstrapChoice()
-  // — só executa depois que o usuário clica no modal), e (ALTERACAO 070,
-  // 2026-09-23) writeShardedStateWithConflictRetry() — reconcilia UMA vez
-  // antes de repetir uma escrita que colidiu por revisao (nunca escreve às
-  // cegas por cima de uma nuvem que mudou). Nenhuma logica de merge
-  // paralela foi criada — todos delegam pra esta mesma funcao.
+  // "Atualizar deste backup/nuvem", e (ALTERACAO 070, 2026-09-23)
+  // writeShardedStateWithConflictRetry() — reconcilia UMA vez antes de
+  // repetir uma escrita que colidiu por revisao (nunca escreve às cegas por
+  // cima de uma nuvem que mudou). ALTERAÇÃO 078 (2026-09-24) removeu a
+  // escolha "Carregar meus dados da nuvem" do bootstrap de dispositivo novo
+  // desta lista: ela não chama mais syncFromFirebase() — chama
+  // adoptRemoteStateForNewDevice() (adoção 1:1, sem
+  // mergeEntryNonDestructive), porque o "local" de um device novo é só o
+  // SEED estático, nunca conteúdo real do usuário (ver teste BOOTSTRAP
+  // SEGURO abaixo e ALTERAÇÃO 078 em multi-device-sync/device-bootstrap
+  // tests). Nenhuma logica de merge paralela foi criada nos demais call
+  // sites — todos continuam delegando pra esta mesma funcao.
   // Exclui mencoes DENTRO do proprio corpo da funcao (o rotulo de string
   // "syncFromFirebase (leitura)" usado em withFirebaseTimeout, linha 2013,
   // bate no regex ingenuo de invocationLocations mas nao e uma chamada).
   const allCalls = activeCallLocations(html, 'syncFromFirebase')
     .filter((m) => m.index < fn.index || m.index >= fn.index + fn.source.length);
-  assert.equal(allCalls.length, 6, 'syncFromFirebase() so pode ser chamada por: loadData() (automatico, guardado), exportar backup, restaurar padrao de fabrica, "Atualizar deste backup/nuvem", a confirmacao de bootstrap em dispositivo novo, e o retry de conflito de revisao — nenhum outro call site');
+  assert.equal(allCalls.length, 5, 'syncFromFirebase() so pode ser chamada por: loadData() (automatico, guardado), exportar backup, restaurar padrao de fabrica, "Atualizar deste backup/nuvem", e o retry de conflito de revisao — nenhum outro call site (bootstrap de device novo não chama mais, ver ALTERAÇÃO 078)');
 });
 
-test('BOOTSTRAP SEGURO: a chamada a syncFromFirebase() do bootstrap fica DENTRO de applyNewDeviceBootstrapChoice(), só depois da escolha do usuário no modal', () => {
+test('BOOTSTRAP SEGURO (ALTERAÇÃO 078): a escolha "load" adota a nuvem 1:1 via adoptRemoteStateForNewDevice(), NÃO mais via syncFromFirebase()/merge — só depois da escolha do usuário no modal', () => {
   const applyChoiceFn = extractFunction(html, 'applyNewDeviceBootstrapChoice');
+  const adoptFn = extractFunction(html, 'adoptRemoteStateForNewDevice');
   const modalFn = extractFunction(html, 'openNewDeviceBootstrapModal');
   const flowFn = extractFunction(html, 'runNewDeviceBootstrapFlow');
-  assert.match(applyChoiceFn.body, /if\(choice === 'load'\)\{[\s\S]*?await syncFromFirebase\(\);/, 'só chama syncFromFirebase() no ramo "load" (usuário confirmou)');
-  assert.doesNotMatch(modalFn.body, /syncFromFirebase/, 'o modal em si não decide/gravanada, só coleta a escolha do usuário');
+  assert.match(applyChoiceFn.body, /if\(choice === 'load'\)\{[\s\S]*?await adoptRemoteStateForNewDevice\(\);/, 'só chama adoptRemoteStateForNewDevice() no ramo "load" (usuário confirmou)');
+  assert.doesNotMatch(applyChoiceFn.body, /syncFromFirebase|mergeEntryNonDestructive|reconcileStateWithRemote/, 'o bootstrap de device novo não pode mais mesclar com o SEED-como-local (bug real: 99 lesões perderam links) — só adota 1:1');
+  // adoptRemoteStateForNewDevice() precisa continuar lendo o estado remoto
+  // de verdade (não virou um stub vazio) e continuar sem reimplementar merge.
+  assert.ok(adoptFn.source.length > 200, 'adoptRemoteStateForNewDevice não pode virar um stub vazio');
+  assert.match(adoptFn.source, /readShardedState/, 'precisa continuar lendo o estado remoto de verdade');
+  assert.doesNotMatch(adoptFn.source, /mergeEntryNonDestructive|reconcileStateWithRemote|unionEntryImages/, 'adoção 1:1 não pode reimplementar nem reaproveitar lógica de merge');
+  assert.doesNotMatch(modalFn.body, /syncFromFirebase|adoptRemoteStateForNewDevice/, 'o modal em si não decide/grava nada, só coleta a escolha do usuário');
   assert.match(flowFn.body, /await openNewDeviceBootstrapModal\(\)/, 'a decisão vem sempre do modal, nunca de heurística automática');
   assert.match(flowFn.body, /await applyNewDeviceBootstrapChoice\(choice\)/);
   // loadData() só chama o orquestrador quando isNewLocalDevice é verdadeiro —
-  // nunca chama applyNewDeviceBootstrapChoice/syncFromFirebase diretamente.
+  // nunca chama applyNewDeviceBootstrapChoice/adoptRemoteStateForNewDevice diretamente.
   assert.match(loadData.source, /if\(isNewLocalDevice\)\{\s*\n\s*await runNewDeviceBootstrapFlow\(\);/);
   assert.doesNotMatch(loadData.source, /applyNewDeviceBootstrapChoice/);
 });

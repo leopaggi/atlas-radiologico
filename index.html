@@ -3097,18 +3097,56 @@ function openNewDeviceBootstrapModal(){
   });
 }
 
+/* ALTERAÇÃO 078 (2026-09-24) — bug real: um device NOVO que escolhia
+   "carregar da nuvem" reaproveitava syncFromFirebase()/
+   reconcileStateWithRemote(), cujo mergeEntryNonDestructive() trata `local`
+   como conteúdo real do usuário a proteger — regra "sem timestamp, local
+   vence" (linha ~3693: "Para registros legados sem timestamp, campos não
+   vazios locais têm prioridade"). Só que o `local` de um device novo, neste
+   momento exato, NUNCA é edição do usuário: é só activeCanonicalSeedV172()
+   (o SEED estático), colocado em DATA só pra a tela ter algo pra desenhar
+   antes da escolha (ver loadData(), bloco catch de STORAGE_KEY ausente).
+   Como o SEED nunca tem _userUpdatedAt, e boa parte do catálogo na nuvem
+   também não (conteúdo nunca tocado pelo editor depois de criado), a regra
+   "sem timestamp, local vence" reafirmava links/notes/tags/classification
+   do SEED por cima do que a nuvem já tinha de mais completo — achado real:
+   99 lesões perderam links extras da nuvem nesse exato fluxo. Corrigido
+   substituindo o merge por uma ADOÇÃO 1:1 da nuvem — não existe estado
+   local de verdade pra preservar aqui, então não faz sentido nenhum passar
+   por mergeEntryNonDestructive/reconcileStateWithRemote/syncFromFirebase
+   (que continuam EXATAMENTE como estavam para todo o resto do app —
+   dispositivos já inicializados, "⬇ atualizar deste backup/nuvem", etc. —
+   nada disso mudou). */
+async function adoptRemoteStateForNewDevice(){
+  if(canonicalRestoreInProgress) return;
+  const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'carregar catálogo da nuvem (dispositivo novo)');
+  if(!remote) return; // nuvem nunca escrita — mantém o SEED que já estava em DATA
+  DATA = (Array.isArray(remote.data) ? remote.data : []).filter(e => e && !isQuarantinedSeedId(e.id));
+  REVIEW = (remote.review && typeof remote.review === 'object' && !Array.isArray(remote.review)) ? remote.review : {};
+  SRS = (remote.srs && typeof remote.srs === 'object' && !Array.isArray(remote.srs)) ? remote.srs : {};
+  SESSIONLOG = (remote.sessionLog && typeof remote.sessionLog === 'object' && !Array.isArray(remote.sessionLog)) ? remote.sessionLog : {};
+  sectionOrder = (Array.isArray(remote.sectionOrder) && remote.sectionOrder.length) ? remote.sectionOrder : [...DEFAULT_SECTION_ORDER];
+  siteOrder = (remote.siteOrder && typeof remote.siteOrder === 'object' && !Array.isArray(remote.siteOrder)) ? remote.siteOrder : {};
+  IMAGE_TOMBSTONES = normalizeTombstoneMap(remote.tombstones);
+  await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
+  await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
+  await storage.set(SRS_KEY, JSON.stringify(SRS), false);
+  await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
+  await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
+  await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false);
+  try{ await saveImageTombstones(); }catch(_e){}
+}
+
 /* Aplica a decisão do modal. Separada da UI de propósito, para ser testável
-   sem simular DOM: 'load' reaproveita o mesmo merge não destrutivo já usado
-   por "⬇ atualizar deste backup/nuvem" (syncFromFirebase) — o dispositivo já
-   foi identificado explicitamente pelo usuário como pronto pra adotar o
-   estado da nuvem, então o push de verificação interno dela deixa de ficar
-   bloqueado. 'empty'/'skip' apenas liberam o dispositivo para o fluxo normal
-   (a nuvem nunca existiu, ou o usuário confirmou o aviso de sobrescrita). */
+   sem simular DOM: 'load' adota a nuvem 1:1 (adoptRemoteStateForNewDevice,
+   ALTERAÇÃO 078 — não há estado local de verdade pra mesclar aqui).
+   'empty'/'skip' apenas liberam o dispositivo para o fluxo normal (a nuvem
+   nunca existiu, ou o usuário confirmou o aviso de sobrescrita). */
 async function applyNewDeviceBootstrapChoice(choice){
   if(choice === 'load'){
     deviceBootstrapPending = false;
     markDeviceInitialized();
-    await syncFromFirebase();
+    await adoptRemoteStateForNewDevice();
     return;
   }
   deviceBootstrapPending = false;
