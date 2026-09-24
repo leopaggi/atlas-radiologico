@@ -431,10 +431,19 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // SUPPRESSED_DUPLICATE_IDS_V172.has( foram trocados (mesma linha, sem
   // ganho/perda) para isQuarantinedSeedId(, incluindo dentro do
   // importHandler — por isso o deslocamento é uniforme nas quatro âncoras.
-  assert.equal(recovery.line, 7032);
-  assert.equal(brokenArtifacts.line, 7022);
-  assert.equal(loadData.line, 9579);
-  assert.equal(importHandler.line, 13224);
+  // +16 nas quatro âncoras (Alteração 076, pre-push reconcile no push
+  // debounced + comentário da regra dos "caminhos reais" atualizado para 5):
+  // bloco reconcileBeforePush('push') dentro do setTimeout de
+  // pushToFirebase() (usado por saveReview/saveSRS/saveSessionLog/
+  // saveOrder/saveSiteOrder) + 1 linha a mais no comentário de
+  // markSyncDirty/syncDirty — tudo antes da primeira âncora, deslocamento
+  // uniforme. +10 a mais só em importHandler (mesma Alteração 076):
+  // markSyncDirty() + comentário no Salvar do editor, entre loadData() e o
+  // handler de importação — só desloca o que vem depois de loadData().
+  assert.equal(recovery.line, 7048);
+  assert.equal(brokenArtifacts.line, 7038);
+  assert.equal(loadData.line, 9595);
+  assert.equal(importHandler.line, 13250);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -992,4 +1001,67 @@ test('operacoes potencialmente destrutivas da importacao sao inventariadas', () 
   assert.match(body, /await\s+saveOrder\(\)/);
   assert.match(body, /await\s+saveSiteOrder\(\)/);
   console.log('Importacao: 10 atribuicoes de estado, 4 storage.set diretos e 2 pushes remotos');
+});
+
+// ===========================================================================
+// TESTE C (ALTERAÇÃO 075/076) — quarentena estrutural dos 70 high ids da
+// contaminação multi-PC de 2026-09-24. Extrai isQuarantinedSeedId() REAL
+// (mesmo trecho entre SUPPRESSED_DUPLICATE_IDS_V172 e getActiveCanonicalSeed)
+// e confirma o comportamento exato pedido: lista B bloqueada, lista A e o
+// keeper real (seed_1212) liberados, ids u_* liberados.
+// ===========================================================================
+test('PROTEÇÃO 075: seed_1213..seed_1282 continuam bloqueados; seed_0..seed_1212 e u_* continuam válidos', () => {
+  const start = html.indexOf('const SUPPRESSED_DUPLICATE_IDS_V172');
+  const end = html.indexOf('function getActiveCanonicalSeed');
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const block = html.slice(start, end);
+  const ctx = { SEED: [], computeDuplicateSeedIds: () => new Set() };
+  vm.createContext(ctx);
+  vm.runInContext(block, ctx, { filename: 'quarantine-075.js' });
+
+  for (let n = 1213; n <= 1282; n += 1) {
+    assert.equal(ctx.isQuarantinedSeedId('seed_' + n), true, 'seed_' + n + ' (lista B) precisa continuar em quarentena');
+  }
+  assert.equal(ctx.isQuarantinedSeedId('seed_1212'), false, 'seed_1212 é o keeper real — nunca pode ser bloqueado');
+  assert.equal(ctx.isQuarantinedSeedId('seed_0'), false);
+  for (const id of ['seed_7', 'seed_39', 'seed_1125']) {
+    assert.equal(ctx.isQuarantinedSeedId(id), false, id + ' (lista A, legado/posicional) precisa continuar liberado');
+  }
+  assert.equal(ctx.isQuarantinedSeedId('u_1790101615508_5dm18o'), false, 'ids u_* precisam continuar liberados');
+});
+
+// ===========================================================================
+// TESTE B, guarda estática (ALTERAÇÃO 076) — reforça em cima da própria
+// fonte do index.html que markSyncDirty() roda ANTES da tentativa de
+// reconcile/push no Salvar do editor. O comportamento funcional completo
+// (preflight falho mantém syncDirty=true; retry na reconexão preserva a
+// edição) é coberto em tests/multi-device-sync.test.js — este teste aqui é
+// especificamente para impedir que alguém remova a chamada por engano numa
+// edição futura, já que o handler inteiro (DOM/Cloudinary) não é executável
+// isolado num vm.
+// ===========================================================================
+test('ALTERAÇÃO 076: markSyncDirty() roda ANTES de reconcileBeforePush no Salvar do editor', () => {
+  // Não usa extractBlock/extractFunction aqui de propósito: este handler
+  // contém, mais acima (fora da janela que nos interessa), um regex literal
+  // (/^data:image\//i) cujo `\/` seguido do `/` de fechamento confunde o
+  // contador ingênuo de chaves de extractBlock com um início de comentário
+  // `//` — faz a extração da função inteira parar cedo demais (bug do
+  // utilitário do teste, não do index.html). Em vez de arriscar mexer num
+  // utilitário compartilhado por dezenas de outros testes, isolamos a janela
+  // certa por dois marcadores únicos e comparamos a ORDEM diretamente na
+  // fonte — suficiente pra garantir estaticamente o que este teste protege.
+  const startMarker = "document.getElementById('f-save').onclick = async ()=>";
+  const endMarker = 'writeShardedStateSerialized(6000)';
+  const start = html.indexOf(startMarker);
+  assert.notEqual(start, -1, 'handler de salvar do editor não encontrado');
+  const end = html.indexOf(endMarker, start);
+  assert.notEqual(end, -1, 'ponto de referência (write real do Salvar) não encontrado após o handler');
+  assert.ok(end - start < 15000, 'os marcadores precisam estar próximos (mesma função) — distância suspeita indica handler mudou de lugar');
+  const window = html.slice(start, end);
+  const dirtyIdx = window.indexOf('await markSyncDirty();');
+  const reconIdx = window.indexOf("reconcileBeforePush('editor-save')");
+  assert.notEqual(dirtyIdx, -1, 'markSyncDirty() precisa estar presente no Salvar do editor');
+  assert.notEqual(reconIdx, -1, "reconcileBeforePush('editor-save') precisa continuar presente");
+  assert.ok(dirtyIdx < reconIdx, 'markSyncDirty() precisa rodar ANTES da tentativa de reconcile/push — senão uma falha de rede deixa a edição local com syncDirty=false');
 });

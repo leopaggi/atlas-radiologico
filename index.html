@@ -1866,9 +1866,10 @@ let lastSyncErrorDetail = null;
 // storage/IndexedDB de REVIEW/SRS) pra sobreviver a reload/offline; só volta
 // a `false` depois de uma escrita CONFIRMADA na nuvem (ver pushToFirebaseNow/
 // pushToFirebase, chokepoints únicos de escrita real). saveData()/
-// saveReview()/saveSRS()/saveSessionLog() — os 4 caminhos reais de
-// persistência do usuário — chamam markSyncDirty() antes de tentar
-// publicar; nenhum outro código muta este marcador.
+// saveReview()/saveSRS()/saveSessionLog() e o Salvar do editor (escrita
+// direta, ver ALTERAÇÃO 076) — os 5 caminhos reais de persistência do
+// usuário — chamam markSyncDirty() antes de tentar publicar; nenhum outro
+// código muta este marcador.
 const SYNC_DIRTY_KEY = 'atlas:syncDirty';
 let syncDirty = false;
 async function markSyncDirty(){
@@ -2093,6 +2094,21 @@ function pushToFirebase(){
   fbPushTimer = setTimeout(async ()=>{
     if(fbSyncing){ syncPushPending = true; return; } // pode ter começado durante os 400ms de espera
     try{
+      // ALTERAÇÃO 076 — mesmo pre-push reconcile de pushToFirebaseNow() (074):
+      // este caminho debounced é usado por saveReview/saveSRS/saveSessionLog/
+      // saveOrder/saveSiteOrder e escrevia DATA local como está, sem reler a
+      // nuvem antes — um device semanticamente incompleto (ex.: acabou de
+      // abrir offline, ainda não puxou tudo) que só mudasse REVIEW/SRS podia
+      // sobrescrever a nuvem e apagar lesões que só existiam lá. Se a
+      // releitura falhar, não escreve às cegas: mantém pendente (o dirty que
+      // originou este push nunca é limpo abaixo) para o mesmo retry tentar de
+      // novo depois — mesma semântica de pushToFirebaseNow().
+      const recon = await reconcileBeforePush('push');
+      if(!recon.ok){
+        setSyncStatus(false, 'não foi possível confirmar a nuvem antes de enviar — tentando de novo em seguida.');
+        syncPushPending = true;
+        return;
+      }
       const ok = await writeShardedStateSerialized(15000);
       setSyncStatus(!!ok);
       // ALTERAÇÃO 072 — só confirmado (escrita real aceita pela nuvem) limpa
@@ -11326,12 +11342,22 @@ function openForm(id, opts){
     try{
       try{ createSafetySnapshot('antes de salvar alterações'); }catch(_e){}
       try{ await storage.set(STORAGE_KEY, JSON.stringify(DATA), false); }catch(e){ console.error('storage error', e); }
+      // ALTERAÇÃO 076 — esta é uma 5ª via real de persistência do usuário
+      // (além de saveData/saveReview/saveSRS/saveSessionLog) e, até aqui, era
+      // a única que NÃO chamava markSyncDirty(): se reconcileBeforePush() ou
+      // o write abaixo falhassem, a edição ficava só local mas syncDirty
+      // continuava false — nem o retry de reconexão (syncPushPending, só em
+      // memória) sobrevive a um reload, então no próximo boot o app achava
+      // que não havia nada pendente e a edição real do usuário nunca mais
+      // era reenviada sozinha. Marcar dirty ANTES da tentativa garante que
+      // qualquer falha aqui deixe o marcador persistente ligado; só uma
+      // escrita CONFIRMADA (cloudOk mais abaixo) o desliga de novo.
+      await markSyncDirty();
       // ALTERAÇÃO 074 — pre-push reconciliation também aqui (esta escrita é
       // direta, não passa pelo pushToFirebaseNow): relê a nuvem ATUAL e
       // mescla antes de escrever a união, para nunca publicar um snapshot
       // local semanticamente incompleto (bug real 118→116). Se a releitura
-      // falhar, mantém o comportamento local-only de antes (sem dirty novo,
-      // sem escrita às cegas).
+      // falhar, o dirty marcado acima garante retry na próxima reconexão/boot.
       let editorRecon = { ok:true, preservedCloudOnly:0 };
       try{ editorRecon = await reconcileBeforePush('editor-save'); }catch(_e){ editorRecon = { ok:false }; }
       if(!editorRecon.ok){

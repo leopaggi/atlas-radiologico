@@ -61,6 +61,9 @@ const writeShardedStateFn = extractFunction(html, 'writeShardedState');
 const writeShardedStateSerializedFn = extractFunction(html, 'writeShardedStateSerialized');
 const readShardedStateFn = extractFunction(html, 'readShardedState');
 const pushToFirebaseNowFn = extractFunction(html, 'pushToFirebaseNow');
+// ALTERAÇÃO 076: pre-push reconcile também no caminho debounced (usado por
+// saveReview/saveSRS/saveSessionLog/saveOrder/saveSiteOrder).
+const pushToFirebaseFn = extractFunction(html, 'pushToFirebase');
 const saveDataFn = extractFunction(html, 'saveData');
 const mergeEntryNonDestructiveFn = extractFunction(html, 'mergeEntryNonDestructive');
 const mergeReviewFn = extractFunction(html, 'mergeReviewPreservingProgress');
@@ -345,6 +348,7 @@ function makeDevice(cloud, { seed = [] } = {}) {
     ${writeShardedStateSerializedFn.source}
     ${readShardedStateFn.source}
     ${pushToFirebaseNowFn.source}
+    ${pushToFirebaseFn.source}
     ${saveDataFn.source}
     ${syncFromFirebaseFn.source}
     ${loadDataFn.source}
@@ -2002,6 +2006,114 @@ test('074 OWNERSHIP REAL: save com conflito genuíno não aborta; asset sobreviv
   assert.ok(deviceImagesByAsset(deviceC, 'seed_9').has('ZZZ'), 'asset sobrevive na nuvem via detentora');
   const blocked = deviceOwnershipEvents(deviceB).filter((e) => e.kind === 'image_merge_ownership_conflict_blocked');
   assert.ok(blocked.length >= 1, 'bloqueio registrado, nunca silencioso');
+});
+
+// ===========================================================================
+// ALTERAÇÃO 076 (2026-09-24) — auditoria independente encontrou dois pontos
+// onde a barreira de pre-push reconciliation (074) não se aplicava:
+// (1) o push DEBOUNCED (pushToFirebase(), usado por saveReview/saveSRS/
+//     saveSessionLog/saveOrder/saveSiteOrder) escrevia DATA local direto,
+//     sem reconcileBeforePush — um device semanticamente incompleto que só
+//     mudasse REVIEW/SRS podia sobrescrever a nuvem e apagar lesões
+//     cloud-only;
+// (2) o Salvar do editor (escrita direta, fora de saveData()) nunca chamava
+//     markSyncDirty() — se reconcileBeforePush()/o write falhassem, a
+//     edição ficava só local com syncDirty=false, e nem o retry em memória
+//     (syncPushPending) sobrevive a um reload.
+// ===========================================================================
+
+test('TESTE A (076): device semanticamente incompleto que só altera SRS não apaga lesão cloud-only — pre-push reconcile no push debounced', async () => {
+  const cloud = makeFakeCloud();
+
+  // A publica DUAS lesões.
+  const seedA = [makeSeedEntry({ id: 'seed_1', name: 'Lesão 1' }), makeSeedEntry({ id: 'seed_2', name: 'Lesão 2' })];
+  const deviceA = makeDevice(cloud, { seed: seedA });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  assert.equal(cloud.peekLesionCount(), 2, 'a nuvem precisa ter as 2 lesões após o boot de A');
+
+  // B puxa as duas normalmente...
+  const deviceB = makeDevice(cloud, { seed: [] });
+  await deviceB.boot();
+  assert.equal(deviceB.context.DATA.length, 2, 'B precisa terminar o boot com as 2 lesões');
+
+  // ...mas fica semanticamente incompleto DEPOIS do boot (ex.: um pull
+  // anterior parcial, uma migração local, qualquer motivo) — perde seed_2
+  // só da memória local, sem isso passar por nenhum merge.
+  deviceB.context.DATA = deviceB.context.DATA.filter((e) => e.id !== 'seed_2');
+  assert.equal(deviceB.context.DATA.length, 1, 'setup do teste: B agora só conhece seed_1');
+
+  // B altera SRS (mesmo caminho real de saveSRS(): markSyncDirty() + push
+  // debounced) sem nunca ter reconhecido seed_2.
+  deviceB.context.SRS = { seed_1: { interval: 3, due: Date.now(), streak: 1 } };
+  await deviceB.context.markSyncDirty();
+  deviceB.context.pushToFirebase();
+
+  // Espera o debounce (400ms) + a escrita real terminarem.
+  await new Promise((resolve) => setTimeout(resolve, 700));
+
+  assert.equal(cloud.peekLesionCount(), 2, 'seed_2 (cloud-only) precisa sobreviver ao push debounced de SRS — reconcile tem que mesclar antes de escrever');
+  assert.equal(deviceB.context.syncDirty, false, 'escrita confirmada precisa limpar o dirty');
+  assert.ok(deviceB.context.DATA.some((e) => e.id === 'seed_2'), 'o próprio device B recupera seed_2 localmente (reconcileBeforePush também persiste local)');
+
+  // Confirma com um terceiro device independente puxando da nuvem.
+  const deviceCheck = makeDevice(cloud, { seed: [] });
+  await deviceCheck.boot();
+  assert.equal(deviceCheck.context.DATA.length, 2, 'a nuvem, ao final, precisa ter as 2 lesões — nunca ter regredido para 1');
+});
+
+test('TESTE B (076): edição real com preflight de rede falhando mantém syncDirty=true; retry na reconexão preserva a edição', async () => {
+  const cloud = makeFakeCloud();
+  const seed = [makeSeedEntry({ id: 'seed_1', name: 'Nome original' })];
+  const device = makeDevice(cloud, { seed });
+  await device.boot();
+  assert.equal(device.context.syncDirty, false, 'estado inicial: nada pendente');
+
+  // Edição real do usuário (mutação direta de DATA, como o Salvar do editor
+  // faz antes de tentar persistir).
+  device.context.DATA.find((e) => e.id === 'seed_1').name = 'Nome editado';
+
+  // Mesma sequência do Salvar do editor (ALTERAÇÃO 076): markSyncDirty()
+  // ANTES da tentativa de reconcile/push.
+  await device.context.markSyncDirty();
+
+  // Simula falha de preflight (offline/erro de rede): sem fbDb,
+  // reconcileBeforePush() devolve ok:false de forma controlada (não lança).
+  const realFbDb = device.context.fbDb;
+  device.context.fbDb = null;
+  const recon = await device.context.reconcileBeforePush('editor-save');
+  assert.equal(recon.ok, false, 'sem fbDb, o preflight precisa falhar de forma controlada');
+
+  assert.equal(cloud.peekLesionCount(), 0, 'preflight falho não pode ter escrito nada (nuvem nunca foi tocada)');
+  assert.equal(device.context.syncDirty, true, 'a edição real precisa continuar marcada como pendente — nunca "esquecida"');
+
+  // "Conexão volta": restaura fbDb e roda o mesmo retry real do listener
+  // 'online' (pushToFirebaseNow).
+  device.context.fbDb = realFbDb;
+  await device.context.pushToFirebaseNow();
+
+  assert.equal(device.context.syncDirty, false, 'retry confirmado precisa limpar o dirty');
+  assert.equal(cloud.peekLesionCount(), 1, 'a nuvem precisa ter recebido a lesão no retry');
+
+  const deviceCheck = makeDevice(cloud, { seed: [] });
+  await deviceCheck.boot();
+  assert.equal(deviceCheck.context.DATA.find((e) => e.id === 'seed_1').name, 'Nome editado', 'a edição feita durante a falha de preflight não pode ter sido perdida');
+});
+
+test('TESTE D (076): boot com syncDirty=false continua sem escrever na nuvem, mesmo depois do pre-push reconcile no push debounced', async () => {
+  const cloud = makeFakeCloud();
+  const seedA = [makeSeedEntry({ id: 'seed_1', name: 'Lesão 1' })];
+  const deviceA = makeDevice(cloud, { seed: seedA });
+  await deviceA.markDirty();
+  await deviceA.boot();
+  const revisionAfterA = cloud.peekRevision();
+
+  // B abre o mesmo catálogo sem editar nada — reabrir não pode escrever.
+  const deviceB = makeDevice(cloud, { seed: seedA.map((e) => ({ ...e })) });
+  await deviceB.boot();
+
+  assert.equal(deviceB.context.syncDirty, false, 'boot sem edição não pode ligar o dirty sozinho');
+  assert.equal(cloud.peekRevision(), revisionAfterA, 'boot com dirty=false não pode ter incrementado a revisão da nuvem (nenhuma escrita)');
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');
