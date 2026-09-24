@@ -63,6 +63,20 @@ const exactLesionIdentityKeyFn = extractFunction(html, 'exactLesionIdentityKey')
 const ownershipBlock = extractBlock(html, 'const IMAGE_OWNERSHIP_MANUAL = { manual:true };', 'let canonicalImageOwnersV208 = null;');
 const removeImageFn = extractFunction(html, 'removeImageFromLesionData');
 const addImageFn = extractFunction(html, 'addImageToLesionData');
+// ALTERAÇÃO 079d: addImageToLesionData passou a chamar markPendingLocalImageAdds
+// (marcador persistente de inclusão local pendente). O harness precisa das
+// mesmas dependências reais que o app carrega, senão addImageToLesionData
+// quebra com ReferenceError dentro do vm isolado deste teste.
+const pendingAddsVarsBlock = extractBlock(
+  html,
+  "const PENDING_LOCAL_IMAGE_ADDS_KEY = 'atlas:pendingLocalImageAdds';",
+  'function normalizePendingLocalImageAdds'
+);
+const markPendingLocalImageAddsFn = extractFunction(html, 'markPendingLocalImageAdds');
+// savePendingLocalImageAdds usa `storage` (IndexedDB), inexistente no vm
+// isolado; a própria função real já engole o erro num try/catch, então é
+// incluída sem stub — fiel ao código de produção, sem mudar comportamento.
+const savePendingLocalImageAddsFn = extractFunction(html, 'savePendingLocalImageAdds');
 
 function cloudinaryImage(over) {
   return Object.assign({
@@ -97,8 +111,9 @@ function loadFix(fixture, opts) {
   const o = opts || {};
   const src = [
     stableKeyFn.source, identityKeysFn.source, normalizeExternalTitleFn.source,
-    exactLesionIdentityKeyFn.source, ownershipBlock, removeImageFn.source, addImageFn.source,
-    FIX_BLOCK
+    exactLesionIdentityKeyFn.source, ownershipBlock, removeImageFn.source,
+    pendingAddsVarsBlock, markPendingLocalImageAddsFn.source, savePendingLocalImageAddsFn.source,
+    addImageFn.source, FIX_BLOCK
   ].join('\n');
   const calls = { saved: 0, snapshots: [] };
   const ctx = vm.createContext({
@@ -115,7 +130,7 @@ function loadFix(fixture, opts) {
     saveData: async () => { calls.saved += 1; if (o.saveFail) throw new Error('save falhou (mock)'); },
     console: { warn: () => {}, log: () => {}, error: () => {} }
   });
-  vm.runInContext(src + '\nthis.__api = { fixAbscessoOligodendrogliomaOwnership20260921, OWNERSHIP_FIX_20260921, IMAGE_OWNERSHIP_CONFLICTS };', ctx);
+  vm.runInContext(src + '\nthis.__api = { fixAbscessoOligodendrogliomaOwnership20260921, OWNERSHIP_FIX_20260921, IMAGE_OWNERSHIP_CONFLICTS, PENDING_LOCAL_IMAGE_ADDS };', ctx);
   return { api: ctx.__api, ctx, calls };
 }
 
@@ -172,6 +187,28 @@ test('5. publicId, assetId, URL (data), label e source são preservados exatamen
   // e os campos de identidade agora refletem o destino (compatibilidade operacional do id)
   assert.equal(img1.lesionName, 'Abscesso cerebral');
   assert.equal(img1.lesionId, 'seed_10');
+});
+
+// ===========================================================================
+// 5b) addImageToLesionData REAL cria o marcador de inclusão local pendente
+//     (Proteção 079d) para as 2 imagens movidas ao destino — a correção de
+//     ownership é uma inclusão real no destino, não deve ficar de fora dessa
+//     proteção.
+// ===========================================================================
+
+test('5b. mover as imagens cria marcador de inclusão pendente (079d) no destino, via addImageToLesionData real', async () => {
+  const { api, ctx } = loadFix(baseFixture());
+  const r = await api.fixAbscessoOligodendrogliomaOwnership20260921();
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const pendingDest = api.PENDING_LOCAL_IMAGE_ADDS['seed_10'];
+  assert.ok(pendingDest, 'destino ("Abscesso cerebral") precisa ganhar marcador pendente após addImageToLesionData real');
+  assert.equal(Object.keys(pendingDest).length, 2, 'as 2 imagens movidas precisam estar marcadas como inclusão pendente');
+  assert.equal(api.PENDING_LOCAL_IMAGE_ADDS['seed_11'], undefined, 'origem não ganha marcador (removeImageFromLesionData não marca pendência)');
+  assert.match(
+    extractFunction(html, 'addImageToLesionData').body,
+    /markPendingLocalImageAdds\(/,
+    'addImageToLesionData real precisa continuar chamando markPendingLocalImageAdds (079d não pode ser removida)'
+  );
 });
 
 // ===========================================================================
