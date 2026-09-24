@@ -479,10 +479,17 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // transacao de writeShardedState() + no-op guard de reconcileBeforePush()
   // comparando o payload ja filtrado — tudo antes da primeira ancora,
   // deslocamento uniforme.
-  assert.equal(recovery.line, 7703);
-  assert.equal(brokenArtifacts.line, 7693);
-  assert.equal(loadData.line, 10250);
-  assert.equal(importHandler.line, 13906);
+  // +100 nas tres primeiras ancoras / +108 no importHandler (Alteracao 079d,
+  // 2026-09-24): modulo de marcadores persistentes de inclusao explicita
+  // (PENDING_LOCAL_IMAGE_ADDS) + gate exigindo marcador + snapshot/confirmacao
+  // em writeShardedState() + confirmacao no reconcile + marcacao em
+  // addImageToLesionData() — tudo antes da primeira ancora; +7 so no
+  // importHandler pela marcacao no Salvar do editor e +1 pelo load dos
+  // marcadores dentro de loadData (ambos entre loadData e ele).
+  assert.equal(recovery.line, 7803);
+  assert.equal(brokenArtifacts.line, 7793);
+  assert.equal(loadData.line, 10350);
+  assert.equal(importHandler.line, 14014);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -701,6 +708,7 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
     loadSessionLog: async () => {},
     // ALTERAÇÃO 073: loadData() real carrega tombstones (stub, mesmo padrão).
     loadImageTombstones: async () => {},
+    loadPendingLocalImageAdds: async () => {}, // ALTERAÇÃO 079d
     loadLesionRevisions: async () => {},
     loadClassificationReviewDecisions: async () => {},
     saveReview: async () => {},

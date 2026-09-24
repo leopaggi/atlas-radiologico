@@ -138,6 +138,11 @@ const forceThisDeviceToCloudFn = extractFunction(html, 'forceThisDeviceToCloud')
 const saveSRSFn = extractFunction(html, 'saveSRS');
 const saveReviewFn = extractFunction(html, 'saveReview');
 const gateStaleImagesFn = extractFunction(html, 'gateStaleLocalOnlyImagesForWrite');
+// ALTERAÇÃO 079d — marcadores persistentes de inclusão explícita de imagem.
+const pendingAddsFns079d = ['normalizePendingLocalImageAdds', 'hasPendingLocalImageAdd', 'markPendingLocalImageAdds',
+  'confirmPendingLocalImageAdds', 'loadPendingLocalImageAdds', 'savePendingLocalImageAdds']
+  .map((n) => extractFunction(html, n).source).join('\n');
+const addImageToLesionDataFn = extractFunction(html, 'addImageToLesionData');
 
 // Nuvem falsa COMPARTILHADA entre "dispositivos" — simula um único projeto
 // Firestore (atlas_state/main + data_chunk_i) visto por computadores
@@ -391,6 +396,13 @@ function makeDevice(cloud, { seed = [] } = {}) {
     function checkChunkSize(){return true;}
     ${markSyncDirtyFn.source}
     ${clearSyncDirtyFn.source}
+    const PENDING_LOCAL_IMAGE_ADDS_KEY = 'atlas:pendingLocalImageAdds';
+    let PENDING_LOCAL_IMAGE_ADDS = {};
+    // acessores só de teste (o \`let\` do motor não vira propriedade do contexto)
+    function __getPendingAdds079d(){ return PENDING_LOCAL_IMAGE_ADDS; }
+    function __setPendingAdds079d(v){ PENDING_LOCAL_IMAGE_ADDS = v; }
+    ${pendingAddsFns079d}
+    ${addImageToLesionDataFn.source}
     let lastWriteStaleImagesBlocked = 0;
     ${gateStaleImagesFn.source}
     ${writeShardedStateFn.source}
@@ -424,7 +436,16 @@ function makeDevice(cloud, { seed = [] } = {}) {
     // confirmada na nuvem" SEM precisar simular a edição inteira — usado só
     // no SETUP de cenários (ex.: popular a nuvem falsa pela primeira vez),
     // nunca como parte do comportamento sendo testado.
-    markDirty: () => context.markSyncDirty()
+    markDirty: () => context.markSyncDirty(),
+    // ALTERAÇÃO 079d — simula uma inclusão REAL de imagem pelo usuário
+    // (mesmo efeito do Salvar do editor / Concluído do Quiz): adiciona à
+    // lesão, carimba e cria o marcador persistente via addImageToLesionData real.
+    addImage: async (lesionId, image) => {
+      const lesion = context.DATA.find((e) => e && e.id === lesionId);
+      const added = context.addImageToLesionData(lesion, image);
+      await context.savePendingLocalImageAdds();
+      return added;
+    }
   };
 }
 
@@ -483,6 +504,7 @@ test('CENARIO A: PC B (local desatualizado) abre e recebe automaticamente as ima
   // ele, o reconcile-before-push trataria como stale sem evidência.
   entryB.images.push(img({ publicId: 'atlas-radiologico/4', assetId: 'A4' }));
   entryB._userUpdatedAt = Date.now();
+  deviceB.context.markPendingLocalImageAdds(entryB.id, [], [entryB.images[entryB.images.length - 1]]); await deviceB.context.savePendingLocalImageAdds(); // ALTERAÇÃO 079d — marcador persistente de uma inclusão real
   await deviceB.save();
 
   // PC A reabre (2º boot, storage local de A ainda só tem 3 imagens) —
@@ -563,6 +585,7 @@ test('CONCORRÊNCIA: edição local DURANTE a reconciliação (pull em andamento
   const entryDuringPull = deviceB.context.DATA.find((e) => e.id === 'seed_1');
   entryDuringPull.images.push(img({ publicId: 'atlas-radiologico/new-from-b', assetId: 'NEWB' }));
   entryDuringPull._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
+  deviceB.context.markPendingLocalImageAdds(entryDuringPull.id, [], [entryDuringPull.images[entryDuringPull.images.length - 1]]); await deviceB.context.savePendingLocalImageAdds(); // ALTERAÇÃO 079d — marcador persistente de uma inclusão real
   await deviceB.save();
 
   // O push desta edição precisa ter sido BLOQUEADO (nunca perdido em
@@ -655,6 +678,7 @@ test('REVISÃO: dois dispositivos sincronizados, B publica primeiro, A com revis
   const entryB0 = deviceB.context.DATA.find((e) => e.id === 'seed_1');
   entryB0.images.push(img({ publicId: 'atlas-radiologico/from-b', assetId: 'FROMB' }));
   entryB0._userUpdatedAt = Date.now();
+  deviceB.context.markPendingLocalImageAdds(entryB0.id, [], [entryB0.images[entryB0.images.length - 1]]); await deviceB.context.savePendingLocalImageAdds(); // ALTERAÇÃO 079d — marcador persistente de uma inclusão real
   await deviceB.save();
   const revisionAposB = cloud.peekRevision();
   assert.ok(revisionAposB > revisionCompartilhada, 'B precisa ter avançado a nuvem para uma revisão mais nova');
@@ -682,6 +706,7 @@ test('REVISÃO: dois dispositivos sincronizados, B publica primeiro, A com revis
   const entryA0 = deviceA.context.DATA.find((e) => e.id === 'seed_1');
   entryA0.images.push(img({ publicId: 'atlas-radiologico/from-a', assetId: 'FROMA' }));
   entryA0._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
+  deviceA.context.markPendingLocalImageAdds(entryA0.id, [], [entryA0.images[entryA0.images.length - 1]]); await deviceA.context.savePendingLocalImageAdds(); // ALTERAÇÃO 079d — marcador persistente de uma inclusão real
   await deviceA.save();
 
   assert.ok(cloud.peekRevision() > revisionAposB, 'o retry precisa ter avançado a nuvem mais uma vez, com o estado já mesclado');
@@ -846,6 +871,7 @@ test('BOOT COM ALTERAÇÃO LOCAL EXCLUSIVA: PC stale com 1 imagem própria (edi�
   const entryComEdicao = deviceStale.context.DATA.find((e) => e.id === 'seed_1');
   entryComEdicao.images.push(img({ publicId: 'atlas-radiologico/exclusiva-local', assetId: 'EXCLUSIVA' }));
   entryComEdicao._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
+  deviceStale.context.markPendingLocalImageAdds(entryComEdicao.id, [], [entryComEdicao.images[entryComEdicao.images.length - 1]]); await deviceStale.context.savePendingLocalImageAdds(); // ALTERAÇÃO 079d — marcador persistente de uma inclusão real
   await deviceStale.save();
 
   const entryStale = deviceStale.context.DATA.find((e) => e.id === 'seed_1');
@@ -914,6 +940,7 @@ test('DIRTY SOBREVIVE A RELOAD: edição real feita offline continua marcada ap�
   const entryOffline = device.context.DATA.find((e) => e.id === 'seed_1');
   entryOffline.images.push(img({ publicId: 'atlas-radiologico/offline-edit', assetId: 'OFFLINE' }));
   entryOffline._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
+  device.context.markPendingLocalImageAdds(entryOffline.id, [], [entryOffline.images[entryOffline.images.length - 1]]); await device.context.savePendingLocalImageAdds(); // ALTERAÇÃO 079d — marcador persistente de uma inclusão real
   await device.save(); // saveData() real: marca dirty, tenta publicar (falha por estar offline)
 
   assert.equal(device.context.syncDirty, true, 'a edição real precisa continuar marcada como dirty enquanto não for confirmada na nuvem');
@@ -1502,6 +1529,7 @@ test('073 CONCORRÊNCIA: A exclui X enquanto B adiciona Y — X continua excluí
   const entryB1 = deviceB.context.DATA.find((e) => e.id === 'seed_1');
   entryB1.images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
   entryB1._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
+  deviceB.context.markPendingLocalImageAdds(entryB1.id, [], [entryB1.images[entryB1.images.length - 1]]); await deviceB.context.savePendingLocalImageAdds(); // ALTERAÇÃO 079d — marcador persistente de uma inclusão real
   await deviceB.save();
 
   assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(['Y']), 'B: X fora, Y dentro');
@@ -1853,6 +1881,7 @@ test('073b ADICIONAL 5: concorrência — A remove X de lesionA, B adiciona Y em
   const entryB2 = deviceB.context.DATA.find((e) => e.id === 'seed_2');
   entryB2.images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
   entryB2._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
+  deviceB.context.markPendingLocalImageAdds(entryB2.id, [], [entryB2.images[entryB2.images.length - 1]]); await deviceB.context.savePendingLocalImageAdds(); // ALTERAÇÃO 079d — marcador persistente de uma inclusão real
   await deviceB.save();
 
   assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(), 'X removida em B');
@@ -1971,6 +2000,7 @@ test('074 MESMA REVISION, LOCAL INCOMPLETO: preflight detecta cloud-only e prese
   // e a nuvem PERDERIA X mesmo com revisão válida.
   entryB.images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
   entryB._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
+  deviceB.context.markPendingLocalImageAdds(entryB.id, [], [entryB.images[entryB.images.length - 1]]); await deviceB.context.savePendingLocalImageAdds(); // ALTERAÇÃO 079d — marcador persistente de uma inclusão real
   await deviceB.save();
 
   assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(['K', 'X', 'Y']), 'preflight re-adotou X + manteve Y');
@@ -1990,6 +2020,7 @@ test('074 OFFLINE EDIT: sem rede salva local + dirty, sem reconcile; reconnect r
   const entryOfflineEdit = device.context.DATA.find((e) => e.id === 'seed_1');
   entryOfflineEdit.images.push(img({ publicId: 'atlas-radiologico/Y', assetId: 'Y' }));
   entryOfflineEdit._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
+  device.context.markPendingLocalImageAdds(entryOfflineEdit.id, [], [entryOfflineEdit.images[entryOfflineEdit.images.length - 1]]); await device.context.savePendingLocalImageAdds(); // ALTERAÇÃO 079d — marcador persistente de uma inclusão real
   await device.save();
   assert.equal(device.context.syncDirty, true, 'dirty persiste offline');
   assert.equal(cloud.peekRevision(), revBase, 'nada escrito offline');
@@ -2036,6 +2067,7 @@ test('074 CONCORRÊNCIA: stale salva após outro push — preflight evita o conf
   const entryA1 = deviceA.context.DATA.find((e) => e.id === 'seed_1');
   entryA1.images.push(img({ publicId: 'atlas-radiologico/N1', assetId: 'N1' }));
   entryA1._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
+  deviceA.context.markPendingLocalImageAdds(entryA1.id, [], [entryA1.images[entryA1.images.length - 1]]); await deviceA.context.savePendingLocalImageAdds(); // ALTERAÇÃO 079d — marcador persistente de uma inclusão real
   await deviceA.save();
   const revAfterA = cloud.peekRevision();
 
@@ -2043,11 +2075,8 @@ test('074 CONCORRÊNCIA: stale salva após outro push — preflight evita o conf
   // mescla e escreve a união — sem conflito de revisão sequer.
   const entryB1 = deviceB.context.DATA.find((e) => e.id === 'seed_1');
   entryB1.images.push(img({ publicId: 'atlas-radiologico/N2', assetId: 'N2' }));
-  // ALTERAÇÃO 079c — a edição de B acontece DEPOIS da de A (é o cenário);
-  // garante carimbo estritamente posterior mesmo quando os dois Date.now()
-  // caem no mesmo milissegundo (artefato de teste rápido): empate de
-  // _userUpdatedAt nunca é evidência de edição (barreira 079c).
-  entryB1._userUpdatedAt = Math.max(Date.now(), entryA1._userUpdatedAt + 1);
+  entryB1._userUpdatedAt = Date.now(); // ALTERAÇÃO 079b — mesmo carimbo de uma adição real
+  deviceB.context.markPendingLocalImageAdds(entryB1.id, [], [entryB1.images[entryB1.images.length - 1]]); await deviceB.context.savePendingLocalImageAdds(); // ALTERAÇÃO 079d — marcador persistente de uma inclusão real
   await deviceB.save();
 
   assert.deepEqual(deviceImagesByAsset(deviceB, 'seed_1'), new Set(['M', 'N1', 'N2']), 'união completa em B');
@@ -3012,27 +3041,32 @@ for (const sc of STAMP_CASES_079C) {
   }
 }
 
-test('PROTEÇÃO 079c: imagem legítima nova (lesão com _userUpdatedAt MAIS NOVO que o remoto) é enviada — [A,B]', async () => {
+test('PROTEÇÃO 079d (substitui 079c): imagem incluída de verdade (addImageToLesionData, marcador persistente) é enviada — [A,B] por todos os caminhos', async () => {
   for (const wp of WRITE_PATHS_079C.filter((w) => !w.preBoot)) {
     const cloud = makeFakeCloud();
     await seedCleanCloud079c(cloud, [remoteEntry079c(T079C)]);
-    const local = makeSeedEntry({ images: [img079c('A'), img079c('B')], _userUpdatedAt: T079C + 5000 });
-    const device = makeDevice(cloud, { seed: [local] });
+    const device = makeDevice(cloud, { seed: [remoteEntry079c(T079C)] });
     await device.boot();
+    await device.addImage('seed_1', img079c('B'));
     await device.markDirty();
     await wp.run(device, cloud);
-    assert.deepEqual(cloudImageIds079c(cloud), ['A', 'B'], 'edição real mais nova precisa chegar à nuvem via ' + wp.label);
+    assert.deepEqual(cloudImageIds079c(cloud), ['A', 'B'], 'inclusão real marcada precisa chegar à nuvem via ' + wp.label);
+    assert.deepEqual(JSON.parse(JSON.stringify(device.context.__getPendingAdds079d())), {}, 'marcador removido após confirmação via ' + wp.label);
   }
 });
 
-test('PROTEÇÃO 079c: lesão nova só-local (sem contraparte remota) continua sendo enviada com suas imagens', async () => {
+test('PROTEÇÃO 079d (F): lesão nova criada localmente sobe com as imagens marcadas; registro stale ausente no remoto NÃO sobe imagens sem marcador', async () => {
   const cloud = makeFakeCloud();
   await seedCleanCloud079c(cloud, [remoteEntry079c(T079C)]);
-  const nova = makeSeedEntry({ id: 'custom_1', name: 'Nova', images: [img079c('N1')], _userUpdatedAt: T079C + 1 });
-  const device = makeDevice(cloud, { seed: [remoteEntry079c(T079C), nova] });
+  const staleOrfa = makeSeedEntry({ id: 'custom_stale', name: 'Stale', images: [img079c('S1')], _userUpdatedAt: T079C + 999999 });
+  const device = makeDevice(cloud, { seed: [remoteEntry079c(T079C), staleOrfa] });
   await device.boot();
+  device.context.DATA.push(makeSeedEntry({ id: 'custom_1', name: 'Nova', images: [], _userUpdatedAt: Date.now() }));
+  await device.addImage('custom_1', img079c('N1'));
   await device.save();
   assert.deepEqual(cloudImageIds079c(cloud, 'custom_1'), ['N1']);
+  assert.deepEqual(cloudImageIds079c(cloud, 'custom_stale'), [], 'imagem de registro stale sem marcador não sobe');
+  assert.deepEqual(localImageIds079c(device, 'custom_stale'), ['S1'], 'mas continua local (073)');
   assert.deepEqual(cloudImageIds079c(cloud), ['A']);
 });
 
@@ -3086,7 +3120,7 @@ test('PROTEÇÃO 079c: no-op guard da 079 preservado — estado idêntico ao rem
   assert.equal(device.context.syncDirty, false);
 });
 
-test('PROTEÇÃO 079c (residual documentado): edição concorrente com carimbo MAIS ANTIGO que o remoto fica só local — nunca perdida, nunca stale na nuvem', async () => {
+test('PROTEÇÃO 079d (resolve o residual da 079c): inclusão real com carimbo de lesão MAIS ANTIGO que o remoto sobe mesmo assim; sem marcador fica só local', async () => {
   const cloud = makeFakeCloud();
   await seedCleanCloud079c(cloud, [remoteEntry079c(T079C + 100000)]); // outro PC editou depois
   const device = makeDevice(cloud, { seed: [remoteEntry079c(T079C + 100000)] });
@@ -3095,8 +3129,12 @@ test('PROTEÇÃO 079c (residual documentado): edição concorrente com carimbo M
   e.images.push(img079c('N'));
   e._userUpdatedAt = T079C; // relógio/edição mais antiga que a versão remota
   await device.save();
-  assert.deepEqual(cloudImageIds079c(cloud), ['A'], 'sem evidência mais nova, não sobe');
+  assert.deepEqual(cloudImageIds079c(cloud), ['A'], 'sem marcador, não sobe');
   assert.deepEqual(localImageIds079c(device), ['A', 'N'], 'continua na cópia local (nada perdido)');
+  await device.addImage('seed_1', img079c('M'));
+  device.context.DATA.find((x) => x.id === 'seed_1')._userUpdatedAt = T079C; // carimbo continua antigo
+  await device.save();
+  assert.deepEqual(cloudImageIds079c(cloud), ['A', 'M'], 'inclusão real marcada sobe mesmo com carimbo antigo; N (sem marcador) continua fora');
 });
 
 test('PROTEÇÃO 079c: no-op guard enxerga o payload filtrado — device stale sem nenhuma mudança publicável NÃO gasta revisão', async () => {
@@ -3107,6 +3145,147 @@ test('PROTEÇÃO 079c: no-op guard enxerga o payload filtrado — device stale s
   await device.boot();
   assert.equal(cloud.peekRevision(), 29, 'nenhuma escrita: o que sobraria no payload já é idêntico à nuvem');
   assert.equal(device.context.syncDirty, false, 'dirty limpo pelo no-op');
+  assert.deepEqual(cloudImageIds079c(cloud), ['A']);
+});
+
+
+// ===========================================================================
+// PROTEÇÃO 079d — intenção EXPLÍCITA e persistente para imagem só-local.
+// ===========================================================================
+// Teste 1 (essencial, falha na 079c): local stale com _userUpdatedAt MAIS
+// NOVO que o remoto (ex.: restore canônico com carimbo antigo) e SEM
+// marcador — por TODOS os caminhos de escrita (itens 8–12 e 14).
+for (const wp of WRITE_PATHS_079C) {
+  test(`PROTEÇÃO 079d - 1: local stale A+B+C com _userUpdatedAt MAIS NOVO que o remoto e SEM marcador => remoto continua [A] — via ${wp.label}`, async () => {
+    const cloud = makeFakeCloud();
+    await seedCleanCloud079c(cloud, [remoteEntry079c(T079C)]);
+    const device = makeDevice(cloud, { seed: [staleLocalEntry079c(T079C + 3600000)] });
+    if (wp.preBoot) await wp.preBoot(device);
+    await device.boot();
+    await wp.run(device, cloud);
+    assert.deepEqual(cloudImageIds079c(cloud), ['A']);
+    assert.deepEqual(localImageIds079c(device), ['A', 'B', 'C'], '073: local preservado');
+  });
+}
+
+async function deviceWithMarkedB079d() {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [remoteEntry079c(T079C)]);
+  const device = makeDevice(cloud, { seed: [remoteEntry079c(T079C)] });
+  await device.boot();
+  await device.addImage('seed_1', img079c('B'));
+  await device.markDirty();
+  return { cloud, device };
+}
+function markerKeys079d(device, lesionId = 'seed_1') {
+  return Object.keys(device.context.__getPendingAdds079d()[lesionId] || {});
+}
+async function storedMarkers079d(device) {
+  try { return JSON.parse((await device.context.storage.get('atlas:pendingLocalImageAdds')).value); } catch (_e) { return null; }
+}
+
+test('PROTEÇÃO 079d - 2/3/13: usuário adiciona B => marcador persistente com a chave canônica; saveData envia [A,B]; confirmação remove o marcador (memória e storage)', async () => {
+  const { cloud, device } = await deviceWithMarkedB079d();
+  const keyB = device.context.stableImageKeyV208(img079c('B'));
+  assert.deepEqual(markerKeys079d(device), [keyB], 'marcador usa stableImageKeyV208 (mesma chave dos tombstones)');
+  assert.deepEqual(Object.keys((await storedMarkers079d(device)).seed_1), [keyB], 'persistido no storage');
+  await device.save();
+  assert.deepEqual(cloudImageIds079c(cloud), ['A', 'B']);
+  assert.deepEqual(markerKeys079d(device), [], 'removido após write confirmado');
+  assert.deepEqual(await storedMarkers079d(device), {}, 'removido também do storage');
+});
+
+for (const failure of [
+  { label: 'erro de rede', make: () => Object.assign(new Error('network error'), { code: 'unavailable' }) },
+  { label: 'permission-denied', make: () => Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' }) }
+]) {
+  test(`PROTEÇÃO 079d - 4/5: ${failure.label} na escrita => marcador de B permanece (memória e storage) e nuvem intacta`, async () => {
+    const { cloud, device } = await deviceWithMarkedB079d();
+    const realTx = cloud.runTransaction;
+    device.context.fbDb = { runTransaction: async () => { throw failure.make(); } };
+    await device.context.pushToFirebaseNow();
+    assert.deepEqual(cloudImageIds079c(cloud), ['A']);
+    assert.equal(markerKeys079d(device).length, 1, 'marcador continua em memória');
+    assert.equal(Object.keys((await storedMarkers079d(device)).seed_1 || {}).length, 1, 'marcador continua no storage');
+    assert.equal(device.context.syncDirty, true, 'dirty preservado');
+    device.context.fbDb = { runTransaction: realTx };
+    await device.context.pushToFirebaseNow();
+    assert.deepEqual(cloudImageIds079c(cloud), ['A', 'B'], 'rede de volta: B sobe');
+    assert.equal(markerKeys079d(device).length, 0);
+  });
+}
+
+test('PROTEÇÃO 079d - 6: conflito de revisão (inclusive retry que falha de novo) mantém o marcador até a confirmação final', async () => {
+  const { cloud, device } = await deviceWithMarkedB079d();
+  const realTx = cloud.runTransaction;
+  // Toda tentativa encontra a nuvem numa revisão nova (outro device escrevendo).
+  device.context.fbDb = { runTransaction: async (fn) => {
+    const meta = cloud.peekMeta();
+    await cloud.FB_META_REF().set({ ...meta, revision: meta.revision + 1 });
+    return realTx(fn);
+  } };
+  const ok = await device.context.writeShardedStateSerialized(5000);
+  assert.equal(ok, false, 'conflito na 1a tentativa e no retry');
+  assert.deepEqual(cloudImageIds079c(cloud), ['A']);
+  assert.equal(markerKeys079d(device).length, 1, 'marcador permanece após conflito+retry');
+  device.context.fbDb = { runTransaction: realTx };
+  const ok2 = await device.context.writeShardedStateSerialized(5000);
+  assert.equal(ok2, true, 'retry com conflito reconcilia e confirma');
+  assert.deepEqual(cloudImageIds079c(cloud), ['A', 'B']);
+  assert.equal(markerKeys079d(device).length, 0, 'só sai após confirmação final');
+});
+
+test('PROTEÇÃO 079d - 7: marcador sobrevive a reload (lido do storage no boot) e autoriza o envio depois', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [remoteEntry079c(T079C)]);
+  const device = makeDevice(cloud, { seed: [remoteEntry079c(T079C)] });
+  await device.boot();
+  const realTx = cloud.runTransaction;
+  device.context.fbDb = { runTransaction: async () => { throw Object.assign(new Error('offline'), { code: 'unavailable' }); } };
+  await device.addImage('seed_1', img079c('B'));
+  await device.save(); // falha: fica local + dirty + marcador
+  assert.deepEqual(cloudImageIds079c(cloud), ['A']);
+  device.context.__setPendingAdds079d({}); // "fecha a aba": memória perdida
+  device.context.fbDb = { runTransaction: realTx };
+  await device.boot(); // reload: loadPendingLocalImageAdds + trailing push (dirty)
+  assert.equal(markerKeys079d(device).length, 0, 'confirmado após o envio do reload');
+  assert.deepEqual(cloudImageIds079c(cloud), ['A', 'B'], 'marcador restaurado do storage autorizou B');
+});
+
+test('PROTEÇÃO 079d - 7b: boot/pull NUNCA cria marcador para imagem que já estava no IndexedDB', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [remoteEntry079c(T079C)]);
+  const device = makeDevice(cloud, { seed: [staleLocalEntry079c(T079C + 3600000)] });
+  await device.context.storage.set('atlas:syncDirty', 'true');
+  await device.boot();
+  assert.deepEqual(JSON.parse(JSON.stringify(device.context.__getPendingAdds079d())), {});
+  assert.deepEqual(cloudImageIds079c(cloud), ['A']);
+});
+
+test('PROTEÇÃO 079d - marcador de imagem que outro device já publicou é confirmado pela leitura do remoto (não reautoriza depois de um restore)', async () => {
+  const { cloud, device } = await deviceWithMarkedB079d();
+  // Outro device publicou B antes deste conseguir escrever.
+  await cloud.FB_CHUNK_REF(0).set({ items: [makeSeedEntry({ images: [img079c('A'), img079c('B')], _userUpdatedAt: T079C })] });
+  const meta = cloud.peekMeta();
+  await cloud.FB_META_REF().set({ ...meta, revision: meta.revision + 1 });
+  await device.context.syncFromFirebase();
+  assert.equal(markerKeys079d(device).length, 0, 'remoto já contém B: marcador sai');
+  // Restore canônico volta a nuvem para [A]: B local (sem marcador) não pode ressurgir.
+  await seedCleanCloud079c(cloud, [remoteEntry079c(T079C - 1000)], { revision: cloud.peekRevision() + 1 });
+  await device.boot();
+  await device.markDirty();
+  await device.context.pushToFirebaseNow();
+  assert.deepEqual(cloudImageIds079c(cloud), ['A']);
+});
+
+test('PROTEÇÃO 079d - 15: tombstone remoto vence o marcador — imagem marcada e depois excluída em outro PC não ressuscita (force incluído)', async () => {
+  const { cloud, device } = await deviceWithMarkedB079d();
+  const keyB = device.context.stableImageKeyV208(img079c('B'));
+  const meta = cloud.peekMeta();
+  await cloud.FB_META_REF().set({ ...meta, tombstones: { ['seed_1\u0001' + keyB]: { key: keyB, lesionId: 'seed_1', deletedAt: '2099-01-01T00:00:00.000Z' } } });
+  await device.context.forceThisDeviceToCloud();
+  assert.deepEqual(cloudImageIds079c(cloud), ['A'], 'force não contorna tombstone remoto');
+  await device.context.pushToFirebaseNow();
   assert.deepEqual(cloudImageIds079c(cloud), ['A']);
 });
 

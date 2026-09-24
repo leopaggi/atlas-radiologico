@@ -3626,3 +3626,24 @@ transação. O mapa 079b continua como camada extra. No-op guard de
 que o remoto fica só local (sem perda) até nova edição.
 **Testes:** `multi-device-sync` 129 (128 PASS; F2 exige arquivo
 protegido); suíte 1124/1089 PASS/30 FAIL (mesmas da base)/5 todo.
+
+## Alteração 079d — Intenção explícita para imagem só-local (2026-09-24)
+
+**Motivo:** 079c aceitava `local._userUpdatedAt > remoto` como
+autorização; restore canônico com carimbo antigo reabria o vazamento.
+**Implementado:** `PENDING_LOCAL_IMAGE_ADDS` persistido em
+`atlas:pendingLocalImageAdds` (`{ [lesionId]: { [stableImageKeyV208]:
+addedAtMs } }`); `markPendingLocalImageAdds(lesionId, prev, next)` só
+nos fluxos reais de inclusão (Salvar do editor — lesão nova incluída —,
+Concluído do Quiz, `addImageToLesionData`); `loadPendingLocalImageAdds`
+no boot; `gateStaleLocalOnlyImagesForWrite(..., pendingAdds)` exige
+marcador para toda imagem ausente da mesma lesão remota (inclusive
+lesão sem contraparte remota); timestamp não autoriza mais imagem.
+Snapshot imutável dos marcadores tirado com o `cleanData`;
+`confirmPendingLocalImageAdds` remove só após commit confirmado (payload
+gravado) ou quando o remoto lido já contém a imagem (reconcile). Nuvem
+nunca escrita (sem documento principal): sem gate (só tombstones).
+No-op guard usa os marcadores. Boot/pull/import/migração nunca marcam.
+**Testes:** `multi-device-sync` 146 (145 PASS; F2 exige arquivo
+protegido), `quiz-images` 103 PASS; suíte 1142/1107 PASS/30 FAIL
+(mesmas da base)/5 todo.

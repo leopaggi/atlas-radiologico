@@ -1381,3 +1381,12 @@ tem se você editou aquela lesão neste computador depois da versão da
 nuvem. Caso contrário a imagem fica só neste computador (nada é
 apagado). Exclusões anotadas continuam impedindo que imagens voltem.
 Vale para todos os jeitos de enviar, inclusive "forçar".
+
+### Imagem nova só sobe se você realmente a incluiu (2026-09-24)
+
+Refino da correção anterior: a data de edição da lesão não basta mais
+para enviar uma imagem que a nuvem não tem. Quando você inclui uma
+imagem (editor, Quiz), o Atlas guarda uma anotação de "inclusão
+pendente" no navegador; só imagens com essa anotação sobem. A anotação
+sai quando a nuvem confirma que recebeu. Imagens antigas que só estavam
+guardadas neste computador (ou vindas de backup) ficam aqui e não sobem.

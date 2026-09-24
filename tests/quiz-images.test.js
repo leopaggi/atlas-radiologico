@@ -68,12 +68,35 @@ const renderQuizSummaryIntegratedFn = extractFunction(html, 'renderQuizSummaryIn
 // addImageToLesionData() — lógica pura, testada de verdade (vm), não uma
 // cópia reescrita.
 // -----------------------------------------------------------------------
-function runAddImageToLesionData(lesion, imgObj) {
-  const context = { Date, Array, Object };
+// ALTERAÇÃO 079d — addImageToLesionData() agora cria o marcador persistente
+// de inclusão explícita; as funções reais do marcador entram no mesmo vm,
+// com um storage em memória.
+const markerFns079d = ['stableImageKeyV208', 'markPendingLocalImageAdds', 'savePendingLocalImageAdds']
+  .map((n) => extractFunction(html, n).source).join('\n');
+function makeAddImageContext079d() {
+  const stored = {};
+  const context = { Date, Array, Object, JSON, stored,
+    storage: { set: async (k, v) => { stored[k] = v; } } };
   vm.createContext(context);
-  vm.runInContext(addImageFn.source, context, { filename: 'add-image-to-lesion-data.js' });
+  vm.runInContext("const PENDING_LOCAL_IMAGE_ADDS_KEY = 'atlas:pendingLocalImageAdds';\nvar PENDING_LOCAL_IMAGE_ADDS = {};\n" +
+    markerFns079d + '\n' + addImageFn.source, context, { filename: 'add-image-to-lesion-data.js' });
+  return context;
+}
+function runAddImageToLesionData(lesion, imgObj) {
+  const context = makeAddImageContext079d();
   return context.addImageToLesionData(lesion, imgObj);
 }
+
+test('ALTERAÇÃO 079d: addImageToLesionData() cria marcador persistente SÓ para a imagem incluída, na lesão certa', async () => {
+  const context = makeAddImageContext079d();
+  const lesion = { id: 'seed_5', name: 'L', images: [{ assetId: 'OLD', data: 'https://x/old.jpg' }] };
+  context.addImageToLesionData(lesion, { assetId: 'NEW', data: 'https://x/new.jpg' });
+  await new Promise((r) => setImmediate(r));
+  const markers = JSON.parse(JSON.stringify(context.PENDING_LOCAL_IMAGE_ADDS));
+  assert.deepEqual(Object.keys(markers), ['seed_5']);
+  assert.deepEqual(Object.keys(markers.seed_5), ['asset:NEW'], 'imagem pré-existente (OLD) nunca é marcada');
+  assert.deepEqual(Object.keys(JSON.parse(context.stored['atlas:pendingLocalImageAdds']).seed_5), ['asset:NEW'], 'persistido');
+});
 
 function runLesionImageFunction(fn, name, ...args) {
   const context = { Date, Array, Object, Number, String };
