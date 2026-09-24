@@ -64,6 +64,20 @@ const pushToFirebaseNowFn = extractFunction(html, 'pushToFirebaseNow');
 // ALTERAÇÃO 076: pre-push reconcile também no caminho debounced (usado por
 // saveReview/saveSRS/saveSessionLog/saveOrder/saveSiteOrder).
 const pushToFirebaseFn = extractFunction(html, 'pushToFirebase');
+// ALTERAÇÃO 077: restore canônico dedicado — nunca lê DATA/REVIEW/SRS
+// globais, nunca faz merge/união/migração, exige expectedRemoteRevision.
+const quarantineIndexedByLesionIdFn = extractFunction(html, 'quarantineIndexedByLesionId');
+const sanitizeCanonicalPayloadForQuarantineFn = extractFunction(html, 'sanitizeCanonicalPayloadForQuarantine');
+const validateCanonicalPayloadFn = extractFunction(html, 'validateCanonicalPayload');
+const canonicalJsonStringFn = extractFunction(html, 'canonicalJsonString');
+const deepStableEqualFn = extractFunction(html, 'deepStableEqual');
+const restoreCanonicalStateToCloudFn = extractFunction(html, 'restoreCanonicalStateToCloud');
+// A quarentena precisa ser REAL (não o stub isQuarantinedSeedId:()=>false já
+// usado no resto deste arquivo) para os testes E/F/G/H/I do restore
+// canônico, que verificam a proteção 075 de verdade. Mesmo trecho que
+// PROTEÇÃO 075 usa em critical-flows.test.js.
+const computeDuplicateSeedIdsFn = extractFunction(html, 'computeDuplicateSeedIds');
+const quarantineConstsSource = html.slice(html.indexOf('const SUPPRESSED_DUPLICATE_IDS_V172'), html.indexOf('function getActiveCanonicalSeed'));
 const saveDataFn = extractFunction(html, 'saveData');
 const mergeEntryNonDestructiveFn = extractFunction(html, 'mergeEntryNonDestructive');
 const mergeReviewFn = extractFunction(html, 'mergeReviewPreservingProgress');
@@ -228,6 +242,7 @@ function makeDevice(cloud, { seed = [] } = {}) {
     // pra fazer a verificação de revisão de verdade entre os "dispositivos".
     fbDb: { runTransaction: cloud.runTransaction },
     fbSyncing: false, fbPushTimer: null, writeChainV247: Promise.resolve(),
+    canonicalRestoreInProgress: false,
     syncPushPending: false,
     syncFromFirebaseSkipTrailingPush: false,
     // ALTERAÇÃO 072 (2026-09-23): dirty PERSISTENTE e explícito — só ligado
@@ -352,6 +367,12 @@ function makeDevice(cloud, { seed = [] } = {}) {
     ${saveDataFn.source}
     ${syncFromFirebaseFn.source}
     ${loadDataFn.source}
+    ${quarantineIndexedByLesionIdFn.source}
+    ${sanitizeCanonicalPayloadForQuarantineFn.source}
+    ${validateCanonicalPayloadFn.source}
+    ${canonicalJsonStringFn.source}
+    ${deepStableEqualFn.source}
+    ${restoreCanonicalStateToCloudFn.source}
   `;
   new vm.Script(engine).runInContext(context);
   return {
@@ -2114,6 +2135,276 @@ test('TESTE D (076): boot com syncDirty=false continua sem escrever na nuvem, me
 
   assert.equal(deviceB.context.syncDirty, false, 'boot sem edição não pode ligar o dirty sozinho');
   assert.equal(cloud.peekRevision(), revisionAfterA, 'boot com dirty=false não pode ter incrementado a revisão da nuvem (nenhuma escrita)');
+});
+
+// ===========================================================================
+// ALTERAÇÃO 077 (2026-09-24) — RESTORE CANÔNICO DEDICADO. Bug real
+// (rev19->rev20): forceThisDeviceToCloud() não tinha proteção própria (sem
+// reconcile, sem filtro de quarentena, confiava cegamente em DATA/REVIEW/
+// SRS globais) e rodou concorrente com um syncFromFirebase() disparado por
+// onAuthStateChanged (Auth se revalidando ao voltar a rede), que mesclou a
+// nuvem AINDA contaminada de volta no estado em memória antes da escrita.
+// restoreCanonicalStateToCloud() é a ferramenta dedicada: recebe o payload
+// por parâmetro (nunca lê DATA/REVIEW/SRS globais como fonte), nunca faz
+// merge/união/migração, exige expectedRemoteRevision, e é bloqueada de
+// qualquer concorrência via canonicalRestoreInProgress.
+// ===========================================================================
+
+// Contexto ISOLADO, só pra restoreCanonicalStateToCloud() e vizinhos diretos
+// — usa a quarentena REAL (isQuarantinedSeedId de verdade), ao contrário do
+// resto deste arquivo (que stuba isQuarantinedSeedId=>false porque várias
+// fixtures pré-existentes usam nome/seção/sítio repetidos de propósito pra
+// testar ownership, não dedup — ligar a quarentena real no engine
+// compartilhado quebrava esses testes sem relação nenhuma com a 077).
+function makeRestoreContext(cloud) {
+  const context = vm.createContext({
+    fbDb: { runTransaction: cloud.runTransaction },
+    FB_META_REF: cloud.FB_META_REF,
+    FB_CHUNK_REF: cloud.FB_CHUNK_REF,
+    DATA_CHUNK_SIZE: 150,
+    CLOUD_REVISION_FIELD: 'revision',
+    canonicalRestoreInProgress: false,
+    withFirebaseTimeout: (p) => p,
+    firebase: { firestore: { FieldValue: { serverTimestamp: () => 'SERVER_TS' } } },
+    SEED: [],
+    // Estado global "real" do app, só aqui pra provar que restore NUNCA os
+    // lê como fonte (ver TESTE J) — propositalmente vazio/diferente do
+    // payload de restore.
+    DATA: [], REVIEW: {}, SRS: {}, SESSIONLOG: {}, sectionOrder: [], siteOrder: {},
+    IMAGE_TOMBSTONES: {}, lastKnownCloudRevision: null,
+    window: {},
+    console
+  });
+  const engine = `
+    ${computeDuplicateSeedIdsFn.source}
+    ${quarantineConstsSource}
+    ${stableKeyFn.source}
+    ${tombScopeFn.source}
+    ${isValidTombFn.source}
+    ${isTombstonedFn.source}
+    function stripUndefinedDeep(v){try{return JSON.parse(JSON.stringify(v));}catch(_e){return v;}}
+    function splitIntoChunks(arr,size){const out=[];for(let i=0;i<arr.length;i+=size)out.push(arr.slice(i,i+size));return out;}
+    function checkChunkSize(){return true;}
+    ${quarantineIndexedByLesionIdFn.source}
+    ${sanitizeCanonicalPayloadForQuarantineFn.source}
+    ${validateCanonicalPayloadFn.source}
+    ${canonicalJsonStringFn.source}
+    ${deepStableEqualFn.source}
+    ${restoreCanonicalStateToCloudFn.source}
+  `;
+  new vm.Script(engine).runInContext(context);
+  return context;
+}
+
+function makeSyntheticCanonicalPayload() {
+  return {
+    data: [
+      { id: 'seed_0', name: 'Lesão A', s: 'Seção 1', site: 'Sítio 1', images: [{ assetId: 'A1', publicId: 'p/A1' }] },
+      { id: 'seed_1', name: 'Lesão B', s: 'Seção 1', site: 'Sítio 2', images: [] },
+      { id: 'u_test1', name: 'Lesão C', s: 'Seção 2', site: 'Sítio 3', images: [] }
+    ],
+    review: { seed_0: 1, seed_1: 2 },
+    srs: { seed_0: { interval: 3, due: 1, streak: 1 } },
+    sessionLog: { '2026-09-01': { reviewed: 2, right: 2, wrong: 0 } },
+    sectionOrder: ['Seção 1', 'Seção 2'],
+    siteOrder: { 'Seção 1': ['Sítio 1', 'Sítio 2'] },
+    imageTombstones: {}
+  };
+}
+const SYNTHETIC_EXPECTED = {
+  records: 3, dupGroups: 0, highIds: 0,
+  withImage: 1, imageRefs: 1, distinctStableKeys: 1,
+  review: 2, srs: 1, altPlacements: 0, tombstones: 0,
+  zeroImageIds: ['seed_1'], seedRangeMax: 1, uCount: 1
+};
+
+test('TESTE A (077): restore recebe canônico sintético e escreve exatamente esse estado na nuvem (revision 0->1)', async () => {
+  const cloud = makeFakeCloud();
+  const ctx = makeRestoreContext(cloud);
+  const result = await ctx.restoreCanonicalStateToCloud(makeSyntheticCanonicalPayload(), { expectedRemoteRevision: 0, expected: SYNTHETIC_EXPECTED });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.revision, 1);
+  assert.equal(cloud.peekLesionCount(), 3);
+  assert.equal(cloud.peekRevision(), 1);
+  assert.deepEqual(Array.from(ctx.DATA).map(e => e.id).sort(), ['seed_0', 'seed_1', 'u_test1']);
+});
+
+test('TESTE B (077): syncFromFirebase() não executa (nem liga fbSyncing) enquanto canonicalRestoreInProgress=true', async () => {
+  const cloud = makeFakeCloud();
+  const seedA = [makeSeedEntry({ id: 'seed_1', name: 'Original' })];
+  const deviceA = makeDevice(cloud, { seed: seedA });
+  await deviceA.markDirty();
+  await deviceA.boot();
+
+  const deviceB = makeDevice(cloud, { seed: [] });
+  deviceB.context.canonicalRestoreInProgress = true;
+  await deviceB.context.syncFromFirebase();
+
+  assert.equal(deviceB.context.fbSyncing, false, 'syncFromFirebase não pode nem ter começado — fbSyncing nunca liga');
+  assert.deepEqual(deviceB.context.DATA, [], 'DATA local não pode ter sido tocado — o pull nem rodou');
+});
+
+test('TESTE C (077): loadData()/boot (mesmo caminho de onAuthStateChanged->showApp) não consegue puxar a nuvem enquanto canonicalRestoreInProgress=true', async () => {
+  const cloud = makeFakeCloud();
+  const seedA = [makeSeedEntry({ id: 'seed_1', name: 'Nuvem' })];
+  const deviceA = makeDevice(cloud, { seed: seedA });
+  await deviceA.markDirty();
+  await deviceA.boot();
+
+  const deviceB = makeDevice(cloud, { seed: [] });
+  deviceB.context.canonicalRestoreInProgress = true;
+  await deviceB.boot();
+
+  assert.deepEqual(Array.from(deviceB.context.DATA), [], 'boot com o lock ligado não pode ter puxado nada da nuvem');
+});
+
+test('TESTE D (077): revision remota diferente da esperada aborta — zero writes', async () => {
+  const cloud = makeFakeCloud();
+  const ctx = makeRestoreContext(cloud);
+  await ctx.restoreCanonicalStateToCloud(makeSyntheticCanonicalPayload(), { expectedRemoteRevision: 0, expected: SYNTHETIC_EXPECTED });
+  assert.equal(cloud.peekRevision(), 1, 'setup: primeira escrita precisa ter ido pra revision 1');
+
+  const before = cloud.peekLesionCount();
+  const result = await ctx.restoreCanonicalStateToCloud(makeSyntheticCanonicalPayload(), { expectedRemoteRevision: 0, expected: SYNTHETIC_EXPECTED });
+  assert.equal(result.ok, false);
+  assert.equal(result.stage, 'revision_check');
+  assert.equal(cloud.peekRevision(), 1, 'revisão não pode ter mudado');
+  assert.equal(cloud.peekLesionCount(), before, 'nenhum write extra deve ter acontecido');
+});
+
+test('TESTE E (077): seed_1282 em DATA é removido pela quarentena antes de qualquer escrita', async () => {
+  const cloud = makeFakeCloud();
+  const ctx = makeRestoreContext(cloud);
+  const payload = makeSyntheticCanonicalPayload();
+  payload.data.push({ id: 'seed_1282', name: 'Contaminado', s: 'Seção X', site: 'Sítio X', images: [] });
+  const result = await ctx.restoreCanonicalStateToCloud(payload, { expectedRemoteRevision: 0, expected: SYNTHETIC_EXPECTED });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.records, 3, 'seed_1282 precisa ter sido removido antes da validação/escrita');
+  assert.equal(cloud.peekLesionCount(), 3);
+  assert.ok(!ctx.DATA.some(e => e.id === 'seed_1282'), 'seed_1282 não pode estar em DATA após o restore');
+});
+
+test('TESTE F (077): seed_1282 em SRS é removido pela quarentena — não chega ao servidor', async () => {
+  const cloud = makeFakeCloud();
+  const ctx = makeRestoreContext(cloud);
+  const payload = makeSyntheticCanonicalPayload();
+  payload.srs.seed_1282 = { interval: 1, due: 1, streak: 1 };
+  const result = await ctx.restoreCanonicalStateToCloud(payload, { expectedRemoteRevision: 0, expected: SYNTHETIC_EXPECTED });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.ok(!('seed_1282' in ctx.SRS), 'seed_1282 não pode estar em SRS após o restore');
+  const rawMeta = await cloud.FB_META_REF().get();
+  assert.ok(!('seed_1282' in (rawMeta.data().srs || {})), 'seed_1282 não pode ter chegado ao servidor');
+});
+
+test('TESTE G (077): payload com contagem de imagens divergente da esperada aborta sem escrever', async () => {
+  const cloud = makeFakeCloud();
+  const ctx = makeRestoreContext(cloud);
+  const payload = makeSyntheticCanonicalPayload();
+  payload.data[1].images = [{ assetId: 'EXTRA', publicId: 'p/extra' }]; // seed_1 ganha 1 imagem inesperada
+  const result = await ctx.restoreCanonicalStateToCloud(payload, { expectedRemoteRevision: 0, expected: SYNTHETIC_EXPECTED });
+  assert.equal(result.ok, false);
+  assert.equal(result.stage, 'validation');
+  assert.ok(result.failures.some(f => f.includes('imageRefs')), JSON.stringify(result.failures));
+  assert.equal(cloud.peekRevision(), 0, 'nenhuma escrita deve ter acontecido');
+});
+
+test('TESTE H (077): payload com duplicação semântica (nome+seção+sítio repetido) aborta sem escrever', async () => {
+  const cloud = makeFakeCloud();
+  const ctx = makeRestoreContext(cloud);
+  const payload = makeSyntheticCanonicalPayload();
+  payload.data[1].name = payload.data[0].name;
+  payload.data[1].s = payload.data[0].s;
+  payload.data[1].site = payload.data[0].site;
+  const result = await ctx.restoreCanonicalStateToCloud(payload, { expectedRemoteRevision: 0, expected: SYNTHETIC_EXPECTED });
+  assert.equal(result.ok, false);
+  assert.equal(result.stage, 'validation');
+  assert.ok(result.failures.some(f => f.includes('dupGroups')), JSON.stringify(result.failures));
+  assert.equal(cloud.peekRevision(), 0);
+});
+
+test('TESTE I (077): imagem ainda presente mas já tombstonada para a mesma lesão aborta sem escrever', async () => {
+  const cloud = makeFakeCloud();
+  const ctx = makeRestoreContext(cloud);
+  const payload = makeSyntheticCanonicalPayload();
+  payload.imageTombstones = { ['seed_0asset:A1']: { key: 'asset:A1', lesionId: 'seed_0', deletedAt: '2026-09-01T00:00:00.000Z' } };
+  const result = await ctx.restoreCanonicalStateToCloud(payload, { expectedRemoteRevision: 0, expected: Object.assign({}, SYNTHETIC_EXPECTED, { tombstones: 1 }) });
+  assert.equal(result.ok, false);
+  assert.equal(result.stage, 'validation');
+  assert.ok(result.failures.some(f => f.includes('tombstonada')), JSON.stringify(result.failures));
+  assert.equal(cloud.peekRevision(), 0);
+});
+
+test('TESTE J (077): a escrita usa o snapshot do payload — mutar DATA global ou o próprio objeto payload depois de chamar não afeta o que é escrito', async () => {
+  const cloud = makeFakeCloud();
+  const ctx = makeRestoreContext(cloud);
+  const payload = makeSyntheticCanonicalPayload();
+  const restorePromise = ctx.restoreCanonicalStateToCloud(payload, { expectedRemoteRevision: 0, expected: SYNTHETIC_EXPECTED, updateGlobalsOnSuccess: false });
+  // Mutação SÍNCRONA logo após chamar (restore já tirou seu snapshot antes
+  // do primeiro await) — tanto do global quanto do próprio objeto payload.
+  ctx.DATA = [{ id: 'seed_999', name: 'MUTADO', s: 'Z', site: 'Z' }];
+  payload.data.push({ id: 'seed_888', name: 'MUTAÇÃO TARDIA DO PAYLOAD', s: 'Z', site: 'Z' });
+  const result = await restorePromise;
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(cloud.peekLesionCount(), 3, 'a nuvem precisa refletir o payload ORIGINAL (3), nunca DATA global nem a mutação tardia do payload (4)');
+  assert.deepEqual(ctx.DATA.map(e => e.id), ['seed_999'], 'updateGlobalsOnSuccess:false — DATA global mutado não deve ter sido tocado pelo restore');
+});
+
+test('TESTE K (077): race real — syncFromFirebase() em voo quando o restore começa não corrompe a escrita canônica', async () => {
+  const cloud = makeFakeCloud();
+  const seedContaminado = [makeSeedEntry({ id: 'seed_1', name: 'Contaminado', images: [img({ publicId: 'atlas-radiologico/old' })] })];
+  const deviceOld = makeDevice(cloud, { seed: seedContaminado });
+  await deviceOld.markDirty();
+  await deviceOld.boot(); // nuvem em revision 1
+
+  // "Edge": MESMO contexto/aba vai rodar tanto o pull concorrente quanto o
+  // restore — exatamente como no bug real (onAuthStateChanged e
+  // forceThisDeviceToCloud no mesmo JS runtime, não dois devices distintos).
+  const edge = makeDevice(cloud, { seed: [] });
+  edge.context.syncDirty = true; // simula edição real ainda não confirmada, que faria syncFromFirebase tentar um push ao final
+  const gate = cloud.gateNextMetaRead();
+  const syncPromise = edge.context.syncFromFirebase(); // dispara e trava no portão de leitura
+  await gate.waitUntilEntered();
+
+  // O pull concorrente já passou pelo check de canonicalRestoreInProgress
+  // (ainda false) e está preso lendo a rede. Restore começa AGORA, no MESMO
+  // contexto, e liga o lock antes de qualquer await seu.
+  const restorePromise = edge.context.restoreCanonicalStateToCloud(
+    makeSyntheticCanonicalPayload(),
+    { expectedRemoteRevision: 1, expected: SYNTHETIC_EXPECTED }
+  );
+  gate.release();
+  const [, restoreResult] = await Promise.all([syncPromise, restorePromise]);
+
+  assert.equal(restoreResult.ok, true, JSON.stringify(restoreResult));
+  assert.equal(cloud.peekRevision(), 2, 'restore precisa ter escrito com sucesso (rev 1->2), apesar do pull concorrente');
+  assert.equal(cloud.peekLesionCount(), 3, 'a nuvem final precisa ser o canônico limpo — nunca uma mistura com o pull concorrente');
+
+  const deviceCheck = makeDevice(cloud, { seed: [] });
+  await deviceCheck.boot();
+  assert.deepEqual(Array.from(deviceCheck.context.DATA).map(e => e.id).sort(), ['seed_0', 'seed_1', 'u_test1'], 'nenhum device puxando depois pode ver contaminação residual da race');
+});
+
+test('TESTE L (077): releitura pós-escrita divergente faz o restore reportar falha e NÃO atualizar os globais', async () => {
+  const cloud = makeFakeCloud();
+  const originalChunkRef = cloud.FB_CHUNK_REF;
+  let corrupt = true;
+  cloud.FB_CHUNK_REF = (i) => {
+    const ref = originalChunkRef(i);
+    if (i !== 0) return ref;
+    return Object.assign({}, ref, {
+      get: async (opts) => {
+        if (corrupt) return { exists: true, data: () => ({ items: [{ id: 'seed_corrompido', name: 'X', s: 'Y', site: 'Z' }] }) };
+        return ref.get(opts);
+      }
+    });
+  };
+
+  const ctx = makeRestoreContext(cloud);
+  const result = await ctx.restoreCanonicalStateToCloud(makeSyntheticCanonicalPayload(), { expectedRemoteRevision: 0, expected: SYNTHETIC_EXPECTED });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.stage, 'post_write_verification');
+  assert.deepEqual(ctx.DATA, [], 'globais não podem ter sido atualizados — o restore não confirmou sucesso');
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');

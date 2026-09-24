@@ -68,6 +68,7 @@ function makeSnapshotContext(backing) {
     sectionOrder: [], siteOrder: {},
     STORAGE_KEY: 'data', REVIEW_KEY: 'review', SRS_KEY: 'srs', SESSIONLOG_KEY: 'slog',
     ORDER_KEY: 'order', SITEORDER_KEY: 'sorder', fbSyncing: false,
+    canonicalRestoreInProgress: false,
     saveLesionRevisions: async () => {},
     renderAll: () => {}
   };

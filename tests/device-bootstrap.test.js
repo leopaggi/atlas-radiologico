@@ -143,6 +143,7 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
   const chunkRef = (i) => ({ __kind: 'chunk', __i: i, delete: async () => { calls.push({ kind: 'delete', i }); } });
   const ctx = {
     deviceBootstrapPending: !!deviceBootstrapPending,
+    canonicalRestoreInProgress: false,
     CLOUD_REVISION_FIELD: 'revision',
     lastKnownCloudRevision: knownRevision,
     lastWriteRefusedReason: null,

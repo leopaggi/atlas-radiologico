@@ -1841,6 +1841,20 @@ let appStateReady = false; // impede que migrações iniciais enviem REVIEW/SRS 
 // manual) — ver motivação completa no bloco "BOOTSTRAP SEGURO" mais abaixo.
 let deviceBootstrapPending = false;
 
+// ALTERAÇÃO 077 (2026-09-24) — LOCK DE RESTORE CANÔNICO. Bug real (rev19->
+// rev20): forceThisDeviceToCloud() rodou enquanto onAuthStateChanged (Auth
+// se revalidando após a rede voltar) disparou showApp()->loadData()->
+// syncFromFirebase() em paralelo — reconcileStateWithRemote()/
+// mergeEntryNonDestructive() mesclaram a nuvem AINDA contaminada de volta
+// em DATA/SRS entre a validação e a escrita, e forceThisDeviceToCloud()
+// gravou esse estado já contaminado (nenhum dos dois checava isso). Este
+// lock é checado por TODO caminho que pode iniciar pull/push remoto —
+// enquanto true, cada um deles aborta de forma segura (nunca lança, nunca
+// escreve às cegas) em vez de competir com um restore em andamento. Só
+// restoreCanonicalStateToCloud() (mais abaixo) liga isto, sempre dentro de
+// um try/finally.
+let canonicalRestoreInProgress = false;
+
 // ALTERAÇÃO 068 (2026-09-23) — estado mínimo de sincronização, mantido aqui
 // (chokepoint único já chamado por todo envio/pull) para dois usos: o
 // diagnóstico do sistema (buildSystemDiagnosticReport) e o retry automático
@@ -1945,7 +1959,7 @@ function checkChunkSize(chunk, label){
    mesclado — nunca às cegas. Ver seção 29 do CONTEXTO_MESTRE. */
 const CLOUD_REVISION_FIELD = 'revision';
 let lastKnownCloudRevision = null; // null = nunca lido com sucesso nesta sessão
-let lastWriteRefusedReason = null; // 'device_bootstrap_pending'|'chunk_too_large'|'no_known_revision'|'cloud_revision_conflict'|null
+let lastWriteRefusedReason = null; // 'device_bootstrap_pending'|'chunk_too_large'|'no_known_revision'|'cloud_revision_conflict'|'canonical_restore_in_progress'|null
 let lastRevisionConflictAt = null; // Date.now() do último conflito de revisão detectado (diagnóstico)
 /* Escreve DATA em vários documentos pequenos + um documento "main" com o
    resto do estado, dentro de UMA transação com verificação de revisão (ver
@@ -1962,6 +1976,12 @@ async function writeShardedState(ms=15000){
   // por cima do estado real já sincronizado na nuvem (overwrite total,
   // não é merge). Retorna false, o mesmo sinal já usado para "pedaço grande
   // demais", que todo chamador já trata sem quebrar nem mutar nada.
+  // ALTERAÇÃO 077 — defesa em profundidade: writeShardedState() usa DATA/
+  // REVIEW/SRS globais, exatamente o que restoreCanonicalStateToCloud()
+  // precisa evitar. Os chamadores reais (pushToFirebase/Now,
+  // syncThisDeviceToCloud) já abortam antes de chegar aqui, mas o guard
+  // fica aqui também caso algum caminho futuro esqueça de checar.
+  if(canonicalRestoreInProgress){ lastWriteRefusedReason = 'canonical_restore_in_progress'; return false; }
   if(deviceBootstrapPending){ lastWriteRefusedReason = 'device_bootstrap_pending'; return false; }
   if(lastKnownCloudRevision === null){
     lastWriteRefusedReason = 'no_known_revision';
@@ -2089,10 +2109,14 @@ function pushToFirebase(){
   // andamento) já é uma intenção real — não pode mais ser descartado em
   // silêncio, daí syncPushPending=true nesses dois casos.
   if(!appStateReady) return;
+  // ALTERAÇÃO 077 — lock de restore canônico: nem agenda o debounce.
+  if(canonicalRestoreInProgress){ syncPushPending = true; return; }
   if(!fbDb || fbSyncing){ syncPushPending = true; return; }
   clearTimeout(fbPushTimer);
   fbPushTimer = setTimeout(async ()=>{
-    if(fbSyncing){ syncPushPending = true; return; } // pode ter começado durante os 400ms de espera
+    // pode ter começado durante os 400ms de espera
+    if(canonicalRestoreInProgress){ syncPushPending = true; return; }
+    if(fbSyncing){ syncPushPending = true; return; }
     try{
       // ALTERAÇÃO 076 — mesmo pre-push reconcile de pushToFirebaseNow() (074):
       // este caminho debounced é usado por saveReview/saveSRS/saveSessionLog/
@@ -2127,6 +2151,8 @@ function pushToFirebase(){
 async function pushToFirebaseNow(){
   // ALTERAÇÃO 069/071: mesmo raciocínio de pushToFirebase() acima.
   if(!appStateReady) return;
+  // ALTERAÇÃO 077 — lock de restore canônico.
+  if(canonicalRestoreInProgress){ syncPushPending = true; return; }
   if(!fbDb || fbSyncing){ syncPushPending = true; return; }
   clearTimeout(fbPushTimer);
   // ALTERAÇÃO 074 — pre-push reconciliation (bug real 118→116: revision
@@ -2331,6 +2357,11 @@ async function syncThisDeviceToCloud(opts){
   if(!fbDb){ toast('Firebase indisponível neste navegador.'); return { ok:false, reason:'no_firebase' }; }
   if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return { ok:false, reason:'not_ready' }; }
   if(deviceBootstrapPending){ toast('Este dispositivo ainda não foi inicializado com os dados da nuvem.'); return { ok:false, reason:'device_not_initialized' }; }
+  // ALTERAÇÃO 077 — lock de restore canônico: este é o caminho de
+  // forceThisDeviceToCloud() (skipPreflight) que gravou o estado
+  // contaminado no bug real rev19->rev20. Nunca pode rodar durante um
+  // restore canônico dedicado.
+  if(canonicalRestoreInProgress){ toast('Um restore canônico está em andamento — tente de novo depois.'); return { ok:false, reason:'canonical_restore_in_progress' }; }
   // ALTERAÇÃO 069 (2026-09-23) — sem este guard, clicar aqui bem na janela em
   // que o pull automático do boot (ou outra reconciliação) ainda está lendo/
   // mesclando o servidor faria este envio EXPLÍCITO competir com a
@@ -2409,10 +2440,334 @@ async function syncThisDeviceToCloud(opts){
 async function forceThisDeviceToCloud(){
   if(!fbDb){ toast('Firebase indisponível neste navegador.'); return; }
   if(!appStateReady){ toast('Aguarde o Atlas terminar de carregar.'); return; }
+  // ALTERAÇÃO 077 — lock de restore canônico (ver syncThisDeviceToCloud).
+  if(canonicalRestoreInProgress){ toast('Um restore canônico está em andamento — tente de novo depois.'); return; }
   const ok=confirm('FORÇAR o envio do estado DESTE dispositivo para a nuvem agora, SEM reconciliar antes?\n\nIsso SUBSTITUI a nuvem pelo que está aqui, mesmo que a nuvem tenha algo que este dispositivo não tem. Use somente no dispositivo que contém as imagens/progresso mais completos. O Atlas fará um snapshot local antes do envio.');
   if(!ok) return;
   await syncThisDeviceToCloud({ skipPreflight:true });
 }
+
+/* ============================================================
+   ALTERAÇÃO 077 (2026-09-24) — RESTORE CANÔNICO DEDICADO
+   Motivado pelo bug real rev19->rev20: forceThisDeviceToCloud() não tem
+   proteção própria (sem reconcile, sem filtro de quarentena, confia
+   cegamente em DATA/REVIEW/SRS globais no instante exato da chamada) e
+   rodou concorrente com um syncFromFirebase() disparado por
+   onAuthStateChanged (Auth se revalidando ao voltar a rede), que mesclou a
+   nuvem ainda contaminada de volta no estado em memória ANTES da escrita —
+   ver CONTEXTO_MESTRE/investigação da sessão de restauração.
+
+   restoreCanonicalStateToCloud() é uma ferramenta SEPARADA, não uma
+   variante de forceThisDeviceToCloud():
+     - recebe o payload por PARÂMETRO (nunca lê DATA/REVIEW/SRS/SESSIONLOG/
+       sectionOrder/siteOrder globais como fonte — só os atualiza DEPOIS de
+       um sucesso totalmente confirmado);
+     - tira um snapshot imutável (deep-clone) do payload ANTES de qualquer
+       await — nenhuma mutação concorrente de DATA global pode alcançá-lo;
+     - nunca chama reconcileStateWithRemote/mergeEntryNonDestructive/
+       unionEntryImages/mergeSRSPreservingNewest/reconcileBeforePush/
+       migrateLegacyLocalImagesToCloudinary — zero merge, zero união, zero
+       migração, zero transformação semântica;
+     - liga canonicalRestoreInProgress (try/finally) — todo caminho
+       concorrente relevante já aborta sozinho enquanto isso for true (ver
+       ALTERAÇÃO 077 em writeShardedState/pushToFirebase/pushToFirebaseNow/
+       reconcileBeforePush/syncFromFirebase/syncThisDeviceToCloud/
+       forceThisDeviceToCloud);
+     - sanitiza (quarentena 075) DATA, REVIEW e SRS — a proteção 075
+       original só cobria DATA; ficou provado (rev20 real, SRS ganhou
+       seed_1282) que um high id sobrevive em SRS sem isso; sessionLog é
+       indexado por data (chaves 'YYYY-MM-DD', verificado no canônico
+       real), não por lesion id, então não é filtrado por id;
+     - valida contagens fortes contra um `expected` antes de qualquer
+       escrita — aborta sem tocar Firestore se algo não bater;
+     - exige expectedRemoteRevision explícito e reconfirma dentro da
+       PRÓPRIA transação — nunca faz merge/retry se a nuvem mudou;
+     - escreve os chunks/meta diretamente do snapshot, nunca via
+       writeShardedState() (que lê globais);
+     - relê do servidor depois (leitura própria, isolada — não usa
+       readShardedState() pra não tocar lastKnownCloudRevision durante a
+       verificação) e faz uma comparação estrutural determinística contra o
+       snapshot antes de declarar sucesso.
+   ============================================================ */
+
+/* Remove do objeto (indexado por lesion id) qualquer chave em quarentena
+   (075). Pura — só lê isQuarantinedSeedId (função) e QUARANTINED_HIGH_IDS_
+   20260924 (constante), nunca estado mutável. Usada em REVIEW e SRS. */
+function quarantineIndexedByLesionId(obj){
+  const out = {};
+  if(!obj || typeof obj !== 'object') return out;
+  for(const k of Object.keys(obj)){
+    if(isQuarantinedSeedId(k)) continue;
+    out[k] = obj[k];
+  }
+  return out;
+}
+
+/* Sanitiza um payload no formato de backup (data/review/srs/sessionLog/
+   sectionOrder/siteOrder/imageTombstones) contra a quarentena 075. DATA já
+   era filtrada; aqui a mesma proteção passa a cobrir REVIEW e SRS, também
+   indexados por lesion id. sessionLog fica como está (indexado por data,
+   não por id — não filtrar). tombstones (imageTombstones) referenciam
+   lesionId dentro do VALOR (registros de exclusão de imagem, não de
+   lesão); mantidos como estão — nenhum dos 70 high ids aparece nos
+   tombstones do canônico atual. Pura: não lê nem escreve nenhum global. */
+function sanitizeCanonicalPayloadForQuarantine(payload){
+  const data = (Array.isArray(payload.data) ? payload.data : [])
+    .filter(e => e && !isQuarantinedSeedId(e.id));
+  return {
+    data,
+    review: quarantineIndexedByLesionId(payload.review),
+    srs: quarantineIndexedByLesionId(payload.srs),
+    sessionLog: (payload.sessionLog && typeof payload.sessionLog === 'object' && !Array.isArray(payload.sessionLog)) ? payload.sessionLog : {},
+    sectionOrder: Array.isArray(payload.sectionOrder) ? payload.sectionOrder : [],
+    siteOrder: (payload.siteOrder && typeof payload.siteOrder === 'object' && !Array.isArray(payload.siteOrder)) ? payload.siteOrder : {},
+    tombstones: (payload.imageTombstones && typeof payload.imageTombstones === 'object' && !Array.isArray(payload.imageTombstones)) ? payload.imageTombstones : {}
+  };
+}
+
+/* Validação forte e determinística do snapshot já sanitizado — roda ANTES
+   de qualquer escrita. `expected` tem defaults pro canônico atual
+   (ATLAS_CANONICO_LIMPO_1216_116_FINAL.json), mas é parametrizável pra
+   qualquer payload canônico futuro. Pura: só lê o snapshot recebido +
+   isQuarantinedSeedId/stableImageKeyV208/isImageTombstoned (funções
+   puras). */
+function validateCanonicalPayload(snapshot, expected){
+  const exp = Object.assign({
+    records: 1216, dupGroups: 0, highIds: 0,
+    withImage: 80, imageRefs: 116, distinctStableKeys: 116,
+    review: 139, srs: 51, altPlacements: 20, tombstones: 5,
+    zeroImageIds: ['seed_416', 'seed_248'],
+    seedRangeMax: 1212, uCount: 3
+  }, expected || {});
+  const failures = [];
+  const data = Array.isArray(snapshot.data) ? snapshot.data : [];
+
+  if(data.length !== exp.records) failures.push(`records: esperado ${exp.records}, achou ${data.length}`);
+
+  const highIds = data.filter(e => e && isQuarantinedSeedId(e.id));
+  if(highIds.length !== exp.highIds) failures.push(`highIds: esperado ${exp.highIds}, achou ${highIds.length}${highIds.length?(' ('+highIds.slice(0,5).map(e=>e.id).join(',')+(highIds.length>5?'...':'')+')'):''}`);
+
+  const groups = new Map();
+  data.forEach(e => { const k = (e.s||'')+'|||'+(e.site||'')+'|||'+(e.name||''); if(!groups.has(k)) groups.set(k, []); groups.get(k).push(e.id); });
+  const dupGroupsArr = [...groups.values()].filter(v => v.length > 1);
+  if(dupGroupsArr.length !== exp.dupGroups) failures.push(`dupGroups: esperado ${exp.dupGroups}, achou ${dupGroupsArr.length}`);
+
+  const withImage = data.filter(e => (e.images||[]).length > 0 || e.img).length;
+  if(withImage !== exp.withImage) failures.push(`withImage: esperado ${exp.withImage}, achou ${withImage}`);
+
+  let imageRefs = 0;
+  const stableKeys = new Set();
+  const tombstones = snapshot.tombstones || {};
+  let activeTombstonedImages = 0;
+  data.forEach(e => {
+    (e.images||[]).forEach(im => {
+      imageRefs++;
+      const k = stableImageKeyV208(im);
+      if(k) stableKeys.add(k);
+      if(isImageTombstoned(im, e.id, tombstones)) activeTombstonedImages++;
+    });
+  });
+  if(imageRefs !== exp.imageRefs) failures.push(`imageRefs: esperado ${exp.imageRefs}, achou ${imageRefs}`);
+  if(stableKeys.size !== exp.distinctStableKeys) failures.push(`distinctStableKeys: esperado ${exp.distinctStableKeys}, achou ${stableKeys.size}`);
+  if(activeTombstonedImages !== 0) failures.push(`imagens tombstonadas ainda ativas: ${activeTombstonedImages}`);
+
+  const reviewKeys = Object.keys(snapshot.review || {});
+  if(reviewKeys.length !== exp.review) failures.push(`review: esperado ${exp.review}, achou ${reviewKeys.length}`);
+  const reviewHighIds = reviewKeys.filter(k => isQuarantinedSeedId(k));
+  if(reviewHighIds.length) failures.push(`review contém high id(s) em quarentena: ${reviewHighIds.join(',')}`);
+
+  const srsKeys = Object.keys(snapshot.srs || {});
+  if(srsKeys.length !== exp.srs) failures.push(`srs: esperado ${exp.srs}, achou ${srsKeys.length}`);
+  const srsHighIds = srsKeys.filter(k => isQuarantinedSeedId(k));
+  if(srsHighIds.length) failures.push(`srs contém high id(s) em quarentena: ${srsHighIds.join(',')}`);
+
+  const altPlacements = data.reduce((n,e) => n + ((e.altPlacements||[]).length), 0);
+  if(altPlacements !== exp.altPlacements) failures.push(`altPlacements: esperado ${exp.altPlacements}, achou ${altPlacements}`);
+
+  const tombstoneKeys = Object.keys(tombstones);
+  if(tombstoneKeys.length !== exp.tombstones) failures.push(`tombstones: esperado ${exp.tombstones}, achou ${tombstoneKeys.length}`);
+
+  for(const id of exp.zeroImageIds){
+    const e = data.find(x => x && x.id === id);
+    const n = e ? (e.images||[]).length : null;
+    if(n !== 0) failures.push(`${id}: esperado 0 imagens, achou ${n===null?'registro ausente':n}`);
+  }
+
+  const seedIds = data.map(e => e.id).filter(id => typeof id === 'string' && id.startsWith('seed_'));
+  const uniqueSeed = new Set(seedIds);
+  if(seedIds.length !== uniqueSeed.size) failures.push(`seed_ duplicados por id: ${seedIds.length - uniqueSeed.size}`);
+  let missingSeed = 0;
+  for(let n = 0; n <= exp.seedRangeMax; n++) if(!uniqueSeed.has('seed_'+n)) missingSeed++;
+  if(missingSeed !== 0) failures.push(`seed_0..seed_${exp.seedRangeMax} faltando: ${missingSeed}`);
+  const uIds = data.filter(e => typeof e.id === 'string' && e.id.startsWith('u_'));
+  if(uIds.length !== exp.uCount) failures.push(`u_* : esperado ${exp.uCount}, achou ${uIds.length}`);
+
+  return { ok: failures.length === 0, failures };
+}
+
+/* Comparação estrutural determinística, ignorando ordem de CHAVES de
+   objetos (ordem de arrays continua importando — ex.: sectionOrder). Pura. */
+function canonicalJsonString(v){
+  if(v === null || v === undefined) return 'null';
+  if(Array.isArray(v)) return '[' + v.map(canonicalJsonString).join(',') + ']';
+  if(typeof v === 'object'){
+    const keys = Object.keys(v).sort();
+    return '{' + keys.map(k => JSON.stringify(k) + ':' + canonicalJsonString(v[k])).join(',') + '}';
+  }
+  return JSON.stringify(v);
+}
+function deepStableEqual(a, b){
+  return canonicalJsonString(a) === canonicalJsonString(b);
+}
+
+/* Restore canônico dedicado — ver bloco de comentário acima. Só chamável
+   manualmente (console), como forceThisDeviceToCloud() — não ligado a
+   nenhum botão de UI.
+
+   payload: objeto no formato de backup (data/review/srs/sessionLog/
+     sectionOrder/siteOrder/imageTombstones) — ex.: o JSON já parseado de
+     ATLAS_CANONICO_LIMPO_1216_116_FINAL.json. NUNCA lido de DATA/REVIEW/
+     SRS globais.
+   opts.expectedRemoteRevision (obrigatório): revisão que a nuvem PRECISA
+     estar antes da escrita — sem merge/retry se não bater.
+   opts.expected (opcional): overrides pra validateCanonicalPayload.
+   opts.updateGlobalsOnSuccess (default true): só depois de um sucesso
+     TOTALMENTE confirmado (escrita + releitura + comparação estrutural +
+     revalidação), atualiza DATA/REVIEW/SRS/SESSIONLOG/sectionOrder/
+     siteOrder/IMAGE_TOMBSTONES globais com o snapshot — nunca antes. */
+async function restoreCanonicalStateToCloud(payload, opts){
+  const o = opts || {};
+  if(typeof o.expectedRemoteRevision !== 'number'){
+    return { ok:false, stage:'precondition', reason:'expectedRemoteRevision é obrigatório' };
+  }
+  if(!fbDb) return { ok:false, stage:'precondition', reason:'no_firebase' };
+  if(canonicalRestoreInProgress) return { ok:false, stage:'precondition', reason:'restore_ja_em_andamento' };
+  if(!payload || typeof payload !== 'object' || !Array.isArray(payload.data)){
+    return { ok:false, stage:'precondition', reason:'payload inválido (precisa de .data array)' };
+  }
+
+  canonicalRestoreInProgress = true;
+  try{
+    // Snapshot IMUTÁVEL — stripUndefinedDeep já é um deep-clone via JSON
+    // round-trip; a partir daqui, nenhuma leitura de DATA/REVIEW/SRS
+    // globais participa mais desta função.
+    const snapshot = stripUndefinedDeep(sanitizeCanonicalPayloadForQuarantine(payload));
+
+    const validation = validateCanonicalPayload(snapshot, o.expected);
+    if(!validation.ok){
+      return { ok:false, stage:'validation', failures: validation.failures };
+    }
+
+    const chunks = splitIntoChunks(snapshot.data, DATA_CHUNK_SIZE);
+    for(let i=0;i<chunks.length;i++){
+      if(!checkChunkSize(chunks[i], `pedaço ${i+1}/${chunks.length}`)){
+        return { ok:false, stage:'chunk_size', reason:'chunk_too_large' };
+      }
+    }
+    const metaPayload = {
+      review: snapshot.review,
+      srs: snapshot.srs,
+      sessionLog: snapshot.sessionLog,
+      sectionOrder: snapshot.sectionOrder,
+      siteOrder: snapshot.siteOrder,
+      tombstones: snapshot.tombstones,
+      chunkCount: chunks.length,
+      stateSchemaVersion: 4,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if(!checkChunkSize(metaPayload, 'documento principal (restore canônico)')){
+      return { ok:false, stage:'chunk_size', reason:'meta_too_large' };
+    }
+
+    let committedRevision = null;
+    let previousChunkCount = 0;
+    try{
+      await withFirebaseTimeout(fbDb.runTransaction(async (tx)=>{
+        const metaSnap = await tx.get(FB_META_REF());
+        const serverRevision = metaSnap.exists ? (Number((metaSnap.data()||{})[CLOUD_REVISION_FIELD]) || 0) : 0;
+        if(serverRevision !== o.expectedRemoteRevision){
+          const err = new Error('revisão do servidor mudou desde a validação — restore abortado, nada escrito');
+          err.code = 'canonical_restore_revision_mismatch';
+          err.serverRevision = serverRevision;
+          throw err;
+        }
+        previousChunkCount = metaSnap.exists ? (Number((metaSnap.data()||{}).chunkCount) || 0) : 0;
+        const nextRevision = serverRevision + 1;
+        tx.set(FB_META_REF(), {...metaPayload, [CLOUD_REVISION_FIELD]: nextRevision});
+        for(let i=0;i<chunks.length;i++) tx.set(FB_CHUNK_REF(i), {items: chunks[i]});
+        committedRevision = nextRevision;
+      }), 20000, 'restore canônico (transação)');
+    }catch(e){
+      if(e && e.code === 'canonical_restore_revision_mismatch'){
+        return { ok:false, stage:'revision_check', reason:'cloud_revision_conflict', expected:o.expectedRemoteRevision, actual:e.serverRevision };
+      }
+      return { ok:false, stage:'write', reason:(e && e.message) || String(e) };
+    }
+
+    // Limpa chunks excedentes de um estado anterior maior. Fora da
+    // transação de propósito — mesmo raciocínio de writeShardedState().
+    if(previousChunkCount > chunks.length){
+      for(let i=chunks.length;i<previousChunkCount;i++){
+        try{ await FB_CHUNK_REF(i).delete(); }catch(_e){}
+      }
+    }
+
+    // Releitura independente do servidor — NÃO usa readShardedState() (que
+    // gravaria lastKnownCloudRevision global antes da hora); leitura
+    // própria, isolada.
+    const verifyMetaSnap = await withFirebaseTimeout(FB_META_REF().get({source:'server'}), 20000, 'restore canônico (verificação meta)');
+    if(!verifyMetaSnap.exists){
+      return { ok:false, stage:'post_write_verification', reason:'doc main sumiu após a escrita (inesperado)' };
+    }
+    const verifyMeta = verifyMetaSnap.data();
+    if(Number(verifyMeta[CLOUD_REVISION_FIELD]) !== committedRevision){
+      return { ok:false, stage:'post_write_verification', reason:'revisão pós-escrita não bate', expected:committedRevision, actual:verifyMeta[CLOUD_REVISION_FIELD] };
+    }
+    const verifyChunkCount = Number(verifyMeta.chunkCount) || 0;
+    const chunkSnaps = await Promise.all(
+      Array.from({length:verifyChunkCount}, (_,i)=> withFirebaseTimeout(FB_CHUNK_REF(i).get({source:'server'}), 20000, `restore canônico (verificação chunk ${i+1})`))
+    );
+    let verifyData = [];
+    chunkSnaps.forEach(snap => { if(snap.exists){ const items=(snap.data()||{}).items; if(Array.isArray(items)) verifyData.push(...items); } });
+
+    const readBack = {
+      data: verifyData,
+      review: verifyMeta.review || {},
+      srs: verifyMeta.srs || {},
+      sessionLog: verifyMeta.sessionLog || {},
+      sectionOrder: verifyMeta.sectionOrder || [],
+      siteOrder: verifyMeta.siteOrder || {},
+      tombstones: verifyMeta.tombstones || {}
+    };
+
+    if(!deepStableEqual(readBack, snapshot)){
+      return { ok:false, stage:'post_write_verification', reason:'servidor não representa exatamente o payload escrito (comparação estrutural falhou)' };
+    }
+    const revalidation = validateCanonicalPayload(readBack, o.expected);
+    if(!revalidation.ok){
+      return { ok:false, stage:'post_write_verification', reason:'revalidação pós-escrita falhou', failures: revalidation.failures };
+    }
+
+    // Só agora, com TUDO confirmado (escrita + releitura + comparação
+    // estrutural + revalidação), atualiza os globais — nunca antes.
+    if(o.updateGlobalsOnSuccess !== false){
+      DATA = JSON.parse(JSON.stringify(snapshot.data));
+      REVIEW = JSON.parse(JSON.stringify(snapshot.review));
+      SRS = JSON.parse(JSON.stringify(snapshot.srs));
+      SESSIONLOG = JSON.parse(JSON.stringify(snapshot.sessionLog));
+      sectionOrder = JSON.parse(JSON.stringify(snapshot.sectionOrder));
+      siteOrder = JSON.parse(JSON.stringify(snapshot.siteOrder));
+      IMAGE_TOMBSTONES = JSON.parse(JSON.stringify(snapshot.tombstones));
+      lastKnownCloudRevision = committedRevision;
+      window.__lastKnownChunkCount = chunks.length;
+    }
+
+    return { ok:true, revision: committedRevision, records: snapshot.data.length };
+  } finally {
+    canonicalRestoreInProgress = false;
+  }
+}
+
 /* Linhas da tabela de contadores (reaproveitadas no resumo e no erro pós-envio). */
 function syncAuditRowsHtml(l, c){
   const cell = v => (v===null || v===undefined) ? '—' : String(v);
@@ -3554,6 +3909,12 @@ async function persistLocalStateNow(){
    {ok:false} e quem chama mantém o comportamento local-only de antes
    (dirty/pending preservados, nada escrito às cegas). */
 async function reconcileBeforePush(reason){
+  // ALTERAÇÃO 077 — lock de restore canônico: nenhuma reconciliação (que
+  // leria a nuvem e mesclaria de volta em DATA/REVIEW/SRS via
+  // reconcileStateWithRemote) pode rodar enquanto um restore canônico está
+  // em andamento — era exatamente essa mescla concorrente que causou a
+  // contaminação rev19->rev20.
+  if(canonicalRestoreInProgress){ return { ok:false, reason:'canonical_restore_in_progress' }; }
   if(!fbDb || fbSyncing || deviceBootstrapPending || !appStateReady){
     return { ok:false, reason: !fbDb ? 'offline' : 'busy' };
   }
@@ -3592,6 +3953,14 @@ async function syncFromFirebase(){
   // agora" (ver pushToFirebase/pushToFirebaseNow, restoreSafetySnapshot,
   // openRecoveryInspector) — reusar o mesmo aqui, em vez de criar um segundo
   // flag paralelo, fecha a reentrância sem fragmentar o mutex.
+  // ALTERAÇÃO 077 — lock de restore canônico: este é o guard mais crítico do
+  // bloco inteiro. É exatamente esta função, disparada por onAuthStateChanged
+  // (Auth se revalidando ao voltar a rede) -> showApp() -> loadData() ->
+  // syncFromFirebase(), que mesclou a nuvem AINDA contaminada (rev19) de
+  // volta em DATA/REVIEW/SRS durante um forceThisDeviceToCloud() concorrente
+  // (bug real, rev19->rev20). syncDirty/syncPushPending nunca gataram esta
+  // função — só o lock explícito resolve.
+  if(canonicalRestoreInProgress) return;
   if(!fbDb || fbSyncing) return;
   // ALTERAÇÃO 070 — consome (reseta) o sinal de "não faça seu próprio push
   // ao final" numa única chamada; ver writeShardedStateWithConflictRetry().

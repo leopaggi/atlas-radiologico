@@ -440,10 +440,19 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // uniforme. +10 a mais só em importHandler (mesma Alteração 076):
   // markSyncDirty() + comentário no Salvar do editor, entre loadData() e o
   // handler de importação — só desloca o que vem depois de loadData().
-  assert.equal(recovery.line, 7048);
-  assert.equal(brokenArtifacts.line, 7038);
-  assert.equal(loadData.line, 9595);
-  assert.equal(importHandler.line, 13250);
+  // +369 nas quatro âncoras (Alteração 077, restore canônico dedicado,
+  // 2026-09-24): canonicalRestoreInProgress (perto de deviceBootstrapPending)
+  // + guards nos chokepoints de sync/push + o módulo inteiro
+  // restoreCanonicalStateToCloud (quarantineIndexedByLesionId,
+  // sanitizeCanonicalPayloadForQuarantine, validateCanonicalPayload,
+  // canonicalJsonString/deepStableEqual, restoreCanonicalStateToCloud em
+  // si) inserido logo após forceThisDeviceToCloud() — tudo antes da
+  // primeira âncora, deslocamento uniforme (nada entre loadData e
+  // importHandler desta vez, por isso o mesmo +369 nos quatro).
+  assert.equal(recovery.line, 7417);
+  assert.equal(brokenArtifacts.line, 7407);
+  assert.equal(loadData.line, 9964);
+  assert.equal(importHandler.line, 13619);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
