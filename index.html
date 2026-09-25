@@ -15618,6 +15618,32 @@ function validateExternalImportPayload(p){
   return { ok: errors.length === 0, errors, value };
 }
 
+// PROTEÇÃO 083 — defesa em profundidade do título (vale também para o
+// userscript ANTIGO ainda instalado): o slug da URL do caso Radiopaedia
+// (/cases/<slug>) é derivado do título clínico. Título sem NENHUM termo em
+// comum com o slug (ex.: nome do autor/usuário capturado de um <h1> da
+// página — bug real "Leonardo Paggi Andrade") é trocado pelo título do
+// slug. Slug sem palavras (só números) = sem âncora: título mantido.
+function externalCaseSlugTitle(sourceUrl){
+  let m = null;
+  try { m = /\/cases\/([^\/?#]+)/.exec(new URL(String(sourceUrl || '')).pathname); } catch (e) { return ''; }
+  if (!m) return '';
+  let slug = '';
+  try { slug = decodeURIComponent(m[1]); } catch (e) { slug = m[1]; }
+  const words = slug.replace(/-\d+$/, '').split('-').filter(Boolean);
+  if (!words.some(w => /[a-z]{3,}/i.test(w))) return '';
+  const t = words.join(' ');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+function reconcileExternalImportTitle(p){
+  if (!p || typeof p !== 'object') return p;
+  const slugTitle = externalCaseSlugTitle(p.sourceUrl);
+  const slugTokens = tokenizeExternalTitle(slugTitle);
+  if (!slugTokens.length) return p;
+  if (tokenizeExternalTitle(p.title).some(t => slugTokens.indexOf(t) >= 0)) return p;
+  return Object.assign({}, p, { title: slugTitle.slice(0, 300), titleFromUrl: true });
+}
+
 // Normalização p/ comparação: minúsculas, sem acentos, sem pontuação,
 // espaços colapsados. (A regra s+site+name do acervo continua intacta;
 // isto é só para a pré-checagem do importador.)
@@ -16342,7 +16368,7 @@ async function maybeHandleExternalImport(){
     try { toast('Caso externo inválido — importação cancelada.'); } catch (e) {}
     return { status: 'rejeitado' };
   }
-  openExternalImportModal(checked.value);
+  openExternalImportModal(reconcileExternalImportTitle(checked.value)); // 083: título nunca = autor
   return { status: 'modal' };
 }
 

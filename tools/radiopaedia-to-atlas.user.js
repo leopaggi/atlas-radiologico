@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.0.0
+// @version      1.1.0
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e abre o Atlas com o payload no fragmento da URL. Não captura imagens, não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -55,18 +55,71 @@
     return '';
   }
 
-  function extractTitle() {
-    var t = firstText(['h1.case-title', 'h1', 'meta[property="og:title"]']);
-    if (!t) {
+  // PROTEÇÃO 083 — o título NUNCA pode vir de um <h1> genérico: em algumas
+  // páginas o primeiro <h1> do DOM é o nome do usuário/autor (bug real:
+  // "Leonardo Paggi Andrade" virava o título do caso). O slug da URL do caso
+  // (/cases/<slug>) é derivado do título clínico pelo próprio Radiopaedia e
+  // serve de âncora: candidato sem nenhum termo em comum com o slug, ou igual
+  // a um nome de autor/perfil, é descartado.
+  function stripSiteSuffix(s) {
+    return cleanText(String(s || '')
+      .replace(/\s*\|\s*Radiology Case\s*\|\s*Radiopaedia\.org\s*$/i, '')
+      .replace(/\s*[|–—-]\s*Radiopaedia(\.org)?\s*$/i, ''));
+  }
+
+  function titleTokens(s) {
+    return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .split(/[^a-z0-9]+/).filter(function (t) { return t.length >= 3; });
+  }
+
+  // "/cases/polyethylene-wear-1" -> "Polyethylene wear" ('' se o slug não tem palavra).
+  function slugTitleFromUrl(url) {
+    try {
+      var m = /\/cases\/([^\/?#]+)/.exec(new URL(url).pathname);
+      if (!m) return '';
+      var words = decodeURIComponent(m[1]).replace(/-\d+$/, '').split('-').filter(Boolean);
+      if (!words.some(function (w) { return /[a-z]{3,}/i.test(w); })) return '';
+      var t = words.join(' ');
+      return t.charAt(0).toUpperCase() + t.slice(1);
+    } catch (e) { return ''; }
+  }
+
+  // Nomes de autor/perfil visíveis na página — nunca podem virar título.
+  function authorNames() {
+    var out = [];
+    var sels = ['meta[name="author"]', '[rel="author"]', 'a[href*="/users/"]', '.author', '.byline', '.user-name', '.username'];
+    for (var i = 0; i < sels.length; i++) {
       try {
-        var m = document.querySelector('meta[property="og:title"]');
-        if (m) t = cleanText(m.getAttribute('content') || '');
-      } catch (e) {}
+        var els = document.querySelectorAll(sels[i]);
+        for (var j = 0; j < els.length; j++) {
+          var v = cleanText((els[j].getAttribute && els[j].getAttribute('content')) || els[j].innerText || '');
+          if (v) out.push(v.toLowerCase());
+        }
+      } catch (e) { /* seletor inválido neste DOM — segue */ }
     }
-    if (!t && document.title) {
-      t = cleanText(document.title.replace(/\s*\|\s*Radiology Case\s*\|\s*Radiopaedia\.org\s*$/i, ''));
+    return out;
+  }
+
+  function extractTitle() {
+    var candidates = [];
+    try {
+      var og = document.querySelector('meta[property="og:title"]');
+      if (og) candidates.push(og.getAttribute('content') || '');
+    } catch (e) {}
+    candidates.push(firstText(['h1.case-title', '.case-title h1', 'h1.header-title']));
+    candidates.push(document.title || '');
+    var slugTitle = slugTitleFromUrl(extractSourceUrl());
+    var slugTokens = titleTokens(slugTitle);
+    var authors = authorNames();
+    for (var i = 0; i < candidates.length; i++) {
+      var c = stripSiteSuffix(candidates[i]);
+      if (!c) continue;
+      if (authors.indexOf(c.toLowerCase()) >= 0) continue;
+      if (slugTokens.length && !titleTokens(c).some(function (t) { return slugTokens.indexOf(t) >= 0; })) continue;
+      return c.slice(0, 300);
     }
-    return t.slice(0, 300);
+    // Sem candidato confiável: o slug do próprio caso (dado real da URL) ou nada.
+    return slugTitle.slice(0, 300);
   }
 
   function extractSourceUrl() {

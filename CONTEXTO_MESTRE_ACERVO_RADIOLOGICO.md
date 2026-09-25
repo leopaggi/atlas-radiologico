@@ -4,6 +4,39 @@ Documento de referência do estado ATUAL do projeto. Leia junto com `AGENTS.md`,
 `AI.md`, `README.md` e `LOG_DESENVOLVIMENTO.md`. Em caso de divergência entre
 uma cópia antiga e o repositório, o repositório e o código valem.
 
+<!-- ===================== CHECKPOINT OPERACIONAL (manter no topo) ===================== -->
+
+## ESTADO OPERACIONAL ATUAL
+
+*Atualizado em 2026-09-25, junto do commit "Protecao 083: corrige titulo e tags do importador Radiopaedia".*
+
+- **Branch local de trabalho:** `master` (publicação: `git push origin master:main`).
+- **origin/main antes da 083:** `aff09e4` (Protecao 082). **Último commit:** Protecao 083 (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
+- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes):** 1167 testes · 1159 pass · 3 fail conhecidos · 5 todo (era 1155/1147/3/5 antes da 083; +12 testes novos da 083). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
+  - Divergência documentada: num clone sem os arquivos protegidos (ex.: sessão na nuvem) a mesma suíte dá 1157 · 1122 · 30 · 5 — +24 fail em `legacy-id-migration` e +1 em `device-bootstrap`/F2 do `multi-device-sync` por falta de `snapshot-catalogo-completo-readonly.json` e `ATLAS_CANONICO_LIMPO_1216_116_FINAL.json`, e `ownership-fix-20260921` aborta por CRLF (arquivo com fim de linha Windows). Nenhuma dessas é regressão.
+- **Firestore (informado pelo usuário; não verificável sem credenciais):** uso normal, última cloud revision observada: 64. Rules intocadas pela 083. Nenhuma escrita deliberada nesta tarefa.
+- **Produção validada (usuário):** links semanticamente duplicados = 0 lesões / 0 grupos; imagens: 0 duplicatas intralesão por identidade estável, 0 identidades compartilhadas entre lesões; ordem de seções/subseções local × Firestore sem diferenças reais.
+- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador explícito `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), **083 (título/tags do importador Radiopaedia)**.
+- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor/usuário (083).
+- **Trabalho pendente FORA do main (não faz parte da 083):** duas entregas anteriores ainda não aprovadas — "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" — estão preservadas no `git stash` da sessão remota (`stash@{0}`, mensagem "pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Não restaurar sem decisão explícita do usuário; tratar como bloco separado.
+- **Problema aberto atual:** `extractModality()` do userscript ainda pega a primeira sigla de modalidade em QUALQUER lugar da página (pode vir modalidade errada → tag de modalidade errada); a estrutura real do DOM do Radiopaedia não pôde ser inspecionada (site inacessível do ambiente remoto).
+- **Próximo passo exato:** (1) o usuário atualiza o userscript no Tampermonkey para a v1.1.0 (`tools/radiopaedia-to-atlas.user.js`) e testa "Enviar ao Atlas" numa página que antes gerava "Leonardo Paggi Andrade"; (2) decidir sobre o `stash@{0}` (fonte por imagem + caso clínico manual) como bloco separado; (3) só então, se desejado, restringir `extractModality()` à área do caso com base no DOM real.
+
+## PROTOCOLO OBRIGATÓRIO DE CONTINUIDADE
+
+1. Todo agente deve ler este arquivo antes de alterar o projeto.
+2. Conferir `git status --short`, `git rev-parse HEAD` e `git rev-parse origin/main` (e `git log -5 --oneline`).
+3. O repositório real vence qualquer contexto de conversa divergente; documentar a divergência aqui.
+4. Após cada alteração validada, atualizar ESTE arquivo antes do commit.
+5. Registrar: alteração concluída; motivo; arquivos alterados; testes/resultados; estado operacional relevante; pendências; próximo passo exato.
+6. Commitar o Contexto Mestre junto com a alteração correspondente.
+7. Nunca usar `git add .` — adicionar arquivos explicitamente.
+8. Nunca usar force push.
+9. Nunca tocar nos arquivos untracked protegidos (lista na seção 3 + os citados no bloco acima).
+10. Se houver dúvida, auditar antes de modificar.
+
+<!-- =================== FIM DO CHECKPOINT OPERACIONAL =================== -->
+
 ## 1. Estado do Git / publicação
 
 - **Nota (2026-09-21):** HEAD local e `origin/main` publicados coincidem em
@@ -1280,3 +1313,90 @@ matching por lesão nos 4 pontos (merge pull, solo-remota, envio,
 varredura); merge por par com deletedAt mais novo; global+scoped
 coexistem. Fluxos, transação/revisão/dirty, ownership e normalização
 intocados; sem hardcode. Suíte: **1039 PASS**, 3 FAIL pré-existentes.
+
+## 38. Histórico 075–082 (resumo a partir do Git, 2026-09-24)
+
+Estas proteções não tinham sido registradas aqui; resumo fiel às mensagens de
+commit e aos comentários do código.
+
+- **075** (`d6b3f1e`) — quarentena permanente dos ids `seed_1213..seed_1282`
+  (`QUARANTINED_HIGH_IDS_20260924`, filtrados em DATA/REVIEW/SRS/payload).
+- **076** (`43533ed`) — reconcile antes de enviar também no push com atraso
+  (SRS/REVIEW/ordem) e dirty seguro no Salvar do editor.
+- **077 / 077b** (`55579fc`, `b84bd00`) — `restoreCanonicalStateToCloud`
+  isolado (console, `expectedRemoteRevision`, bloqueio de race) e REVIEW
+  canônico corrigido após a quarentena.
+- **078** (`8dda3a1`) — dispositivo novo "carregar da nuvem" adota a nuvem 1:1
+  (`adoptRemoteStateForNewDevice`), sem merge com o SEED.
+- **079 / 079b** (`d7d02b4`, `45aae37`) — barreira final de quarentena no
+  write; remoto vence sem timestamp; primeiro filtro de imagens stale.
+- **079c** (`48e91a0`) — barreira final de imagens dentro da transação de
+  `writeShardedState` (`gateStaleLocalOnlyImagesForWrite`).
+- **079d** (`13a3166`, `f8c9445`) — imagem só-local só sobe com marcador
+  explícito persistente `atlas:pendingLocalImageAdds`.
+- **080** (`eca4b1c`) — bloqueia e saneia links duplicados (editor, boot,
+  reconcile).
+- **081** (`13c1914`) — teste de invariante `tests/links-dedup-invariant.test.js`.
+- **082** (`aff09e4`) — deduplicação de links por URL semântica.
+
+## 39. Proteção 083 — título e tags do importador Radiopaedia (2026-09-25)
+
+### Causa raiz
+- `tools/radiopaedia-to-atlas.user.js` → `extractTitle()` usava
+  `firstText(['h1.case-title', 'h1', 'meta[property="og:title"]'])`. Quando a
+  página não tinha `h1.case-title`, o seletor GENÉRICO `'h1'` devolvia o
+  PRIMEIRO `<h1>` do DOM — em algumas páginas, o nome do usuário/autor
+  ("Leonardo Paggi Andrade"). O `og:title` nunca era alcançado (e, dentro de
+  `firstText`, nem funcionava: `meta` não tem `innerText`).
+- O Atlas aceitava qualquer título (só tamanho/host validados) → `draft.title`
+  = autor → `suggestPortugueseLesionName` caía em "original + needsReview" →
+  zero candidatos (zero token em comum) → `suggestExternalTags` só com a
+  modalidade. O autor nunca virava tag (tags só vêm de vocabulário/candidatos/
+  nome confiável/mapa de modalidade); o sintoma era a ausência de tags.
+- O DOM real do Radiopaedia NÃO pôde ser inspecionado (site inacessível do
+  ambiente remoto); a correção não depende dele.
+
+### Correção (defesa em profundidade)
+- **Userscript v1.1.0:** sem `<h1>` genérico. Candidatos: `og:title` (via
+  `content`), seletores específicos (`h1.case-title`, `.case-title h1`,
+  `h1.header-title`) e `document.title`, sem o sufixo do site. Candidato é
+  descartado se for igual a um nome de autor/perfil visível
+  (`meta[name=author]`, `[rel=author]`, `a[href*="/users/"]`, `.author`,
+  `.byline`, `.user-name`, `.username`) ou se não tiver NENHUM termo em comum
+  com o slug da URL do caso (`/cases/<slug>`, derivado do título clínico pelo
+  próprio Radiopaedia). Sem candidato confiável: título do slug; sem slug
+  utilizável: título vazio (nada é enviado — nunca o autor).
+- **Atlas (`index.html`, bloco do importador, depois das âncoras):**
+  `externalCaseSlugTitle` + `reconcileExternalImportTitle`, chamado em
+  `maybeHandleExternalImport` antes do modal. Protege também quem ainda usa o
+  userscript ANTIGO: título sem termo em comum com o slug é trocado pelo título
+  do slug (`titleFromUrl: true`); slug sem palavras → payload intacto
+  (compatível com payloads antigos). Nada mais mudou no fluxo (validação,
+  vínculo com lesão existente, criação, salvamento).
+- Tags continuam conservadoras (sem mudança em `suggestExternalTags`): com o
+  título correto voltam o nome confiável (catálogo via `enTerm`/glossário) e as
+  tags de candidatos/vocabulário; sem base real, continuam vazias.
+
+### Arquivos alterados
+`tools/radiopaedia-to-atlas.user.js`, `index.html`,
+`tests/external-import.test.js` (12 testes novos + 5 funções no harness do
+teste 14, ajuste mecânico), `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`.
+
+### Testes
+- Focados: `external-import` 79/79 (12 novos: autor não vira título; og:title/
+  h1 específico/document.title válidos; og:title=autor rejeitado → slug; sem
+  slug e só autor → vazio; ausência do `'h1'` genérico; ida-e-volta
+  userscript→Atlas; defesa do Atlas p/ payload antigo; título coerente
+  mantido; sem slug não inventa; gancho em `maybeHandleExternalImport`; autor
+  nunca vira tag e tags voltam com título correto; tags conservadoras sem
+  base). `clinical-cases` 47/47, `critical-flows` 23/23 (âncoras inalteradas),
+  `modal-cleanup` 14/14, `quiz-images` 103/103, `multi-device-sync` 145/146
+  (F2 = arquivo protegido ausente).
+- Suíte (ambiente remoto): 1157 · 1122 · 30 · 5 — mesmas falhas da base
+  (1145 · 1110 · 30 · 5). Esperado no ambiente local: 1167 · 1159 · 3 · 5.
+
+### Pendências
+- `extractModality()` ainda varre a página inteira (ver "Problema aberto
+  atual" no topo).
+- Userscript instalado no Tampermonkey precisa ser atualizado manualmente para
+  a v1.1.0 (o Atlas já corrige o título mesmo com a versão antiga, via slug).

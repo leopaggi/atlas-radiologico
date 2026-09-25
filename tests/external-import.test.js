@@ -382,6 +382,12 @@ test('14. fragmento é removido após consumo', () => {
     + '\n' + extractFunction(html, 'parseExternalImportHash')
     + '\n' + extractFunction(html, 'validateExternalImportPayload')
     + '\n' + extractFunction(html, 'clearExternalImportHash')
+    // 083: maybeHandleExternalImport passa o payload por reconcileExternalImportTitle.
+    + '\n' + extractConst(html, 'EXTERNAL_IMPORT_STOPWORDS')
+    + '\n' + extractFunction(html, 'normalizeExternalTitle')
+    + '\n' + extractFunction(html, 'tokenizeExternalTitle')
+    + '\n' + extractFunction(html, 'externalCaseSlugTitle')
+    + '\n' + extractFunction(html, 'reconcileExternalImportTitle')
     + '\n' + extractFunction(html, 'maybeHandleExternalImport');
   const replaced = [];
   let modalOpened = 0;
@@ -1063,4 +1069,151 @@ test('userscript: builder gera payload que o Atlas aceita (ida-e-volta)', () => 
   const r = api.validateExternalImportPayload(ctx.__p);
   assert.equal(r.ok, true, 'payload do userscript passa na validação do Atlas: ' + JSON.stringify(r.errors));
   assert.equal(ctx.__p.imagem, undefined, 'sem imagens no payload');
+});
+
+// ===========================================================================
+// PROTEÇÃO 083 — título do caso Radiopaedia nunca pode ser o autor/usuário.
+// Bug real: o userscript usava o <h1> GENÉRICO da página como fallback e, em
+// algumas páginas, o primeiro <h1> era "Leonardo Paggi Andrade" -> draft.title
+// errado -> nome sugerido errado e praticamente nenhuma tag. Correção em
+// profundidade: userscript (slug da URL como âncora + filtro de autor, sem
+// <h1> genérico) e Atlas (reconcileExternalImportTitle, vale também para o
+// userscript antigo ainda instalado).
+// ===========================================================================
+
+// Carrega as funções REAIS do userscript num vm com uma DOM falsa mínima.
+function loadUserscriptTitle(page) {
+  const names = ['cleanText', 'firstText', 'extractSourceUrl', 'stripSiteSuffix', 'titleTokens', 'slugTitleFromUrl', 'authorNames', 'extractTitle', 'buildExternalPayload'];
+  const maxField = /var MAX_FIELD\s*=\s*\d+;/.exec(userscript)[0];
+  const src = maxField + '\n' + names.map((n) => extractFunction(userscript, n)).join('\n');
+  const el = (text, attrs) => ({ innerText: text || '', getAttribute: (k) => (attrs && Object.prototype.hasOwnProperty.call(attrs, k)) ? attrs[k] : null });
+  const bySel = page.selectors || {};
+  const document = {
+    title: page.documentTitle || '',
+    querySelector: (sel) => { const list = bySel[sel]; return list && list.length ? list[0] : null; },
+    querySelectorAll: (sel) => bySel[sel] || []
+  };
+  const ctx = vm.createContext({ document, window: { location: { href: page.url } }, URL });
+  vm.runInContext(src + '\nthis.__us = { extractTitle, slugTitleFromUrl, buildExternalPayload, extractSourceUrl };', ctx);
+  return { us: ctx.__us, el };
+}
+function pageWith(opts) {
+  const e = (text, attrs) => ({ innerText: text || '', getAttribute: (k) => (attrs && Object.prototype.hasOwnProperty.call(attrs, k)) ? attrs[k] : null });
+  const sel = {};
+  if (opts.ogTitle !== undefined) sel['meta[property="og:title"]'] = [e('', { content: opts.ogTitle })];
+  if (opts.caseTitleH1) sel['h1.case-title'] = [e(opts.caseTitleH1)];
+  if (opts.firstH1) sel['h1'] = [e(opts.firstH1)]; // <h1> genérico (autor/usuário) — nunca deve ser usado
+  if (opts.authorLink) sel['a[href*="/users/"]'] = [e(opts.authorLink)];
+  sel['link[rel="canonical"]'] = [e('', { href: opts.url })];
+  return { url: opts.url, documentTitle: opts.documentTitle || '', selectors: sel };
+}
+function loadTitleGuard() {
+  const src = [
+    extractConst(html, 'EXTERNAL_IMPORT_STOPWORDS'),
+    extractFunction(html, 'normalizeExternalTitle'),
+    extractFunction(html, 'tokenizeExternalTitle'),
+    extractFunction(html, 'externalCaseSlugTitle'),
+    extractFunction(html, 'reconcileExternalImportTitle')
+  ].join('\n');
+  const ctx = vm.createContext({ URL });
+  vm.runInContext(src + '\nthis.__g = { externalCaseSlugTitle, reconcileExternalImportTitle };', ctx);
+  return ctx.__g;
+}
+const AUTHOR = 'Leonardo Paggi Andrade';
+const CASE_URL = 'https://radiopaedia.org/cases/polyethylene-wear-1';
+
+test('083 userscript: <h1> do autor NÃO vira título — og:title clínico é usado', () => {
+  const { us } = loadUserscriptTitle(pageWith({ url: CASE_URL, firstH1: AUTHOR, authorLink: AUTHOR, ogTitle: 'Polyethylene wear | Radiology Case | Radiopaedia.org', documentTitle: 'Polyethylene wear | Radiology Case | Radiopaedia.org' }));
+  assert.equal(us.extractTitle(), 'Polyethylene wear');
+});
+
+test('083 userscript: até og:title/document.title com o nome do autor são rejeitados (slug + filtro de autor) -> título do slug', () => {
+  const { us } = loadUserscriptTitle(pageWith({ url: CASE_URL, firstH1: AUTHOR, authorLink: AUTHOR, ogTitle: AUTHOR, documentTitle: AUTHOR }));
+  const t = us.extractTitle();
+  assert.notEqual(t, AUTHOR);
+  assert.equal(t, 'Polyethylene wear');
+});
+
+test('083 userscript: título clínico válido continua sendo capturado (h1.case-title específico e document.title)', () => {
+  const a = loadUserscriptTitle(pageWith({ url: 'https://radiopaedia.org/cases/hepatic-haemangioma-12', caseTitleH1: 'Hepatic haemangioma', firstH1: AUTHOR }));
+  assert.equal(a.us.extractTitle(), 'Hepatic haemangioma');
+  const b = loadUserscriptTitle(pageWith({ url: 'https://radiopaedia.org/cases/hepatic-haemangioma-12', documentTitle: 'Hepatic haemangioma | Radiology Case | Radiopaedia.org' }));
+  assert.equal(b.us.extractTitle(), 'Hepatic haemangioma');
+});
+
+test('083 userscript: sem âncora de slug e só o autor na página -> não inventa (título vazio, nada é enviado)', () => {
+  const { us } = loadUserscriptTitle(pageWith({ url: 'https://radiopaedia.org/cases/12345', firstH1: AUTHOR, authorLink: AUTHOR, ogTitle: AUTHOR }));
+  assert.equal(us.extractTitle(), '', 'autor filtrado e sem slug utilizável: título ausente em vez de autor');
+});
+
+test('083 userscript: o seletor genérico "h1" não existe mais na cadeia de título', () => {
+  const src = extractFunction(userscript, 'extractTitle');
+  assert.doesNotMatch(src, /['"]h1['"]/);
+  assert.match(src, /og:title/);
+  assert.match(src, /slugTitleFromUrl\(extractSourceUrl\(\)\)/);
+});
+
+test('083 ida-e-volta: payload montado pelo userscript corrigido continua aceito pelo Atlas', () => {
+  const { us } = loadUserscriptTitle(pageWith({ url: CASE_URL, firstH1: AUTHOR, authorLink: AUTHOR, ogTitle: 'Polyethylene wear | Radiology Case | Radiopaedia.org' }));
+  const p = us.buildExternalPayload({ title: us.extractTitle(), sourceUrl: us.extractSourceUrl(), modality: 'x-ray' });
+  const r = loadPure().validateExternalImportPayload(p);
+  assert.equal(r.ok, true, JSON.stringify(r.errors));
+  assert.equal(r.value.title, 'Polyethylene wear');
+});
+
+test('083 Atlas: payload ANTIGO com o autor como título é corrigido pelo slug da URL (defesa em profundidade)', () => {
+  const g = loadTitleGuard();
+  const fixed = g.reconcileExternalImportTitle({ source: 'Radiopaedia', title: AUTHOR, sourceUrl: CASE_URL, modality: 'x-ray' });
+  assert.equal(fixed.title, 'Polyethylene wear');
+  assert.equal(fixed.titleFromUrl, true);
+  assert.equal(fixed.sourceUrl, CASE_URL);
+  assert.equal(fixed.modality, 'x-ray', 'demais campos preservados');
+});
+
+test('083 Atlas: título clínico coerente com o slug é mantido intacto (inclusive grafia diferente)', () => {
+  const g = loadTitleGuard();
+  const p = { source: 'Radiopaedia', title: 'Polyethene wear', sourceUrl: 'https://radiopaedia.org/cases/polyethene-wear-1' };
+  const out = g.reconcileExternalImportTitle(p);
+  assert.equal(out.title, 'Polyethene wear');
+  assert.equal(out.titleFromUrl, undefined);
+  const out2 = g.reconcileExternalImportTitle({ source: 'Radiopaedia', title: 'Hepatic haemangioma (typical)', sourceUrl: 'https://radiopaedia.org/cases/hepatic-haemangioma-12' });
+  assert.equal(out2.title, 'Hepatic haemangioma (typical)');
+});
+
+test('083 Atlas: sem slug utilizável não inventa nome — mantém o que veio (compatível com payloads antigos)', () => {
+  const g = loadTitleGuard();
+  assert.equal(g.externalCaseSlugTitle('https://radiopaedia.org/cases/12345'), '');
+  assert.equal(g.externalCaseSlugTitle('https://radiopaedia.org/articles/abc'), '');
+  assert.equal(g.externalCaseSlugTitle('não é url'), '');
+  const p = { source: 'Radiopaedia', title: 'Qualquer', sourceUrl: 'https://radiopaedia.org/cases/12345' };
+  assert.equal(g.reconcileExternalImportTitle(p), p, 'mesmo objeto, nada muda');
+});
+
+test('083 Atlas: maybeHandleExternalImport passa o payload validado por reconcileExternalImportTitle antes do modal', () => {
+  const src = extractFunction(html, 'maybeHandleExternalImport');
+  assert.match(src, /openExternalImportModal\(reconcileExternalImportTitle\(checked\.value\)\)/);
+});
+
+test('083 tags: autor/nome próprio nunca vira tag; com o título corrigido nome e tags voltam a vir do catálogo', () => {
+  const api = loadPure();
+  const catalog = [{ id: 'seed_1', name: 'Desgaste de polietileno', enTerm: 'Polyethylene wear', s: 'Musculoesquelético', site: 'Quadril', tags: ['prótese', 'radiografia'], images: [] }];
+  const bad = { source: 'Radiopaedia', title: AUTHOR, sourceUrl: CASE_URL, modality: 'x-ray' };
+  const badSug = api.buildExternalSuggestion(bad, catalog, api.findExternalImportCandidates(bad, catalog));
+  for (const t of Array.from(badSug.tags)) assert.doesNotMatch(t.toLowerCase(), /leonardo|paggi|andrade/, 'autor nunca vira tag');
+  const fixed = loadTitleGuard().reconcileExternalImportTitle(bad);
+  const matches = api.findExternalImportCandidates(fixed, catalog);
+  const sug = api.buildExternalSuggestion(fixed, catalog, matches);
+  assert.equal(sug.name, 'Desgaste de polietileno', 'nome PT vem do catálogo (enTerm)');
+  assert.deepEqual(Array.from(sug.tags), ['Desgaste de polietileno', 'radiografia'], 'nome confiável (catálogo via enTerm) + modalidade (mapa fechado)');
+  assert.deepEqual(Array.from(badSug.tags), ['radiografia'], 'com o autor como título só sobrava a modalidade (sintoma do bug)');
+  for (const t of Array.from(sug.tags)) assert.doesNotMatch(t.toLowerCase(), /leonardo|paggi|andrade/);
+});
+
+test('083 tags: continuam conservadoras — título sem base no catálogo não gera tag inventada', () => {
+  const api = loadPure();
+  const catalog = [{ id: 'seed_1', name: 'Desgaste de polietileno', enTerm: 'Polyethylene wear', s: 'Musculoesquelético', site: 'Quadril', tags: ['prótese'], images: [] }];
+  const d = { source: 'Radiopaedia', title: 'Zzyzx unknown entity', sourceUrl: 'https://radiopaedia.org/cases/zzyzx-unknown-entity-1' };
+  const sug = api.buildExternalSuggestion(d, catalog, api.findExternalImportCandidates(d, catalog));
+  assert.deepEqual(Array.from(sug.tags), [], 'sem base real: sem tags');
+  assert.equal(sug.needsReview, true);
 });
