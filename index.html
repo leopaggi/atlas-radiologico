@@ -2172,6 +2172,7 @@ async function writeShardedState(ms=15000){
     sessionLog: stripUndefinedDeep(SESSIONLOG),
     sectionOrder: stripUndefinedDeep(sectionOrder),
     siteOrder: stripUndefinedDeep(siteOrder),
+    orderUpdatedAt: normalizeOrderStamps(ORDER_STAMPS), // PROTEÇÃO 085
     // ALTERAÇÃO 073 — tombstones de imagem excluída viajam no documento
     // principal (pequenos, sem binário), protegidos pela mesma transação/
     // revisão de todo o resto.
@@ -2230,7 +2231,14 @@ async function writeShardedState(ms=15000){
       // PROTEÇÃO 084 — união local ∪ remoto por reviewId (nunca apaga uma
       // revisão que só existe na nuvem, nem em syncThisDeviceToCloud/force).
       const writeLesionRevisions = stripUndefinedDeep(mergeLesionRevisions(metaPayloadBase.lesionRevisions, remoteMeta.lesionRevisions));
-      const metaPayload = {...metaPayloadBase, tombstones: stripUndefinedDeep(writeTombstones), lesionRevisions: writeLesionRevisions, chunkCount: gatedChunks.length};
+      // PROTEÇÃO 085 — ordem: merge por carimbo também DENTRO da transação
+      // (nenhum caminho de escrita grava default/ordem velha por cima de uma
+      // ordem remota mais nova — nem syncThisDeviceToCloud/force).
+      const writeOrder = stripUndefinedDeep(mergeOrderState(
+        { sectionOrder: metaPayloadBase.sectionOrder, siteOrder: metaPayloadBase.siteOrder, stamps: metaPayloadBase.orderUpdatedAt },
+        { sectionOrder: remoteMeta.sectionOrder, siteOrder: remoteMeta.siteOrder, stamps: remoteMeta.orderUpdatedAt }));
+      const metaPayload = {...metaPayloadBase, tombstones: stripUndefinedDeep(writeTombstones), lesionRevisions: writeLesionRevisions,
+        sectionOrder: writeOrder.sectionOrder, siteOrder: writeOrder.siteOrder, orderUpdatedAt: writeOrder.stamps, chunkCount: gatedChunks.length};
       if(!checkChunkSize(metaPayload, 'documento principal (revisão/SRS/histórico)')){
         const err = new Error('documento principal grande demais');
         err.code = 'chunk_too_large';
@@ -2316,6 +2324,7 @@ async function readShardedState(ms=15000){
 
   return { data: combinedData, review: meta.review, srs: meta.srs, sessionLog: meta.sessionLog,
     sectionOrder: meta.sectionOrder, siteOrder: meta.siteOrder,
+    orderUpdatedAt: normalizeOrderStamps(meta.orderUpdatedAt), // PROTEÇÃO 085 — ausente = sem carimbo
     tombstones: (meta.tombstones && typeof meta.tombstones === 'object' && !Array.isArray(meta.tombstones)) ? meta.tombstones : {},
     // PROTEÇÃO 084 — documento antigo sem o campo = {} (compatível).
     lesionRevisions: (meta.lesionRevisions && typeof meta.lesionRevisions === 'object' && !Array.isArray(meta.lesionRevisions)) ? meta.lesionRevisions : {} };
@@ -3363,8 +3372,13 @@ async function adoptRemoteStateForNewDevice(){
   REVIEW = (remote.review && typeof remote.review === 'object' && !Array.isArray(remote.review)) ? remote.review : {};
   SRS = (remote.srs && typeof remote.srs === 'object' && !Array.isArray(remote.srs)) ? remote.srs : {};
   SESSIONLOG = (remote.sessionLog && typeof remote.sessionLog === 'object' && !Array.isArray(remote.sessionLog)) ? remote.sessionLog : {};
-  sectionOrder = (Array.isArray(remote.sectionOrder) && remote.sectionOrder.length) ? remote.sectionOrder : [...DEFAULT_SECTION_ORDER];
-  siteOrder = (remote.siteOrder && typeof remote.siteOrder === 'object' && !Array.isArray(remote.siteOrder)) ? remote.siteOrder : {};
+  // PROTEÇÃO 085 — ordem remota adotada integralmente (só normalizada:
+  // sem duplicatas); default só quando a nuvem não tem ordem válida.
+  const adoptedOrder = mergeOrderState({ sectionOrder: [], siteOrder: {}, stamps: null },
+    { sectionOrder: remote.sectionOrder, siteOrder: remote.siteOrder, stamps: remote.orderUpdatedAt });
+  sectionOrder = adoptedOrder.sectionOrder.length ? adoptedOrder.sectionOrder : [...DEFAULT_SECTION_ORDER];
+  siteOrder = adoptedOrder.siteOrder;
+  ORDER_STAMPS = adoptedOrder.stamps;
   IMAGE_TOMBSTONES = normalizeTombstoneMap(remote.tombstones);
   // PROTEÇÃO 084 — dispositivo novo recebe a Central de Revisões (merge, não
   // overwrite: preserva qualquer revisão local que já exista).
@@ -3375,6 +3389,7 @@ async function adoptRemoteStateForNewDevice(){
   await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
   await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
   await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false);
+  await saveOrderStamps();
   try{ await saveImageTombstones(); }catch(_e){}
   await saveLesionRevisions(true);
   try{ updateReviewCenterBadges(); }catch(_e){}
@@ -4096,8 +4111,9 @@ async function mergeThisDeviceImagesToCloud(opts){
     REVIEW = mergeReviewPreservingProgress(REVIEW, remote && remote.review);
     SRS = mergeSRSPreservingNewest(SRS, remote && remote.srs);
     SESSIONLOG = mergeSessionLogPreservingProgress(SESSIONLOG, remote && remote.sessionLog);
-    if(!(Array.isArray(sectionOrder) && sectionOrder.length) && remote && Array.isArray(remote.sectionOrder) && remote.sectionOrder.length) sectionOrder = remote.sectionOrder;
-    if(!(siteOrder && Object.keys(siteOrder).length) && remote && remote.siteOrder && typeof remote.siteOrder==='object' && Object.keys(remote.siteOrder).length) siteOrder = remote.siteOrder;
+    // PROTEÇÃO 085 — mesmo merge de ordem do reconcile (carimbo de reordenação manual).
+    { const om = mergeOrderState({ sectionOrder, siteOrder, stamps: ORDER_STAMPS }, { sectionOrder: remote && remote.sectionOrder, siteOrder: remote && remote.siteOrder, stamps: remote && remote.orderUpdatedAt });
+      sectionOrder = om.sectionOrder; siteOrder = om.siteOrder; ORDER_STAMPS = om.stamps; await saveOrderStamps(); }
     try{ await storage.set(STORAGE_KEY, JSON.stringify(DATA), false); }catch(_e){}
     try{ await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false); }catch(_e){}
     try{ await storage.set(SRS_KEY, JSON.stringify(SRS), false); }catch(_e){}
@@ -4250,16 +4266,16 @@ function reconcileStateWithRemote(remote){
   // PROTEÇÃO 084 — revisões/soluções: merge por reviewId (nunca overwrite cego).
   LESION_REVISIONS = mergeLesionRevisions(LESION_REVISIONS, remote && remote.lesionRevisions);
 
-  // Ordem local é preservada quando válida; remoto só preenche ausência.
-  if((!Array.isArray(sectionOrder) || !sectionOrder.length) &&
-     Array.isArray(remote.sectionOrder) && remote.sectionOrder.length){
-    sectionOrder = remote.sectionOrder;
-  }
-  // Ordem local dos sítios também é preservada quando válida; remoto só preenche ausência.
-  if((!siteOrder || typeof siteOrder!=='object' || !Object.keys(siteOrder).length) &&
-     remote.siteOrder && typeof remote.siteOrder==='object' && Object.keys(remote.siteOrder).length){
-    siteOrder = remote.siteOrder;
-  }
+  // PROTEÇÃO 085 — ordem de seções/sítios: merge por carimbo de reordenação
+  // manual (ver mergeOrderState). Antes: "local preservada quando válida;
+  // remoto só preenche ausência" — como o boot sempre grava o default
+  // localmente, a ordem personalizada da nuvem nunca era adotada.
+  const orderMerged = mergeOrderState(
+    { sectionOrder, siteOrder, stamps: ORDER_STAMPS },
+    { sectionOrder: remote && remote.sectionOrder, siteOrder: remote && remote.siteOrder, stamps: remote && remote.orderUpdatedAt });
+  sectionOrder = orderMerged.sectionOrder;
+  siteOrder = orderMerged.siteOrder;
+  ORDER_STAMPS = orderMerged.stamps;
 
   const preservedCloudOnly = countRemoteOnlyAdopted(localData, remoteData, DATA);
   return { preservedCloudOnly, untimedLocalOnlyImageKeysById };
@@ -4271,6 +4287,7 @@ async function persistLocalStateNow(){
   try{ await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false); }catch(_e){}
   try{ await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false); }catch(_e){}
   try{ await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false); }catch(_e){}
+  await saveOrderStamps(); // PROTEÇÃO 085
   try{ await storage.set(IMAGE_TOMBSTONES_KEY, JSON.stringify(IMAGE_TOMBSTONES), false); }catch(_e){}
   await saveLesionRevisions(true); // PROTEÇÃO 084 — persistência interna (sem dirty)
   await savePendingLocalImageAdds(); // ALTERAÇÃO 079d
@@ -4324,14 +4341,16 @@ async function reconcileBeforePush(reason){
       ).data,
       review: quarantineIndexedByLesionId(REVIEW), srs: quarantineIndexedByLesionId(SRS),
       sessionLog: SESSIONLOG, sectionOrder, siteOrder, tombstones: IMAGE_TOMBSTONES,
-      lesionRevisions: LESION_REVISIONS || {} // PROTEÇÃO 084 — mudança só de revisão NÃO é no-op
+      lesionRevisions: LESION_REVISIONS || {}, // PROTEÇÃO 084 — mudança só de revisão NÃO é no-op
+      orderUpdatedAt: normalizeOrderStamps(ORDER_STAMPS) // PROTEÇÃO 085
     };
     const remoteSnapshot = {
       data: (Array.isArray(remote.data)?remote.data:[]).filter(e=>e && !isQuarantinedSeedId(e.id)),
       review: quarantineIndexedByLesionId(remote.review||{}), srs: quarantineIndexedByLesionId(remote.srs||{}),
       sessionLog: remote.sessionLog||{}, sectionOrder: remote.sectionOrder||[], siteOrder: remote.siteOrder||{},
       tombstones: remote.tombstones||{},
-      lesionRevisions: remote.lesionRevisions||{}
+      lesionRevisions: remote.lesionRevisions||{},
+      orderUpdatedAt: normalizeOrderStamps(remote.orderUpdatedAt)
     };
     const noOp = deepStableEqual(localSnapshot, remoteSnapshot);
     return { ok:true, preservedCloudOnly: r.preservedCloudOnly, noOp };
@@ -4388,6 +4407,7 @@ async function syncFromFirebase(){
       await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
       await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
       await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false);
+      await saveOrderStamps(); // PROTEÇÃO 085
       try{ await storage.set(IMAGE_TOMBSTONES_KEY, JSON.stringify(IMAGE_TOMBSTONES), false); }catch(_e){}
       await saveLesionRevisions(true); // PROTEÇÃO 084 — pull nunca marca dirty
       await savePendingLocalImageAdds(); // ALTERAÇÃO 079d
@@ -7418,6 +7438,7 @@ function runDuplicateCleanup(){
 let DATA = [];
 let sectionOrder = [...DEFAULT_SECTION_ORDER];
 let siteOrder = {}; // { [nomeDaSeção]: [siteA, siteB, ...] } — ordem manual dos sítios dentro de cada seção
+let ORDER_STAMPS = { section: 0, sites: {} }; // PROTEÇÃO 085 — carimbo da última reordenação MANUAL (seções / sítios por seção)
 let scope = {section:null, site:null};
 /* Preferências de navegação LOCAL POR NAVEGADOR/ORIGEM (localStorage; NUNCA
    Firebase, IndexedDB, sync, backup ou DATA). Sidebar e Quiz são INDEPENDENTES:
@@ -7860,6 +7881,7 @@ async function restoreSafetySnapshot(id){
   LESION_REVISIONS = JSON.parse(JSON.stringify(snapshot.lesionRevisions||{}));
   if(Array.isArray(snapshot.sectionOrder) && snapshot.sectionOrder.length) sectionOrder = [...snapshot.sectionOrder];
   if(snapshot.siteOrder && typeof snapshot.siteOrder==='object') siteOrder = JSON.parse(JSON.stringify(snapshot.siteOrder));
+  markRestoredOrderManual(); // PROTEÇÃO 085 — restauração manual continua valendo sobre a nuvem (como antes)
   const wasSyncing = fbSyncing;
   fbSyncing = true;
   await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
@@ -7868,6 +7890,7 @@ async function restoreSafetySnapshot(id){
   await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
   await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
   await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false);
+  await saveOrderStamps(); // PROTEÇÃO 085
   await saveLesionRevisions(true); // PROTEÇÃO 084: restauração manual segue sem sync automático
   fbSyncing = wasSyncing;
   renderAll();
@@ -10527,12 +10550,13 @@ async function loadData(){
     DATA = JSON.parse(JSON.stringify(activeCanonicalSeedV172()));
     try{ await storage.set(RECOVERY_KEY,RECOVERY_VERSION,false); }catch(_e){}
   }
+  await loadOrderStamps(); // PROTEÇÃO 085 — antes de qualquer saveOrder/saveSiteOrder de boot
   try{
     const r2 = await storage.get(ORDER_KEY, false);
     sectionOrder = JSON.parse(r2.value);
   }catch(e){
     sectionOrder = [...DEFAULT_SECTION_ORDER];
-    await saveOrder();
+    await saveOrder(true); // PROTEÇÃO 085: default de boot nunca é edição
   }
   try{
     const rSite = await storage.get(SITEORDER_KEY, false);
@@ -10540,7 +10564,7 @@ async function loadData(){
     if(!siteOrder || typeof siteOrder!=='object') siteOrder = {};
   }catch(e){
     siteOrder = {};
-    await saveSiteOrder();
+    await saveSiteOrder(true);
   }
   try{
     const r3 = await storage.get(REVIEW_KEY, false);
@@ -10725,10 +10749,20 @@ async function saveData(internal){
   await markSyncDirty();
   await pushToFirebaseNow();
 }
-async function saveOrder(){
+// PROTEÇÃO 085 — mesmo contrato de saveReview/saveSRS/saveLesionRevisions:
+// sem `internal` = ação REAL do usuário (reordenar/importar backup) — marca
+// dirty + push debounced com reconcile; `internal=true` = só persiste
+// (default de boot, normalização do render ao surgir seção/sítio novo, pull).
+// Antes, toda gravação publicava sem dirty — inclusive a normalização do
+// render ao abrir o app (violava a regra 072) — e a reordenação manual não
+// marcava dirty (um push bloqueado/offline se perdia no F5).
+async function saveOrder(internal){
   try{
     await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
   }catch(e){ console.error('storage error', e); }
+  await saveOrderStamps();
+  if(internal) return;
+  await markSyncDirty();
   pushToFirebase();
 }
 function orderedSectionNames(map){
@@ -10736,12 +10770,96 @@ function orderedSectionNames(map){
   const ordered = sectionOrder.filter(s=>known.includes(s));
   const extra = known.filter(s=>!sectionOrder.includes(s)).sort();
   const full = [...ordered, ...extra];
-  if(extra.length){ sectionOrder = full; saveOrder(); }
+  if(extra.length){ sectionOrder = full; saveOrder(true); } // PROTEÇÃO 085: normalização, não edição
   return full;
 }
-async function saveSiteOrder(){
+async function saveSiteOrder(internal){
   try{ await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false); }catch(e){ console.error('storage error', e); }
+  await saveOrderStamps();
+  if(internal) return;
+  await markSyncDirty();
   pushToFirebase();
+}
+/* PROTEÇÃO 085 — ORDEM ENTRE DISPOSITIVOS.
+   Causa raiz: reconcileStateWithRemote() só adotava a ordem remota quando a
+   local estava VAZIA ("remoto só preenche ausência") — mas todo boot grava o
+   DEFAULT localmente, então a ordem personalizada da nuvem nunca era
+   adotada por um PC já inicializado, e o próximo push desse PC ainda
+   gravava o default por cima da nuvem. Sem carimbo, não havia como saber
+   qual lado era intenção do usuário.
+   Regra: cada reordenação MANUAL carimba (seção inteira / sítios de UMA
+   seção). No merge, o carimbo mais novo vence; sem carimbo nos dois lados
+   (estado legado), uma ordem local que é só o default automático
+   (isAutoSectionOrder/isAutoSiteList) cede para a remota — uma ordem local
+   personalizada legada é preservada, como antes. Itens que só o lado
+   perdedor conhece entram no FIM, na ordem dele; nunca há reordenação
+   alfabética do que já estava definido; duplicatas são removidas. */
+const ORDER_STAMPS_KEY = 'atlas:orderUpdatedAt';
+function normalizeOrderStamps(v){
+  const o = (v && typeof v==='object' && !Array.isArray(v)) ? v : {};
+  const sites = {};
+  if(o.sites && typeof o.sites==='object' && !Array.isArray(o.sites)){
+    for(const [k, t] of Object.entries(o.sites)){ const n = Number(t)||0; if(n > 0) sites[k] = n; }
+  }
+  return { section: Number(o.section)||0, sites };
+}
+async function loadOrderStamps(){
+  try{ const r = await storage.get(ORDER_STAMPS_KEY, false); ORDER_STAMPS = normalizeOrderStamps(JSON.parse(r.value)); }
+  catch(e){ ORDER_STAMPS = normalizeOrderStamps(null); }
+}
+async function saveOrderStamps(){
+  try{ await storage.set(ORDER_STAMPS_KEY, JSON.stringify(normalizeOrderStamps(ORDER_STAMPS)), false); }
+  catch(e){ console.error('storage error', e); }
+}
+function markSectionOrderManual(){ ORDER_STAMPS = normalizeOrderStamps(ORDER_STAMPS); ORDER_STAMPS.section = Date.now(); }
+function markSiteOrderManual(sectionName){ ORDER_STAMPS = normalizeOrderStamps(ORDER_STAMPS); ORDER_STAMPS.sites[sectionName] = Date.now(); }
+// Restauração MANUAL (backup/snapshot): a ordem restaurada é intenção do
+// usuário — carimba seções e todos os sítios restaurados.
+function markRestoredOrderManual(){
+  markSectionOrderManual();
+  for(const name of Object.keys((siteOrder && typeof siteOrder==='object' && !Array.isArray(siteOrder)) ? siteOrder : {})) markSiteOrderManual(name);
+}
+function dedupeOrderList(arr){
+  const seen = new Set();
+  return (Array.isArray(arr) ? arr : []).filter(x=>{ if(typeof x!=='string' || !x || seen.has(x)) return false; seen.add(x); return true; });
+}
+// Ordem que o próprio app geraria sozinho (DEFAULT_SECTION_ORDER + extras em
+// ordem alfabética — ver orderedSectionNames) = não é intenção do usuário.
+function isAutoSectionOrder(arr){
+  const a = dedupeOrderList(arr);
+  const auto = [...DEFAULT_SECTION_ORDER.filter(x=>a.includes(x)), ...a.filter(x=>!DEFAULT_SECTION_ORDER.includes(x)).sort()];
+  return a.join('\u0001') === auto.join('\u0001');
+}
+function isAutoSiteList(arr){
+  const a = dedupeOrderList(arr);
+  return a.join('\u0001') === [...a].sort().join('\u0001');
+}
+function mergeOrderList(localArr, remoteArr, lts, rts, isAuto){
+  const l = dedupeOrderList(localArr), r = dedupeOrderList(remoteArr);
+  if(!r.length) return { list: l, stamp: lts };
+  if(!l.length) return { list: r, stamp: rts };
+  let remoteWins;
+  if(lts || rts) remoteWins = rts !== lts ? rts > lts : r.join('\u0001') > l.join('\u0001');
+  else remoteWins = isAuto(l);
+  const win = remoteWins ? r : l, lose = remoteWins ? l : r;
+  return { list: [...win, ...lose.filter(x=>!win.includes(x))], stamp: Math.max(lts, rts) };
+}
+/* Pura: { sectionOrder, siteOrder, stamps } local × remoto -> mesmo formato. */
+function mergeOrderState(local, remote){
+  const L = local || {}, R = remote || {};
+  const ls = normalizeOrderStamps(L.stamps), rs = normalizeOrderStamps(R.stamps);
+  const sec = mergeOrderList(L.sectionOrder, R.sectionOrder, ls.section, rs.section, isAutoSectionOrder);
+  const obj = v => (v && typeof v==='object' && !Array.isArray(v)) ? v : {};
+  const lSites = obj(L.siteOrder), rSites = obj(R.siteOrder);
+  const siteOrderOut = {};
+  const stamps = { section: sec.stamp, sites: {} };
+  for(const name of new Set([...Object.keys(lSites), ...Object.keys(rSites)])){
+    if(!Array.isArray(lSites[name]) && !Array.isArray(rSites[name])) continue;
+    const m = mergeOrderList(lSites[name], rSites[name], ls.sites[name]||0, rs.sites[name]||0, isAutoSiteList);
+    siteOrderOut[name] = m.list;
+    if(m.stamp > 0) stamps.sites[name] = m.stamp;
+  }
+  return { sectionOrder: sec.list, siteOrder: siteOrderOut, stamps };
 }
 /* ordem manual dos sítios dentro de UMA seção — sítios novos (nunca ordenados) entram
    alfabeticamente ao final, sem perder a ordem manual já definida pelo usuário */
@@ -10751,7 +10869,7 @@ function orderedSiteNames(sectionName, sitesMap){
   const ordered = current.filter(s=>known.includes(s));
   const extra = known.filter(s=>!current.includes(s)).sort();
   const full = [...ordered, ...extra];
-  if(extra.length || !siteOrder[sectionName]){ siteOrder[sectionName] = full; saveSiteOrder(); }
+  if(extra.length || !siteOrder[sectionName]){ siteOrder[sectionName] = full; saveSiteOrder(true); } // PROTEÇÃO 085: normalização
   return full;
 }
 /* usada pelo drag-and-drop: move um sítio para uma nova posição dentro da seção */
@@ -10760,6 +10878,7 @@ function reorderSite(sectionName, fromIdx, toIdx){
   if(!Array.isArray(arr) || fromIdx===toIdx || fromIdx<0 || toIdx<0 || fromIdx>=arr.length || toIdx>=arr.length) return;
   const [moved] = arr.splice(fromIdx,1);
   arr.splice(toIdx,0,moved);
+  markSiteOrderManual(sectionName); // PROTEÇÃO 085
   saveSiteOrder();
 }
 async function moveSection(name, dir){
@@ -10767,6 +10886,7 @@ async function moveSection(name, dir){
   const swapWith = idx + dir;
   if(idx<0 || swapWith<0 || swapWith>=sectionOrder.length) return;
   [sectionOrder[idx], sectionOrder[swapWith]] = [sectionOrder[swapWith], sectionOrder[idx]];
+  markSectionOrderManual(); // PROTEÇÃO 085
   await saveOrder();
   renderTree();
 }
@@ -10779,6 +10899,7 @@ async function reorderSectionDrag(fromName, toName){
   if(fromIdx<0 || toIdx<0) return;
   const [moved] = sectionOrder.splice(fromIdx,1);
   sectionOrder.splice(toIdx,0,moved);
+  markSectionOrderManual(); // PROTEÇÃO 085
   await saveOrder();
   renderTree();
 }
@@ -14158,6 +14279,7 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
       ? parsed.sectionOrder
       : [...DEFAULT_SECTION_ORDER];
     siteOrder = (parsed.siteOrder && typeof parsed.siteOrder==='object') ? parsed.siteOrder : {};
+    markRestoredOrderManual(); // PROTEÇÃO 085 — backup importado vale sobre a nuvem (como antes)
     LESION_REVISIONS = (parsed.lesionRevisions && typeof parsed.lesionRevisions==='object' && !Array.isArray(parsed.lesionRevisions)) ? parsed.lesionRevisions : {};
     // ALTERAÇÃO 073 — tombstones do backup unidos pelo mais recente (nunca
     // descartados: o backup pode ser anterior a uma exclusão explícita).

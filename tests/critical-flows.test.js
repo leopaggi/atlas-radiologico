@@ -491,10 +491,16 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // no modulo da Central e lesionRevisions em writeShardedState/
   // readShardedState/reconcile/persist/pull/adocao/auditoria — tudo antes
   // da primeira ancora, deslocamento uniforme.
-  assert.equal(recovery.line, 7888);
-  assert.equal(brokenArtifacts.line, 7878);
-  assert.equal(loadData.line, 10435);
-  assert.equal(importHandler.line, 14099);
+  // +23 nas tres primeiras ancoras / +121 no importHandler (Protecao 085,
+  // 2026-09-25): ORDER_STAMPS + merge de ordem em writeShardedState/
+  // readShardedState/reconcile/persist/pull/adocao/merge de imagens e o
+  // carimbo na restauracao de snapshot — antes da primeira ancora; +98 so no
+  // importHandler: funcoes de carimbo/merge de ordem junto de saveOrder/
+  // saveSiteOrder, load dos carimbos em loadData e o carimbo no proprio import.
+  assert.equal(recovery.line, 7911);
+  assert.equal(brokenArtifacts.line, 7901);
+  assert.equal(loadData.line, 10458);
+  assert.equal(importHandler.line, 14220);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -674,6 +680,7 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
     SESSIONLOG: {},
     sectionOrder: [],
     siteOrder: {},
+    loadOrderStamps: async () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085
     appStateReady: false,
     SEED: seed,
     STORAGE_KEY: 'data',
@@ -903,6 +910,7 @@ async function runImportScenario(raw, { confirmResult = true } = {}) {
     saveSessionLog: async () => writes.push('saveSessionLog'),
     saveOrder: async () => writes.push('saveOrder'),
     saveSiteOrder: async () => writes.push('saveSiteOrder'),
+    markRestoredOrderManual: () => {}, // PROTEÇÃO 085 — carimbo da ordem importada (coberto em order-sync.test.js)
     scope: { section: 'Original', site: 'Original' },
     activeTags: new Set(['original']),
     searchTerm: 'original',

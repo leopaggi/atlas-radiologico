@@ -8,31 +8,29 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
-*Atualizado em 2026-09-25, junto do commit "Protecao 084: sincroniza revisoes e solucoes entre dispositivos".*
+*Atualizado em 2026-09-25, junto do commit "Protecao 085: preserva ordem entre dispositivos".*
 
 - **Branch local de trabalho:** `master` (publicação: `git push origin master:main`).
-- **origin/main antes da 084:** `850ace6` (Protecao 083). **Último commit:** Protecao 084 (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
-- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 084:** 1192 testes · 1184 pass · 3 fail conhecidos · 5 todo (era 1167/1159/3/5 após a 083; +25 testes novos da 084). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
-  - Medido no ambiente remoto (sem os arquivos protegidos): 1182 · 1147 · 30 · 5 (base 850ace6 no mesmo ambiente: 1157 · 1122 · 30 · 5; conjunto de falhas idêntico). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
-- **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 084. Nenhuma escrita deliberada nesta tarefa. A partir da 084 o documento principal (`atlas_state/main`) ganha o campo `lesionRevisions` na próxima publicação real.
-- **Produção validada (usuário):** links semanticamente duplicados = 0; imagens: 0 duplicatas intralesão por identidade estável, 0 identidades compartilhadas entre lesões.
-- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), **084 (Central de Revisões + Soluções sincronizada entre dispositivos — seção 40)**.
-- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); **`lesionRevisions` nunca é sobrescrito às cegas — merge por reviewId em pull, pre-push e dentro da transação de escrita; pull/load/reconcile nunca marcam dirty (084)**.
-- **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 084. Não restaurar sem decisão explícita do usuário.
-- **Passo manual pós-deploy (084):** revisões criadas ANTES da 084 existem só no IndexedDB de cada PC e só sobem na próxima ação real do usuário que publique (qualquer ação na Central, edição, Quiz) ou em "Sincronizar este dispositivo" — abrir o Atlas sem ação nunca publica (regra 072). Fazer isso primeiro no PC que tem as revisões; depois abrir o outro PC.
-- **Próximo passo exato:** Proteção 085 (ver BACKLOG abaixo).
+- **origin/main antes da 085:** `f6ee3aa` (Protecao 084). **Último commit:** Protecao 085 (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
+- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 085:** 1217 testes · 1209 pass · 3 fail conhecidos · 5 todo (era 1192/1184/3/5 após a 084; +25 testes novos da 085). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
+  - Medido no ambiente remoto (sem os arquivos protegidos): 1207 · 1172 · 30 · 5 (base `f6ee3aa` no mesmo ambiente: 1182 · 1147 · 30 · 5; conjunto de falhas idêntico). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
+- **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 085. Nenhuma escrita deliberada nesta tarefa. A partir da 085 o documento principal ganha o campo `orderUpdatedAt` (carimbos de reordenação manual) na próxima publicação real.
+- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), **085 (ordem de seções/sítios entre dispositivos — seção 41)**.
+- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085)**.
+- **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 085. Não restaurar sem decisão explícita do usuário.
+- **Passo manual pós-deploy (085):** ordens personalizadas feitas ANTES da 085 não têm carimbo. No PC que tem a ordem CORRETA, fazer uma reordenação qualquer (ex.: descer uma seção e subir de volta; idem um sítio em cada seção personalizada) — isso carimba e publica. Depois abrir o outro PC: ordem default/automática cede para a da nuvem sozinha. (Revisões pré-084: mesma lógica, ver seção 40.)
+- **Próximo passo exato:** Proteção 086 (ver BACKLOG abaixo).
 
 ## BACKLOG
 
-- **PRÓXIMA PRIORIDADE: Proteção 085 — corrigir/garantir sincronização real de sectionOrder + siteOrder em bootstrap de novo dispositivo.**
+- **PRÓXIMA PRIORIDADE: Proteção 086 — alerta visual junto ao nome da lesão quando houver revisão ativa.**
 - Pendências funcionais posteriores:
-  - alerta visual de revisão ativa;
-  - sequência RM manual/livre;
-  - contexto clínico por imagem antes da resposta no Quiz;
-  - descrição da imagem continua só após a resposta;
-  - conteúdo complementar/classificações/estadiamento oculto antes da resposta;
+  - sequência RM com entrada livre;
+  - contexto clínico/dados do paciente por imagem;
+  - descrição só depois da resposta no Quiz;
+  - conteúdo complementar/classificações pós-resposta;
   - fonte individual por imagem;
-  - auditar o stash antigo antes de reimplementar fonte por imagem / caso clínico manual.
+  - auditar o stash antes de reimplementar funcionalidades antigas.
 - Herdado da 083: `extractModality()` do userscript ainda varre a página inteira (restringir à área do caso com base no DOM real); userscript no Tampermonkey precisa ser atualizado para a v1.1.0.
 
 ## PROTOCOLO OBRIGATÓRIO DE CONTINUIDADE
@@ -1504,3 +1502,98 @@ permite `pushToFirebase` só dentro de `saveLesionRevisions`),
   reconcile ou o campo do no-op derruba os cenários 084.
 - Suíte (remoto): 1182 · 1147 · 30 · 5 (base 1157 · 1122 · 30 · 5; mesmas
   falhas). Esperado no local: 1192 · 1184 · 3 · 5.
+
+## 41. Proteção 085 — ordem de seções/sítios preservada entre dispositivos (2026-09-25)
+
+### Causa raiz
+- `reconcileStateWithRemote()` (pull e pre-push) tinha a regra "ordem local é
+  preservada quando válida; remoto só preenche ausência". Mas a ordem local
+  NUNCA fica vazia: o boot grava `DEFAULT_SECTION_ORDER` em `atlas:sectionOrder`
+  quando a chave não existe, e o render (`orderedSectionNames`/
+  `orderedSiteNames`) grava a ordem automática (extras em ordem alfabética).
+- **Ponto exato:** o bloco `if((!Array.isArray(sectionOrder) || !sectionOrder.length) && …) sectionOrder = remote.sectionOrder;`
+  (e o equivalente de `siteOrder`) em `reconcileStateWithRemote()`, repetido
+  em `mergeThisDeviceImagesToCloud()`. Um PC já inicializado (com a ordem
+  default) nunca adotava a ordem personalizada da nuvem — e o próximo push
+  desse PC ainda gravava o default por cima da nuvem (o `set()` é do
+  documento inteiro). Sem carimbo não havia como saber qual lado era
+  intenção do usuário.
+- Agravantes: reordenar manualmente não marcava dirty (um push bloqueado/
+  offline se perdia no F5), e a normalização do render publicava sozinha ao
+  abrir o app (violava a regra 072).
+- PC realmente NOVO (IndexedDB vazio, "Carregar da nuvem") já adotava a ordem
+  remota em `adoptRemoteStateForNewDevice()` — continua adotando (agora
+  normalizada e com o carimbo).
+
+### Correção
+- **Carimbo de reordenação manual** `ORDER_STAMPS = { section, sites: { [seção]: ms } }`
+  (IndexedDB `atlas:orderUpdatedAt`; Firestore `orderUpdatedAt` no documento
+  principal). Carimbado só por `moveSection`, `reorderSectionDrag`,
+  `reorderSite` (por seção) e pelas restaurações manuais (importar backup,
+  restaurar snapshot — que antes sempre venciam a nuvem e continuam vencendo).
+- **`mergeOrderState(local, remoto)`** (pura), usada em
+  `reconcileStateWithRemote`, `mergeThisDeviceImagesToCloud`,
+  `adoptRemoteStateForNewDevice` e DENTRO da transação de `writeShardedState`
+  (nem `syncThisDeviceToCloud`/`forceThisDeviceToCloud` gravam default/ordem
+  velha por cima de uma ordem mais nova):
+  - carimbo mais novo vence (seções; sítios POR SEÇÃO — não destrói ordem de
+    outra seção); empate de carimbo: desempate fixo (convergente);
+  - sem carimbo nos dois lados (legado): ordem local que é só o default
+    automático (`isAutoSectionOrder`: defaults existentes + extras
+    alfabéticos; `isAutoSiteList`: alfabética) cede à remota; ordem local
+    personalizada legada é preservada (comportamento antigo);
+  - lado sem lista válida = usa o outro; itens que só o perdedor conhece
+    entram no FIM, na ordem dele; duplicatas removidas; nunca reordena
+    alfabeticamente o que já estava definido; itens fora do catálogo ficam
+    guardados (o render os ignora).
+- **Dirty/publicação:** `saveOrder(internal)`/`saveSiteOrder(internal)` com o
+  mesmo contrato de `saveReview/saveSRS`. Default de boot e normalização do
+  render = `internal` (só persiste). Reordenação manual e importação de
+  backup = marcam dirty + push com reconcile. Pull/persist/adoção persistem
+  o carimbo sem dirty. `loadData()` carrega o carimbo antes dos saves de boot.
+- `reconcileBeforePush()`: `orderUpdatedAt` normalizado nos dois lados do
+  no-op.
+
+### Comportamento em PC novo
+- IndexedDB vazio → "Carregar da nuvem" → `sectionOrder`/`siteOrder` remotos
+  adotados integralmente (sem duplicatas) + carimbo; default só se a nuvem
+  não tiver ordem válida; nada publicado; `syncDirty` segue false; F5 mantém.
+- PC já inicializado com ordem default → no primeiro pull adota a ordem da
+  nuvem (sem dirty, sem publicar); uma edição posterior publica com a ordem
+  certa.
+
+### Arquivos alterados
+`index.html`, `tests/order-sync.test.js` (novo, 17),
+`tests/multi-device-sync.test.js` (+7 ponta a ponta + funções reais no
+harness), `tests/device-bootstrap.test.js` (+1 + harness/stubs),
+`tests/critical-flows.test.js` (âncoras +23 nas três primeiras / +121 no
+importHandler; stubs), `tests/snapshots-ownership.test.js` (stubs),
+`CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`.
+
+### Testes
+- Focados: `order-sync` 17/17 (remoto completo/parcial/ausente/inválido,
+  duplicata, item removido, novo item no fim, carimbo por seção, legado auto
+  × personalizado, convergência/idempotência, serialização, pipeline estático,
+  saves reais internal × usuário, restauração carimba); `multi-device-sync`
+  159/160 (novos: reordenação real marca dirty e sincroniza; PC novo adota
+  exato sem dirty/sem publicar + F5; PC já inicializado com default adota e
+  edição posterior não grava default; dois PCs convergem; nuvem legada sem
+  ordem; novo item no fim sem publicar; force não apaga ordem mais nova;
+  F2 = arquivo protegido ausente); `device-bootstrap` 41/42; `critical-flows`
+  23/23; `snapshots-ownership` 48/48; `site-taxonomy` 42/42;
+  `lesion-revisions-sync` 15/15; `modal-cleanup` 14/14. Checagem de mutação:
+  voltar a regra antiga do reconcile derruba 2 cenários 085; remover o merge
+  de ordem da transação derruba o cenário do force.
+- Suíte (remoto): 1207 · 1172 · 30 · 5 (base 1182 · 1147 · 30 · 5; mesmas
+  falhas). Esperado no local: 1217 · 1209 · 3 · 5.
+
+### Limitações
+- Ordem personalizada ANTERIOR à 085 não tem carimbo: entre dois PCs com
+  ordens personalizadas diferentes e legadas, cada um mantém a sua até uma
+  reordenação manual (que carimba) — ver "Passo manual pós-deploy" no topo.
+- Uma ordem personalizada que coincida exatamente com a automática é
+  indistinguível do default (cede à nuvem se legada).
+- `restoreCanonicalStateToCloud()` (console) grava ordem sem carimbo;
+  dispositivos com carimbo mantêm a própria ordem depois dele.
+- Sem teste de DOM real (arrastar na sidebar): a reordenação foi testada
+  pelas funções reais chamadas pelos handlers.

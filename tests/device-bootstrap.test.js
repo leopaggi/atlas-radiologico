@@ -90,6 +90,10 @@ const normalizeExternalTitleFn = extractFunction(html, 'normalizeExternalTitle')
 const adoptRemoteFn = extractFunction(html, 'adoptRemoteStateForNewDevice');
 const readShardedStateFn = extractFunction(html, 'readShardedState');
 const normalizeTombstoneMapFn = extractFunction(html, 'normalizeTombstoneMap');
+// PROTEÇÃO 085 — ordem de seções/sítios com carimbo (funções reais).
+const orderFns085 = ['normalizeOrderStamps', 'saveOrderStamps', 'dedupeOrderList', 'isAutoSectionOrder',
+  'isAutoSiteList', 'mergeOrderList', 'mergeOrderState']
+  .map((n) => extractFunction(html, n).source).join('\n');
 // PROTEÇÃO 084 — Central de Revisões sincronizada (merge/save/badges reais).
 const lesionRevisionsFns084 = ['canonicalJsonString', 'mergeLesionRevisions', 'saveLesionRevisions', 'updateReviewCenterBadges']
   .map((n) => extractFunction(html, n).source).join('\n');
@@ -208,6 +212,7 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
   vm.createContext(ctx);
   vm.runInContext(
     lesionRevisionsFns084 + '\n' +
+    "const DEFAULT_SECTION_ORDER = []; let ORDER_STAMPS = { section: 0, sites: {} };\n" + orderFns085 + '\n' +
     'function stripUndefinedDeep(v){try{return JSON.parse(JSON.stringify(v));}catch(_e){return v;}}\n' +
     'function splitIntoChunks(arr,size){const out=[];for(let i=0;i<arr.length;i+=size)out.push(arr.slice(i,i+size));return out;}\n' +
     'function checkChunkSize(){return true;}\n' +
@@ -406,6 +411,7 @@ test('loadData() real: dispositivo NOVO (storage.get lança) aciona o bootstrap 
     const seed = [{ id: 'seed_0', name: 'L0', s: 'S', site: 'T', images: [] }];
     const context = vm.createContext({
       DATA: [], REVIEW: {}, SRS: {}, SESSIONLOG: {}, sectionOrder: [], siteOrder: {},
+      loadOrderStamps: async () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085 (fora do escopo destes testes)
       appStateReady: false, deviceBootstrapPending: false,
       SEED: seed,
       STORAGE_KEY: 'data', ORDER_KEY: 'order', SITEORDER_KEY: 'site-order', REVIEW_KEY: 'review',
@@ -502,6 +508,7 @@ test('loadData() real: reload DEPOIS do bootstrap não repete o fluxo (storage j
   function makeContext() {
     return vm.createContext({
       DATA: [], REVIEW: {}, SRS: {}, SESSIONLOG: {}, sectionOrder: [], siteOrder: {},
+      loadOrderStamps: async () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085 (fora do escopo destes testes)
       appStateReady: false, deviceBootstrapPending: false,
       SEED: seed,
       STORAGE_KEY: 'data', ORDER_KEY: 'order', SITEORDER_KEY: 'site-order', REVIEW_KEY: 'review',
@@ -724,6 +731,10 @@ function makeAdoptContext({ localData, remoteMeta, remoteChunks } = {}) {
     const LESION_REVISIONS_KEY = 'atlas:lesionRevisions';
     let LESION_REVISIONS = {};
     function __getLesionRevisions084(){ return LESION_REVISIONS; }
+    const ORDER_STAMPS_KEY = 'atlas:orderUpdatedAt';
+    let ORDER_STAMPS = { section: 0, sites: {} };
+    function __getOrderStamps085(){ return ORDER_STAMPS; }
+    ${orderFns085}
     ${lesionRevisionsFns084}
     ${adoptRemoteFn.source}
   `;
@@ -773,6 +784,24 @@ test('PROTEÇÃO 084: nuvem antiga sem lesionRevisions — adoção de device no
   await ctx.adoptRemoteStateForNewDevice();
   assert.deepEqual(JSON.parse(JSON.stringify(ctx.__getLesionRevisions084())), {});
   assert.equal(ctx.DATA.length, 1);
+});
+
+test('PROTEÇÃO 085: device novo adota sectionOrder/siteOrder remotos (sem duplicatas) com o carimbo; sem ordem remota usa o default', async () => {
+  const { ctx, backing } = makeAdoptContext({
+    localData: [{ id: 'seed_1' }],
+    remoteMeta: { ...cloudMetaBase, revision: 4, chunkCount: 1,
+      sectionOrder: ['Tórax', 'Neuro', 'Tórax'], siteOrder: { Neuro: ['b', 'a', 'b'] }, orderUpdatedAt: { section: 50, sites: { Neuro: 40 } } },
+    remoteChunks: [[{ id: 'seed_1' }]]
+  });
+  await ctx.adoptRemoteStateForNewDevice();
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.sectionOrder)), ['Tórax', 'Neuro']);
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.siteOrder)), { Neuro: ['b', 'a'] });
+  assert.deepEqual(JSON.parse(backing['atlas:orderUpdatedAt']), { section: 50, sites: { Neuro: 40 } }, 'carimbo persistido (F5)');
+  assert.deepEqual(JSON.parse(backing['order']), ['Tórax', 'Neuro']);
+  const empty = makeAdoptContext({ localData: [], remoteMeta: { ...cloudMetaBase, revision: 1, chunkCount: 1 }, remoteChunks: [[{ id: 'seed_1' }]] });
+  await empty.ctx.adoptRemoteStateForNewDevice();
+  assert.deepEqual(JSON.parse(JSON.stringify(empty.ctx.sectionOrder)), ['Seção Padrão'], 'nuvem sem ordem válida: default');
+  assert.deepEqual(JSON.parse(JSON.stringify(empty.ctx.siteOrder)), {});
 });
 
 test('ALTERAÇÃO 078: adoptRemoteStateForNewDevice() adota 3 links da nuvem mesmo com SEED tendo só 1', async () => {

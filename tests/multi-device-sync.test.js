@@ -143,6 +143,11 @@ const pendingAddsFns079d = ['normalizePendingLocalImageAdds', 'hasPendingLocalIm
   'confirmPendingLocalImageAdds', 'loadPendingLocalImageAdds', 'savePendingLocalImageAdds']
   .map((n) => extractFunction(html, n).source).join('\n');
 const addImageToLesionDataFn = extractFunction(html, 'addImageToLesionData');
+// PROTEÇÃO 085 — ordem de seções/sítios com carimbo de reordenação manual.
+const orderFns085 = ['normalizeOrderStamps', 'loadOrderStamps', 'saveOrderStamps', 'markSectionOrderManual',
+  'markSiteOrderManual', 'markRestoredOrderManual', 'dedupeOrderList', 'isAutoSectionOrder', 'isAutoSiteList',
+  'mergeOrderList', 'mergeOrderState']
+  .map((n) => extractFunction(html, n).source).join('\n');
 // PROTEÇÃO 084 — Central de Revisões sincronizada (merge + save reais).
 const lesionRevisionsFns084 = ['mergeLesionRevisions', 'saveLesionRevisions', 'updateReviewCenterBadges',
   'getPendingReviews', 'getProposedSolutions', 'getAppliedSolutionsAwaitingValidation', 'getManualActionSolutions',
@@ -340,6 +345,7 @@ function makeDevice(cloud, { seed = [] } = {}) {
     // ALTERAÇÃO 079c — stubs mínimos para syncThisDeviceToCloud()/
     // forceThisDeviceToCloud() reais (verificação pós-envio e confirm()).
     LESION_REVISIONS: {},
+    ORDER_STAMPS: { section: 0, sites: {} }, // PROTEÇÃO 085
     syncAuditCounters: () => ({}),
     readCloudAuditFromServer: async () => null,
     syncCountersMatch: () => false,
@@ -410,6 +416,8 @@ function makeDevice(cloud, { seed = [] } = {}) {
     ${addImageToLesionDataFn.source}
     const LESION_REVISIONS_KEY = 'atlas:lesionRevisions';
     ${lesionRevisionsFns084}
+    const ORDER_STAMPS_KEY = 'atlas:orderUpdatedAt';
+    ${orderFns085}
     let lastWriteStaleImagesBlocked = 0;
     ${gateStaleImagesFn.source}
     ${writeShardedStateFn.source}
@@ -3440,6 +3448,165 @@ test('PROTEÇÃO 084 - escrita sem reconcile (forceThisDeviceToCloud) nunca apag
   b.context.appStateReady = true;
   await b.context.forceThisDeviceToCloud();
   assert.deepEqual(Object.keys(cloudRevs084(cloud)).sort(), ['R1', 'R2'], 'união dentro da transação');
+});
+
+// ===========================================================================
+// PROTEÇÃO 085 — ordem de seções/sítios entre dispositivos (loadData/
+// syncFromFirebase/writeShardedState/adoção REAIS + funções reais de
+// reordenação: moveSection/reorderSectionDrag/reorderSite/saveOrder/...).
+// ===========================================================================
+const orderUiFns085 = ['saveOrder', 'saveSiteOrder', 'orderedSectionNames', 'orderedSiteNames', 'moveSection',
+  'reorderSectionDrag', 'reorderSite', 'adoptRemoteStateForNewDevice', 'applyNewDeviceBootstrapChoice']
+  .map((n) => extractFunction(html, n).source).join('\n');
+const DEFAULTS085 = ['Neuro', 'Tórax', 'Abdome'];
+// fresh=true: IndexedDB vazio (PC novo) — o bootstrap escolhe "carregar da
+// nuvem" (mesma função real applyNewDeviceBootstrapChoice('load')).
+function makeOrderDevice085(cloud, { fresh = false, backing } = {}) {
+  const d = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  const store = backing || (fresh ? {} : { data: JSON.stringify([makeSeedEntry()]) });
+  const c = d.context;
+  c.storage = {
+    get: async (key) => { if (Object.prototype.hasOwnProperty.call(store, key)) return { value: store[key] }; throw new Error('key not found: ' + key); },
+    set: async (key, value) => { store[key] = value; }
+  };
+  c.DEFAULT_SECTION_ORDER = DEFAULTS085;
+  c.renderTree = () => {};
+  c.markDeviceInitialized = () => {};
+  c.runNewDeviceBootstrapFlow = async () => { await c.applyNewDeviceBootstrapChoice('load'); };
+  new vm.Script(orderUiFns085).runInContext(c);
+  d.store = store;
+  return d;
+}
+const flush085 = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r)); };
+const plain085 = (v) => JSON.parse(JSON.stringify(v));
+// PC A com ordem personalizada feita pelas funções REAIS de reordenação e publicada.
+async function pcAWithCustomOrder085(cloud) {
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = makeOrderDevice085(cloud);
+  await a.boot();
+  a.context.sectionOrder = [...DEFAULTS085];
+  a.context.siteOrder = { Neuro: ['a', 'b', 'c'], Tórax: ['x', 'y'] };
+  await a.context.reorderSectionDrag('Abdome', 'Neuro');       // Abdome, Neuro, Tórax
+  await a.context.moveSection('Tórax', -1);                    // Abdome, Tórax, Neuro
+  a.context.reorderSite('Neuro', 2, 0);                        // c, a, b
+  a.context.reorderSite('Tórax', 1, 0);                        // y, x
+  await flush085();
+  assert.equal(a.context.syncDirty, true, 'reordenação manual marca dirty');
+  await a.context.pushToFirebaseNow();
+  assert.equal(a.context.syncDirty, false);
+  return a;
+}
+const ORDER_A085 = ['Abdome', 'Tórax', 'Neuro'];
+const SITES_A085 = { Neuro: ['c', 'a', 'b'], Tórax: ['y', 'x'] };
+
+test('PROTEÇÃO 085 - reordenar seção e sítios (funções reais) persiste local, marca dirty e sincroniza (com carimbo)', async () => {
+  const cloud = makeFakeCloud();
+  const a = await pcAWithCustomOrder085(cloud);
+  const meta = cloud.peekMeta();
+  assert.deepEqual(plain085(meta.sectionOrder), ORDER_A085);
+  assert.deepEqual(plain085(meta.siteOrder), SITES_A085);
+  assert.ok(meta.orderUpdatedAt.section > 0 && meta.orderUpdatedAt.sites.Neuro > 0 && meta.orderUpdatedAt.sites['Tórax'] > 0);
+  assert.deepEqual(JSON.parse(a.store.order), ORDER_A085, 'persistido localmente');
+});
+
+test('PROTEÇÃO 085 - PC NOVO (IndexedDB vazio) adota exatamente a ordem da nuvem, sem dirty e sem publicar; F5 mantém', async () => {
+  const cloud = makeFakeCloud();
+  await pcAWithCustomOrder085(cloud);
+  const rev0 = cloud.peekRevision();
+  const b = makeOrderDevice085(cloud, { fresh: true });
+  await b.boot();
+  assert.deepEqual(plain085(b.context.sectionOrder), ORDER_A085);
+  assert.deepEqual(plain085(b.context.siteOrder), SITES_A085);
+  assert.equal(b.context.syncDirty, false, 'adotar a ordem remota não é edição');
+  assert.equal(cloud.peekRevision(), rev0, 'bootstrap não publica defaults (nem nada)');
+  // F5: mesmo IndexedDB, novo boot (dispositivo já inicializado agora)
+  const b2 = makeOrderDevice085(cloud, { backing: b.store });
+  await b2.boot();
+  assert.deepEqual(plain085(b2.context.sectionOrder), ORDER_A085);
+  assert.deepEqual(plain085(b2.context.siteOrder), SITES_A085);
+  assert.equal(b2.context.syncDirty, false);
+  assert.equal(cloud.peekRevision(), rev0, 'F5 não publica');
+});
+
+test('PROTEÇÃO 085 - PC JÁ INICIALIZADO com ordem default (causa raiz) adota a ordem da nuvem e uma edição posterior NÃO grava o default por cima', async () => {
+  const cloud = makeFakeCloud();
+  await pcAWithCustomOrder085(cloud);
+  const rev0 = cloud.peekRevision();
+  const store = { data: JSON.stringify([makeSeedEntry()]), order: JSON.stringify(DEFAULTS085), 'site-order': JSON.stringify({ Neuro: ['a', 'b', 'c'] }) };
+  const b = makeOrderDevice085(cloud, { backing: store });
+  await b.boot();
+  assert.deepEqual(plain085(b.context.sectionOrder), ORDER_A085, 'antes da 085: ficava no default local');
+  assert.deepEqual(plain085(b.context.siteOrder), SITES_A085);
+  assert.equal(b.context.syncDirty, false);
+  assert.equal(cloud.peekRevision(), rev0);
+  assert.deepEqual(JSON.parse(store.order), ORDER_A085, 'pull persiste a ordem adotada localmente');
+  // edição real qualquer em B (ex.: salvar uma lesão) publica — mas com a ordem certa
+  b.context.DATA[0].notes = 'edição em B'; b.context.DATA[0]._userUpdatedAt = Date.now();
+  await b.save();
+  assert.ok(cloud.peekRevision() > rev0);
+  assert.deepEqual(plain085(cloud.peekMeta().sectionOrder), ORDER_A085);
+  assert.deepEqual(plain085(cloud.peekMeta().siteOrder), SITES_A085);
+});
+
+test('PROTEÇÃO 085 - dois PCs convergem: reordenação mais nova em B chega em A no pull', async () => {
+  const cloud = makeFakeCloud();
+  const a = await pcAWithCustomOrder085(cloud);
+  const b = makeOrderDevice085(cloud, { fresh: true });
+  await b.boot();
+  await new Promise((r) => setTimeout(r, 5)); // carimbo estritamente mais novo
+  await b.context.moveSection('Neuro', -1); // Abdome, Neuro, Tórax
+  await b.context.pushToFirebaseNow();
+  await a.context.syncFromFirebase();
+  assert.deepEqual(plain085(a.context.sectionOrder), ['Abdome', 'Neuro', 'Tórax']);
+  assert.deepEqual(plain085(a.context.siteOrder), SITES_A085, 'sítios intocados');
+  assert.equal(a.context.syncDirty, false);
+  assert.deepEqual(plain085(a.context.sectionOrder), plain085(b.context.sectionOrder));
+});
+
+test('PROTEÇÃO 085 - nuvem sem sectionOrder/siteOrder (legado) mantém a ordem local, sem erro nem publicação', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const meta = cloud.peekMeta(); delete meta.sectionOrder; delete meta.siteOrder;
+  await cloud.FB_META_REF().set(meta);
+  const rev0 = cloud.peekRevision();
+  const store = { data: JSON.stringify([makeSeedEntry()]), order: JSON.stringify(['Tórax', 'Neuro']), 'site-order': JSON.stringify({ Neuro: ['b', 'a'] }) };
+  const d = makeOrderDevice085(cloud, { backing: store });
+  await d.boot();
+  assert.deepEqual(plain085(d.context.sectionOrder), ['Tórax', 'Neuro']);
+  assert.deepEqual(plain085(d.context.siteOrder), { Neuro: ['b', 'a'] });
+  assert.equal(cloud.peekRevision(), rev0);
+});
+
+test('PROTEÇÃO 085 - seção/sítio novo local entra no FIM (normalização do render) sem dirty e sem publicar', async () => {
+  const cloud = makeFakeCloud();
+  await pcAWithCustomOrder085(cloud);
+  const b = makeOrderDevice085(cloud, { fresh: true });
+  await b.boot();
+  const rev0 = cloud.peekRevision();
+  const names = b.context.orderedSectionNames({ Abdome: 1, Tórax: 1, Neuro: 1, 'Zeta Nova': 1, 'Alfa Nova': 1 });
+  const sites = b.context.orderedSiteNames('Neuro', { a: 1, b: 1, c: 1, d: 1 });
+  await flush085();
+  assert.deepEqual(plain085(names), [...ORDER_A085, 'Alfa Nova', 'Zeta Nova'], 'conhecidos na ordem remota, novos no fim');
+  assert.deepEqual(plain085(sites), ['c', 'a', 'b', 'd']);
+  assert.equal(b.context.syncDirty, false);
+  assert.equal(cloud.peekRevision(), rev0, 'abrir/desenhar nunca publica (regra 072)');
+});
+
+test('PROTEÇÃO 085 - escrita sem reconcile (forceThisDeviceToCloud) de um PC com default não apaga a ordem mais nova da nuvem', async () => {
+  const cloud = makeFakeCloud();
+  await pcAWithCustomOrder085(cloud);
+  // PC B que nunca puxou a nuvem nesta sessão (sem boot): ordem default, sem carimbo.
+  const b = makeOrderDevice085(cloud);
+  b.context.DATA = [makeSeedEntry()];
+  b.context.sectionOrder = [...DEFAULTS085];
+  b.context.siteOrder = { Neuro: ['a', 'b', 'c'] };
+  b.context.appStateReady = true;
+  const rev0 = cloud.peekRevision();
+  b.context.lastKnownCloudRevision = rev0;
+  await b.context.forceThisDeviceToCloud();
+  assert.ok(cloud.peekRevision() > rev0, 'o envio forçado de fato escreveu');
+  assert.deepEqual(plain085(cloud.peekMeta().sectionOrder), ORDER_A085, 'merge por carimbo dentro da transação');
+  assert.deepEqual(plain085(cloud.peekMeta().siteOrder), SITES_A085);
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');

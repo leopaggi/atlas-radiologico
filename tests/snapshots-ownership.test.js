@@ -70,6 +70,7 @@ function makeSnapshotContext(backing) {
     ORDER_KEY: 'order', SITEORDER_KEY: 'sorder', fbSyncing: false,
     canonicalRestoreInProgress: false,
     saveLesionRevisions: async () => {},
+    markRestoredOrderManual: () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085
     renderAll: () => {}
   };
   vm.createContext(ctx);
