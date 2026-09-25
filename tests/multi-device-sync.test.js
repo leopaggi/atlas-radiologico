@@ -143,6 +143,11 @@ const pendingAddsFns079d = ['normalizePendingLocalImageAdds', 'hasPendingLocalIm
   'confirmPendingLocalImageAdds', 'loadPendingLocalImageAdds', 'savePendingLocalImageAdds']
   .map((n) => extractFunction(html, n).source).join('\n');
 const addImageToLesionDataFn = extractFunction(html, 'addImageToLesionData');
+// PROTEÇÃO 084 — Central de Revisões sincronizada (merge + save reais).
+const lesionRevisionsFns084 = ['mergeLesionRevisions', 'saveLesionRevisions', 'updateReviewCenterBadges',
+  'getPendingReviews', 'getProposedSolutions', 'getAppliedSolutionsAwaitingValidation', 'getManualActionSolutions',
+  'getReadySolutions', 'countPendingLesionReviews', 'countReadyLesionSolutions']
+  .map((n) => extractFunction(html, n).source).join('\n');
 
 // Nuvem falsa COMPARTILHADA entre "dispositivos" — simula um único projeto
 // Firestore (atlas_state/main + data_chunk_i) visto por computadores
@@ -403,6 +408,8 @@ function makeDevice(cloud, { seed = [] } = {}) {
     function __setPendingAdds079d(v){ PENDING_LOCAL_IMAGE_ADDS = v; }
     ${pendingAddsFns079d}
     ${addImageToLesionDataFn.source}
+    const LESION_REVISIONS_KEY = 'atlas:lesionRevisions';
+    ${lesionRevisionsFns084}
     let lastWriteStaleImagesBlocked = 0;
     ${gateStaleImagesFn.source}
     ${writeShardedStateFn.source}
@@ -3287,6 +3294,152 @@ test('PROTEÇÃO 079d - 15: tombstone remoto vence o marcador — imagem marcada
   assert.deepEqual(cloudImageIds079c(cloud), ['A'], 'force não contorna tombstone remoto');
   await device.context.pushToFirebaseNow();
   assert.deepEqual(cloudImageIds079c(cloud), ['A']);
+});
+
+// ===========================================================================
+// PROTEÇÃO 084 — LESION_REVISIONS sincronizada entre dispositivos (nuvem
+// falsa compartilhada; writeShardedState/readShardedState/reconcile/pull REAIS).
+// ===========================================================================
+function rev084(id, over) {
+  return Object.assign({
+    id, lesionId: 'seed_1', createdAt: 1000, updatedAt: 1000, status: 'pending',
+    requestText: 'pedido ' + id, solution: null, attempts: [], humanFeedback: [],
+    history: [{ timestamp: 1000, action: 'created', details: null }]
+  }, over || {});
+}
+async function device084(cloud, revisions) {
+  const d = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await d.boot();
+  d.context.LESION_REVISIONS = JSON.parse(JSON.stringify(revisions || {}));
+  return d;
+}
+// ação REAL do usuário na Central (mesmo contrato das funções do módulo):
+// muta LESION_REVISIONS -> saveLesionRevisions() -> dirty + push; o teste
+// dispara o push imediato em vez de esperar o debounce de 400ms.
+async function userRevisionAction084(device, mutate) {
+  mutate(device.context.LESION_REVISIONS);
+  await device.context.saveLesionRevisions();
+  assert.equal(device.context.syncDirty, true, 'ação do usuário precisa marcar dirty');
+  await device.context.pushToFirebaseNow();
+}
+const cloudRevs084 = (cloud) => JSON.parse(JSON.stringify((cloud.peekMeta() || {}).lesionRevisions || {}));
+
+test('PROTEÇÃO 084 - PC A cria revisão -> nuvem recebe; PC B (já inicializado) abre e recebe SEM marcar dirty nem escrever', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = await device084(cloud);
+  await userRevisionAction084(a, (L) => { L.R1 = rev084('R1'); });
+  assert.deepEqual(Object.keys(cloudRevs084(cloud)), ['R1']);
+  assert.equal(a.context.syncDirty, false, 'escrita confirmada limpa o dirty');
+  const revAfterA = cloud.peekRevision();
+  const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await b.boot();
+  assert.deepEqual(Object.keys(b.context.LESION_REVISIONS), ['R1'], 'PC B recebe a revisão no pull');
+  assert.equal(b.context.LESION_REVISIONS.R1.status, 'pending');
+  assert.equal(b.context.syncDirty, false, 'pull NUNCA marca dirty');
+  assert.equal(cloud.peekRevision(), revAfterA, 'abrir o PC B não gasta escrita (sem loop)');
+  assert.ok(await b.context.storage.get('atlas:lesionRevisions'), 'pull persiste localmente (IndexedDB)');
+});
+
+test('PROTEÇÃO 084 - badges 🔔/💡 do PC B atualizam no pull, sem F5', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = await device084(cloud);
+  await userRevisionAction084(a, (L) => { L.R1 = rev084('R1'); L.R2 = rev084('R2', { status: 'proposed', updatedAt: 1500 }); });
+  const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  const btn = () => ({ classList: { empty: null, toggle(c, v) { this.empty = v; } } });
+  const els = { 'pending-reviews-btn': btn(), 'pending-reviews-badge': { textContent: '' }, 'ready-solutions-btn': btn(), 'ready-solutions-badge': { textContent: '' } };
+  b.context.document = { getElementById: (id) => els[id] || null };
+  await b.boot();
+  assert.equal(els['pending-reviews-badge'].textContent, '1', '🔔 mostra a revisão pendente vinda do PC A');
+  assert.equal(els['ready-solutions-badge'].textContent, '1', '💡 mostra a proposta vinda do PC A');
+  assert.equal(els['pending-reviews-btn'].classList.empty, false);
+});
+
+test('PROTEÇÃO 084 - concorrência: R1 em A e R2 em B -> nuvem e os dois dispositivos terminam com a UNIÃO', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = await device084(cloud);
+  const b = await device084(cloud);
+  await userRevisionAction084(a, (L) => { L.R1 = rev084('R1'); });
+  await userRevisionAction084(b, (L) => { L.R2 = rev084('R2'); }); // B tinha revisão antiga: conflito -> reconcile -> união
+  assert.deepEqual(Object.keys(cloudRevs084(cloud)).sort(), ['R1', 'R2']);
+  assert.deepEqual(Object.keys(b.context.LESION_REVISIONS).sort(), ['R1', 'R2']);
+  await a.context.syncFromFirebase();
+  assert.deepEqual(Object.keys(a.context.LESION_REVISIONS).sort(), ['R1', 'R2']);
+  assert.equal(a.context.syncDirty, false);
+});
+
+test('PROTEÇÃO 084 - mesmo id: updatedAt mais novo vence status/solution; history/attempts/feedback são UNIDOS', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = await device084(cloud);
+  await userRevisionAction084(a, (L) => { L.R1 = rev084('R1'); });
+  const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await b.boot();
+  // A: recusa com feedback (mais antigo). B: proposta nova (mais novo) com tentativa.
+  await userRevisionAction084(a, (L) => {
+    L.R1.status = 'rejected'; L.R1.updatedAt = 2000;
+    L.R1.history.push({ timestamp: 2000, action: 'solution_rejected', details: null });
+    L.R1.humanFeedback.push({ kind: 'reject', text: 'incompleto', at: 2000, attemptId: null });
+  });
+  await userRevisionAction084(b, (L) => {
+    L.R1.status = 'applied_pending_validation'; L.R1.updatedAt = 3000;
+    L.R1.solution = { summary: 'corrige notas', proposedChanges: { notes: 'n' } };
+    L.R1.attempts.push({ id: 'att_b', appliedAt: 3000, beforeSnapshot: { id: 'seed_1' } });
+    L.R1.history.push({ timestamp: 3000, action: 'changes_applied', details: { attemptId: 'att_b' } });
+  });
+  const r1 = cloudRevs084(cloud).R1;
+  assert.equal(r1.status, 'applied_pending_validation', 'updatedAt mais novo vence o status');
+  assert.deepEqual(r1.solution, { summary: 'corrige notas', proposedChanges: { notes: 'n' } });
+  assert.deepEqual(r1.history.map((h) => h.action), ['created', 'solution_rejected', 'changes_applied'], 'history unido sem duplicar');
+  assert.deepEqual(r1.attempts.map((x) => x.id), ['att_b']);
+  assert.deepEqual(r1.humanFeedback.map((f) => f.text), ['incompleto'], 'feedback de A preservado mesmo perdendo o status');
+  await a.context.syncFromFirebase();
+  assert.deepEqual(JSON.parse(JSON.stringify(a.context.LESION_REVISIONS.R1)), r1, 'A converge para o mesmo estado da nuvem');
+  assert.equal(a.context.syncDirty, false);
+});
+
+test('PROTEÇÃO 084 - no-op: estado de revisões idêntico ao da nuvem não gasta revisão; mudança SÓ de revisão não é no-op', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = await device084(cloud);
+  await userRevisionAction084(a, (L) => { L.R1 = rev084('R1'); });
+  const r0 = cloud.peekRevision();
+  await a.markDirty();
+  await a.context.pushToFirebaseNow();
+  assert.equal(cloud.peekRevision(), r0, 'nada mudou: sem escrita');
+  assert.equal(a.context.syncDirty, false, 'no-op limpa o dirty');
+  await userRevisionAction084(a, (L) => { L.R1.status = 'cancelled'; L.R1.updatedAt = 5000; });
+  assert.equal(cloud.peekRevision(), r0 + 1, 'mudança só na Central precisa publicar');
+  assert.equal(cloudRevs084(cloud).R1.status, 'cancelled');
+});
+
+test('PROTEÇÃO 084 - nuvem antiga SEM lesionRevisions continua válida; revisão local é preservada e publicada na próxima ação real', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  assert.equal('lesionRevisions' in cloud.peekMeta(), false);
+  const a = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  a.context.LESION_REVISIONS = { OLD: rev084('OLD') };
+  const r0 = cloud.peekRevision();
+  await a.boot();
+  assert.deepEqual(Object.keys(a.context.LESION_REVISIONS), ['OLD'], 'pull de documento antigo não apaga revisão local');
+  assert.equal(cloud.peekRevision(), r0, 'boot sem ação do usuário não publica (regra 072)');
+  const remote = await a.context.readShardedState(1000);
+  assert.deepEqual(JSON.parse(JSON.stringify(remote.lesionRevisions)), {}, 'campo ausente = {}');
+  await userRevisionAction084(a, (L) => { L.NEW = rev084('NEW'); });
+  assert.deepEqual(Object.keys(cloudRevs084(cloud)).sort(), ['NEW', 'OLD']);
+});
+
+test('PROTEÇÃO 084 - escrita sem reconcile (forceThisDeviceToCloud) nunca apaga revisão que só existe na nuvem', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = await device084(cloud);
+  await userRevisionAction084(a, (L) => { L.R1 = rev084('R1'); });
+  const b = await device084(cloud, { R2: rev084('R2') });
+  b.context.appStateReady = true;
+  await b.context.forceThisDeviceToCloud();
+  assert.deepEqual(Object.keys(cloudRevs084(cloud)).sort(), ['R1', 'R2'], 'união dentro da transação');
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');

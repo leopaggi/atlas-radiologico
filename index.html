@@ -2176,6 +2176,10 @@ async function writeShardedState(ms=15000){
     // principal (pequenos, sem binário), protegidos pela mesma transação/
     // revisão de todo o resto.
     tombstones: stripUndefinedDeep(IMAGE_TOMBSTONES),
+    // PROTEÇÃO 084 — Central de Revisões + Soluções viaja no documento
+    // principal (mesma transação/revisão); unida ao remoto dentro da
+    // transação abaixo, então nenhum caminho de escrita apaga revisão alheia.
+    lesionRevisions: stripUndefinedDeep(LESION_REVISIONS || {}),
     chunkCount: chunks.length,
     stateSchemaVersion: 4, // v4 = estado dividido em pedaços (chunks)
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -2223,7 +2227,10 @@ async function writeShardedState(ms=15000){
         ? gateStaleLocalOnlyImagesForWrite(cleanData, remoteData, writeTombstones, pendingAddsSnapshot)
         : gateStaleLocalOnlyImagesForWrite(cleanData, cleanData, writeTombstones, pendingAddsSnapshot);
       const gatedChunks = splitIntoChunks(gated.data, DATA_CHUNK_SIZE);
-      const metaPayload = {...metaPayloadBase, tombstones: stripUndefinedDeep(writeTombstones), chunkCount: gatedChunks.length};
+      // PROTEÇÃO 084 — união local ∪ remoto por reviewId (nunca apaga uma
+      // revisão que só existe na nuvem, nem em syncThisDeviceToCloud/force).
+      const writeLesionRevisions = stripUndefinedDeep(mergeLesionRevisions(metaPayloadBase.lesionRevisions, remoteMeta.lesionRevisions));
+      const metaPayload = {...metaPayloadBase, tombstones: stripUndefinedDeep(writeTombstones), lesionRevisions: writeLesionRevisions, chunkCount: gatedChunks.length};
       if(!checkChunkSize(metaPayload, 'documento principal (revisão/SRS/histórico)')){
         const err = new Error('documento principal grande demais');
         err.code = 'chunk_too_large';
@@ -2309,7 +2316,9 @@ async function readShardedState(ms=15000){
 
   return { data: combinedData, review: meta.review, srs: meta.srs, sessionLog: meta.sessionLog,
     sectionOrder: meta.sectionOrder, siteOrder: meta.siteOrder,
-    tombstones: (meta.tombstones && typeof meta.tombstones === 'object' && !Array.isArray(meta.tombstones)) ? meta.tombstones : {} };
+    tombstones: (meta.tombstones && typeof meta.tombstones === 'object' && !Array.isArray(meta.tombstones)) ? meta.tombstones : {},
+    // PROTEÇÃO 084 — documento antigo sem o campo = {} (compatível).
+    lesionRevisions: (meta.lesionRevisions && typeof meta.lesionRevisions === 'object' && !Array.isArray(meta.lesionRevisions)) ? meta.lesionRevisions : {} };
 }
 
 /* envia o estado atual pra nuvem (com pequeno atraso pra juntar mudanças rápidas em uma escrita só) */
@@ -2444,6 +2453,11 @@ function syncAuditCounters(data, revisions, review, srs){
     totalImages,
     altPlacements,
     revisions: revisions ? Object.keys(revisions).length : 0,
+    // PROTEÇÃO 084 — pendentes (pending+rejected), soluções no 💡 e tamanho
+    // serializado (o campo viaja no documento principal, limite ~1MB).
+    revisionsPending: revisions ? Object.values(revisions).filter(r=>r && (r.status==='pending' || r.status==='rejected')).length : 0,
+    revisionsSolutions: revisions ? Object.values(revisions).filter(r=>r && (r.status==='proposed' || r.status==='applied_pending_validation' || r.status==='manual_action_required')).length : 0,
+    revisionsBytes: revisions ? JSON.stringify(revisions).length : 0,
     srs: srs ? Object.keys(srs).length : 0,
     review: review ? Object.keys(review).length : 0
   };
@@ -2460,8 +2474,8 @@ async function buildSyncAudit(){
       if(remote){
         const remoteData = (Array.isArray(remote.data) ? remote.data : [])
           .filter(e=>e && !isQuarantinedSeedId(e.id));
-        cloud = syncAuditCounters(remoteData, null, remote.review, remote.srs);
-        cloud.storesRevisions = false; // Firestore não guarda LESION_REVISIONS (é local por dispositivo)
+        cloud = syncAuditCounters(remoteData, remote.lesionRevisions, remote.review, remote.srs);
+        cloud.storesRevisions = true; // PROTEÇÃO 084 — Firestore guarda lesionRevisions no documento principal
       }
     }catch(e){ cloudError = (e && e.message) || String(e); }
   }
@@ -2488,8 +2502,8 @@ async function readCloudAuditFromServer(){
   if(!remote) return null;
   const remoteData = (Array.isArray(remote.data) ? remote.data : [])
     .filter(e=>e && !isQuarantinedSeedId(e.id));
-  const counters = syncAuditCounters(remoteData, null, remote.review, remote.srs);
-  counters.storesRevisions = false;
+  const counters = syncAuditCounters(remoteData, remote.lesionRevisions, remote.review, remote.srs);
+  counters.storesRevisions = true; // PROTEÇÃO 084
   return counters;
 }
 /* ALTERAÇÃO 069 (2026-09-23) — auditoria READ-ONLY de IDENTIDADE de imagem
@@ -3008,7 +3022,8 @@ function syncAuditRowsHtml(l, c){
     row('Total de imagens', l && l.totalImages, c && c.totalImages),
     row('altPlacements', l && l.altPlacements, c && c.altPlacements),
     row('SRS', l && l.srs, c && c.srs),
-    row('Revisões (local por dispositivo)', l && l.revisions, '—')
+    row('Revisões (Central)', l && l.revisions, c && c.revisions),
+    row('Revisões pendentes', l && l.revisionsPending, c && c.revisionsPending)
   ].join('');
 }
 /* Resumo visual da auditoria (mesmos contadores dos dois lados). */
@@ -3351,6 +3366,9 @@ async function adoptRemoteStateForNewDevice(){
   sectionOrder = (Array.isArray(remote.sectionOrder) && remote.sectionOrder.length) ? remote.sectionOrder : [...DEFAULT_SECTION_ORDER];
   siteOrder = (remote.siteOrder && typeof remote.siteOrder === 'object' && !Array.isArray(remote.siteOrder)) ? remote.siteOrder : {};
   IMAGE_TOMBSTONES = normalizeTombstoneMap(remote.tombstones);
+  // PROTEÇÃO 084 — dispositivo novo recebe a Central de Revisões (merge, não
+  // overwrite: preserva qualquer revisão local que já exista).
+  LESION_REVISIONS = mergeLesionRevisions(LESION_REVISIONS, remote.lesionRevisions);
   await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
   await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
   await storage.set(SRS_KEY, JSON.stringify(SRS), false);
@@ -3358,6 +3376,8 @@ async function adoptRemoteStateForNewDevice(){
   await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
   await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false);
   try{ await saveImageTombstones(); }catch(_e){}
+  await saveLesionRevisions(true);
+  try{ updateReviewCenterBadges(); }catch(_e){}
 }
 
 /* Aplica a decisão do modal. Separada da UI de propósito, para ser testável
@@ -4227,6 +4247,8 @@ function reconcileStateWithRemote(remote){
   for(const e of reconciled){ if(!e||!Array.isArray(e.links)) continue; const seen=new Set(); e.links=e.links.filter(l=>{ const k=String(l&&l.url||'').trim().replace(/\/+$/,''); if(!k) return true; if(seen.has(k)) return false; seen.add(k); return true; }); } DATA = reconciled.filter(Boolean);   REVIEW = mergeReviewPreservingProgress(REVIEW, remote && remote.review);
   SRS = mergeSRSPreservingNewest(SRS, remote && remote.srs);
   SESSIONLOG = mergeSessionLogPreservingProgress(SESSIONLOG, remote && remote.sessionLog);
+  // PROTEÇÃO 084 — revisões/soluções: merge por reviewId (nunca overwrite cego).
+  LESION_REVISIONS = mergeLesionRevisions(LESION_REVISIONS, remote && remote.lesionRevisions);
 
   // Ordem local é preservada quando válida; remoto só preenche ausência.
   if((!Array.isArray(sectionOrder) || !sectionOrder.length) &&
@@ -4250,6 +4272,7 @@ async function persistLocalStateNow(){
   try{ await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false); }catch(_e){}
   try{ await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false); }catch(_e){}
   try{ await storage.set(IMAGE_TOMBSTONES_KEY, JSON.stringify(IMAGE_TOMBSTONES), false); }catch(_e){}
+  await saveLesionRevisions(true); // PROTEÇÃO 084 — persistência interna (sem dirty)
   await savePendingLocalImageAdds(); // ALTERAÇÃO 079d
 }
 /* ALTERAÇÃO 074 — RECONCILIAÇÃO PRÉ-ENVIO (pre-push reconciliation).
@@ -4300,13 +4323,15 @@ async function reconcileBeforePush(reason){
         PENDING_LOCAL_IMAGE_ADDS
       ).data,
       review: quarantineIndexedByLesionId(REVIEW), srs: quarantineIndexedByLesionId(SRS),
-      sessionLog: SESSIONLOG, sectionOrder, siteOrder, tombstones: IMAGE_TOMBSTONES
+      sessionLog: SESSIONLOG, sectionOrder, siteOrder, tombstones: IMAGE_TOMBSTONES,
+      lesionRevisions: LESION_REVISIONS || {} // PROTEÇÃO 084 — mudança só de revisão NÃO é no-op
     };
     const remoteSnapshot = {
       data: (Array.isArray(remote.data)?remote.data:[]).filter(e=>e && !isQuarantinedSeedId(e.id)),
       review: quarantineIndexedByLesionId(remote.review||{}), srs: quarantineIndexedByLesionId(remote.srs||{}),
       sessionLog: remote.sessionLog||{}, sectionOrder: remote.sectionOrder||[], siteOrder: remote.siteOrder||{},
-      tombstones: remote.tombstones||{}
+      tombstones: remote.tombstones||{},
+      lesionRevisions: remote.lesionRevisions||{}
     };
     const noOp = deepStableEqual(localSnapshot, remoteSnapshot);
     return { ok:true, preservedCloudOnly: r.preservedCloudOnly, noOp };
@@ -4364,7 +4389,9 @@ async function syncFromFirebase(){
       await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
       await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false);
       try{ await storage.set(IMAGE_TOMBSTONES_KEY, JSON.stringify(IMAGE_TOMBSTONES), false); }catch(_e){}
+      await saveLesionRevisions(true); // PROTEÇÃO 084 — pull nunca marca dirty
       await savePendingLocalImageAdds(); // ALTERAÇÃO 079d
+      try{ updateReviewCenterBadges(); }catch(_e){} // PROTEÇÃO 084 — 🔔/💡 sem F5
 
       fbSyncing = false;
 
@@ -4963,10 +4990,11 @@ async function saveReview(internal){
    usado no fluxo de estudo) nem SRS (repetição espaçada do quiz) — os
    três são independentes e não devem ser confundidos.
    Persistida via a camada storage.get/set existente (IndexedDB), do
-   mesmo jeito que REVIEW/SRS/SESSIONLOG. A fila em si (pedidos, propostas,
-   histórico) não sincroniza com Firebase nesta primeira versão — é local
-   por dispositivo, para não tocar na camada de reconciliação/sincronização
-   remota. A ÚNICA exceção é quando uma correção é efetivamente autorizada
+   mesmo jeito que REVIEW/SRS/SESSIONLOG. PROTEÇÃO 084: a fila (pedidos,
+   propostas, histórico) passou a sincronizar entre dispositivos pelo campo
+   `lesionRevisions` do documento principal do Firestore, com merge por
+   reviewId (mergeLesionRevisions) — antes era local por dispositivo.
+   Quando uma correção é efetivamente autorizada
    e aplicada: nesse caso ela muta DATA (a lesão de verdade) e usa o mesmo
    `saveData()` já existente no app pra persistir — o mesmo caminho que o
    formulário de edição usa — porque toda mudança real em DATA precisa
@@ -5007,9 +5035,66 @@ async function loadLesionRevisions(){
     LESION_REVISIONS = (parsed && typeof parsed==='object' && !Array.isArray(parsed)) ? parsed : {};
   }catch(e){ LESION_REVISIONS = {}; }
 }
-async function saveLesionRevisions(){
+// PROTEÇÃO 084 — a fila passa a sincronizar via Firestore (campo
+// `lesionRevisions` do documento principal). Mesmo contrato de saveReview/
+// saveSRS: sem `internal` = ação REAL do usuário (marca dirty + push
+// debounced com reconcile); `internal=true` = só persiste localmente (pull,
+// restauração manual de snapshot) — nunca gera loop de publicação.
+async function saveLesionRevisions(internal){
   try{ await storage.set(LESION_REVISIONS_KEY, JSON.stringify(LESION_REVISIONS), false); }
   catch(e){ console.error('storage error', e); }
+  if(internal) return;
+  await markSyncDirty();
+  pushToFirebase();
+}
+/* PROTEÇÃO 084 — merge determinístico local × remoto, por reviewId. Nunca
+   apaga: só-local fica, só-remoto é adotado. Mesmo id nos dois lados: o
+   `updatedAt` mais novo vence os campos escalares/status/solution (empate:
+   desempate pela serialização canônica, idêntico em todo dispositivo);
+   history/attempts/humanFeedback são UNIDOS sem duplicar (ordem do vencedor
+   preservada, itens só do outro lado acrescentados e ordenados de forma
+   estável pelo próprio timestamp). Ausente/inválido = {} (estados antigos). */
+function mergeLesionRevisions(localRevs, remoteRevs){
+  const norm = v => (v && typeof v==='object' && !Array.isArray(v)) ? v : {};
+  const local = norm(localRevs), remote = norm(remoteRevs);
+  const clone = v => JSON.parse(JSON.stringify(v));
+  const unionBy = (winArr, loseArr, keyFn, tsFn) => {
+    const a = Array.isArray(winArr) ? winArr : [];
+    const b = Array.isArray(loseArr) ? loseArr : [];
+    const seen = new Set(a.map(keyFn));
+    const extra = b.filter(x => { const k = keyFn(x); if(seen.has(k)) return false; seen.add(k); return true; });
+    if(!extra.length) return clone(a);
+    return clone(a.concat(extra)).map((x,i)=>({x,i}))
+      .sort((p,q)=> ((Number(tsFn(p.x))||0) - (Number(tsFn(q.x))||0)) || (p.i - q.i))
+      .map(p=>p.x);
+  };
+  const out = {};
+  const ids = new Set([...Object.keys(local), ...Object.keys(remote)]);
+  for(const id of ids){
+    const l = local[id], r = remote[id];
+    const lOk = l && typeof l==='object' && !Array.isArray(l);
+    const rOk = r && typeof r==='object' && !Array.isArray(r);
+    if(!lOk || !rOk){ const solo = lOk ? l : (rOk ? r : (l !== undefined ? l : r)); out[id] = clone(solo); continue; }
+    const lt = Number(l.updatedAt)||0, rt = Number(r.updatedAt)||0;
+    const localWins = lt !== rt ? lt > rt : canonicalJsonString(l) >= canonicalJsonString(r);
+    const win = localWins ? l : r, lose = localWins ? r : l;
+    const merged = clone(win);
+    if(Array.isArray(win.history) || Array.isArray(lose.history)){
+      merged.history = unionBy(win.history, lose.history,
+        h => (h && h.timestamp) + '|' + (h && h.action), h => h && h.timestamp);
+    }
+    if(Array.isArray(win.attempts) || Array.isArray(lose.attempts)){
+      merged.attempts = unionBy(win.attempts, lose.attempts,
+        a => (a && a.id) ? 'id:' + a.id : 'raw:' + canonicalJsonString(a), a => a && a.appliedAt);
+    }
+    if(Array.isArray(win.humanFeedback) || Array.isArray(lose.humanFeedback)){
+      merged.humanFeedback = unionBy(win.humanFeedback, lose.humanFeedback,
+        f => (f && (f.at != null ? f.at : f.timestamp)) + '|' + (f && f.text),
+        f => f && (f.at != null ? f.at : f.timestamp));
+    }
+    out[id] = merged;
+  }
+  return out;
 }
 function genLesionReviewId(){
   return 'lrev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
@@ -7783,7 +7868,7 @@ async function restoreSafetySnapshot(id){
   await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
   await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
   await storage.set(SITEORDER_KEY, JSON.stringify(siteOrder), false);
-  await saveLesionRevisions();
+  await saveLesionRevisions(true); // PROTEÇÃO 084: restauração manual segue sem sync automático
   fbSyncing = wasSyncing;
   renderAll();
 }

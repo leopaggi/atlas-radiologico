@@ -114,7 +114,14 @@ const renderQuizCardSource = extractFn(html, 'renderQuizCardIntegrated');
 test('SEGURANÇA ESTÁTICA: o módulo não lê/escreve REVIEW/SRS nem chama Firebase diretamente', () => {
   assert.doesNotMatch(moduleSource, /\bREVIEW\s*(=[^=]|\.\w|\[)/, 'não deve ler/escrever REVIEW (fluxo de estudo)');
   assert.doesNotMatch(moduleSource, /\bSRS\s*(=[^=]|\.\w|\[)/, 'não deve ler/escrever SRS (quiz)');
-  assert.doesNotMatch(moduleSource, /pushToFirebase/, 'não deve chamar Firebase diretamente — usa saveData() já existente quando muta DATA');
+  // PROTEÇÃO 084 — a fila agora sincroniza, mas SÓ pelo mesmo contrato de
+  // saveReview/saveSRS: saveLesionRevisions() (sem `internal`) marca dirty e
+  // agenda pushToFirebase(); nenhuma outra função do módulo chama Firebase,
+  // e nada no módulo acessa Firestore diretamente.
+  const saveFn = extractFn(moduleSource, 'saveLesionRevisions');
+  assert.doesNotMatch(moduleSource.replace(saveFn, ''), /pushToFirebase/, 'só saveLesionRevisions() pode agendar o push — usa saveData() já existente quando muta DATA');
+  assert.match(saveFn, /if\(internal\) return;\s*await markSyncDirty\(\);\s*pushToFirebase\(\);/, 'push só depois do guard `internal`, com dirty marcado antes');
+  assert.doesNotMatch(moduleSource, /\bfbDb\b|runTransaction|FB_META_REF|writeShardedState/, 'o módulo nunca acessa Firestore diretamente');
 });
 
 function extractFn(source, name) {
@@ -187,6 +194,11 @@ function buildTestContext(opts) {
     saveDataCalls: []
   };
   context.saveData = () => { context.saveDataCalls.push(Date.now()); };
+  // PROTEÇÃO 084 — stubs do contrato de sync (dirty + push debounced).
+  context.syncDirtyCalls = 0;
+  context.pushCalls = 0;
+  context.markSyncDirty = async () => { context.syncDirtyCalls += 1; };
+  context.pushToFirebase = () => { context.pushCalls += 1; };
   if (opts.dom) {
     const makeBtn = () => ({ textContent: '', classList: { emptyState: null, toggle(cls, isEmpty) { this.emptyState = isEmpty; } } });
     const elements = {

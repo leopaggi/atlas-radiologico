@@ -378,6 +378,23 @@ test('SYNC AUDIT: syncAuditCounters conta lesões/imagens/altPlacements/SRS/revi
   assert.equal(c.srs, 3);
 });
 
+test('SYNC AUDIT (Proteção 084): conta revisões pendentes, soluções no 💡 e tamanho serializado', () => {
+  const revs = {
+    r1:{ status:'pending' }, r2:{ status:'rejected' }, r3:{ status:'proposed' },
+    r4:{ status:'applied_pending_validation' }, r5:{ status:'manual_action_required' },
+    r6:{ status:'accepted' }, r7:{ status:'cancelled' }
+  };
+  const c = runSyncAuditCounters([], revs, {}, {});
+  assert.equal(c.revisions, 7);
+  assert.equal(c.revisionsPending, 2, 'pending + rejected (mesma regra de getPendingReviews)');
+  assert.equal(c.revisionsSolutions, 3, 'proposed + applied_pending_validation + manual_action_required (mesma regra de getReadySolutions)');
+  assert.equal(c.revisionsBytes, JSON.stringify(revs).length);
+  const empty = runSyncAuditCounters([], null, {}, {});
+  assert.equal(empty.revisions, 0);
+  assert.equal(empty.revisionsPending, 0);
+  assert.equal(empty.revisionsBytes, 0);
+});
+
 test('SYNC AUDIT: buildSyncAudit é READ-ONLY (não grava local, não envia, não cria snapshot)', () => {
   const body = buildSyncAuditFn.body;
   assert.doesNotMatch(body, /storage\.set|saveData\(|writeShardedState|pushToFirebase|createSafetySnapshot|restoreSafetySnapshot/);
@@ -393,7 +410,8 @@ test('SYNC AUDIT (dinâmico): detecta divergência de contagem e NÃO grava nada
   assert.equal(audit.local.lesions, 2);
   assert.equal(audit.cloud.lesions, 1);
   assert.equal(audit.divergent, true, '2 vs 1 lesões precisa ser detectado como divergência');
-  assert.equal(audit.cloud.storesRevisions, false, 'Firestore não guarda LESION_REVISIONS');
+  // PROTEÇÃO 084 — a nuvem passou a guardar lesionRevisions no documento principal.
+  assert.equal(audit.cloud.storesRevisions, true, 'Firestore guarda lesionRevisions (Proteção 084)');
   assert.equal(audit.cloudError, null);
 });
 

@@ -8,19 +8,32 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
-*Atualizado em 2026-09-25, junto do commit "Protecao 083: corrige titulo e tags do importador Radiopaedia".*
+*Atualizado em 2026-09-25, junto do commit "Protecao 084: sincroniza revisoes e solucoes entre dispositivos".*
 
 - **Branch local de trabalho:** `master` (publicação: `git push origin master:main`).
-- **origin/main antes da 083:** `aff09e4` (Protecao 082). **Último commit:** Protecao 083 (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
-- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes):** 1167 testes · 1159 pass · 3 fail conhecidos · 5 todo (era 1155/1147/3/5 antes da 083; +12 testes novos da 083). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
-  - Divergência documentada: num clone sem os arquivos protegidos (ex.: sessão na nuvem) a mesma suíte dá 1157 · 1122 · 30 · 5 — +24 fail em `legacy-id-migration` e +1 em `device-bootstrap`/F2 do `multi-device-sync` por falta de `snapshot-catalogo-completo-readonly.json` e `ATLAS_CANONICO_LIMPO_1216_116_FINAL.json`, e `ownership-fix-20260921` aborta por CRLF (arquivo com fim de linha Windows). Nenhuma dessas é regressão.
-- **Firestore (informado pelo usuário; não verificável sem credenciais):** uso normal, última cloud revision observada: 64. Rules intocadas pela 083. Nenhuma escrita deliberada nesta tarefa.
-- **Produção validada (usuário):** links semanticamente duplicados = 0 lesões / 0 grupos; imagens: 0 duplicatas intralesão por identidade estável, 0 identidades compartilhadas entre lesões; ordem de seções/subseções local × Firestore sem diferenças reais.
-- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador explícito `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), **083 (título/tags do importador Radiopaedia)**.
-- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor/usuário (083).
-- **Trabalho pendente FORA do main (não faz parte da 083):** duas entregas anteriores ainda não aprovadas — "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" — estão preservadas no `git stash` da sessão remota (`stash@{0}`, mensagem "pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Não restaurar sem decisão explícita do usuário; tratar como bloco separado.
-- **Problema aberto atual:** `extractModality()` do userscript ainda pega a primeira sigla de modalidade em QUALQUER lugar da página (pode vir modalidade errada → tag de modalidade errada); a estrutura real do DOM do Radiopaedia não pôde ser inspecionada (site inacessível do ambiente remoto).
-- **Próximo passo exato:** (1) o usuário atualiza o userscript no Tampermonkey para a v1.1.0 (`tools/radiopaedia-to-atlas.user.js`) e testa "Enviar ao Atlas" numa página que antes gerava "Leonardo Paggi Andrade"; (2) decidir sobre o `stash@{0}` (fonte por imagem + caso clínico manual) como bloco separado; (3) só então, se desejado, restringir `extractModality()` à área do caso com base no DOM real.
+- **origin/main antes da 084:** `850ace6` (Protecao 083). **Último commit:** Protecao 084 (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
+- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 084:** 1192 testes · 1184 pass · 3 fail conhecidos · 5 todo (era 1167/1159/3/5 após a 083; +25 testes novos da 084). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
+  - Medido no ambiente remoto (sem os arquivos protegidos): 1182 · 1147 · 30 · 5 (base 850ace6 no mesmo ambiente: 1157 · 1122 · 30 · 5; conjunto de falhas idêntico). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
+- **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 084. Nenhuma escrita deliberada nesta tarefa. A partir da 084 o documento principal (`atlas_state/main`) ganha o campo `lesionRevisions` na próxima publicação real.
+- **Produção validada (usuário):** links semanticamente duplicados = 0; imagens: 0 duplicatas intralesão por identidade estável, 0 identidades compartilhadas entre lesões.
+- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), **084 (Central de Revisões + Soluções sincronizada entre dispositivos — seção 40)**.
+- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); **`lesionRevisions` nunca é sobrescrito às cegas — merge por reviewId em pull, pre-push e dentro da transação de escrita; pull/load/reconcile nunca marcam dirty (084)**.
+- **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 084. Não restaurar sem decisão explícita do usuário.
+- **Passo manual pós-deploy (084):** revisões criadas ANTES da 084 existem só no IndexedDB de cada PC e só sobem na próxima ação real do usuário que publique (qualquer ação na Central, edição, Quiz) ou em "Sincronizar este dispositivo" — abrir o Atlas sem ação nunca publica (regra 072). Fazer isso primeiro no PC que tem as revisões; depois abrir o outro PC.
+- **Próximo passo exato:** Proteção 085 (ver BACKLOG abaixo).
+
+## BACKLOG
+
+- **PRÓXIMA PRIORIDADE: Proteção 085 — corrigir/garantir sincronização real de sectionOrder + siteOrder em bootstrap de novo dispositivo.**
+- Pendências funcionais posteriores:
+  - alerta visual de revisão ativa;
+  - sequência RM manual/livre;
+  - contexto clínico por imagem antes da resposta no Quiz;
+  - descrição da imagem continua só após a resposta;
+  - conteúdo complementar/classificações/estadiamento oculto antes da resposta;
+  - fonte individual por imagem;
+  - auditar o stash antigo antes de reimplementar fonte por imagem / caso clínico manual.
+- Herdado da 083: `extractModality()` do userscript ainda varre a página inteira (restringir à área do caso com base no DOM real); userscript no Tampermonkey precisa ser atualizado para a v1.1.0.
 
 ## PROTOCOLO OBRIGATÓRIO DE CONTINUIDADE
 
@@ -221,7 +234,9 @@ Untracked, intocados. Nunca devem entrar em commit sem pedido explícito:
 
 Fila própria, separada de `REVIEW` (estudo) e `SRS` (quiz). Persistida em
 IndexedDB sob `atlas:lesionRevisions`; sobrevive a F5; incluída no backup
-completo. NÃO sincroniza com Firebase (de propósito).
+completo. **Desde a Proteção 084 sincroniza entre dispositivos** pelo campo
+`lesionRevisions` do documento principal do Firestore, com merge por reviewId
+(`mergeLesionRevisions`) — ver seção 40. (Até a 083 era local por dispositivo.)
 
 Status: `pending`, `rejected`, `proposed` (legado), `applied_pending_validation`,
 `accepted`, `cancelled`, `manual_action_required`.
@@ -1400,3 +1415,92 @@ teste 14, ajuste mecânico), `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`.
   atual" no topo).
 - Userscript instalado no Tampermonkey precisa ser atualizado manualmente para
   a v1.1.0 (o Atlas já corrige o título mesmo com a versão antiga, via slug).
+
+## 40. Proteção 084 — Central de Revisões + Soluções sincronizada entre dispositivos (2026-09-25)
+
+### Causa raiz
+- `LESION_REVISIONS` era persistido só no IndexedDB (`atlas:lesionRevisions`)
+  e ficava FORA do payload remoto: `writeShardedState()` não gravava o campo,
+  `readShardedState()` não o devolvia, `reconcileStateWithRemote()` não o
+  mesclava, e a auditoria marcava `cloud.storesRevisions = false`. Decisão
+  consciente da primeira versão da Central ("não sincroniza com Firebase") —
+  por isso revisões/soluções criadas no PC A nunca apareciam no PC B.
+
+### Estratégia de merge (`mergeLesionRevisions(local, remoto)`, função pura)
+- Por `reviewId`: só-local fica; só-remoto é adotado; nada é apagado.
+- Mesmo id nos dois lados: o `updatedAt` mais novo vence os campos escalares,
+  `status` e `solution`. Empate: desempate pela serialização canônica
+  (`canonicalJsonString`) — resultado idêntico em qualquer dispositivo.
+- `history` (chave `timestamp|action`), `attempts` (chave `attempt.id`;
+  sem id → conteúdo canônico) e `humanFeedback` (chave `at|text`) são UNIDOS
+  sem duplicar: ordem do vencedor preservada, itens só do outro lado
+  acrescentados e ordenados de forma estável pelo próprio timestamp.
+- Todos os status preservados como estão (inclusive desconhecidos).
+- Ausente/inválido (documento/backup/snapshot antigo) = `{}`.
+
+### Onde entra no pipeline
+- `writeShardedState()`: `lesionRevisions` no documento principal (mesma
+  transação/revisão; mesmo `checkChunkSize` de ~1MB) e **unido com o remoto
+  DENTRO da transação** — nenhum caminho de escrita (push, debounce,
+  `syncThisDeviceToCloud`, `forceThisDeviceToCloud`, retry) apaga revisão que
+  só existe na nuvem.
+- `readShardedState()`: devolve `lesionRevisions` (fallback `{}`).
+- `reconcileStateWithRemote()` (pull e pre-push): merge; `persistLocalStateNow()`
+  e `syncFromFirebase()` persistem com `saveLesionRevisions(true)` (interno,
+  sem dirty) e o pull atualiza os badges 🔔/💡 sem F5.
+- `reconcileBeforePush()`: `lesionRevisions` entra nos dois lados da
+  comparação no-op — mudança só na Central publica; estado idêntico não gasta
+  revisão.
+- `adoptRemoteStateForNewDevice()` (dispositivo novo): merge + persistência
+  interna + badges.
+- `saveLesionRevisions(internal)`: mesmo contrato de `saveReview/saveSRS` —
+  ação do usuário marca dirty + `pushToFirebase()` (debounced, com
+  reconcile); `internal=true` só persiste. `restoreSafetySnapshot()` usa
+  `internal` (restauração manual continua sem sync automático). Importar
+  backup continua sendo ação do usuário (publica, como antes fazia com o resto).
+- Auditoria: `syncAuditCounters` ganhou `revisionsPending`,
+  `revisionsSolutions` e `revisionsBytes` (tamanho serializado);
+  `cloud.storesRevisions = true`; resumo mostra "Revisões (Central)" e
+  "Revisões pendentes" local × nuvem.
+- Backup/snapshot já incluíam `lesionRevisions` (sem mudança).
+
+### Tamanho
+- O campo viaja no documento principal. Lesão típica do catálogo ≈ 0,9 KB
+  (p95 1,1 KB); cada tentativa guarda um `beforeSnapshot` da lesão, então uma
+  revisão com 1–2 tentativas fica em ~3–6 KB. Se o documento principal passar
+  de ~0,95 MB, `checkChunkSize` recusa a escrita (dirty preservado, aviso na
+  barra lateral) — falha segura, sem perda. `revisionsBytes` na auditoria
+  permite acompanhar. O tamanho real do acervo do usuário não pôde ser medido
+  daqui (sem acesso aos dados).
+
+### Riscos residuais / fora do escopo
+- `restoreCanonicalStateToCloud()` (console, manual) grava um payload próprio
+  sem `lesionRevisions` — após um restore canônico o campo some da nuvem, mas
+  as cópias locais sobrevivem e voltam na próxima publicação (merge é união).
+  Não alterado (fora do escopo; restore canônico não deve ser executado).
+- `mergeThisDeviceImagesToCloud` não adota as revisões remotas localmente
+  antes de escrever, mas a união dentro da transação preserva o remoto.
+- Revisões pré-084 só sobem na próxima ação real de publicação (ver "Passo
+  manual pós-deploy" no topo).
+
+### Arquivos alterados
+`index.html`, `tests/lesion-revisions-sync.test.js` (novo, 15),
+`tests/multi-device-sync.test.js` (+7 cenários ponta a ponta + funções reais
+no harness), `tests/device-bootstrap.test.js` (+2 + harness),
+`tests/snapshots-ownership.test.js` (+1; `storesRevisions` agora `true`),
+`tests/lesion-review.test.js` (stubs de dirty/push; teste estático agora
+permite `pushToFirebase` só dentro de `saveLesionRevisions`),
+`tests/critical-flows.test.js` (âncoras +85, deslocamento uniforme),
+`CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`.
+
+### Testes
+- Focados: `lesion-revisions-sync` 15/15; `multi-device-sync` 152/153 (novos:
+  A→nuvem→B sem dirty/sem escrita; badges do PC B sem F5; R1+R2 união;
+  updatedAt mais novo vence + unions de history/attempts/feedback; no-op e
+  mudança só-revisão; nuvem antiga sem o campo; force não apaga revisão só da
+  nuvem; F2 = arquivo protegido ausente); `device-bootstrap` 40/41;
+  `snapshots-ownership` 48/48; `lesion-review` 138/138; `critical-flows`
+  23/23; `modal-cleanup` 14/14. Checagem de mutação: remover o merge do
+  reconcile ou o campo do no-op derruba os cenários 084.
+- Suíte (remoto): 1182 · 1147 · 30 · 5 (base 1157 · 1122 · 30 · 5; mesmas
+  falhas). Esperado no local: 1192 · 1184 · 3 · 5.

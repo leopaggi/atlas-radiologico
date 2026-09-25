@@ -486,10 +486,15 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // addImageToLesionData() — tudo antes da primeira ancora; +7 so no
   // importHandler pela marcacao no Salvar do editor e +1 pelo load dos
   // marcadores dentro de loadData (ambos entre loadData e ele).
-  assert.equal(recovery.line, 7803);
-  assert.equal(brokenArtifacts.line, 7793);
-  assert.equal(loadData.line, 10350);
-  assert.equal(importHandler.line, 14014);
+  // +85 nas quatro ancoras (Protecao 084, 2026-09-25): LESION_REVISIONS
+  // sincronizada — saveLesionRevisions(internal) + mergeLesionRevisions()
+  // no modulo da Central e lesionRevisions em writeShardedState/
+  // readShardedState/reconcile/persist/pull/adocao/auditoria — tudo antes
+  // da primeira ancora, deslocamento uniforme.
+  assert.equal(recovery.line, 7888);
+  assert.equal(brokenArtifacts.line, 7878);
+  assert.equal(loadData.line, 10435);
+  assert.equal(importHandler.line, 14099);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

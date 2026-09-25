@@ -90,6 +90,9 @@ const normalizeExternalTitleFn = extractFunction(html, 'normalizeExternalTitle')
 const adoptRemoteFn = extractFunction(html, 'adoptRemoteStateForNewDevice');
 const readShardedStateFn = extractFunction(html, 'readShardedState');
 const normalizeTombstoneMapFn = extractFunction(html, 'normalizeTombstoneMap');
+// PROTEÇÃO 084 — Central de Revisões sincronizada (merge/save/badges reais).
+const lesionRevisionsFns084 = ['canonicalJsonString', 'mergeLesionRevisions', 'saveLesionRevisions', 'updateReviewCenterBadges']
+  .map((n) => extractFunction(html, n).source).join('\n');
 const isValidTombFn2 = extractFunction(html, 'isValidImageTombstone');
 const saveTombFn2 = extractFunction(html, 'saveImageTombstones');
 const tombScopeFn2 = extractFunction(html, 'tombstoneScopeKey');
@@ -199,10 +202,12 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
     // função no index.html); nenhum teste deste arquivo simula um reconcile
     // prévio, então fica null (sem exclusão) por padrão, igual ao caminho
     // real de syncThisDeviceToCloud/forceThisDeviceToCloud.
-    pendingWriteImageExclusionsById: null
+    pendingWriteImageExclusionsById: null,
+    LESION_REVISIONS: {} // PROTEÇÃO 084
   };
   vm.createContext(ctx);
   vm.runInContext(
+    lesionRevisionsFns084 + '\n' +
     'function stripUndefinedDeep(v){try{return JSON.parse(JSON.stringify(v));}catch(_e){return v;}}\n' +
     'function splitIntoChunks(arr,size){const out=[];for(let i=0;i<arr.length;i+=size)out.push(arr.slice(i,i+size));return out;}\n' +
     'function checkChunkSize(){return true;}\n' +
@@ -716,6 +721,10 @@ function makeAdoptContext({ localData, remoteMeta, remoteChunks } = {}) {
     ${normalizeTombstoneMapFn.source}
     ${saveTombFn2.source}
     ${readShardedStateFn.source}
+    const LESION_REVISIONS_KEY = 'atlas:lesionRevisions';
+    let LESION_REVISIONS = {};
+    function __getLesionRevisions084(){ return LESION_REVISIONS; }
+    ${lesionRevisionsFns084}
     ${adoptRemoteFn.source}
   `;
   new vm.Script(engine).runInContext(ctx);
@@ -735,6 +744,35 @@ test('ALTERAÇÃO 078: adoptRemoteStateForNewDevice() adota os links da nuvem 1:
   await ctx.adoptRemoteStateForNewDevice();
   assert.equal(ctx.DATA.length, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(ctx.DATA[0].links)), remoteEntry.links, 'links precisam ser EXATAMENTE os da nuvem (2), não os do SEED (1)');
+});
+
+test('PROTEÇÃO 084: dispositivo novo (PC B) recebe a Central de Revisões da nuvem — persistida localmente, sem apagar revisão local', async () => {
+  const cloudRevs = {
+    R1: { id: 'R1', lesionId: 'seed_1', updatedAt: 1000, status: 'pending', requestText: 'x', history: [], attempts: [], humanFeedback: [] },
+    R2: { id: 'R2', lesionId: 'seed_1', updatedAt: 2000, status: 'proposed', requestText: 'y', solution: { summary: 's' }, history: [], attempts: [], humanFeedback: [] }
+  };
+  const { ctx, backing } = makeAdoptContext({
+    localData: [{ id: 'seed_1' }],
+    remoteMeta: { ...cloudMetaBase, revision: 3, chunkCount: 1, lesionRevisions: cloudRevs },
+    remoteChunks: [[{ id: 'seed_1' }]]
+  });
+  vm.runInContext("LESION_REVISIONS = { L0: { id: 'L0', lesionId: 'seed_1', updatedAt: 500, status: 'pending' } };", ctx);
+  await ctx.adoptRemoteStateForNewDevice();
+  const got = JSON.parse(JSON.stringify(ctx.__getLesionRevisions084()));
+  assert.deepEqual(Object.keys(got).sort(), ['L0', 'R1', 'R2']);
+  assert.equal(got.R2.status, 'proposed');
+  assert.deepEqual(Object.keys(JSON.parse(backing['atlas:lesionRevisions'])).sort(), ['L0', 'R1', 'R2'], 'persistido no IndexedDB');
+});
+
+test('PROTEÇÃO 084: nuvem antiga sem lesionRevisions — adoção de device novo segue válida ({}), sem erro', async () => {
+  const { ctx } = makeAdoptContext({
+    localData: [],
+    remoteMeta: { ...cloudMetaBase, revision: 2, chunkCount: 1 },
+    remoteChunks: [[{ id: 'seed_1' }]]
+  });
+  await ctx.adoptRemoteStateForNewDevice();
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.__getLesionRevisions084())), {});
+  assert.equal(ctx.DATA.length, 1);
 });
 
 test('ALTERAÇÃO 078: adoptRemoteStateForNewDevice() adota 3 links da nuvem mesmo com SEED tendo só 1', async () => {
