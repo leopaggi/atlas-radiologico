@@ -289,6 +289,29 @@ body{
 .card-title-row .card-title{margin-bottom:0;}
 /* PROTEÇÃO 086 — alerta de revisão ativa junto ao nome da lesão */
 .lesion-review-warning{display:inline-flex;align-items:center;justify-content:center;margin-left:6px;padding:0 4px;min-width:1.25em;height:1.25em;border-radius:4px;background:#facc15;color:#1c1917;border:1px solid #a16207;font-size:.78em;font-weight:700;line-height:1;vertical-align:middle;white-space:nowrap;flex:none;cursor:pointer;}
+.didactic-block{border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin:8px 0;}
+.didactic-block>summary{cursor:pointer;font-weight:600;color:var(--text);padding:4px 0;}
+.didactic-item{border-top:1px solid var(--line);padding:6px 0;}
+.didactic-item>summary{cursor:pointer;color:var(--text);}
+.didactic-item-title{font-weight:600;}
+.didactic-item-body{padding:4px 0 2px 0;font-size:13px;}
+.didactic-text p{margin:4px 0;} .didactic-text ul{margin:4px 0 4px 18px;padding:0;}
+.didactic-subtitle{font-weight:700;margin:8px 0 2px 0;color:var(--text);}
+.didactic-meta{color:var(--muted);font-size:12px;}
+.didactic-credit{color:var(--muted-2);}
+.didactic-badge{display:inline-block;padding:0 7px;border-radius:9px;border:1px solid var(--line);font-size:11px;font-weight:600;color:var(--muted);vertical-align:middle;}
+.didactic-badge-specific{border-color:var(--teal-dim);color:var(--teal);}
+.didactic-badge-pathognomonic{border-color:var(--amber-dim);color:var(--amber);}
+.didactic-images{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin:6px 0;}
+.didactic-figure{margin:0;} .didactic-figure img{width:100%;max-height:220px;object-fit:contain;background:var(--ink);border-radius:6px;cursor:zoom-in;}
+.didactic-figure figcaption{font-size:12px;color:var(--muted);margin-top:2px;}
+.didactic-links{display:flex;flex-direction:column;gap:2px;margin-top:4px;}
+.didactic-form-area{border:1px solid var(--line);border-radius:8px;padding:4px 8px;margin:6px 0;}
+.didactic-form-area>summary{cursor:pointer;color:var(--text);}
+.didactic-form-row .btn{padding:2px 8px;margin:0;}
+.didactic-edit-img{display:flex;gap:8px;align-items:flex-start;margin:6px 0;}
+.didactic-edit-img>img{width:72px;height:72px;object-fit:cover;border-radius:6px;background:var(--ink);}
+.didactic-editor-modal{max-width:720px;}
 .lesion-review-warning:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
 .inc-badge{
   font-size:10px;font-weight:600;padding:2px 8px;border-radius:9px;border:1px solid;
@@ -4121,8 +4144,16 @@ function mergeEntryNonDestructive(localEntry, remoteEntry, legacyCatalog, tombst
   // Casos clínicos exemplo (clinicalCases): mesma lógica aditiva das imagens
   // — nunca perde um caso vinculado só de um lado (local ou nuvem). Dedup por
   // sourceUrl (função definida mais abaixo, junto do resto do recurso).
-  const unionedCases = unionClinicalCases(local.clinicalCases, remote.clinicalCases);
+  // PROTEÇÃO 093 — casos com id (manuais/gerenciados) seguem o merge por item
+  // (edição e exclusão não se perdem); legados sem id: mesma união de sempre.
+  const unionedCases = mergeClinicalCaseLists(local.clinicalCases, remote.clinicalCases);
   if(unionedCases.length) merged.clinicalCases = unionedCases; else delete merged.clinicalCases;
+  // PROTEÇÃO 093 — sinais radiológicos e classificações/esquemas: merge por
+  // item (id estável; carimbo mais novo vence; exclusão = tombstone).
+  for(const f of ['radiologicSigns', 'classificationSchemes']){
+    const m = mergeDidacticItems(local[f], remote[f]);
+    if(m.length) merged[f] = m; else delete merged[f];
+  }
 
   // Para registros legados sem timestamp, campos não vazios locais têm
   // prioridade — EXCETO quando o chamador pede prioridade ao remoto sem
@@ -8588,6 +8619,12 @@ function foldLesionMergesIntoState(st, merges, opts){
         k.clinicalCases = Array.isArray(k.clinicalCases) ? k.clinicalCases : [];
         d.clinicalCases.forEach(c=>{ const key = ck(c); if(!cs.has(key)){ cs.add(key); k.clinicalCases.push(c); } });
       }
+      // PROTEÇÃO 093 — sinais/classificações do fundido vão para o keeper (por id).
+      if(typeof mergeDidacticItems === 'function'){
+        for(const f of ['radiologicSigns', 'classificationSchemes']){
+          if(Array.isArray(d[f]) && d[f].length) k[f] = mergeDidacticItems(k[f], d[f]);
+        }
+      }
       if(Array.isArray(d.altPlacements) && d.altPlacements.length){
         const pk = p => String((p && p.s) || '') + '|||' + String((p && p.site) || '');
         const ps = new Set([pk({ s:k.s, site:k.site }), ...(Array.isArray(k.altPlacements) ? k.altPlacements : []).map(pk)]);
@@ -12496,6 +12533,8 @@ function openDetail(id, opts){
         ${links.map(l=>`<a class="detail-link" href="${l.url}" target="_blank" rel="noopener">↗ ${l.label||l.url}</a>`).join('')}
       </div>`:''}
       ${clinicalCasesSectionHtml(e)}
+      ${radiologicSignsSectionHtml(e)}
+      ${classificationSchemesSectionHtml(e)}
       <div class="detail-review">
         <div class="detail-links-label">STATUS DE REVISÃO</div>
         <div class="review-btn-row" id="review-btn-row"></div>
@@ -12560,6 +12599,7 @@ function openDetail(id, opts){
   }
   renderReviewButtons();
   wireClinicalCasesToggle(ov, e);
+  wireDidacticImages(ov); // 093
   document.getElementById('btn-close').onclick = closeOverlay;
   const backTodayBtn = document.getElementById('btn-back-today');
   // Voltar fecha SOMENTE o detalhe (ov.remove, nunca closeOverlay — o
@@ -12744,11 +12784,7 @@ function openForm(id, opts){
         <input id="f-en-term" value="${existing?(existing.enTerm||'').replace(/"/g,'&quot;'):''}" placeholder="ex: hepatic hemangioma — o Radiopaedia é em inglês">
       </div>
 
-      ${existing && Array.isArray(existing.clinicalCases) && existing.clinicalCases.length?`
-      <div class="field">
-        <label>Casos clínicos exemplo vinculados</label>
-        <div id="clinical-cases-list"></div>
-      </div>`:''}
+      ${didacticFormSectionHtml()}
 
       ${existing?`
       <div class="field">
@@ -12818,6 +12854,13 @@ function openForm(id, opts){
     });
   }
   renderClinicalCasesDraft();
+  // PROTEÇÃO 093 — conteúdo didático (draft até o Salvar).
+  let radiologicSignsDraft = (existing && Array.isArray(existing.radiologicSigns)) ? JSON.parse(JSON.stringify(existing.radiologicSigns)) : [];
+  let classificationSchemesDraft = (existing && Array.isArray(existing.classificationSchemes)) ? JSON.parse(JSON.stringify(existing.classificationSchemes)) : [];
+  const didacticDrafts = { get cases(){ return clinicalCasesDraft; }, get signs(){ return radiologicSignsDraft; }, get schemes(){ return classificationSchemesDraft; } };
+  wireDidacticFormSection(ov, didacticDrafts, (kind, list)=>{
+    if(kind==='cases') clinicalCasesDraft = list; else if(kind==='signs') radiologicSignsDraft = list; else classificationSchemesDraft = list;
+  }, getCurrentLesionMeta);
 
   // Dropdown/validação do Sítio/órgão (ajuste 22/09/2026): a seta abre TODOS
   // os sítios JÁ CADASTRADOS nesta seção (mesma fonte que a sidebar usa —
@@ -13495,6 +13538,8 @@ function openForm(id, opts){
       // adiciona aqui — vincular é exclusivo do importador). Sem draft (form
       // de lesão nova), o campo nem é tocado.
       if(clinicalCasesDraft.length) existing.clinicalCases = JSON.parse(JSON.stringify(clinicalCasesDraft)); else delete existing.clinicalCases;
+      if(radiologicSignsDraft.length) existing.radiologicSigns = JSON.parse(JSON.stringify(radiologicSignsDraft)); else delete existing.radiologicSigns; // 093
+      if(classificationSchemesDraft.length) existing.classificationSchemes = JSON.parse(JSON.stringify(classificationSchemesDraft)); else delete existing.classificationSchemes; // 093
     } else if(DATA.some(x=>x && x.id===entryId)){
       // Rede de segurança anti-mesmo-id (auditoria 2026-09-21): se o id já
       // está no acervo (ex.: submit duplicado que escapou da trava), atualiza
@@ -13502,10 +13547,12 @@ function openForm(id, opts){
       const target = DATA.find(x=>x && x.id===entryId);
       target.name=name; target.s=sec; target.site=site; target.tags=tags; target.img=img; target.notes=notes; target.links=links; target.enTerm=enTerm; target.inc=inc; target.localImg=localImgFlag; target.images=remoteImgs; target.classification=classification; target._userUpdatedAt=Date.now();
       if(altPlacementsDraft.length) target.altPlacements = JSON.parse(JSON.stringify(altPlacementsDraft)); else delete target.altPlacements;
+      applyDidacticDraftsToNewEntry(target, clinicalCasesDraft, radiologicSignsDraft, classificationSchemesDraft); // 093
       toast('Registro existente atualizado (id já estava no acervo — nada duplicado).');
     } else {
       const newEntry = {id:entryId, name, s:sec, site, tags, img, notes, links, enTerm, inc, localImg:localImgFlag, images:remoteImgs, classification, _userUpdatedAt:Date.now()};
       if(altPlacementsDraft.length) newEntry.altPlacements = JSON.parse(JSON.stringify(altPlacementsDraft));
+      applyDidacticDraftsToNewEntry(newEntry, clinicalCasesDraft, radiologicSignsDraft, classificationSchemesDraft); // 093: só o que o usuário adicionou
       DATA.push(newEntry);
     }
 
@@ -16937,7 +16984,7 @@ function renderQuizCardIntegrated(host){
   // reiniciar a questão.
   function renderDetail(){
     const links=ensureLinks(e);
-    return `<div class="quiz-answer-detail"><b>${esc(e.name)}</b><div class="quiz-points">${(e.tags||[]).slice(0,8).map(t=>`<span class="quiz-point">${esc(t)}</span>`).join('')}</div>${e.notes?`<div class="detail-notes">${esc(e.notes)}</div>`:''}${links.length?`<a class="detail-link" href="${links[0].url}" target="_blank" rel="noopener">↗ referência / imagens</a>`:''}</div>`;
+    return `<div class="quiz-answer-detail"><b>${esc(e.name)}</b><div class="quiz-points">${(e.tags||[]).slice(0,8).map(t=>`<span class="quiz-point">${esc(t)}</span>`).join('')}</div>${e.notes?`<div class="detail-notes">${esc(e.notes)}</div>`:''}${links.length?`<a class="detail-link" href="${links[0].url}" target="_blank" rel="noopener">↗ referência / imagens</a>`:''}${lesionDidacticQuizHtml(e)}</div>`; // 093: sinais/classificações SÓ aqui (pós-resposta)
   }
   const GRADE_LABELS={easy:'🟢 Fácil',medium:'🔵 Média',hard:'🟠 Difícil',again:'⚪ Não sei'};
   function applyGrade(g){
@@ -16958,6 +17005,7 @@ function renderQuizCardIntegrated(host){
       ${renderDetail()}
       <div class="quiz-post-answer-actions"><button type="button" class="btn btn-ghost quiz-add-img-action" id="quiz-add-img-btn">🖼 Adicionar imagem a esta lesão</button><button type="button" class="btn btn-ghost quiz-edit-lesion-action" id="quiz-edit-lesion-btn">✏ Editar esta lesão no Acervo</button><button type="button" class="btn btn-ghost quiz-review-action" id="quiz-review-btn">🔔 Marcar para revisão</button></div>
       ${gradeHtml}`;
+    wireDidacticImages(fb); // 093
     fb.querySelector('#quiz-add-img-btn').onclick=()=>{
       openQuizAddImageModal(e.id, ()=>{ refreshQuizImgs(true); renderAll(); }); // sidebar reflete a nova imagem (overlays do Quiz intactas)
     };
@@ -16970,7 +17018,7 @@ function renderQuizCardIntegrated(host){
         preserveUnderlyingOverlay: true,
         onSaved: ()=>{
           const detailEl = fb.querySelector('.quiz-answer-detail');
-          if(detailEl) detailEl.outerHTML = renderDetail();
+          if(detailEl){ detailEl.outerHTML = renderDetail(); wireDidacticImages(fb); }
           const correctOpt = host.querySelector(`.quiz-mcq-option[data-id="${e.id}"] span:last-child`);
           if(correctOpt) correctOpt.textContent = e.name;
           // keepIndex: preserva a imagem atual do carrossel (normalizada ao
@@ -19105,7 +19153,7 @@ function buildClinicalCaseFromDraft(draft){
 
 function lesionHasClinicalCaseUrl(entry, sourceUrl){
   const list = Array.isArray(entry && entry.clinicalCases) ? entry.clinicalCases : [];
-  return list.some(c => c && sameExternalUrl(c.sourceUrl, sourceUrl));
+  return list.some(c => c && !c.deletedAt && sameExternalUrl(c.sourceUrl, sourceUrl)); // 093: excluído não conta
 }
 
 // Procura em TODO o catálogo (exceto excludeId) se essa URL já está
@@ -19133,11 +19181,22 @@ function addClinicalCaseToLesion(entry, draft){
   const url = String((draft && draft.sourceUrl) || '').trim();
   if (!url) return { ok: false, reason: 'sourceUrl ausente', entry };
   const existingCases = Array.isArray(entry.clinicalCases) ? entry.clinicalCases : [];
-  if (existingCases.some(c => c && sameExternalUrl(c.sourceUrl, url))) {
+  if (existingCases.some(c => c && !c.deletedAt && sameExternalUrl(c.sourceUrl, url))) {
     return { ok: false, reason: 'duplicate_same_lesion', entry };
   }
   const newCase = buildClinicalCaseFromDraft(draft);
   const next = Object.assign({}, entry);
+  // PROTEÇÃO 093 — caso excluído (tombstone) da mesma URL: reimportar REVIVE
+  // o mesmo id com carimbo mais novo (senão o tombstone venceria no merge).
+  const tombIdx = existingCases.findIndex(c => c && c.deletedAt && c.id && sameExternalUrl(c.sourceUrl, url));
+  if (tombIdx >= 0) {
+    const tomb = existingCases[tombIdx];
+    const t = Math.max(Date.now(), didacticItemTime(tomb) + 1);
+    const revived = Object.assign(newCase, { id: tomb.id, origin: 'imported', createdAt: t, updatedAt: t });
+    if (tomb.legacyKey) revived.legacyKey = tomb.legacyKey;
+    next.clinicalCases = existingCases.slice(0, tombIdx).concat([revived], existingCases.slice(tombIdx + 1));
+    return { ok: true, reason: '', entry: next, case: revived };
+  }
   next.clinicalCases = existingCases.concat([newCase]);
   return { ok: true, reason: '', entry: next, case: newCase };
 }
@@ -19152,7 +19211,7 @@ function filterReferenceLinksForDisplay(links, clinicalCases){
   const cases = Array.isArray(clinicalCases) ? clinicalCases : [];
   const list = Array.isArray(links) ? links : [];
   if (!cases.length) return list;
-  return list.filter(l => !(l && cases.some(c => c && sameExternalUrl(c.sourceUrl, l.url))));
+  return list.filter(l => !(l && cases.some(c => c && !c.deletedAt && sameExternalUrl(c.sourceUrl, l.url))));
 }
 
 // Pura: remove SÓ o caso correspondente (por sourceUrl), sem apagar a lesão,
@@ -19331,15 +19390,16 @@ function clinicalCaseRowHtml(c){
   const pac = [c.patientAge ? esc(c.patientAge + ' anos') : '', c.patientSex ? esc(c.patientSex) : ''].filter(Boolean).join(' / ');
   return `<div class="clinical-case-row" style="border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;">`
     + `<div style="font-weight:700;">${esc(c.title || '')}</div>`
-    + `<div style="color:var(--muted-2);font-size:12px;">${esc(c.source || '')}</div>`
+    + `<div style="color:var(--muted-2);font-size:12px;">${esc(c.source || '')}${c.origin === 'manual' ? `${c.source ? ' · ' : ''}caso manual` : ''}</div>`
     + (pac ? `<div style="font-size:12px;">${pac}</div>` : '')
     + (c.modality ? `<div style="font-size:12px;">Modalidade: ${esc(c.modality)}</div>` : '')
     + (c.presentation ? `<div style="font-size:12px;margin-top:2px;">${esc(c.presentation)}</div>` : '')
+    + (c.notes ? `<div style="font-size:12px;margin-top:2px;color:var(--muted);">${esc(c.notes)}</div>` : '') // 093
     + (c.sourceUrl ? `<a class="detail-link" href="${esc(c.sourceUrl)}" target="_blank" rel="noopener">↗ Abrir caso</a>` : '')
     + `</div>`;
 }
 function clinicalCasesSectionHtml(entry){
-  const list = Array.isArray(entry && entry.clinicalCases) ? entry.clinicalCases : [];
+  const list = sortDidacticItems(entry && entry.clinicalCases); // 093: importados + manuais, sem excluídos, ordem manual
   if (!list.length) return '';
   return `<div class="detail-clinical-cases">`
     + `<button type="button" class="btn btn-ghost clinical-cases-toggle" aria-expanded="false" style="width:100%;text-align:left;margin-bottom:0;">▸ Casos clínicos exemplo (${list.length})</button>`
@@ -19350,13 +19410,445 @@ function clinicalCasesSectionHtml(entry){
 function wireClinicalCasesToggle(ov, entry){
   const toggle = ov.querySelector('.clinical-cases-toggle');
   if (!toggle) return;
-  const list = Array.isArray(entry && entry.clinicalCases) ? entry.clinicalCases : [];
+  const list = sortDidacticItems(entry && entry.clinicalCases); // 093
   toggle.onclick = () => {
     const body = ov.querySelector('.clinical-cases-body');
     if (!body) return;
     body.hidden = !body.hidden;
     toggle.textContent = (body.hidden ? '▸' : '▾') + ' Casos clínicos exemplo (' + list.length + ')';
     toggle.setAttribute('aria-expanded', body.hidden ? 'false' : 'true');
+  };
+}
+
+/* ============================================================
+   PROTEÇÃO 093 — CONTEÚDO DIDÁTICO POR LESÃO
+   ------------------------------------------------------------
+   Três áreas por lesão, em arrays da PRÓPRIA lesão (sincronizam junto com
+   ela, sem coleção paralela):
+   - clinicalCases[]        (existente; + casos MANUAIS na mesma lista)
+   - radiologicSigns[]      {id,title,strength,description,modality,notes,
+                             referenceUrl,images[],order,createdAt,updatedAt}
+   - classificationSchemes[] {id,title,content,links[],images[],order,
+                             createdAt,updatedAt}
+   Identidade = `id` estável (nunca índice). Ordem manual = `order`.
+   Exclusão = tombstone no próprio array (`deletedAt`), para não ressuscitar
+   no merge entre PCs. Merge por item: união por id; mesmo id -> o carimbo
+   mais novo (updatedAt/deletedAt) vence o item inteiro.
+   Imagens didáticas: mesmo upload do Atlas (uploadToCloudinary), guardadas
+   DENTRO do item (nunca em entry.images: não entram em ownership/tombstone
+   de imagem nem na galeria/Quiz principal); cada imagem tem id, legenda
+   (caption), fonte (credit), order e carimbos próprios (prontas p/ a 092).
+   Quiz: sinais e classificações só são renderizados DEPOIS da resposta.
+   Dados antigos sem os campos = [] (nenhuma migração destrutiva).
+   ============================================================ */
+const DIDACTIC_SIGN_STRENGTHS = { suggestive:'Sugestivo', specific:'Específico', pathognomonic:'Patognomônico' };
+const DIDACTIC_LIMITS = { title:200, text:4000, notes:2000, modality:60, content:20000, caption:500, credit:300, url:500, images:20, links:20, age:20, sex:20, source:120 };
+function genDidacticId(prefix){
+  return (prefix || 'did') + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+function didacticStr(v, max){ return String(v == null ? '' : v).trim().slice(0, max || DIDACTIC_LIMITS.text); }
+function didacticUrl(v){
+  const s = didacticStr(v, DIDACTIC_LIMITS.url);
+  return /^https?:\/\/\S+$/i.test(s) ? s : '';
+}
+function didacticItemTime(it){
+  return Math.max(Number(it && it.updatedAt) || 0, Number(it && it.deletedAt) || 0, Number(it && it.createdAt) || 0);
+}
+function isDidacticItemVisible(it){ return !!it && typeof it === 'object' && !it.deletedAt; }
+// Visíveis, na ordem manual (sem `order` = posição no array; estável).
+function sortDidacticItems(list){
+  return (Array.isArray(list) ? list : []).map((it, i) => ({ it, i }))
+    .filter(x => isDidacticItemVisible(x.it))
+    .sort((a, b) => {
+      const oa = Number.isFinite(Number(a.it.order)) && a.it.order !== null && a.it.order !== undefined ? Number(a.it.order) : a.i;
+      const ob = Number.isFinite(Number(b.it.order)) && b.it.order !== null && b.it.order !== undefined ? Number(b.it.order) : b.i;
+      return (oa - ob) || (a.i - b.i);
+    })
+    .map(x => x.it);
+}
+function countDidacticItems(list){ return sortDidacticItems(list).length; }
+// Merge por item (id). Determinístico nos dois PCs: empate de carimbo ->
+// serialização canônica maior vence. Item sem id (legado) é mantido.
+function mergeDidacticItems(localList, remoteList){
+  const canon = (v) => (typeof canonicalJsonString === 'function' ? canonicalJsonString(v) : JSON.stringify(v));
+  const byId = new Map();
+  const noId = [];
+  const take = (it) => {
+    if (!it || typeof it !== 'object') return;
+    if (!it.id) { noId.push(it); return; }
+    const cur = byId.get(it.id);
+    if (!cur) { byId.set(it.id, it); return; }
+    const tc = didacticItemTime(cur), ti = didacticItemTime(it);
+    if (ti > tc || (ti === tc && canon(it) > canon(cur))) byId.set(it.id, it);
+  };
+  (Array.isArray(localList) ? localList : []).forEach(take);
+  (Array.isArray(remoteList) ? remoteList : []).forEach(take);
+  return noId.concat([...byId.values()]);
+}
+// Casos clínicos: itens COM id seguem o merge por item; itens legados SEM id
+// seguem a união aditiva de sempre (unionClinicalCases). Um legado que
+// corresponde (url/título ou legacyKey) a um item com id do outro lado é a
+// MESMA entidade já gerenciada -> vence o item com id (inclusive tombstone).
+function mergeClinicalCaseLists(localList, remoteList){
+  const L = Array.isArray(localList) ? localList : [];
+  const R = Array.isArray(remoteList) ? remoteList : [];
+  const withId = mergeDidacticItems(L.filter(c => c && c.id), R.filter(c => c && c.id));
+  const managedKeys = new Set();
+  withId.forEach(c => { const k = clinicalCaseIdentityKey(c); if (k) managedKeys.add(k); if (c.legacyKey) managedKeys.add(c.legacyKey); });
+  const legacy = unionClinicalCases(L.filter(c => c && !c.id), R.filter(c => c && !c.id))
+    .filter(c => !managedKeys.has(clinicalCaseIdentityKey(c)));
+  return legacy.concat(withId);
+}
+// Caso legado ganha identidade estável na 1ª gestão (editar/excluir/ordenar).
+function ensureClinicalCaseIdentity(c, now){
+  if (!c || typeof c !== 'object' || c.id) return c;
+  const t = Number(now) || Date.now();
+  const createdAt = Date.parse(c.addedAt || '') || t;
+  return Object.assign({}, c, { id: genDidacticId('case'), legacyKey: clinicalCaseIdentityKey(c), origin: c.origin || 'imported', createdAt, updatedAt: t });
+}
+function normalizeDidacticImage(raw, prev, now){
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const data = didacticStr(r.data, 2000);
+  if (!/^https?:\/\//i.test(data)) return null; // só URL (Cloudinary/https) — nunca base64 no documento
+  const t = Number(now) || Date.now();
+  const out = { id: r.id || (prev && prev.id) || genDidacticId('img'), data, source: r.source === 'cloudinary' ? 'cloudinary' : 'url',
+    caption: didacticStr(r.caption, DIDACTIC_LIMITS.caption), credit: didacticStr(r.credit, DIDACTIC_LIMITS.credit),
+    createdAt: Number(r.createdAt) || (prev && prev.createdAt) || t, updatedAt: Number(r.updatedAt) || t };
+  ['thumb', 'publicId', 'assetId', 'format'].forEach(k => { if (r[k]) out[k] = didacticStr(r[k], 2000); });
+  ['width', 'height', 'bytes'].forEach(k => { if (r[k]) out[k] = Number(r[k]) || r[k]; });
+  return out;
+}
+function normalizeDidacticImages(list, now){
+  return (Array.isArray(list) ? list : []).map(im => normalizeDidacticImage(im, null, now)).filter(Boolean).slice(0, DIDACTIC_LIMITS.images)
+    .map((im, i) => Object.assign(im, { order: i }));
+}
+// Validação pura (editor): devolve {ok, item} ou {ok:false, field, error}.
+function normalizeRadiologicSign(raw, now){
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const title = didacticStr(r.title, DIDACTIC_LIMITS.title);
+  if (!title) return { ok:false, field:'title', error:'Informe o nome do sinal.' };
+  if (!Object.prototype.hasOwnProperty.call(DIDACTIC_SIGN_STRENGTHS, r.strength)) return { ok:false, field:'strength', error:'Escolha: sugestivo, específico ou patognomônico.' };
+  return { ok:true, item: { id: r.id || null, title, strength: r.strength, description: didacticStr(r.description, DIDACTIC_LIMITS.text),
+    modality: didacticStr(r.modality, DIDACTIC_LIMITS.modality), notes: didacticStr(r.notes, DIDACTIC_LIMITS.notes),
+    referenceUrl: didacticUrl(r.referenceUrl), images: normalizeDidacticImages(r.images, now) } };
+}
+function normalizeClassificationScheme(raw, now){
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const title = didacticStr(r.title, DIDACTIC_LIMITS.title);
+  if (!title) return { ok:false, field:'title', error:'Informe o título.' };
+  const links = (Array.isArray(r.links) ? r.links : []).map(l => ({ label: didacticStr(l && l.label, DIDACTIC_LIMITS.title), url: didacticUrl(l && l.url) }))
+    .filter(l => l.url).slice(0, DIDACTIC_LIMITS.links);
+  return { ok:true, item: { id: r.id || null, title, content: didacticStr(r.content, DIDACTIC_LIMITS.content), links, images: normalizeDidacticImages(r.images, now) } };
+}
+function normalizeManualClinicalCase(raw){
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const title = didacticStr(r.title, 300);
+  if (!title) return { ok:false, field:'title', error:'Informe o título do caso.' };
+  const presentation = didacticStr(r.presentation, 2000);
+  // obrigatória no caso MANUAL; caso importado antigo pode não ter
+  if (!presentation && r.origin !== 'imported') return { ok:false, field:'presentation', error:'Informe a apresentação clínica.' };
+  const rawUrl = didacticStr(r.sourceUrl, DIDACTIC_LIMITS.url);
+  const sourceUrl = didacticUrl(rawUrl);
+  if (rawUrl && !sourceUrl) return { ok:false, field:'sourceUrl', error:'URL inválida (use http:// ou https://).' };
+  const out = { id: r.id || null, origin: r.origin === 'imported' ? 'imported' : 'manual', title,
+    source: didacticStr(r.source, DIDACTIC_LIMITS.source), sourceUrl };
+  if (presentation) out.presentation = presentation;
+  const age = didacticStr(r.patientAge, DIDACTIC_LIMITS.age).replace(/\s*anos?$/i, '');
+  if (age) out.patientAge = age;
+  const sex = didacticStr(r.patientSex, DIDACTIC_LIMITS.sex); if (sex) out.patientSex = sex;
+  const mod = didacticStr(r.modality, DIDACTIC_LIMITS.modality); if (mod) out.modality = mod;
+  const notes = didacticStr(r.notes, DIDACTIC_LIMITS.notes); if (notes) out.notes = notes;
+  return { ok:true, item: out };
+}
+// Operações puras sobre a lista (devolvem uma NOVA lista).
+function upsertDidacticItem(list, item, now){
+  const t = Number(now) || Date.now();
+  const arr = Array.isArray(list) ? list.slice() : [];
+  const idx = item && item.id ? arr.findIndex(x => x && x.id === item.id) : -1;
+  if (idx >= 0) {
+    const prev = arr[idx];
+    arr[idx] = Object.assign({}, prev, item, { id: prev.id, createdAt: prev.createdAt || t, order: prev.order, updatedAt: Math.max(t, didacticItemTime(prev) + 1) });
+    delete arr[idx].deletedAt;
+    return arr;
+  }
+  const visible = sortDidacticItems(arr);
+  const maxOrder = visible.reduce((m, x, i) => Math.max(m, Number.isFinite(Number(x.order)) && x.order !== null && x.order !== undefined ? Number(x.order) : i), -1);
+  arr.push(Object.assign({}, item, { id: item.id || genDidacticId('did'), order: maxOrder + 1, createdAt: t, updatedAt: t }));
+  return arr;
+}
+function deleteDidacticItem(list, id, now){
+  const t = Number(now) || Date.now();
+  return (Array.isArray(list) ? list : []).map(x => (x && x.id === id) ? Object.assign({}, x, { deletedAt: Math.max(t, didacticItemTime(x) + 1), updatedAt: Math.max(t, didacticItemTime(x) + 1) }) : x);
+}
+function moveDidacticItem(list, id, dir, now){
+  const t = Number(now) || Date.now();
+  const arr = Array.isArray(list) ? list.slice() : [];
+  const visible = sortDidacticItems(arr);
+  const i = visible.findIndex(x => x.id === id);
+  const j = i + (dir < 0 ? -1 : 1);
+  if (i < 0 || j < 0 || j >= visible.length) return arr;
+  const order = visible.slice(); const tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+  const newOrder = new Map(order.map((x, k) => [x.id, k]));
+  return arr.map(x => {
+    if (!x || !newOrder.has(x.id)) return x;
+    const o = newOrder.get(x.id);
+    return Number(x.order) === o ? x : Object.assign({}, x, { order: o, updatedAt: Math.max(t, didacticItemTime(x) + 1) });
+  });
+}
+// Texto formatado SEGURO (tudo escapado): "## " subtítulo, "- " lista,
+// **negrito**, linha em branco = parágrafo.
+function renderDidacticRichText(text){
+  const lines = String(text || '').split(/\r?\n/);
+  const out = []; let para = []; let list = [];
+  const inline = (s) => esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  const flushPara = () => { if (para.length) { out.push('<p>' + para.map(inline).join('<br>') + '</p>'); para = []; } };
+  const flushList = () => { if (list.length) { out.push('<ul>' + list.map(li => '<li>' + inline(li) + '</li>').join('') + '</ul>'); list = []; } };
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (/^#{2,3}\s+/.test(line)) { flushPara(); flushList(); out.push('<div class="didactic-subtitle">' + inline(line.replace(/^#{2,3}\s+/, '')) + '</div>'); }
+    else if (/^\s*[-•]\s+/.test(line)) { flushPara(); list.push(line.replace(/^\s*[-•]\s+/, '')); }
+    else if (!line.trim()) { flushPara(); flushList(); }
+    else { flushList(); para.push(line); }
+  }
+  flushPara(); flushList();
+  return out.join('');
+}
+function didacticImagesHtml(images){
+  const list = sortDidacticItems(images);
+  if (!list.length) return '';
+  return '<div class="didactic-images">' + list.map(im => '<figure class="didactic-figure">'
+    + '<img class="didactic-img" loading="lazy" src="' + escAttr(im.thumb || im.data) + '" data-full="' + escAttr(im.data) + '" data-caption="' + escAttr(im.caption || '') + '" alt="' + escAttr(im.caption || 'imagem didática') + '">'
+    + ((im.caption || im.credit) ? '<figcaption>' + esc(im.caption || '') + (im.credit ? ' <span class="didactic-credit">— ' + esc(im.credit) + '</span>' : '') + '</figcaption>' : '')
+    + '</figure>').join('') + '</div>';
+}
+function radiologicSignHtml(s){
+  const n = sortDidacticItems(s.images).length;
+  return '<details class="didactic-item didactic-sign"><summary><span class="didactic-item-title">' + esc(s.title) + '</span> '
+    + '<span class="didactic-badge didactic-badge-' + escAttr(s.strength) + '">' + esc(DIDACTIC_SIGN_STRENGTHS[s.strength] || '') + '</span>'
+    + (n ? ' <span class="didactic-meta">· ' + n + (n === 1 ? ' imagem' : ' imagens') + '</span>' : '') + '</summary>'
+    + '<div class="didactic-item-body">'
+    + (s.description ? '<div class="didactic-text">' + renderDidacticRichText(s.description) + '</div>' : '')
+    + (s.modality ? '<div class="didactic-meta">Modalidade: ' + esc(s.modality) + '</div>' : '')
+    + (s.notes ? '<div class="didactic-meta">' + esc(s.notes) + '</div>' : '')
+    + didacticImagesHtml(s.images)
+    + (s.referenceUrl ? '<a class="detail-link" href="' + escAttr(s.referenceUrl) + '" target="_blank" rel="noopener">↗ Referência</a>' : '')
+    + '</div></details>';
+}
+function classificationSchemeHtml(c){
+  const links = Array.isArray(c.links) ? c.links : [];
+  return '<details class="didactic-item didactic-scheme"><summary><span class="didactic-item-title">' + esc(c.title) + '</span></summary>'
+    + '<div class="didactic-item-body">'
+    + (c.content ? '<div class="didactic-text">' + renderDidacticRichText(c.content) + '</div>' : '')
+    + didacticImagesHtml(c.images)
+    + (links.length ? '<div class="didactic-links">' + links.map(l => '<a class="detail-link" href="' + escAttr(l.url) + '" target="_blank" rel="noopener">↗ ' + esc(l.label || l.url) + '</a>').join('') + '</div>' : '')
+    + '</div></details>';
+}
+// Blocos do detalhe/Quiz (somem quando vazios no modo leitura).
+function radiologicSignsSectionHtml(entry){
+  const list = sortDidacticItems(entry && entry.radiologicSigns);
+  if (!list.length) return '';
+  return '<details class="didactic-block didactic-signs-block"><summary>Sinais radiológicos (' + list.length + ')</summary>'
+    + list.map(radiologicSignHtml).join('') + '</details>';
+}
+function classificationSchemesSectionHtml(entry){
+  const list = sortDidacticItems(entry && entry.classificationSchemes);
+  if (!list.length) return '';
+  return '<details class="didactic-block didactic-schemes-block"><summary>Classificações e esquemas (' + list.length + ')</summary>'
+    + list.map(classificationSchemeHtml).join('') + '</details>';
+}
+// Quiz: SÓ chamada no feedback pós-resposta (renderDetail).
+function lesionDidacticQuizHtml(entry){
+  return radiologicSignsSectionHtml(entry) + classificationSchemesSectionHtml(entry);
+}
+function wireDidacticImages(root){
+  if (!root || typeof root.querySelectorAll !== 'function') return;
+  root.querySelectorAll('.didactic-img').forEach(img => {
+    img.onclick = () => { try { openImageLightbox(img.getAttribute('data-full'), img.getAttribute('data-caption') || ''); } catch (e) {} };
+  });
+}
+/* ---------- Edição (formulário da lesão): lista por área + editor por item.
+   Tudo é DRAFT até o Salvar do formulário (mesmo padrão de links/
+   altPlacements/clinicalCasesDraft). Upload de imagem = uploadToCloudinary
+   (mesmo backend; sem imagem base64 no documento). ---------- */
+// Lesão NOVA: grava só o conteúdo didático que o usuário adicionou no
+// formulário (nunca inventa; listas vazias não criam campo).
+function applyDidacticDraftsToNewEntry(entry, cases, signs, schemes){
+  const put = (field, list) => { if (Array.isArray(list) && list.length) entry[field] = JSON.parse(JSON.stringify(list)); };
+  put('clinicalCases', cases); put('radiologicSigns', signs); put('classificationSchemes', schemes);
+  return entry;
+}
+const DIDACTIC_AREAS = {
+  cases:   { label:'Casos clínicos exemplo', add:'+ Adicionar caso clínico manual', empty:'nenhum caso clínico' },
+  signs:   { label:'Sinais radiológicos', add:'+ Adicionar sinal radiológico', empty:'nenhum sinal radiológico' },
+  schemes: { label:'Classificações e esquemas', add:'+ Adicionar classificação/esquema', empty:'nenhuma classificação ou esquema' }
+};
+function didacticFormSectionHtml(){
+  return '<div class="field didactic-form">'
+    + '<label>Conteúdo didático</label>'
+    + ['cases', 'signs', 'schemes'].map(k => '<details class="didactic-form-area" data-area="' + k + '">'
+      + '<summary><span class="didactic-form-label">' + DIDACTIC_AREAS[k].label + '</span> (<span class="didactic-form-count">0</span>)</summary>'
+      + '<div class="didactic-form-list"></div>'
+      + '<button type="button" class="btn btn-ghost didactic-form-add">' + DIDACTIC_AREAS[k].add + '</button>'
+      + '</details>').join('')
+    + '</div>';
+}
+function didacticRowSummary(kind, it){
+  if (kind === 'signs') return esc(it.title) + ' <span class="didactic-badge didactic-badge-' + escAttr(it.strength) + '">' + esc(DIDACTIC_SIGN_STRENGTHS[it.strength] || '') + '</span>' + (sortDidacticItems(it.images).length ? ' <span class="didactic-meta">· ' + sortDidacticItems(it.images).length + ' img</span>' : '');
+  if (kind === 'schemes') return esc(it.title) + (sortDidacticItems(it.images).length ? ' <span class="didactic-meta">· ' + sortDidacticItems(it.images).length + ' img</span>' : '');
+  return esc(it.title || it.source || 'caso clínico') + ' <span class="didactic-meta">· ' + (it.origin === 'manual' ? 'manual' : 'importado') + '</span>';
+}
+// Liga a seção do formulário aos drafts. drafts = { cases, signs, schemes }
+// (arrays substituídos por referência via setDraft). getLesionMeta() para upload.
+function wireDidacticFormSection(root, drafts, setDraft, getLesionMeta){
+  const box = root && root.querySelector('.didactic-form');
+  if (!box) return;
+  const render = (kind) => {
+    const area = box.querySelector('.didactic-form-area[data-area="' + kind + '"]');
+    const listEl = area.querySelector('.didactic-form-list');
+    const items = sortDidacticItems(drafts[kind]);
+    area.querySelector('.didactic-form-count').textContent = String(items.length);
+    listEl.innerHTML = items.length ? '' : '<div class="didactic-meta" style="padding:2px 0 4px 0;">' + DIDACTIC_AREAS[kind].empty + '</div>';
+    items.forEach((it, i) => {
+      const row = document.createElement('div');
+      row.className = 'link-row didactic-form-row';
+      row.innerHTML = '<span class="link-row-label" style="flex:1;min-width:0;">' + didacticRowSummary(kind, it) + '</span>'
+        + '<button type="button" class="btn btn-ghost didactic-up" title="subir"' + (i === 0 ? ' disabled' : '') + '>↑</button>'
+        + '<button type="button" class="btn btn-ghost didactic-down" title="descer"' + (i === items.length - 1 ? ' disabled' : '') + '>↓</button>'
+        + '<button type="button" class="btn btn-ghost didactic-edit" title="editar">✏</button>'
+        + '<button type="button" class="link-row-del didactic-del" title="excluir (não apaga a lesão nem o Cloudinary)">✕</button>';
+      const act = (fn) => {
+        // caso legado (sem id) ganha identidade estável na 1ª gestão
+        if (kind === 'cases' && !it.id) {
+          const j = drafts.cases.indexOf(it);
+          const conv = drafts.cases.slice(); conv[j] = ensureClinicalCaseIdentity(it); setDraft('cases', conv); it = conv[j];
+        }
+        setDraft(kind, fn(drafts[kind], it.id));
+        render(kind);
+      };
+      row.querySelector('.didactic-up').onclick = () => act((l, id) => moveDidacticItem(l, id, -1));
+      row.querySelector('.didactic-down').onclick = () => act((l, id) => moveDidacticItem(l, id, 1));
+      row.querySelector('.didactic-del').onclick = () => { if (confirm('Excluir este item? (a lesão e as demais áreas não são alteradas)')) act((l, id) => deleteDidacticItem(l, id)); };
+      row.querySelector('.didactic-edit').onclick = () => openDidacticItemEditor(kind, it, getLesionMeta, (saved) => act((l) => upsertDidacticItem(l, Object.assign({}, saved, { id: it.id }))));
+      listEl.appendChild(row);
+    });
+  };
+  ['cases', 'signs', 'schemes'].forEach(kind => {
+    const area = box.querySelector('.didactic-form-area[data-area="' + kind + '"]');
+    area.querySelector('.didactic-form-add').onclick = () => openDidacticItemEditor(kind, null, getLesionMeta, (saved) => {
+      const id = genDidacticId(kind === 'signs' ? 'sign' : kind === 'schemes' ? 'scheme' : 'case');
+      setDraft(kind, upsertDidacticItem(drafts[kind], Object.assign({}, saved, { id })));
+      render(kind);
+      area.open = true;
+    });
+    render(kind);
+  });
+}
+function openDidacticItemEditor(kind, item, getLesionMeta, onSave){
+  const it = item || {};
+  const ov = document.createElement('div');
+  ov.className = 'overlay didactic-editor-overlay';
+  const title = { cases: item ? 'Editar caso clínico' : 'Adicionar caso clínico manual', signs: item ? 'Editar sinal radiológico' : 'Novo sinal radiológico', schemes: item ? 'Editar classificação/esquema' : 'Nova classificação/esquema' }[kind];
+  const field = (id, label, tag, ph) => '<div class="field"><label for="de-' + id + '">' + label + '</label>' + (tag === 'textarea' ? '<textarea id="de-' + id + '" rows="' + (id === 'content' ? 10 : 4) + '" placeholder="' + escAttr(ph || '') + '"></textarea>' : '<input id="de-' + id + '" placeholder="' + escAttr(ph || '') + '">') + '</div>';
+  let body = '';
+  if (kind === 'cases') body = field('title', 'Título *') + field('presentation', 'Apresentação clínica *', 'textarea')
+    + '<div class="lesion-form-grid-3">' + field('patientAge', 'Idade', 'input', 'ex.: 45') + field('patientSex', 'Sexo', 'input', 'Feminino/Masculino') + field('modality', 'Modalidade', 'input', 'TC, RM, US…') + '</div>'
+    + field('source', 'Fonte', 'input', 'opcional') + field('sourceUrl', 'URL', 'input', 'https://… (opcional)') + field('notes', 'Observações', 'textarea');
+  if (kind === 'signs') body = field('title', 'Nome do sinal *')
+    + '<div class="field"><label>Categoria diagnóstica *</label><div class="nrr-scope-options" role="radiogroup">'
+    + Object.entries(DIDACTIC_SIGN_STRENGTHS).map(([k, v]) => '<label class="nrr-scope-option"><input type="radio" name="de-strength" value="' + k + '"><span>' + v + '</span></label>').join('') + '</div></div>'
+    + field('description', 'Descrição', 'textarea') + field('modality', 'Modalidade', 'input', 'opcional') + field('notes', 'Observações', 'textarea') + field('referenceUrl', 'Referência (link)', 'input', 'https://… (opcional)');
+  if (kind === 'schemes') body = field('title', 'Título *', 'input', 'ex.: PI-RADS v2.1, Bosniak, estadiamento, conduta…')
+    + field('content', 'Conteúdo', 'textarea', '## Subtítulo\n- item de lista\n**negrito**\nLinha em branco separa parágrafos.')
+    + '<div class="field"><label>Links / referências</label><div id="de-links"></div><div style="display:flex;gap:6px;"><input id="de-link-label" placeholder="rótulo" style="flex:0 0 35%"><input id="de-link-url" placeholder="https://…"><button type="button" class="btn btn-ghost" id="de-link-add">+</button></div></div>';
+  if (kind !== 'cases') body += '<div class="field"><label>Imagens (legenda e fonte por imagem)</label><div id="de-images"></div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"><label class="btn btn-ghost" style="margin:0;">📤 Enviar imagem<input type="file" id="de-img-file" accept="image/*" multiple hidden></label>'
+    + '<input id="de-img-url" placeholder="ou cole a URL da imagem (https://…)" style="flex:1;min-width:180px;"><button type="button" class="btn btn-ghost" id="de-img-url-add">+ URL</button></div>'
+    + '<div class="didactic-meta" style="margin-top:4px;">Nunca envie imagem com nome, prontuário ou outro dado identificável do paciente.</div></div>';
+  ov.innerHTML = '<div class="modal didactic-editor-modal"><h2>' + esc(title) + '</h2>' + body
+    + '<div id="de-error" role="alert" style="color:var(--red);font-size:13px;min-height:16px;"></div>'
+    + '<div class="modal-actions"><button type="button" class="btn btn-ghost" id="de-cancel">Cancelar</button><button type="button" class="btn btn-primary" id="de-save">Salvar item</button></div></div>';
+  document.body.appendChild(ov);
+  const $ = (id) => ov.querySelector('#' + id);
+  const set = (id, v) => { const el = $('de-' + id); if (el) el.value = v == null ? '' : String(v); }; // via .value (nunca HTML)
+  ['title', 'presentation', 'patientAge', 'patientSex', 'modality', 'source', 'sourceUrl', 'notes', 'description', 'referenceUrl', 'content'].forEach(k => set(k, it[k]));
+  if (kind === 'signs') { const r = ov.querySelector('input[name="de-strength"][value="' + (it.strength || '') + '"]'); if (r) r.checked = true; }
+  let imgs = sortDidacticItems(it.images).map(x => Object.assign({}, x));
+  let links = (Array.isArray(it.links) ? it.links : []).map(x => Object.assign({}, x));
+  const renderImgs = () => {
+    const box = $('de-images'); if (!box) return;
+    box.innerHTML = '';
+    imgs.forEach((im, i) => {
+      const row = document.createElement('div');
+      row.className = 'didactic-edit-img';
+      row.innerHTML = '<img src="' + escAttr(im.thumb || im.data) + '" alt="">'
+        + '<div style="flex:1;min-width:0;display:grid;gap:4px;"><input class="de-cap" placeholder="legenda"><input class="de-cred" placeholder="fonte/referência (opcional)"></div>'
+        + '<div style="display:flex;flex-direction:column;gap:2px;"><button type="button" class="btn btn-ghost de-iu"' + (i === 0 ? ' disabled' : '') + '>↑</button><button type="button" class="btn btn-ghost de-id"' + (i === imgs.length - 1 ? ' disabled' : '') + '>↓</button><button type="button" class="link-row-del de-ix">✕</button></div>';
+      row.querySelector('.de-cap').value = im.caption || '';
+      row.querySelector('.de-cred').value = im.credit || '';
+      row.querySelector('.de-cap').oninput = (ev) => { im.caption = ev.target.value; im.updatedAt = Date.now(); };
+      row.querySelector('.de-cred').oninput = (ev) => { im.credit = ev.target.value; im.updatedAt = Date.now(); };
+      row.querySelector('.de-iu').onclick = () => { imgs.splice(i - 1, 0, imgs.splice(i, 1)[0]); renderImgs(); };
+      row.querySelector('.de-id').onclick = () => { imgs.splice(i + 1, 0, imgs.splice(i, 1)[0]); renderImgs(); };
+      row.querySelector('.de-ix').onclick = () => { imgs.splice(i, 1); renderImgs(); };
+      box.appendChild(row);
+    });
+  };
+  const renderLinks = () => {
+    const box = $('de-links'); if (!box) return;
+    box.innerHTML = '';
+    links.forEach((l, i) => {
+      const row = document.createElement('div'); row.className = 'link-row';
+      row.innerHTML = '<span class="link-row-label"></span><span class="link-row-url"></span><button type="button" class="link-row-del">✕</button>';
+      row.querySelector('.link-row-label').textContent = l.label || '';
+      row.querySelector('.link-row-url').textContent = l.url;
+      row.querySelector('.link-row-del').onclick = () => { links.splice(i, 1); renderLinks(); };
+      box.appendChild(row);
+    });
+  };
+  renderImgs(); renderLinks();
+  const err = (m) => { $('de-error').textContent = m || ''; };
+  if ($('de-link-add')) $('de-link-add').onclick = () => {
+    const url = didacticUrl($('de-link-url').value);
+    if (!url) { err('Link inválido (use http:// ou https://).'); return; }
+    links.push({ label: didacticStr($('de-link-label').value, DIDACTIC_LIMITS.title), url }); $('de-link-url').value = ''; $('de-link-label').value = ''; err(''); renderLinks();
+  };
+  if ($('de-img-url-add')) $('de-img-url-add').onclick = () => {
+    const url = didacticUrl($('de-img-url').value);
+    if (!url) { err('URL de imagem inválida (use http:// ou https://).'); return; }
+    if (imgs.length >= DIDACTIC_LIMITS.images) { err('Limite de ' + DIDACTIC_LIMITS.images + ' imagens por item.'); return; }
+    imgs.push({ id: genDidacticId('img'), data: url, source: 'url', caption: '', credit: '', createdAt: Date.now(), updatedAt: Date.now() });
+    $('de-img-url').value = ''; err(''); renderImgs();
+  };
+  if ($('de-img-file')) $('de-img-file').onchange = async (ev) => {
+    const files = Array.from(ev.target.files || []);
+    ev.target.value = '';
+    for (const f of files) {
+      if (imgs.length >= DIDACTIC_LIMITS.images) { err('Limite de ' + DIDACTIC_LIMITS.images + ' imagens por item.'); break; }
+      err('Enviando imagem…');
+      try {
+        const up = await uploadToCloudinary(f, typeof getLesionMeta === 'function' ? getLesionMeta() : {});
+        imgs.push({ id: genDidacticId('img'), data: up.data, thumb: up.thumb, publicId: up.publicId, assetId: up.assetId, width: up.width, height: up.height, format: up.format, bytes: up.bytes, source: 'cloudinary', caption: '', credit: '', createdAt: Date.now(), updatedAt: Date.now() });
+        err(''); renderImgs();
+      } catch (e) { err('Falha no upload: ' + String(e && e.message || e) + ' — você pode colar a URL da imagem.'); }
+    }
+  };
+  const close = () => ov.remove();
+  ov.onclick = (ev) => { if (ev.target === ov) close(); };
+  $('de-cancel').onclick = close;
+  $('de-save').onclick = () => {
+    const val = (id) => { const el = $('de-' + id); return el ? el.value : ''; };
+    const images = imgs.map((im, i) => Object.assign({}, im, { order: i }));
+    let res;
+    if (kind === 'cases') res = normalizeManualClinicalCase({ title: val('title'), presentation: val('presentation'), patientAge: val('patientAge'), patientSex: val('patientSex'), modality: val('modality'), source: val('source'), sourceUrl: val('sourceUrl'), notes: val('notes'), origin: it.origin || 'manual' });
+    if (kind === 'signs') { const r = ov.querySelector('input[name="de-strength"]:checked'); res = normalizeRadiologicSign({ title: val('title'), strength: r ? r.value : '', description: val('description'), modality: val('modality'), notes: val('notes'), referenceUrl: val('referenceUrl'), images }); }
+    if (kind === 'schemes') res = normalizeClassificationScheme({ title: val('title'), content: val('content'), links, images });
+    if (!res.ok) { err(res.error); return; }
+    const out = Object.assign({}, res.item); delete out.id;
+    // campo opcional apagado pelo usuário: undefined (some ao gravar); o
+    // resto do caso importado (addedAt, legacyKey…) é preservado pelo upsert.
+    if (kind === 'cases') ['patientAge', 'patientSex', 'modality', 'notes', 'presentation'].forEach(k => { if (!(k in out)) out[k] = undefined; });
+    close();
+    onSave(out);
   };
 }
 

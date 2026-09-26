@@ -127,6 +127,7 @@ function loadPure() {
     extractFunction(html, 'removeClinicalCaseFromLesion'),
     extractFunction(html, 'clinicalCaseIdentityKey'),
     extractFunction(html, 'unionClinicalCases'),
+    ...['genDidacticId', 'didacticItemTime', 'isDidacticItemVisible', 'sortDidacticItems', 'mergeDidacticItems', 'mergeClinicalCaseLists'].map((n) => extractFunction(html, n)), // 093
     extractFunction(html, 'clinicalCaseRowHtml'),
     extractFunction(html, 'clinicalCasesSectionHtml'),
     extractFunction(html, 'externalLinkConfirmModalHtml')

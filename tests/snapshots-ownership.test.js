@@ -676,7 +676,9 @@ test('MERGE PUSH (estático): servidor-only, union aditiva, preserva SRS/REVIEW/
 
 test('MERGE NAO-DESTRUTIVO (estático): clinicalCases usa UNION aditiva (nunca overwrite/perda ao sincronizar entre dispositivos)', () => {
   const src = MERGE_NONDESTRUCTIVE_FN.source;
-  assert.match(src, /unionClinicalCases\(local\.clinicalCases, remote\.clinicalCases\)/, 'casos clínicos são unidos, não sobrescritos por spread');
+  // 093: merge por item (casos com id) que envolve a MESMA união aditiva para os legados sem id
+  assert.match(src, /mergeClinicalCaseLists\(local\.clinicalCases, remote\.clinicalCases\)/, 'casos clínicos são mesclados, não sobrescritos por spread');
+  assert.match(html, /const legacy = unionClinicalCases\(L\.filter\(c => c && !c\.id\), R\.filter\(c => c && !c\.id\)\)/, 'legados continuam na união aditiva');
 });
 
 test('MERGE PUSH (estático): mergeEntryForImagePush usa o remoto como base e só soma imagens locais', () => {

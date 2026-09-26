@@ -91,6 +91,8 @@ const isValidAssignedAtFn = extractFunction(html, 'isValidAssignedAt');
 const adoptOldestFn = extractFunction(html, 'adoptOldestAssignedAt');
 const mergeForPushFn = extractFunction(html, 'mergeEntryForImagePush');
 const unionClinicalCasesFn = extractFunction(html, 'unionClinicalCases');
+// PROTEÇÃO 093 — merge por item do conteúdo didático (usado por mergeEntryNonDestructive).
+const didacticFns093 = ['genDidacticId', 'didacticItemTime', 'isDidacticItemVisible', 'sortDidacticItems', 'mergeDidacticItems', 'mergeClinicalCaseLists'].map((n) => extractFunction(html, n).source).join('\n');
 const clinicalCaseIdentityKeyFn = extractFunction(html, 'clinicalCaseIdentityKey');
 const normalizeExternalTitleFn = extractFunction(html, 'normalizeExternalTitle');
 const imageOwnerIdFn = extractFunction(html, 'imageOwnerIdV1');
@@ -415,6 +417,7 @@ function makeDevice(cloud, { seed = [] } = {}) {
     ${normalizeExternalTitleFn.source}
     ${clinicalCaseIdentityKeyFn.source}
     ${unionClinicalCasesFn.source}
+    ${didacticFns093}
     ${mergeEntryNonDestructiveFn.source}
     ${mergeForPushFn.source}
     ${mergeReviewFn.source}
@@ -1363,6 +1366,7 @@ test('072b PUSH inalterado: merge local→nuvem NÃO normaliza (bloqueio puro, c
     'let PUSH_IMAGE_OWNERSHIP_CONFLICTS = [];\n' +
     'function adoptOldestAssignedAt(){};\n' +
     'function unionClinicalCases(a){ return Array.isArray(a) ? a : []; };\n' +
+    'function clinicalCaseIdentityKey(){ return ""; }\n' + didacticFns093 + '\n' + // 093
     dedupeFn.source + '\n' +
     legacyHoldersFn.source + '\n' +
     tryNormalizeFn.source + '\n' +
@@ -4042,6 +4046,63 @@ test('PROTEÇÃO 091d - motivo editado no PC A chega ao PC B; edição posterior
   assert.equal(ra.requestText, 'versão final do B');
   assert.deepEqual(Array.from(ra.requestHistory, (h) => h.text), ['pedido R1', 'pedido R1 + revisar classificação', 'versão final do B']);
   assert.deepEqual(Object.keys(a.context.LESION_REVISIONS), ['R1'], 'mesmo reviewId, nenhuma revisão nova');
+});
+
+// ===========================================================================
+// PROTEÇÃO 093 — conteúdo didático por lesão atravessa o sync entre PCs
+// (write/read/reconcile/pull REAIS; merge por item com id + tombstone).
+// ===========================================================================
+function sign093(id, over) {
+  return Object.assign({ id, title: 'Sinal ' + id, strength: 'specific', description: '', images: [], order: 0, createdAt: 1000, updatedAt: 1000 }, over || {});
+}
+async function editLesion093(device, mutate) {
+  const e = device.context.DATA.find((x) => x.id === 'seed_1');
+  mutate(e);
+  e._userUpdatedAt = Date.now();
+  await device.context.saveData();
+  await device.context.pushToFirebaseNow();
+}
+const cloudLesion093 = (cloud) => Array.from(cloud.peekChunkItems(0)).find((x) => x.id === 'seed_1');
+const visible093 = (list) => JSON.parse(JSON.stringify(list || [])).filter((x) => x && !x.deletedAt).map((x) => x.id + ':' + x.title).sort();
+
+test('PROTEÇÃO 093 - sinal criado no PC A aparece no B; edição no B volta ao A; exclusão não ressuscita; ordem persiste; caso manual e classificação idem', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = makeDevice(cloud, { seed: [makeSeedEntry()] }); await a.boot();
+  const b = makeDevice(cloud, { seed: [makeSeedEntry()] }); await b.boot();
+  await editLesion093(a, (e) => {
+    e.radiologicSigns = [sign093('s1', { order: 0 }), sign093('s2', { order: 1, strength: 'pathognomonic', images: [{ id: 'i1', data: 'https://res.cloudinary.com/x/1.png', caption: 'c', credit: 'f', order: 0, createdAt: 1000, updatedAt: 1000 }] })];
+    e.classificationSchemes = [{ id: 'c1', title: 'PI-RADS v2.1', content: '## x', links: [], images: [], order: 0, createdAt: 1000, updatedAt: 1000 }];
+    e.clinicalCases = [{ id: 'case_1', origin: 'manual', title: 'Caso manual', presentation: 'p', order: 0, createdAt: 1000, updatedAt: 1000 }];
+  });
+  assert.deepEqual(visible093(cloudLesion093(cloud).radiologicSigns), ['s1:Sinal s1', 's2:Sinal s2']);
+  await b.context.syncFromFirebase();
+  let eb = b.context.DATA.find((x) => x.id === 'seed_1');
+  assert.deepEqual(visible093(eb.radiologicSigns), ['s1:Sinal s1', 's2:Sinal s2'], 'PC B recebe');
+  assert.equal(eb.radiologicSigns.find((x) => x.id === 's2').images[0].caption, 'c');
+  assert.deepEqual(visible093(eb.classificationSchemes), ['c1:PI-RADS v2.1']);
+  assert.deepEqual(visible093(eb.clinicalCases), ['case_1:Caso manual']);
+  // B edita s1 e inverte a ordem
+  await editLesion093(b, (e) => {
+    e.radiologicSigns = e.radiologicSigns.map((x) => x.id === 's1' ? Object.assign({}, x, { title: 'Sinal s1 editado', order: 1, updatedAt: 5000 }) : Object.assign({}, x, { order: 0, updatedAt: 5000 }));
+  });
+  await a.context.syncFromFirebase();
+  let ea = a.context.DATA.find((x) => x.id === 'seed_1');
+  assert.deepEqual(visible093(ea.radiologicSigns), ['s1:Sinal s1 editado', 's2:Sinal s2'], 'edição não some');
+  assert.deepEqual(JSON.parse(JSON.stringify(ea.radiologicSigns)).sort((x, y) => x.order - y.order).map((x) => x.id), ['s2', 's1'], 'ordem persiste');
+  // A exclui s2 (tombstone) e o caso manual
+  await editLesion093(a, (e) => {
+    e.radiologicSigns = e.radiologicSigns.map((x) => x.id === 's2' ? Object.assign({}, x, { deletedAt: 9000, updatedAt: 9000 }) : x);
+    e.clinicalCases = e.clinicalCases.map((x) => Object.assign({}, x, { deletedAt: 9000, updatedAt: 9000 }));
+  });
+  // B (sem puxar) ainda tem s2 visível e salva outra coisa: a exclusão NÃO ressuscita
+  await editLesion093(b, (e) => { e.notes = 'edição qualquer do PC B'; });
+  const cl = cloudLesion093(cloud);
+  assert.deepEqual(visible093(cl.radiologicSigns), ['s1:Sinal s1 editado'], 'excluído não volta pelo PC desatualizado');
+  assert.deepEqual(visible093(cl.clinicalCases), []);
+  eb = b.context.DATA.find((x) => x.id === 'seed_1');
+  assert.deepEqual(visible093(eb.radiologicSigns), ['s1:Sinal s1 editado'], 'PC B converge');
+  assert.equal(cl.notes, 'edição qualquer do PC B');
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');

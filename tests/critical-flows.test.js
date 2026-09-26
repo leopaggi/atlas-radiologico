@@ -547,10 +547,16 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // 2026-09-26): resolveReviewManually() no modulo da Central antes da
   // primeira ancora; +32 entre loadData e o importHandler: botao/confirmacao
   // "✓ Marcar como resolvida" nas listas da Central e no resumo do ⚠.
-  assert.equal(recovery.line, 9009);
-  assert.equal(brokenArtifacts.line, 8999);
-  assert.equal(loadData.line, 11560);
-  assert.equal(importHandler.line, 15848);
+  // +37 nas tres primeiras ancoras / +47 no importHandler (Protecao 093,
+  // 2026-09-26): CSS do conteudo didatico, merge por item de clinicalCases/
+  // radiologicSigns/classificationSchemes em mergeEntryNonDestructive e a
+  // fusao 091c preservando sinais/classificacoes — antes da primeira ancora;
+  // +10 entre loadData e o importHandler: blocos no detalhe, secao do
+  // formulario (drafts + save) e o bloco pos-resposta do Quiz.
+  assert.equal(recovery.line, 9046);
+  assert.equal(brokenArtifacts.line, 9036);
+  assert.equal(loadData.line, 11597);
+  assert.equal(importHandler.line, 15895);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

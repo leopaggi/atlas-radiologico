@@ -90,6 +90,7 @@ function loadPure() {
     extractFunction(html, 'removeClinicalCaseFromLesion'),
     extractFunction(html, 'clinicalCaseIdentityKey'),
     extractFunction(html, 'unionClinicalCases'),
+    ...['genDidacticId', 'didacticItemTime', 'isDidacticItemVisible', 'sortDidacticItems', 'mergeDidacticItems', 'mergeClinicalCaseLists'].map((n) => extractFunction(html, n)), // 093
     extractFunction(html, 'findExternalImportCandidatesForLink'),
     extractFunction(html, 'searchExistingLesionsForLink'),
     extractFunction(html, 'externalLinkCandidateRowHtml'),
@@ -606,7 +607,9 @@ test('REGRESSAO: vincular a lesao existente e a unica funcao desta extensao que 
 
 test('REGRESSAO: mergeEntryNonDestructive integra clinicalCases (declarado antes de mais nada quebrar)', () => {
   const src = stripJsComments(extractFunction(html, 'mergeEntryNonDestructive'));
-  assert.match(src, /unionClinicalCases\(local\.clinicalCases, remote\.clinicalCases\)/);
+  // 093: merge por item (casos com id) que envolve a MESMA união de sempre para os legados sem id
+  assert.match(src, /mergeClinicalCaseLists\(local\.clinicalCases, remote\.clinicalCases\)/);
+  assert.match(extractFunction(html, 'mergeClinicalCaseLists'), /unionClinicalCases\(L\.filter\(c => c && !c\.id\), R\.filter\(c => c && !c\.id\)\)/);
 });
 
 test('REGRESSAO: openDetail exibe a secao de casos clinicos sem alterar o fluxo de excluir/editar', () => {

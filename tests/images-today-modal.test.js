@@ -410,6 +410,7 @@ function loadDetail() {
     renderReviewBar: () => {},
     renderResults: () => {},
     wireClinicalCasesToggle: () => {},
+    radiologicSignsSectionHtml: () => '', classificationSchemesSectionHtml: () => '', wireDidacticImages: () => {}, // 093
     closeOverlay: () => { calls.closeOverlay++; },
     openForm: () => { calls.openForm++; },
     openImagesTodayModal: () => { calls.openImagesTodayModal++; },

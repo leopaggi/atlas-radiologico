@@ -8,21 +8,21 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
-*Atualizado em 2026-09-26, junto do commit "Protecao 091g: reutiliza aba do Atlas via BroadcastChannel".*
+*Atualizado em 2026-09-26, junto do commit "Protecao 093: conteudo didatico por lesao".*
 
 - **Branch local de trabalho:** `master` (publicação: `git push origin master:main`).
-- **origin/main antes da 091g:** `984ce42` (Protecao 091f). **Último commit:** Protecao 091g (código + testes + este checkpoint; hash exato em `git log -1`).
-- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 091g:** 1391 testes · 1383 pass · 3 fail conhecidos · 5 todo (era 1380/1372/3/5 após a 091f; +11 `atlas-broadcast-import`). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
-  - Medido no ambiente remoto (sem os arquivos protegidos): 1381 · 1346 · 30 · 5 (base `984ce42` no mesmo ambiente: 1370 · 1335 · 30 · 5; conjunto de falhas idêntico, arquivo a arquivo). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
+- **origin/main antes da 093:** `61fc2c1` (fix de boot do userscript 1.4.2). **Último commit:** Protecao 093 (código + testes + este checkpoint; hash exato em `git log -1`).
+- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 093:** 1413 testes · 1405 pass · 3 fail conhecidos · 5 todo (+11 `lesion-didactic-content`, +1 multi-PC; +3 `userscript-match-hosts` e +7 `userscript-boot-regression` desde a 091g). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
+  - Medido no ambiente remoto (sem os arquivos protegidos): 1403 · 1368 · 30 · 5 (base `61fc2c1` no mesmo ambiente: 1391 · 1356 · 30 · 5; conjunto de falhas idêntico, arquivo a arquivo). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
 - **Validação real do usuário após a 091 (navegador):** `LESION_REVISIONS` sincronizou entre navegadores/PCs; as pendências apareceram no Edge; a lógica da 091 funciona; só foram encontrados problemas visuais (contraste/alinhamento) — corrigidos na 091b.
 - **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 091b (só CSS/markup). Nenhuma escrita deliberada nesta tarefa. A 091 não cria campo/documento novo (pendências gerais vivem em `lesionRevisions`, sincronizado desde a 084). A 090 adicionou `reviewProgress` (histórico compacto do Quiz, até 8 tentativas por lesão) e `reviewOverride` (override manual) no documento principal; a 089 adicionou `reviewUpdatedAt` (carimbos de mudança manual do estado de estudo) no documento principal, na próxima publicação real. A 088 adicionou só o campo opcional `clinicalContext` DENTRO do objeto da imagem (viaja nos chunks como qualquer metadado de imagem). A 087 reaproveitou `img.label`/`panels[].seq`; a 086 também não (alerta derivado de `lesionRevisions`). Desde a 085 o documento principal tem `orderUpdatedAt`.
-- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), 088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44), 089 (estado de estudo estável — seção 45), 090 (estado AUTOMÁTICO pelo Quiz + override manual — seção 46; corrige o modelo da 089), 091 (pendências gerais do Atlas na Central de Revisões — seção 47), 091b (ajuste visual após validação real no navegador — seção 48), 091c (fusão clínica controlada de 4 grupos de duplicatas aprovados; mapa `lesionMerges` sincronizado — seção 49), **091d (editar motivo de revisão ativa com histórico, ⚠ clicável, importador externo com nome PT/enTerm/descrição/tags e "✨ Revisar com IA" criando revisão real — seção 50)**, **091e (importações do Radiopaedia reutilizam a aba já aberta do Atlas — seção 51)**, **091f (título do Radiopaedia sem branding + alias Paraovarian cyst; "✓ Marcar como resolvida" — seção 52)**, **091g (reuso da aba do Atlas via canal: ponte do userscript + BroadcastChannel; alvo nomeado vira fallback — seção 53)**.
-- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087); `img.clinicalContext` é pré-diagnóstico, digitado pelo usuário, visível no Quiz antes e depois da resposta — a descrição (`label`) continua só depois (088); REVIEW (Não revisado/Revisando/Dominado) é AUTOMÁTICO pelo histórico do Quiz (`REVIEW_PROGRESS`, regra determinística `replayAutoReview`) salvo override MANUAL explícito (`REVIEW_OVERRIDE`), que o Quiz nunca sobrescreve; boot/render/pull não mudam nada sem dado novo; conflitos por recência, nunca Math.max (089/090); pendência GERAL (`scope:'global'`, `lesionId:null`) é só um pedido: nunca aplica nada em DATA (`global_review_has_no_direct_target`), nunca gera ⚠ em lesão, conclusão é humana (091)**. **091c:** id presente em `LESION_MERGES` nunca volta (nem pelo SEED, nem por PC desatualizado, nem por backup antigo); o mapa só cresce; a única exceção de ownership de imagem é o fold desse mapa (imagens marcadas com `mergedFromLesionId`). **091d:** o motivo (`requestText`) de revisão ativa é editável com `requestHistory` (união no merge) e carimbo próprio `requestTextUpdatedAt` (editar texto nunca mexe em `updatedAt`/status/🔔); não há IA integrada — "✨ Revisar com IA" só cria revisão na Central (ponte manual). **091f:** fusão clínica (091c) NÃO conclui revisão — ela só é redirecionada ao keeper; concluir é sempre ação humana ("✓ Marcar como resolvida" → `accepted`, sem tocar DATA).
+- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), 088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44), 089 (estado de estudo estável — seção 45), 090 (estado AUTOMÁTICO pelo Quiz + override manual — seção 46; corrige o modelo da 089), 091 (pendências gerais do Atlas na Central de Revisões — seção 47), 091b (ajuste visual após validação real no navegador — seção 48), 091c (fusão clínica controlada de 4 grupos de duplicatas aprovados; mapa `lesionMerges` sincronizado — seção 49), **091d (editar motivo de revisão ativa com histórico, ⚠ clicável, importador externo com nome PT/enTerm/descrição/tags e "✨ Revisar com IA" criando revisão real — seção 50)**, **091e (importações do Radiopaedia reutilizam a aba já aberta do Atlas — seção 51)**, **091f (título do Radiopaedia sem branding + alias Paraovarian cyst; "✓ Marcar como resolvida" — seção 52)**, **091g (reuso da aba do Atlas via canal: ponte do userscript + BroadcastChannel; alvo nomeado vira fallback — seção 53)**, userscript 1.4.1/1.4.2 (www + regressão de boot — seção 54), **093 (conteúdo didático por lesão: casos manuais, sinais radiológicos, classificações e esquemas — seção 55)**.
+- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087); `img.clinicalContext` é pré-diagnóstico, digitado pelo usuário, visível no Quiz antes e depois da resposta — a descrição (`label`) continua só depois (088); REVIEW (Não revisado/Revisando/Dominado) é AUTOMÁTICO pelo histórico do Quiz (`REVIEW_PROGRESS`, regra determinística `replayAutoReview`) salvo override MANUAL explícito (`REVIEW_OVERRIDE`), que o Quiz nunca sobrescreve; boot/render/pull não mudam nada sem dado novo; conflitos por recência, nunca Math.max (089/090); pendência GERAL (`scope:'global'`, `lesionId:null`) é só um pedido: nunca aplica nada em DATA (`global_review_has_no_direct_target`), nunca gera ⚠ em lesão, conclusão é humana (091)**. **091c:** id presente em `LESION_MERGES` nunca volta (nem pelo SEED, nem por PC desatualizado, nem por backup antigo); o mapa só cresce; a única exceção de ownership de imagem é o fold desse mapa (imagens marcadas com `mergedFromLesionId`). **091d:** o motivo (`requestText`) de revisão ativa é editável com `requestHistory` (união no merge) e carimbo próprio `requestTextUpdatedAt` (editar texto nunca mexe em `updatedAt`/status/🔔); não há IA integrada — "✨ Revisar com IA" só cria revisão na Central (ponte manual). **091f:** fusão clínica (091c) NÃO conclui revisão — ela só é redirecionada ao keeper; concluir é sempre ação humana ("✓ Marcar como resolvida" → `accepted`, sem tocar DATA). **093:** `clinicalCases`/`radiologicSigns`/`classificationSchemes` — itens com `id` estável, `order`, `createdAt`/`updatedAt` e exclusão por tombstone `deletedAt` (nunca apagar do array); merge por item; sinais/classificações NUNCA renderizados no Quiz antes da resposta; imagens didáticas fora de `entry.images`.
 - **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 091b. Não restaurar sem decisão explícita do usuário.
 - **Passo manual pós-deploy (085):** ordens personalizadas feitas ANTES da 085 não têm carimbo. No PC que tem a ordem CORRETA, fazer uma reordenação qualquer (ex.: descer uma seção e subir de volta; idem um sítio em cada seção personalizada) — isso carimba e publica. Depois abrir o outro PC: ordem default/automática cede para a da nuvem sozinha. (Revisões pré-084: mesma lógica, ver seção 40.)
 - **Passo manual pendente (091c):** a fusão NÃO foi executada no ambiente remoto (sem acesso aos dados reais). No navegador com os dados reais: 💾 exportar backup JSON → Ferramentas avançadas → "🧬 fusões clínicas aprovadas" → conferir o relatório (ids reais, keeper, motivo) → "Fundir". Depois abrir o outro PC e conferir que ele converge sozinho.
 - **Passo manual (091e/091f/091g):** atualizar o userscript no Tampermonkey para a **v1.4.2** (`tools/radiopaedia-to-atlas.user.js`) e ACEITAR as novas permissões (`@match` do Atlas e de www.radiopaedia.org + `GM_setValue`/`GM_addValueChangeListener`/`GM_removeValueChangeListener`) — sem isso o reuso da aba não funciona (cai no fallback que abre aba). Título sem branding (091f) também é limpo pelo Atlas ao receber. Conferir no DevTools do Radiopaedia a linha `[Atlas userscript 1.4.2] ativo`.
-- **Próximo passo exato:** executar no navegador a fusão da 091c (passo manual acima), depois Proteção 092 (ver BACKLOG abaixo). Pendente de análise separada (NÃO alterado na 091d): semântica de "AUTO Dominado sem histórico".
+- **Próximo passo exato:** executar no navegador a fusão da 091c (passo manual acima), depois Proteção 092 (sync de metadados de imagens entre PCs — incluir as imagens didáticas da 093, que já têm id/carimbos por imagem). Pendente de análise separada: "AUTO Dominado sem histórico".
 
 ## BACKLOG
 
@@ -2545,3 +2545,93 @@ paraovariano", enTerm); descrição/tags; Revisar com IA; payload idêntico.
   Atlas em leopaggi.github.io servido localmente: botão presente em todos os
   cenários, reaparece após remoção, 3 envios com o Atlas aberto = 2 abas
   (modal "Apendicite aguda" na aba existente), Atlas fechado = 1 aba nova.
+
+## 55. Proteção 093 — Conteúdo didático por lesão (2026-09-26)
+
+### O que é
+Três áreas didáticas por lesão, editáveis no formulário da lesão e
+exibidas no detalhe e no Quiz (pós-resposta):
+1. **Casos clínicos exemplo** — além dos importados (Radiopaedia), agora
+   **casos manuais** na MESMA lista/visual (`origin: 'manual'`; importados
+   antigos sem o campo = importados). Campos: título*, apresentação
+   clínica* (obrigatória só no manual), fonte, URL (http/https), idade,
+   sexo, modalidade, observações. Criar/editar/excluir/reordenar. O
+   contador conta importados + manuais (sem os excluídos).
+2. **Sinais radiológicos** — vários por lesão: nome*, categoria
+   diagnóstica* (Sugestivo/Específico/Patognomônico — selo discreto com as
+   cores do tema), descrição, modalidade, observações, link de referência,
+   várias imagens (legenda + fonte por imagem), ordem manual.
+3. **Classificações e esquemas** — título*, conteúdo formatado (seguro:
+   "## subtítulo", "- lista", "**negrito**", parágrafos; tudo escapado),
+   links/referências, várias imagens com legenda/fonte, ordem manual. Uso
+   livre (PI-RADS, Bosniak, O-RADS, LI-RADS, Atlanta, estadiamento,
+   critérios, algoritmos, conduta, tratamento…).
+
+### Schema (na própria lesão; sincroniza junto)
+- `clinicalCases[]` (existente) + opcionais `id`, `origin`, `order`,
+  `createdAt`, `updatedAt`, `deletedAt`, `legacyKey`, `notes`.
+- `radiologicSigns[]`: `{id, title, strength: suggestive|specific|
+  pathognomonic, description, modality, notes, referenceUrl, images[],
+  order, createdAt, updatedAt[, deletedAt]}`.
+- `classificationSchemes[]`: `{id, title, content, links[{label,url}],
+  images[], order, createdAt, updatedAt[, deletedAt]}`.
+- Imagem didática: `{id, data (URL http/https), thumb, publicId, assetId,
+  width, height, format, bytes, source: cloudinary|url, caption, credit,
+  order, createdAt, updatedAt}` — **sem** `lesionId`/`lesionName` e nunca em
+  `entry.images` (fora de ownership, tombstones de imagem, galeria e Quiz
+  principal). Nunca base64 no documento. Limite 20 imagens por item.
+- Identidade = `id` estável (nunca índice). Campos ausentes = `[]`
+  (sem migração). Caso legado ganha `id` + `legacyKey` (identidade antiga
+  url/título) só quando o usuário o gerencia (editar/excluir/ordenar).
+
+### Sync / multi-PC
+- `mergeEntryNonDestructive`: `mergeDidacticItems` (união por id; mesmo id
+  → carimbo mais novo `updatedAt`/`deletedAt` vence o item inteiro;
+  empate → serialização canônica; determinístico nos dois PCs) para sinais
+  e classificações; `mergeClinicalCaseLists` para casos (com id → merge por
+  item; legados sem id → a MESMA `unionClinicalCases` de sempre; legado que
+  corresponde a um item gerenciado do outro PC, por url/título ou
+  `legacyKey`, cede ao gerenciado — inclusive exclusão).
+- Exclusão = tombstone `deletedAt` mantido no array → não ressuscita por PC
+  desatualizado. Reimportar a URL de um caso excluído REVIVE o mesmo id
+  (carimbo mais novo).
+- Ordem = `order` por item (reordenar carimba os itens movidos).
+- Imagens: carimbos por imagem já existem (base para a 092); hoje a edição
+  concorrente do MESMO item em dois PCs resolve pelo item inteiro (mais novo).
+- Fusão clínica (091c): o keeper recebe sinais/classificações do fundido
+  (por id).
+- Validado com write/read/pull reais (multi-device-sync): criar no A → B
+  recebe; editar/reordenar no B → A recebe; excluir no A + PC B desatualizado
+  salvando → nada ressuscita.
+
+### UI
+- Detalhe (ordem): conteúdo principal → Casos clínicos exemplo (n) →
+  Sinais radiológicos (n) → Classificações e esquemas (n); blocos
+  recolhíveis (`<details>`), cada sinal/classificação também recolhível;
+  vazio = bloco oculto na leitura. Imagem abre no lightbox.
+- Formulário: seção "Conteúdo didático" com 3 áreas recolhíveis (contador,
+  ↑ ↓ ✏ ✕ por item, "+ Adicionar …") e editor por item em submodal.
+  Upload pelo MESMO `uploadToCloudinary` (ou URL da imagem). Tudo draft até
+  o Salvar da lesão (lesão nova grava só o que o usuário adicionou).
+  Aviso: nunca enviar imagem com dado identificável do paciente.
+
+### Quiz
+- Sinais radiológicos e Classificações e esquemas **não são renderizados**
+  antes da resposta (não existem no DOM: nada de CSS escondido). Aparecem
+  no feedback pós-resposta (`renderDetail` → `lesionDidacticQuizHtml`),
+  junto da descrição da lesão, com imagens. Casos clínicos: comportamento
+  atual (não aparecem no Quiz). Conferido no Chromium: antes = 0 ocorrência
+  de "Patognom"/título/imagem; depois = blocos e imagens; 1 overlay só.
+
+### Arquivos / testes
+- `index.html`; `tests/lesion-didactic-content.test.js` (novo, 11 — cobre
+  os 33 itens pedidos); `tests/multi-device-sync.test.js` (+1 multi-PC;
+  funções 093 no motor); harnesses: `clinical-cases`, `external-import`,
+  `device-bootstrap`, `images-today-modal`, `snapshots-ownership` (merge por
+  item envolve a união dos legados), `critical-flows` (âncoras
+  +37/+37/+37/+47); `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`.
+- Suíte (remoto): 1403 · 1368 · 30 · 5 (base 1391 · 1356 · 30 · 5; mesmas
+  falhas). Userscript não alterado.
+- Risco residual: conteúdo muito longo aumenta o documento/chunk da lesão
+  no Firestore (limites por campo aplicados; `checkChunkSize` existente
+  continua barrando envio grande demais).

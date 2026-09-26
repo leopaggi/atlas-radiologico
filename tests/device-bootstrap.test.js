@@ -83,6 +83,8 @@ const stableKeyFn = extractFunction(html, 'stableImageKeyV208');
 const isValidAssignedAtFn = extractFunction(html, 'isValidAssignedAt');
 const adoptOldestFn = extractFunction(html, 'adoptOldestAssignedAt');
 const unionClinicalCasesFn = extractFunction(html, 'unionClinicalCases');
+// PROTEÇÃO 093 — merge por item do conteúdo didático (usado por mergeEntryNonDestructive).
+const didacticFns093 = ['genDidacticId', 'didacticItemTime', 'isDidacticItemVisible', 'sortDidacticItems', 'mergeDidacticItems', 'mergeClinicalCaseLists'].map((n) => extractFunction(html, n).source).join('\n');
 const clinicalCaseIdentityKeyFn = extractFunction(html, 'clinicalCaseIdentityKey');
 const normalizeExternalTitleFn = extractFunction(html, 'normalizeExternalTitle');
 // ALTERAÇÃO 078 (2026-09-24): "carregar da nuvem" em device novo agora adota
@@ -613,7 +615,7 @@ function makeMergeContext() {
   vm.runInContext(
     stableKeyFn.source + '\n' + identityKeysFn.source + '\n' + isValidAssignedAtFn.source + '\n' +
     adoptOldestFn.source + '\n' + unionFn.source + '\n' + dedupeFn.source + '\n' +
-    normalizeExternalTitleFn.source + '\n' + clinicalCaseIdentityKeyFn.source + '\n' + unionClinicalCasesFn.source + '\n' +
+    normalizeExternalTitleFn.source + '\n' + clinicalCaseIdentityKeyFn.source + '\n' + unionClinicalCasesFn.source + '\n' + didacticFns093 + '\n' +
     'let PULL_IMAGE_OWNERSHIP_CONFLICTS=[];\n' +
     mergeEntryNonDestructiveFn.source,
     ctx, { filename: 'merge-entry.js' }
