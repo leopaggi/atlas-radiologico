@@ -21,7 +21,7 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 - **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 091b. Não restaurar sem decisão explícita do usuário.
 - **Passo manual pós-deploy (085):** ordens personalizadas feitas ANTES da 085 não têm carimbo. No PC que tem a ordem CORRETA, fazer uma reordenação qualquer (ex.: descer uma seção e subir de volta; idem um sítio em cada seção personalizada) — isso carimba e publica. Depois abrir o outro PC: ordem default/automática cede para a da nuvem sozinha. (Revisões pré-084: mesma lógica, ver seção 40.)
 - **Passo manual pendente (091c):** a fusão NÃO foi executada no ambiente remoto (sem acesso aos dados reais). No navegador com os dados reais: 💾 exportar backup JSON → Ferramentas avançadas → "🧬 fusões clínicas aprovadas" → conferir o relatório (ids reais, keeper, motivo) → "Fundir". Depois abrir o outro PC e conferir que ele converge sozinho.
-- **Passo manual (091e/091f/091g):** atualizar o userscript no Tampermonkey para a **v1.4.0** (`tools/radiopaedia-to-atlas.user.js`) e ACEITAR as novas permissões (`@match` do Atlas + `GM_setValue`/`GM_addValueChangeListener`/`GM_removeValueChangeListener`) — sem isso o reuso da aba não funciona (cai no fallback que abre aba). Título sem branding (091f) também é limpo pelo Atlas ao receber.
+- **Passo manual (091e/091f/091g):** atualizar o userscript no Tampermonkey para a **v1.4.2** (`tools/radiopaedia-to-atlas.user.js`) e ACEITAR as novas permissões (`@match` do Atlas e de www.radiopaedia.org + `GM_setValue`/`GM_addValueChangeListener`/`GM_removeValueChangeListener`) — sem isso o reuso da aba não funciona (cai no fallback que abre aba). Título sem branding (091f) também é limpo pelo Atlas ao receber. Conferir no DevTools do Radiopaedia a linha `[Atlas userscript 1.4.2] ativo`.
 - **Próximo passo exato:** executar no navegador a fusão da 091c (passo manual acima), depois Proteção 092 (ver BACKLOG abaixo). Pendente de análise separada (NÃO alterado na 091d): semântica de "AUTO Dominado sem histórico".
 
 ## BACKLOG
@@ -2514,3 +2514,34 @@ paraovariano", enTerm); descrição/tags; Revisar com IA; payload idêntico.
   existente ("Cisto paraovariano"); Atlas fechado → 1º envio abriu exatamente
   1 aba (`window.name = atlas-radiologico`). Validação final depende do
   Tampermonkey real do usuário.
+
+## 54. Userscript 1.4.2 — correção da regressão de boot da 091g (2026-09-26)
+
+- Relato real do usuário (Chrome + Tampermonkey): a v1.3.0 (`984ce42`) mostra
+  o botão "📥 Enviar ao Atlas"; a v1.4.0/1.4.1 não.
+- Não reproduzido aqui: o arquivo COMPLETO da 1.4.1 montou o botão em todos
+  os cenários do Chromium (mundo da página e mundo ISOLADO como o sandbox do
+  Tampermonkey; GM_* presente/ausente/lançando erro; sem BroadcastChannel).
+  O que só o Tampermonkey real interpreta é o cabeçalho (novos `@grant GM_*`
+  e `@match`). Não foi possível apontar a causa exata sem o navegador do
+  usuário.
+- 1.4.2 = texto EXATO da 1.3.0 + o mínimo da ponte:
+  - boot do botão idêntico ao da 1.3.0 (`mountButton`, `readyState`/
+    `DOMContentLoaded`, `setInterval(mountButton, 5000)`), com NADA da ponte
+    antes; só pulado na página do Atlas;
+  - GM_*/BroadcastChannel só no clique (`try` → fallback `window.open`
+    nomeado) ou na página do Atlas (ponte isolada em `try`, depois do boot);
+  - `defaultBridgeEnv` nunca lança;
+  - classe de acentos de `titleTokens` passou de caracteres invisíveis
+    literais (U+0300..U+036F, frágeis em copiar/colar) para `\u0300-\u036f`
+    (mesma semântica);
+  - linha de diagnóstico no console após o boot.
+- Payload, título (091f), tradução, sourceUrl e regras do Atlas inalterados.
+- Testes: `userscript-boot-regression` (novo, 7: arquivo completo em DOM
+  simulado — botão nos 2 hosts com ponte/sem BC/sem GM/GM lançando/Atlas
+  fechado/página carregando; reaparece via setInterval; reuso de aba;
+  fallback; título; payload idêntico). Chromium real, arquivo completo no
+  mundo isolado, URLs radiopaedia.org e www.radiopaedia.org interceptadas e
+  Atlas em leopaggi.github.io servido localmente: botão presente em todos os
+  cenários, reaparece após remoção, 3 envios com o Atlas aberto = 2 abas
+  (modal "Apendicite aguda" na aba existente), Atlas fechado = 1 aba nova.

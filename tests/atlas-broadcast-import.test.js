@@ -276,7 +276,8 @@ test('091g userscript: roda também na página do Atlas SÓ como ponte (sem bot�
   assert.match(userscript, /@match\s+https:\/\/leopaggi\.github\.io\/atlas-radiologico\/\*/);
   for (const g of ['GM_setValue', 'GM_addValueChangeListener', 'GM_removeValueChangeListener']) assert.match(userscript, new RegExp('@grant\\s+' + g));
   assert.match(userscript, /@version\s+1\.4\.\d+/);
-  assert.match(userscript, /if \(isAtlasPage\(\)\) \{\s*startAtlasBridge\(defaultBridgeEnv\(\)\);\s*return;\s*\}/);
+  // 1.4.2: a ponte só inicia DEPOIS do boot do botão e isolada em try/catch (ver userscript-boot-regression)
+  assert.match(userscript, /if \(onAtlasPage\) \{\s*try \{ startAtlasBridge\(defaultBridgeEnv\(\)\); \} catch \(_\) \{\}\s*\}/);
   assert.doesNotMatch(userscript, /window\.open\([^)]*(_blank|noopener)/);
   assert.doesNotMatch(html + userscript, /openai|anthropic\.com|generativelanguage/i);
 });

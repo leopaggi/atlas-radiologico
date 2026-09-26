@@ -32,8 +32,8 @@ test('continua rodando no Atlas (ponte 091g) e não se espalha para outras pági
   assert.equal(matches.length, 3);
 });
 
-test('versão 1.4.1 e o Atlas aceita sourceUrl dos dois hosts', () => {
-  assert.match(header, /@version\s+1\.4\.1\b/);
+test('versão 1.4.x e o Atlas aceita sourceUrl dos dois hosts', () => {
+  assert.match(header, /@version\s+1\.4\.\d+\b/);
   const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
   assert.match(html, /const EXTERNAL_IMPORT_ALLOWED_HOSTS = \['radiopaedia\.org', 'www\.radiopaedia\.org'\];/);
 });

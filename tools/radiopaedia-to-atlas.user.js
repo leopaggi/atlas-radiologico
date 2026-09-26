@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.4.1
+// @version      1.4.2
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e entrega o caso à aba do Atlas já aberta (ou abre o Atlas com o payload no fragmento da URL). Não captura imagens, não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -91,7 +91,7 @@
   }
 
   function titleTokens(s) {
-    return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .split(/[^a-z0-9]+/).filter(function (t) { return t.length >= 3; });
   }
 
@@ -226,9 +226,13 @@
     }
     var base = ATLAS_URL.replace(/\/+$/, '') + '/';
     var url = base + '#external-import=' + encodePayload(payload);
-    // 091g: primeiro tenta a aba do Atlas JÁ ABERTA (ponte); sem resposta,
-    // abre como antes (alvo nomeado da 091e).
-    sendToAtlasViaBridge(payload, url, defaultBridgeEnv());
+    // 1.4.2: a ponte (091g) só é tocada AQUI, depois do clique. Qualquer
+    // erro nela cai no fallback da 1.3.0 (alvo nomeado da 091e).
+    try {
+      sendToAtlasViaBridge(payload, url, defaultBridgeEnv());
+    } catch (e) {
+      openAtlasWindow(url);
+    }
   }
 
   /* 091g — PONTE para a aba do Atlas já aberta. BroadcastChannel só liga
@@ -252,7 +256,8 @@
   }
 
   function defaultBridgeEnv() {
-    var hasGM = typeof GM_setValue === 'function' && typeof GM_addValueChangeListener === 'function';
+    var hasGM = false;
+    try { hasGM = typeof GM_setValue === 'function' && typeof GM_addValueChangeListener === 'function'; } catch (_) {}
     return {
       available: hasGM,
       setValue: hasGM ? function (k, v) { GM_setValue(k, v); } : null,
@@ -262,7 +267,7 @@
       openWindow: openAtlasWindow,
       notify: showSentNotice,
       timeoutMs: BRIDGE_TIMEOUT_MS,
-      BroadcastChannel: typeof BroadcastChannel === 'function' ? BroadcastChannel : null
+      BroadcastChannel: (function () { try { return typeof BroadcastChannel === 'function' ? BroadcastChannel : null; } catch (_) { return null; } })()
     };
   }
 
@@ -370,17 +375,25 @@
     (document.body || document.documentElement).appendChild(btn);
   }
 
-  // 091g: na página do Atlas este script é SÓ a ponte (sem botão).
-  if (isAtlasPage()) {
-    startAtlasBridge(defaultBridgeEnv());
-    return;
-  }
+  // 1.4.2: o boot do botão é o da 1.3.0, sem nada da ponte antes dele.
+  var onAtlasPage = false;
+  try { onAtlasPage = isAtlasPage(); } catch (_) {}
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', mountButton);
-  } else {
-    mountButton();
+  if (!onAtlasPage) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', mountButton);
+    } else {
+      mountButton();
+    }
+    // Radiopaedia usa navegação parcial em alguns fluxos — reinsere se sumir.
+    setInterval(mountButton, 5000);
   }
-  // Radiopaedia usa navegação parcial em alguns fluxos — reinsere se sumir.
-  setInterval(mountButton, 5000);
+  // Diagnóstico (DevTools do Chrome): confirma que o script rodou nesta página.
+  try { console.info('[Atlas userscript 1.4.2] ativo — ' + (onAtlasPage ? 'ponte do Atlas' : 'botão Enviar ao Atlas')); } catch (_) {}
+
+  // 091g: na página do Atlas este script é SÓ a ponte (sem botão). Isolada:
+  // qualquer erro aqui fica aqui (o Radiopaedia cai no fallback por timeout).
+  if (onAtlasPage) {
+    try { startAtlasBridge(defaultBridgeEnv()); } catch (_) {}
+  }
 })();
