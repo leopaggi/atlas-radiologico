@@ -506,10 +506,14 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // (normalizeCustomSequence/addSequenceToImageLabel/collageSeqSelectHtml),
   // linha "Outra / personalizada" no editor e campo livre no quadro entre
   // loadData e o importHandler.
-  assert.equal(recovery.line, 7952);
-  assert.equal(brokenArtifacts.line, 7942);
-  assert.equal(loadData.line, 10499);
-  assert.equal(importHandler.line, 14317);
+  // +8 nas tres primeiras ancoras / +64 no importHandler (Protecao 088,
+  // 2026-09-26): CSS do contexto clinico por imagem antes da primeira ancora;
+  // campos no editor, preservacao na troca/salvar entre loadData e o
+  // importHandler.
+  assert.equal(recovery.line, 7960);
+  assert.equal(brokenArtifacts.line, 7950);
+  assert.equal(loadData.line, 10507);
+  assert.equal(importHandler.line, 14381);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

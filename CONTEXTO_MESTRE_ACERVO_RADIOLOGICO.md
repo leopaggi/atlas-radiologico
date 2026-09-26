@@ -8,25 +8,25 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
-*Atualizado em 2026-09-26, junto do commit "Protecao 087: permite sequencia livre de RM".*
+*Atualizado em 2026-09-26, junto do commit "Protecao 088: adiciona contexto clinico por imagem".*
 
 - **Branch local de trabalho:** `master` (publicação: `git push origin master:main`).
-- **origin/main antes da 087:** `12f3c3b` (Protecao 086). **Último commit:** Protecao 087 (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
-- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 087:** 1250 testes · 1242 pass · 3 fail conhecidos · 5 todo (era 1234/1226/3/5 após a 086; +16 testes novos da 087). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
-  - Medido no ambiente remoto (sem os arquivos protegidos): 1240 · 1205 · 30 · 5 (base `12f3c3b` no mesmo ambiente: 1224 · 1189 · 30 · 5; conjunto de falhas idêntico). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
-- **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 087. Nenhuma escrita deliberada nesta tarefa. A 087 não adiciona campo nenhum (reaproveita `img.label` e `panels[].seq`); a 086 também não (alerta derivado de `lesionRevisions`). Desde a 085 o documento principal tem `orderUpdatedAt`.
-- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), **087 (sequência livre de RM — seção 43)**.
-- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087)**.
-- **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 087. Não restaurar sem decisão explícita do usuário.
+- **origin/main antes da 088:** `e445bae` (Protecao 087). **Último commit:** Protecao 088 (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
+- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 088:** 1265 testes · 1257 pass · 3 fail conhecidos · 5 todo (era 1250/1242/3/5 após a 087; +15 testes novos da 088). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
+  - Medido no ambiente remoto (sem os arquivos protegidos): 1255 · 1220 · 30 · 5 (base `e445bae` no mesmo ambiente: 1240 · 1205 · 30 · 5; conjunto de falhas idêntico). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
+- **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 088. Nenhuma escrita deliberada nesta tarefa. A 088 adiciona só o campo opcional `clinicalContext` DENTRO do objeto da imagem (viaja nos chunks como qualquer metadado de imagem). A 087 reaproveitou `img.label`/`panels[].seq`; a 086 também não (alerta derivado de `lesionRevisions`). Desde a 085 o documento principal tem `orderUpdatedAt`.
+- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), **088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44)**.
+- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087); `img.clinicalContext` é pré-diagnóstico, digitado pelo usuário, visível no Quiz antes e depois da resposta — a descrição (`label`) continua só depois (088)**.
+- **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 088. Não restaurar sem decisão explícita do usuário.
 - **Passo manual pós-deploy (085):** ordens personalizadas feitas ANTES da 085 não têm carimbo. No PC que tem a ordem CORRETA, fazer uma reordenação qualquer (ex.: descer uma seção e subir de volta; idem um sítio em cada seção personalizada) — isso carimba e publica. Depois abrir o outro PC: ordem default/automática cede para a da nuvem sozinha. (Revisões pré-084: mesma lógica, ver seção 40.)
-- **Próximo passo exato:** Proteção 088 (ver BACKLOG abaixo).
+- **Próximo passo exato:** Proteção 089 (ver BACKLOG abaixo). Atenção à limitação de sync de metadados de imagem já existente (BACKLOG).
 
 ## BACKLOG
 
-- **PRÓXIMA PRIORIDADE: Proteção 088 — adicionar contexto clínico/dados do paciente por imagem e exibir isso antes da resposta no Quiz.**
+- **PRÓXIMA PRIORIDADE: Proteção 089 — conteúdo complementar/classificações/estadiamento separado dos casos clínicos, oculto antes da resposta e exibido após a resposta no Quiz.**
+- **Pendência de sync encontrada na 088 (pré-existente, recomendável tratar logo):** em `mergeEntryNonDestructive`, `unionEntryImages(local.images, remote.images)` mantém SEMPRE a versão local de uma imagem que existe nos dois lados. Uma EDIÇÃO posterior de metadados de uma imagem já existente (`label`, `clinicalContext`, `panels`…) chega à nuvem, mas um PC que já tinha a imagem mantém a cópia antiga no pull — e pode republicá-la no próximo envio dele. Imagens NOVAS (com label/contexto) propagam normalmente. `tests/image-description.test.js` proíbe hoje lógica específica de `label` nesse merge: a correção exige decisão explícita (ex.: metadados de imagem pelo `_userUpdatedAt` da lesão) e testes próprios.
+- **Pendência pré-existente observada:** `uploadPendingImage()` copia só `label` + campos de fonte/licença (+ `clinicalContext` desde a 088); `panels` de um quadro novo criado no editor não são copiados no upload do Salvar (o quadro salvo não fica reeditável). Não alterado.
 - Pendências funcionais posteriores:
-  - manter descrição da imagem apenas após a resposta;
-  - conteúdo complementar/classificações pós-resposta;
   - fonte individual por imagem;
   - auditar o stash antigo antes de reimplementar funcionalidades já existentes.
 - Herdado da 083: `extractModality()` do userscript ainda varre a página inteira (restringir à área do caso com base no DOM real); userscript no Tampermonkey precisa ser atualizado para a v1.1.0.
@@ -1738,3 +1738,73 @@ personalizada no editor + ajuste de fonte do rótulo no canvas),
   falhas). Esperado no local: 1250 · 1242 · 3 · 5.
 - Sem teste em navegador real (fiação validada por leitura estática + helpers
   reais); conferir visualmente no editor e no construtor de quadro.
+
+## 44. Proteção 088 — contexto clínico / dados do paciente por imagem (2026-09-26)
+
+### Auditoria
+- Imagem = objeto em `entry.images[]` (`data`, `label` = descrição, `publicId`/
+  `assetId`, `lesionId`/`lesionName`, `assignedAt`, `source`, `panels` de
+  quadro, campos de fonte/licença). Cada imagem é independente (sem agrupador
+  de "caso" entre imagens).
+- Caso clínico importado (Radiopaedia) = `entry.clinicalCases[]` com
+  `title`, `sourceUrl`, `patientAge`, `patientSex`, `modality`,
+  `presentation` — ligado à LESÃO, sem imagens (o importador é metadata-only).
+  Portanto não há correspondência segura imagem↔caso para reaproveitar
+  automaticamente; nenhum preenchimento automático foi criado.
+
+### Schema escolhido (opcional, retrocompatível)
+`img.clinicalContext = { presentation, patientAge, patientSex, notes }` —
+mesmos nomes do caso clínico importado + `notes`. Strings com trim externo e
+limites (2000/30/30/2000); campo ausente/vazio = removido ao salvar
+(`withNormalizedImageClinicalContext`); `normalizeImageClinicalContext`
+ignora qualquer outra chave. Não participa de `stableImageKeyV208`/
+`imageIdentityKeys`. Imagens antigas seguem válidas, sem migração.
+
+### Editor
+Em cada imagem da galeria do formulário (adicionar/editar lesão): botão
+recolhível "▸ Contexto clínico / dados do paciente" (● quando preenchido) com
+História clínica (textarea), Idade (texto), Sexo (—/Feminino/Masculino; valor
+antigo diferente é preservado como opção), Observações clínicas (textarea),
+aviso "Informação pré-diagnóstica: aparece no Quiz ANTES da resposta. Não
+escreva o diagnóstico aqui" e "⤵ copiar da imagem anterior" (várias imagens do
+mesmo caso, sem arquitetura nova). Descrição da imagem continua no campo
+próprio. Valores lidos/escritos via `.value`. Trocar a imagem (arquivo/URL)
+mantém o contexto; `uploadPendingImage` copia o campo; Salvar mantém o spread
+`...x` e normaliza depois (`.map(withNormalizedImageClinicalContext)`).
+O atalho "adicionar imagem" do Quiz não ganhou os campos (Quiz fora do escopo).
+
+### Quiz
+- `renderMedia()`: `quizImageClinicalContextHtml(cur.clinicalContext)` +
+  `quizImageDescHtml(cur.label, st.answered)` no mesmo innerHTML (sem
+  duplicar; segue a imagem atual do carrossel).
+- **Antes da resposta:** imagem + bloco "Caso clínico" (Paciente: idade
+  [número → "N anos"] / sexo; História clínica; Observações) — só os campos
+  preenchidos, sem frase inventada, tudo escapado. **Nunca** a descrição.
+- **Depois:** mesmo bloco + "Descrição da imagem" (gate existente intacto,
+  inclusive o do lightbox).
+
+### Persistência / sync
+Campo dentro do objeto da imagem: IndexedDB, chunks do Firestore, backup/
+import, snapshot — sem allowlist que o corte. Imagem nova com contexto chega
+idêntica ao outro PC; merge nunca remove o contexto; contexto de uma imagem
+não contamina outra. Limitação pré-existente (igual ao `label`): edição
+POSTERIOR do contexto de uma imagem que o outro PC já tem não substitui a
+cópia local dele no pull — ver BACKLOG.
+
+### Arquivos alterados
+`index.html` (CSS; `IMAGE_CLINICAL_CONTEXT_LIMITS`,
+`normalizeImageClinicalContext`, `withNormalizedImageClinicalContext`,
+`quizImageClinicalContextHtml`; campos no editor; troca/upload/salvar
+preservam; bloco no Quiz), `tests/image-clinical-context.test.js` (novo, 13),
+`tests/multi-device-sync.test.js` (+2), `tests/critical-flows.test.js`
+(âncoras +8 / +64 no importHandler), `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`.
+
+### Testes
+- Focados: `image-clinical-context` 13/13; `multi-device-sync` 163/164 (F2 =
+  arquivo protegido ausente); `quiz-images` 103/103; `quiz-image-desc` 8/8;
+  `image-description` 31/31; `image-handling` 18/18; `critical-flows` 23/23;
+  `modal-cleanup` 14/14; `external-import` 79/79; `custom-sequence` 15/15;
+  `lightbox-navigation` 25/25.
+- Suíte (remoto): 1255 · 1220 · 30 · 5 (base 1240 · 1205 · 30 · 5; mesmas
+  falhas). Esperado no local: 1265 · 1257 · 3 · 5.
+- Sem teste em navegador real; conferir visualmente o editor e o Quiz.

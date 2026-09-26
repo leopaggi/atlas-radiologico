@@ -3656,4 +3656,55 @@ test('PROTEÇÃO 087 - sequência livre ("PD FAT SAT", "T2 FAT SAT", "STIR") che
   assert.equal(b.context.syncDirty, false);
 });
 
+// ===========================================================================
+// PROTEÇÃO 088 — contexto clínico por imagem (img.clinicalContext) atravessa
+// sync e merge sem ser removido nem contaminar outra imagem.
+// ===========================================================================
+const CTX088 = { presentation: 'Dor no joelho há 3 semanas após trauma', patientAge: '52', patientSex: 'Masculino', notes: 'Tabagista' };
+test('PROTEÇÃO 088 - contexto clínico da imagem chega idêntico ao outro PC; imagem sem contexto continua sem', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await a.boot();
+  await a.addImage('seed_1', img({ publicId: 'atlas-radiologico/c088', assetId: 'C088', label: 'RM PD FAT SAT', clinicalContext: CTX088 }));
+  await a.addImage('seed_1', img({ publicId: 'atlas-radiologico/n088', assetId: 'N088', label: 'RM T1' }));
+  await a.save();
+  const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await b.boot();
+  const imgs = Array.from(b.context.DATA.find((e) => e.id === 'seed_1').images);
+  assert.deepEqual(JSON.parse(JSON.stringify(imgs.find((i) => i.assetId === 'C088').clinicalContext)), CTX088);
+  assert.equal('clinicalContext' in imgs.find((i) => i.assetId === 'N088'), false, 'não contamina a outra imagem');
+  assert.equal(b.context.syncDirty, false);
+});
+
+test('PROTEÇÃO 088 - merge/reconcile: imagens diferentes nos dois PCs mantêm cada uma o seu contexto; edição do contexto chega à nuvem', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await a.boot();
+  const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await b.boot();
+  await a.addImage('seed_1', img({ publicId: 'atlas-radiologico/a088', assetId: 'A088', clinicalContext: { presentation: 'Caso A — cefaleia' } }));
+  await a.save();
+  await b.addImage('seed_1', img({ publicId: 'atlas-radiologico/b088', assetId: 'B088', clinicalContext: { presentation: 'Caso B — lombalgia', patientSex: 'Feminino' } }));
+  await b.save(); // conflito de revisão -> reconcile -> união
+  const cloudImgs = Array.from(cloud.peekChunkItems(0).find((e) => e.id === 'seed_1').images);
+  assert.equal(cloudImgs.find((i) => i.assetId === 'A088').clinicalContext.presentation, 'Caso A — cefaleia');
+  assert.deepEqual(JSON.parse(JSON.stringify(cloudImgs.find((i) => i.assetId === 'B088').clinicalContext)), { presentation: 'Caso B — lombalgia', patientSex: 'Feminino' });
+  // A edita o contexto da imagem de B (edição real mais nova, carimbada) e publica:
+  // a nuvem recebe a edição. (Limitação PRÉ-EXISTENTE, igual ao label: um PC que
+  // já tinha essa imagem mantém a própria cópia no pull — ver CONTEXTO §44.)
+  await a.context.syncFromFirebase();
+  const la = a.context.DATA.find((e) => e.id === 'seed_1');
+  la.images.find((i) => i.assetId === 'B088').clinicalContext = { presentation: 'Caso B — lombalgia há 2 meses', patientSex: 'Feminino', patientAge: '41' };
+  la._userUpdatedAt = Date.now() + 1000;
+  await a.save();
+  const cloudAfter = Array.from(cloud.peekChunkItems(0).find((e) => e.id === 'seed_1').images);
+  assert.deepEqual(JSON.parse(JSON.stringify(cloudAfter.find((i) => i.assetId === 'B088').clinicalContext)), { presentation: 'Caso B — lombalgia há 2 meses', patientSex: 'Feminino', patientAge: '41' });
+  await b.context.syncFromFirebase();
+  const lb = b.context.DATA.find((e) => e.id === 'seed_1');
+  assert.ok(lb.images.find((i) => i.assetId === 'B088').clinicalContext.presentation, 'merge nunca remove o contexto');
+  assert.equal(lb.images.find((i) => i.assetId === 'A088').clinicalContext.presentation, 'Caso A — cefaleia', 'merge não remove contexto');
+});
+
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');

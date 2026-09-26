@@ -369,6 +369,14 @@ body{
 .img-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-bottom:8px;}
 .img-gallery:empty{display:none;}
 .img-gallery-item{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius);padding:6px;position:relative;}
+/* PROTEÇÃO 088 — contexto clínico / dados do paciente por imagem */
+.img-clinical-box{display:flex;flex-direction:column;gap:4px;margin-top:4px;}
+.img-clinical-box[hidden]{display:none;}
+.img-clinical-box label{font-size:10px;color:var(--muted-2);text-transform:uppercase;letter-spacing:.04em;}
+.img-clinical-box textarea,.img-clinical-box input,.img-clinical-box select{width:100%;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);color:var(--text);padding:4px 6px;border-radius:3px;font-size:11px;font-family:inherit;}
+.img-clinical-row{display:flex;gap:6px;}
+.img-clinical-row > div{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.img-clinical-hint{font-size:10px;color:var(--muted-2);}
 .img-gallery-item img{width:100%;height:80px;object-fit:cover;border-radius:4px;display:block;margin-bottom:6px;cursor:zoom-in;}
 .img-gallery-label{
   width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
@@ -7674,7 +7682,7 @@ function buildPendingImage(file, trackObjectUrl){
 async function uploadPendingImage(img, lesionMeta){
   const remote = await uploadToCloudinary(img._file, lesionMeta);
   remote.label = img.label || '';
-  for(const k of ['sourcePage','sourceSite','license','artist','attribution','originalUrl']){
+  for(const k of ['sourcePage','sourceSite','license','artist','attribution','originalUrl','clinicalContext']){ // clinicalContext: PROTEÇÃO 088
     if(img[k]!==undefined) remote[k] = img[k];
   }
   return remote;
@@ -11982,6 +11990,7 @@ function openForm(id, opts){
   // WeakSet preserva o estado expandido entre re-renders (mesmo objeto).
   // Preview, descrição, tags da imagem e ações ficam sempre visíveis.
   const expandedPresetGroups = new WeakSet();
+  const expandedClinicalBoxes = new WeakSet(); // PROTEÇÃO 088
   let replaceTargetIdx = null; // se definido, o próximo upload/URL SUBSTITUI esse índice em vez de adicionar
   let imgsChanged = false;
   const imgGallery = document.getElementById('img-gallery');
@@ -12018,6 +12027,17 @@ function openForm(id, opts){
         <textarea class="img-gallery-label" rows="3" placeholder="descrição da imagem/quadro (sequências curtas como &quot;axial T2, CC, MLO&quot; ou um texto mais longo)">${esc(img.label||'')}</textarea>
         <button type="button" class="btn btn-ghost img-gallery-presets-toggle" aria-expanded="false" style="width:100%;text-align:left;margin:6px 0 0;">▸ Sequências / modalidade</button>
         <div class="img-gallery-preset-groups" hidden></div>
+        <button type="button" class="btn btn-ghost img-clinical-toggle" aria-expanded="false" style="width:100%;text-align:left;margin:6px 0 0;">▸ Contexto clínico / dados do paciente</button>
+        <div class="img-clinical-box" hidden>
+          <div class="img-clinical-hint">Informação pré-diagnóstica: aparece no Quiz ANTES da resposta. Não escreva o diagnóstico aqui (a descrição da imagem continua no campo acima).</div>
+          <label>História clínica</label><textarea class="img-clinical-presentation" rows="2" placeholder="ex.: dor no joelho há 3 semanas após trauma"></textarea>
+          <div class="img-clinical-row">
+            <div><label>Idade</label><input class="img-clinical-age" type="text" maxlength="30" placeholder="ex.: 52"></div>
+            <div><label>Sexo</label><select class="img-clinical-sex"><option value="">—</option><option value="Feminino">Feminino</option><option value="Masculino">Masculino</option></select></div>
+          </div>
+          <label>Observações clínicas</label><textarea class="img-clinical-notes" rows="2" placeholder="ex.: tabagista, febre, exames laboratoriais"></textarea>
+          ${idx>0 ? '<button type="button" class="btn btn-ghost img-clinical-copy-prev" style="align-self:flex-start;font-size:11px;">⤵ copiar da imagem anterior</button>' : ''}
+        </div>
         <div class="img-gallery-replace-box" style="display:none;">
           <button type="button" class="img-gallery-replace-file">📁 escolher arquivo</button>
           <input class="img-gallery-replace-url" placeholder="ou cole uma URL http(s)…">
@@ -12051,7 +12071,9 @@ function openForm(id, opts){
         if(!/^https?:\/\//i.test(url)){ toast('Cole uma URL http/https válida.'); return; }
         const oldLabel = pendingImgs[idx].label;
         revokeObjectUrl(pendingImgs[idx]._objectUrl);
+        const oldCtx = pendingImgs[idx].clinicalContext; // PROTEÇÃO 088 — trocar a imagem mantém o contexto
         pendingImgs[idx] = { label: oldLabel || '', data: url, source: 'url' };
+        if(oldCtx) pendingImgs[idx].clinicalContext = oldCtx;
         imgsChanged = true;
         renderImgGallery();
       });
@@ -12096,6 +12118,47 @@ function openForm(id, opts){
         });
         groupsWrap.appendChild(groupDiv);
       });
+      // PROTEÇÃO 088 — contexto clínico por imagem (lido/escrito via .value,
+      // nunca via HTML). Recolhido por padrão (● no botão quando preenchido).
+      const clinicalBox = item.querySelector('.img-clinical-box');
+      const clinicalToggle = item.querySelector('.img-clinical-toggle');
+      const ctxNow = img.clinicalContext && typeof img.clinicalContext==='object' ? img.clinicalContext : {};
+      const cFields = { presentation: '.img-clinical-presentation', patientAge: '.img-clinical-age', patientSex: '.img-clinical-sex', notes: '.img-clinical-notes' };
+      const sexSel = item.querySelector('.img-clinical-sex');
+      if(ctxNow.patientSex && ![...sexSel.options].some(o=>o.value===ctxNow.patientSex)){
+        const o = document.createElement('option'); o.value = ctxNow.patientSex; o.textContent = ctxNow.patientSex; sexSel.appendChild(o);
+      }
+      Object.entries(cFields).forEach(([k, sel])=>{
+        const el = item.querySelector(sel);
+        el.value = ctxNow[k] != null ? String(ctxNow[k]) : '';
+        el.addEventListener(el.tagName==='SELECT' ? 'change' : 'input', (ev)=>{
+          const cur = (pendingImgs[idx].clinicalContext && typeof pendingImgs[idx].clinicalContext==='object') ? pendingImgs[idx].clinicalContext : {};
+          pendingImgs[idx].clinicalContext = { ...cur, [k]: ev.target.value };
+          imgsChanged = true;
+        });
+      });
+      const paintClinicalToggle = ()=>{
+        const open = !clinicalBox.hidden;
+        const filled = !!normalizeImageClinicalContext(pendingImgs[idx].clinicalContext);
+        clinicalToggle.textContent = (open ? '▾ ' : '▸ ') + 'Contexto clínico / dados do paciente' + (filled && !open ? ' ●' : '');
+        clinicalToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      };
+      clinicalToggle.onclick = ()=>{
+        clinicalBox.hidden = !clinicalBox.hidden;
+        if(!clinicalBox.hidden) expandedClinicalBoxes.add(img); else expandedClinicalBoxes.delete(img);
+        paintClinicalToggle();
+      };
+      if(expandedClinicalBoxes.has(img)) clinicalBox.hidden = false;
+      paintClinicalToggle();
+      const copyPrevBtn = item.querySelector('.img-clinical-copy-prev');
+      if(copyPrevBtn) copyPrevBtn.onclick = ()=>{
+        const prevCtx = normalizeImageClinicalContext(pendingImgs[idx-1] && pendingImgs[idx-1].clinicalContext);
+        if(!prevCtx){ toast('A imagem anterior não tem contexto clínico.'); return; }
+        pendingImgs[idx].clinicalContext = { ...prevCtx };
+        imgsChanged = true;
+        expandedClinicalBoxes.add(img);
+        renderImgGallery();
+      };
       // PROTEÇÃO 087 — sequência livre: acrescenta o texto EXATO (trim) como
       // mais uma parte da legenda, igual aos chips (sem apagar as outras).
       const customDiv = document.createElement('div');
@@ -12161,6 +12224,7 @@ function openForm(id, opts){
       const old = pendingImgs[targetIdx];
       if(old && old.source==='pending') revokeObjectUrl(old._objectUrl);
       temp.label = old.label || '';
+      if(old.clinicalContext) temp.clinicalContext = old.clinicalContext; // PROTEÇÃO 088
       pendingImgs[targetIdx] = temp;
     } else {
       pendingImgs.push(temp);
@@ -12288,7 +12352,7 @@ function openForm(id, opts){
         source:x.source||'cloudinary',
         lesionId:x.lesionId||entryId,
         lesionName:x.lesionName||name
-      }));
+      })).map(withNormalizedImageClinicalContext); // PROTEÇÃO 088 — contexto vazio não gera campo
       // Produtividade: carimba assignedAt (ISO) SÓ nas imagens novas
       // confirmadas neste Salvar. Mantidas/históricas ficam como estão —
       // sem timestamp inventado. Falha de upload acima já abortou o save.
@@ -15343,7 +15407,9 @@ function renderQuizCardIntegrated(host){
     // — antes da resposta, nada é mostrado para não entregar pistas. O bloco
     // segue o quizImgIdx atual (carrossel) e some na próxima questão, pois
     // cada render zera o estado de resposta.
-    media.innerHTML=`${quizImageDescHtml(cur.label, st.answered)}<div class="quiz-carousel${hasMultiple?' has-multi':''}">
+    // PROTEÇÃO 088 — contexto clínico da imagem: pré-diagnóstico, visível
+    // ANTES e depois da resposta (a descrição acima continua só depois).
+    media.innerHTML=`${quizImageClinicalContextHtml(cur.clinicalContext)}${quizImageDescHtml(cur.label, st.answered)}<div class="quiz-carousel${hasMultiple?' has-multi':''}">
         ${hasMultiple?'<button type="button" class="quiz-carousel-arrow quiz-carousel-prev" aria-label="imagem anterior">‹</button>':''}
         <img src="${cur.data}">
         ${hasMultiple?'<button type="button" class="quiz-carousel-arrow quiz-carousel-next" aria-label="imagem seguinte">›</button>':''}
@@ -15825,6 +15891,47 @@ if(fbAuth){
   // Firebase Auth indisponível (offline, bloqueio de rede) — não há como
   // verificar a conta, então o app não abre, em vez de liberar sem checagem.
   showLoginGate('Não foi possível verificar o login (sem conexão com o Firebase). Tente novamente.');
+}
+
+/* ============================================================
+   PROTEÇÃO 088 — CONTEXTO CLÍNICO / DADOS DO PACIENTE POR IMAGEM
+   ------------------------------------------------------------
+   Campo opcional `img.clinicalContext` = { presentation, patientAge,
+   patientSex, notes } — mesmos nomes do caso clínico importado
+   (clinicalCases[]: presentation/patientAge/patientSex), agrupados na
+   própria imagem. Informação PRÉ-diagnóstica digitada pelo usuário (nunca
+   gerada/copiada do nome, descrição ou tags). No Quiz aparece ANTES e
+   DEPOIS da resposta; a descrição da imagem (label) continua só depois.
+   Ausente/vazio = nenhum bloco. Não participa da identidade da imagem.
+   ============================================================ */
+const IMAGE_CLINICAL_CONTEXT_LIMITS = { presentation: 2000, patientAge: 30, patientSex: 30, notes: 2000 };
+function normalizeImageClinicalContext(v){
+  if(!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const out = {};
+  for(const [k, max] of Object.entries(IMAGE_CLINICAL_CONTEXT_LIMITS)){
+    const t = (typeof v[k] === 'string' || typeof v[k] === 'number') ? String(v[k]).trim().slice(0, max) : '';
+    if(t) out[k] = t;
+  }
+  return Object.keys(out).length ? out : null;
+}
+// Cópia da imagem com o contexto normalizado (vazio = campo removido).
+function withNormalizedImageClinicalContext(img){
+  const copy = { ...img };
+  const ctx = normalizeImageClinicalContext(copy.clinicalContext);
+  if(ctx) copy.clinicalContext = ctx; else delete copy.clinicalContext;
+  return copy;
+}
+function quizImageClinicalContextHtml(clinicalContext){
+  const c = normalizeImageClinicalContext(clinicalContext);
+  if(!c) return '';
+  const age = c.patientAge ? (/^\d{1,3}$/.test(c.patientAge) ? c.patientAge + ' anos' : c.patientAge) : '';
+  const pac = [age, c.patientSex || ''].filter(Boolean).map(esc).join(' / ');
+  return `<div class="quiz-clinical-context" style="font-size:14px;line-height:1.4;color:var(--text);background:rgba(250,204,21,.08);border:1px solid rgba(202,138,4,.45);border-radius:10px;padding:7px 14px;margin-bottom:10px;max-width:100%;overflow-wrap:anywhere;text-align:left;white-space:pre-wrap;">`
+    + `<div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);margin-bottom:3px;">Caso clínico</div>`
+    + (pac ? `<div><b>Paciente:</b> ${pac}</div>` : '')
+    + (c.presentation ? `<div><b>História clínica:</b> ${esc(c.presentation)}</div>` : '')
+    + (c.notes ? `<div><b>Observações:</b> ${esc(c.notes)}</div>` : '')
+    + `</div>`;
 }
 
 /* ============================================================
