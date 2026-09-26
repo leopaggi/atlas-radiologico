@@ -3634,4 +3634,26 @@ test('PROTEÇÃO 085 - escrita sem reconcile (forceThisDeviceToCloud) de um PC c
   assert.deepEqual(plain085(cloud.peekMeta().siteOrder), SITES_A085);
 });
 
+// ===========================================================================
+// PROTEÇÃO 087 — sequência livre de RM (img.label / panels[].seq) atravessa a
+// sincronização sem ser alterada.
+// ===========================================================================
+test('PROTEÇÃO 087 - sequência livre ("PD FAT SAT", "T2 FAT SAT", "STIR") chega idêntica ao outro dispositivo', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await a.boot();
+  const quadro = img({ publicId: 'atlas-radiologico/q087', assetId: 'Q087', label: 'RM T1 · PD FAT SAT',
+    panels: [{ url: 'https://res.cloudinary.com/x/p1.jpg', seq: 'T2 FAT SAT' }, { url: 'https://res.cloudinary.com/x/p2.jpg', seq: 'STIR' }] });
+  await a.addImage('seed_1', quadro);
+  await a.save();
+  const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await b.boot();
+  const got = Array.from(b.context.DATA.find((e) => e.id === 'seed_1').images).find((i) => i.assetId === 'Q087');
+  assert.ok(got, 'imagem chegou ao PC B');
+  assert.equal(got.label, 'RM T1 · PD FAT SAT');
+  assert.deepEqual(Array.from(got.panels, (p) => p.seq), ['T2 FAT SAT', 'STIR']);
+  assert.equal(b.context.syncDirty, false);
+});
+
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');

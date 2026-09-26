@@ -501,10 +501,15 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // .lesion-review-warning + hasActiveLesionReview/lesionReviewWarningHtml/
   // refreshLesionReviewWarnings no modulo da Central — tudo antes da primeira
   // ancora, deslocamento uniforme.
-  assert.equal(recovery.line, 7947);
-  assert.equal(brokenArtifacts.line, 7937);
-  assert.equal(loadData.line, 10494);
-  assert.equal(importHandler.line, 14256);
+  // +5 nas tres primeiras ancoras / +61 no importHandler (Protecao 087,
+  // 2026-09-26): CSS da sequencia livre antes da primeira ancora; helpers
+  // (normalizeCustomSequence/addSequenceToImageLabel/collageSeqSelectHtml),
+  // linha "Outra / personalizada" no editor e campo livre no quadro entre
+  // loadData e o importHandler.
+  assert.equal(recovery.line, 7952);
+  assert.equal(brokenArtifacts.line, 7942);
+  assert.equal(loadData.line, 10499);
+  assert.equal(importHandler.line, 14317);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

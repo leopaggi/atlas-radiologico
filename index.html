@@ -531,6 +531,11 @@ body{
 .collage-drag-hint{font-size:11px;color:var(--muted-2);margin:4px 0 10px;font-family:'IBM Plex Mono',monospace;}
 .collage-item img{width:100%;height:105px;object-fit:contain;background:#000;display:block;border-radius:3px;margin-bottom:6px;}
 .collage-item select{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);padding:6px;border-radius:3px;font-size:11px;}
+/* PROTEÇÃO 087 — sequência livre (quadro e editor de imagem) */
+.collage-item .collage-seq-custom{width:100%;box-sizing:border-box;margin-top:4px;background:var(--panel);border:1px solid var(--line);color:var(--text);padding:6px;border-radius:3px;font-size:11px;user-select:text;}
+.collage-item .collage-seq-custom[hidden]{display:none;}
+.img-gallery-custom-seq{display:flex;gap:4px;align-items:center;}
+.img-gallery-custom-seq-input{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);color:var(--text);padding:4px 6px;border-radius:3px;font-size:11px;}
 .collage-item-actions{display:flex;justify-content:space-between;gap:4px;margin-top:5px;}
 .collage-mini{background:none;border:1px solid var(--line);color:var(--muted);cursor:pointer;border-radius:3px;padding:2px 6px;}
 .collage-preview{width:100%;max-height:520px;object-fit:contain;background:#000;border:1px solid var(--line);display:none;margin-top:10px;}
@@ -12091,6 +12096,23 @@ function openForm(id, opts){
         });
         groupsWrap.appendChild(groupDiv);
       });
+      // PROTEÇÃO 087 — sequência livre: acrescenta o texto EXATO (trim) como
+      // mais uma parte da legenda, igual aos chips (sem apagar as outras).
+      const customDiv = document.createElement('div');
+      customDiv.className = 'img-gallery-modality';
+      customDiv.innerHTML = `<div class="img-gallery-modality-title">Outra / personalizada</div><div class="img-gallery-custom-seq"><input type="text" class="img-gallery-custom-seq-input" maxlength="80" placeholder="ex.: PD FAT SAT, T2 Dixon, DWI b1000" aria-label="sequência personalizada"><button type="button" class="img-gallery-preset-chip img-gallery-custom-seq-add">+ adicionar</button></div>`;
+      const customInput = customDiv.querySelector('.img-gallery-custom-seq-input');
+      const addCustomSeq = ()=>{
+        const v = normalizeCustomSequence(customInput.value);
+        if(!v){ toast('Digite a sequência (ex.: PD FAT SAT).'); return; }
+        const next = addSequenceToImageLabel(pendingImgs[idx].label, v);
+        if(next !== (pendingImgs[idx].label||'')){ pendingImgs[idx].label = next; imgsChanged = true; }
+        expandedPresetGroups.add(img);
+        renderImgGallery();
+      };
+      customDiv.querySelector('.img-gallery-custom-seq-add').onclick = addCustomSeq;
+      customInput.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter'){ ev.preventDefault(); addCustomSeq(); } });
+      groupsWrap.appendChild(customDiv);
       item.querySelector('.img-gallery-remove').addEventListener('click', ()=>{
         const removed = pendingImgs.splice(idx,1)[0];
         if(removed && removed.source==='pending') revokeObjectUrl(removed._objectUrl);
@@ -12417,6 +12439,34 @@ function openForm(id, opts){
 // testadas. O campo canônico de descrição de imagem no Atlas é `label`
 // (mesmo da legenda individual, do detalhe, do Quiz e da edição) — nada de
 // collageDescription/boardDescription.
+/* PROTEÇÃO 087 — sequência/protocolo de RM com texto LIVRE, mantendo as
+   opções rápidas. Reaproveita os campos reais (sem schema novo): no editor,
+   a sequência entra como uma parte de `img.label` (partes separadas por
+   " · ", igual aos chips); no construtor de quadro, em `panels[].seq`.
+   O texto é salvo EXATAMENTE como digitado — só trim externo; nunca é
+   convertido para uma opção pré-definida ("PD FAT SAT" nunca vira "PD"). */
+const CUSTOM_SEQUENCE_OPTION = '__custom__';
+function normalizeCustomSequence(v){
+  return String(v == null ? '' : v).trim();
+}
+function addSequenceToImageLabel(label, seq){
+  const s = normalizeCustomSequence(seq);
+  const cur = String(label || '');
+  if(!s) return cur;
+  const parts = cur.split('·').map(x=>x.trim()).filter(Boolean);
+  if(parts.includes(s)) return cur;
+  parts.push(s);
+  return parts.join(' · ');
+}
+function collageSeqSelectHtml(seq, presets){
+  const v = String(seq || '');
+  const list = Array.isArray(presets) ? presets : [];
+  const isCustom = !!v && !list.includes(v);
+  return `<select class="collage-seq-select"><option value="">identificar sequência…</option>`
+    + list.map(q=>`<option value="${escAttr(q)}" ${v===q?'selected':''}>${esc(q)}</option>`).join('')
+    + `<option value="${CUSTOM_SEQUENCE_OPTION}" ${isCustom?'selected':''}>Outra / personalizada…</option></select>`
+    + `<input class="collage-seq-custom" type="text" maxlength="80" placeholder="ex.: PD FAT SAT" aria-label="sequência personalizada" value="${escAttr(isCustom ? v : '')}"${isCustom ? '' : ' hidden'}>`;
+}
 function resolveCollageLabel(descText, seqs){
   const d = String(descText || '').trim();
   if(d) return d;
@@ -12504,13 +12554,22 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
   function render(){
     list.innerHTML=''; items.forEach((it,i)=>{
       const d=document.createElement('div');d.className='collage-item'; d.draggable=true; d.dataset.index=i;
-      d.innerHTML=`<img src="${it.url}" draggable="false"><select><option value="">identificar sequência…</option>${seqs.map(q=>`<option value="${q}" ${it.seq===q?'selected':''}>${q}</option>`).join('')}</select><div class="collage-item-actions"><button class="collage-mini" data-a="left">←</button><button class="collage-mini" data-a="right">→</button><button class="collage-mini" data-a="del">✕</button></div>`;
+      d.innerHTML=`<img src="${it.url}" draggable="false">${collageSeqSelectHtml(it.seq, seqs)}<div class="collage-item-actions"><button class="collage-mini" data-a="left">←</button><button class="collage-mini" data-a="right">→</button><button class="collage-mini" data-a="del">✕</button></div>`;
       d.ondragstart=e=>{ d.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',String(i)); };
       d.ondragend=()=>{ d.classList.remove('dragging'); list.querySelectorAll('.drag-over').forEach(x=>x.classList.remove('drag-over')); };
       d.ondragover=e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; d.classList.add('drag-over'); };
       d.ondragleave=()=>d.classList.remove('drag-over');
       d.ondrop=e=>{ e.preventDefault(); d.classList.remove('drag-over'); const from=Number(e.dataTransfer.getData('text/plain')); const to=i; if(Number.isInteger(from)&&from>=0&&from<items.length&&from!==to){ const moved=items.splice(from,1)[0]; items.splice(to,0,moved); render(); if(finalBlob)generateCollage(); } };
-      d.querySelector('select').onchange=e=>{items[i].seq=e.target.value;if(finalBlob)generateCollage();};
+      // PROTEÇÃO 087 — "Outra / personalizada…" abre o campo livre.
+      const customSeq=d.querySelector('.collage-seq-custom');
+      d.querySelector('select').onchange=e=>{
+        if(e.target.value===CUSTOM_SEQUENCE_OPTION){ customSeq.hidden=false; items[i].seq=normalizeCustomSequence(customSeq.value); customSeq.focus(); }
+        else { customSeq.hidden=true; items[i].seq=e.target.value; }
+        if(finalBlob)generateCollage();
+      };
+      customSeq.oninput=e=>{items[i].seq=normalizeCustomSequence(e.target.value);};
+      customSeq.onchange=()=>{if(finalBlob)generateCollage();};
+      customSeq.onfocus=()=>{d.draggable=false;}; customSeq.onblur=()=>{d.draggable=true;};
       d.querySelector('[data-a="left"]').onclick=()=>{if(i){[items[i-1],items[i]]=[items[i],items[i-1]];render();if(finalBlob)generateCollage();}};
       d.querySelector('[data-a="right"]').onclick=()=>{if(i<items.length-1){[items[i+1],items[i]]=[items[i],items[i+1]];render();if(finalBlob)generateCollage();}};
       d.querySelector('[data-a="del"]').onclick=()=>{URL.revokeObjectURL(items[i].url);items.splice(i,1);render();if(finalBlob&&items.length>=2)generateCollage();}; list.appendChild(d);
@@ -12533,6 +12592,8 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
         const scale=Math.min(cellW/im.width,ih/im.height),dw=im.width*scale,dh=im.height*scale;
         ctx.drawImage(im,x+(cellW-dw)/2,iy+(ih-dh)/2,dw,dh);
         const lab=items[i].seq||('Imagem '+(i+1));
+        // PROTEÇÃO 087 — sequência livre pode ser longa: reduz a fonte (nunca trunca).
+        let fs=28; ctx.font='600 '+fs+'px Arial'; while(fs>14 && ctx.measureText(lab).width>cellW-16){ fs-=2; ctx.font='600 '+fs+'px Arial'; }
         if(pos==='top'){ctx.fillStyle='#050505';ctx.fillRect(x,y,cellW,labelH);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,y+labelH/2);}
         else{const bh=46;ctx.fillStyle='rgba(0,0,0,.72)';ctx.fillRect(x,iy+ih-bh,cellW,bh);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,iy+ih-bh/2);}
       }
