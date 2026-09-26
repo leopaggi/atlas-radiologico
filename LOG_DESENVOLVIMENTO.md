@@ -1,5 +1,20 @@
 # Diario de desenvolvimento
 
+## Cards de casos clínicos — textos longos recolhíveis (26/09/2026)
+
+A história clínica já começava compacta, mas as observações do caso e a
+descrição abaixo de cada imagem vinculada ainda podiam ocupar muitas linhas.
+Agora usam o mesmo mecanismo da história: textos longos mostram inicialmente
+~1,5 linha e expandem/recolhem no próprio texto por clique, Enter ou Espaço.
+Os textos permanecem completos; imagem, título, idade, modalidade, fonte,
+crédito e link não são recolhidos. É só visual, sem alteração nos dados.
+
+Arquivos desta etapa: `index.html`, `tests/clinical-case-text-collapse.test.js`,
+`AI.md`, `README.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` e este diário.
+Teste focado: 7/7 PASS; `clinical-cases` 47/47, `external-import` 79/79 e
+`critical-flows` 23/23 PASS. Smoke visual com navegador autenticado ainda
+depende do usuário; não foi executado neste ambiente.
+
 ## Lightbox das imagens do Quiz — 26/09/2026
 
 Ao maximizar uma imagem, o Quiz enviava ao visualizador apenas aquela imagem.

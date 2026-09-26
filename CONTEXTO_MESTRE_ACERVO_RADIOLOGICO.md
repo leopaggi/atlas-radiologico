@@ -8,6 +8,19 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**Cards de casos clínicos (2026-09-26, após validação real do lightbox):**
+o usuário confirmou que o lightbox do Quiz funciona em produção no commit
+`d6eb345`. `clinicalCases[].presentation` já tinha clamp 093d, mas as notas
+`clinicalCases[].notes` e as legendas longas `entry.images[].label` das
+imagens vinculadas (renderizadas como `caption` abaixo da miniatura) escapavam
+dele. Agora os três textos reutilizam `clinicalCasePresentationHtml` e
+`wireClinicalCasePresentations`: ~1,5 linha inicial, clique/Enter/Espaço
+expande/recolhe sem remover texto do DOM. Título, metadados curtos, crédito,
+imagem e link ficam fora do clamp; sinais e classificações continuam com a
+renderização antiga. Nenhum dado/sync/upload mudou. Teste focado:
+`tests/clinical-case-text-collapse.test.js` (7/7); smoke visual no navegador
+real pendente.
+
 **Quiz/lightbox (2026-09-26, após `12e971c`):** o Quiz passa ao lightbox
 genérico a coleção e o índice da própria questão; cada navegação no lightbox
 devolve o índice ao `renderMedia()` existente, que atualiza imagem, contador e

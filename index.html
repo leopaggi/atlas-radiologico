@@ -19769,9 +19769,9 @@ function clinicalCaseRowHtml(c, entry){
     + (pac ? `<div style="font-size:12px;">${pac}</div>` : '')
     + (c.modality ? `<div style="font-size:12px;">Modalidade: ${esc(c.modality)}</div>` : '')
     + (c.presentation ? (typeof clinicalCasePresentationHtml === 'function' ? clinicalCasePresentationHtml(c.presentation) : `<div style="font-size:12px;margin-top:2px;">${esc(c.presentation)}</div>`) : '') // 093d: compacta
-    + (c.notes ? `<div style="font-size:12px;margin-top:2px;color:var(--muted);">${esc(c.notes)}</div>` : '') // 093
+    + (c.notes ? `<div style="color:var(--muted);">${clinicalCasePresentationHtml(c.notes)}</div>` : '') // narrativas do card usam o clamp 093d
     + (c.sourceUrl ? `<a class="detail-link" href="${esc(c.sourceUrl)}" target="_blank" rel="noopener">↗ Abrir caso</a>` : '')
-    + (entry && typeof linkedImageViews === 'function' ? didacticViewsHtml(linkedImageViews(c, entry)) : '') // 093b: imagens vinculadas
+    + (entry && typeof linkedImageViews === 'function' ? didacticViewsHtml(linkedImageViews(c, entry), true) : '') // 093b: só legenda longa do caso é recolhível
     + `</div>`;
 }
 function clinicalCasesSectionHtml(entry){
@@ -20009,12 +20009,12 @@ function renderDidacticRichText(text){
 }
 // views = [{data, thumb, caption, credit}] (vínculos resolvidos e/ou
 // imagens antigas 093). O asset é SEMPRE o da galeria (nada copiado).
-function didacticViewsHtml(views){
+function didacticViewsHtml(views, collapseCaseCaptions){
   const list = Array.isArray(views) ? views.filter(v => v && v.data) : [];
   if (!list.length) return '';
   return '<div class="didactic-images">' + list.map((im, i) => '<figure class="didactic-figure">'
     + '<img class="didactic-img" loading="lazy" src="' + escAttr(im.thumb || im.data) + '" data-full="' + escAttr(im.data) + '" data-caption="' + escAttr(im.caption || '') + '" data-idx="' + i + '" alt="' + escAttr(im.caption || 'imagem didática') + '">'
-    + ((im.caption || im.credit) ? '<figcaption>' + esc(im.caption || '') + (im.credit ? ' <span class="didactic-credit">— ' + esc(im.credit) + '</span>' : '') + '</figcaption>' : '')
+    + ((im.caption || im.credit) ? '<figcaption>' + (collapseCaseCaptions && im.caption ? clinicalCasePresentationHtml(im.caption) : esc(im.caption || '')) + (im.credit ? ' <span class="didactic-credit">— ' + esc(im.credit) + '</span>' : '') + '</figcaption>' : '')
     + '</figure>').join('') + '</div>';
 }
 function radiologicSignHtml(s, entry){

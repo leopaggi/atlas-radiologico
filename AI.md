@@ -1,5 +1,15 @@
 # AI.md — instruções para assistentes de IA (Claude, DeepSeek, ChatGPT, etc.)
 
+## Card de caso clínico — textos narrativos (2026-09-26)
+
+`clinicalCasePresentationHtml` e `wireClinicalCasePresentations` da 093d são
+o único mecanismo de expansão: agora também exibem `clinicalCases[].notes`
+e, só dentro do card do caso, legendas das imagens vinculadas (`img.label`
+resolvido como `caption` em `didacticViewsHtml(views, true)`). Textos curtos
+continuam sem clamp/foco extra; textos longos têm o texto completo escapado
+no DOM e alternam por clique, Enter ou Espaço. O `credit` e as galerias de
+sinais/classificações ficam fora dessa variação. Nenhum dado é reescrito.
+
 ## Quiz — navegação do lightbox (2026-09-26)
 
 O lightbox genérico recebe `navImages`/`startIndex` do carrossel do Quiz e

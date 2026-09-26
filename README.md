@@ -1,5 +1,13 @@
 # Atlas Radiológico
 
+### Cards de casos clínicos: textos compactos (2026-09-26)
+
+História, observações e descrições longas das imagens vinculadas começam em
+aproximadamente 1,5 linha no card do caso. Clicar no próprio texto (ou usar
+Enter/Espaço) expande e recolhe; o texto completo continua presente. Textos
+curtos e metadados não recebem o clamp. Teste:
+`node tests/clinical-case-text-collapse.test.js`.
+
 ### Lightbox do Quiz (2026-09-26)
 
 Ao ampliar uma imagem do Quiz, as setas e as teclas ←/→ navegam pelas mesmas
