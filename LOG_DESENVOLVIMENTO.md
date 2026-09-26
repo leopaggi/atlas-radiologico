@@ -1,5 +1,32 @@
 # Diario de desenvolvimento
 
+## Correção do envio ao Firestore — 26/09/2026 (em validação)
+
+O envio do Atlas falhava porque o histórico das respostas do Quiz tinha um
+array de tentativas dentro de outro array no documento principal da nuvem.
+O caminho reproduzido no payload é
+`atlas_state/main.reviewProgress.<id da lesão>.a[0]`. O Atlas agora troca
+somente a representação dessas tentativas ao enviar e restaura a representação
+original ao receber; histórico, casos clínicos, imagens, vínculos e progresso
+permanecem preservados. Uma conferência antes de gravar aponta somente o
+caminho de outros arrays aninhados, sem expor o conteúdo. Os testes locais
+usam Firestore simulado; a checagem manual no navegador real ainda é necessária.
+
+Arquivos desta etapa: `index.html`, `tests/firestore-no-nested-arrays.test.js`,
+`tests/multi-device-sync.test.js`, `tests/device-bootstrap.test.js`,
+`tests/review-auto-mode.test.js`, `tests/critical-flows.test.js`, `AI.md`, `README.md`,
+`CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` e este diário.
+
+Testes executados: 4/4 no teste novo; 180/180 no multi-PC (inclusive envio
+com mock que recusa o mesmo formato proibido pelo Firebase e leitura por outro
+PC); 42/42 no bootstrap; 19/19 no modo automático; 23/23 nos fluxos críticos
+após atualização das âncoras. O teste obrigatório de duplicatas: 6 PASS e 1
+FAIL histórico. A suíte ampla detectou ainda 2 falhas antigas dependentes da
+data e 7 testes de portabilidade de fim de linha no Windows (CRLF), sem relação
+com o payload. `git diff --check` não apontou erros. Smoke autenticado pendente.
+O usuário autorizou publicar antes do smoke para testar a correção no site;
+o resultado em produção só poderá ser registrado após esse teste manual.
+
 Este arquivo registra, em linguagem simples, as mudancas importantes realizadas no projeto. Ele existe para que seja possivel entender o que aconteceu, quando aconteceu e como retornar a um estado anterior com seguranca.
 
 ## Conceitos basicos

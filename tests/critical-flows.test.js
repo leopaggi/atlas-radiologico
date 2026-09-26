@@ -573,14 +573,16 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // 2026-09-26): CSS do bloco "Contexto clinico" do Quiz e do card de caso
   // compacto — antes da primeira ancora; +1 entre loadData e o importHandler
   // (chave temporaria das imagens da galeria do formulario p/ vinculo pre-Salvar).
-  assert.equal(recovery.line, 9271);
-  assert.equal(brokenArtifacts.line, 9261);
-  assert.equal(loadData.line, 11822);
+  // Payload Firestore: diagnóstico antes das âncoras e codec de reviewProgress
+  // acrescentaram 52 linhas; sem alteração nos fluxos de recovery/boot.
+  assert.equal(recovery.line, 9323);
+  assert.equal(brokenArtifacts.line, 9313);
+  assert.equal(loadData.line, 11874);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
   // importHandler; as tres primeiras ancoras nao mudam.
-  assert.equal(importHandler.line, 16206);
+  assert.equal(importHandler.line, 16258);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

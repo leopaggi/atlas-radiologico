@@ -2011,6 +2011,24 @@ function stripUndefinedDeep(value){
   try{ return JSON.parse(JSON.stringify(value)); }
   catch(_e){ return value; }
 }
+// Diagnóstico somente-leitura: caminhos, nunca valores (metadados clínicos
+// podem ser sensíveis). O Firestore recusa array como elemento de outro array.
+function findNestedArrayPaths(value, path='payload'){
+  const paths = [];
+  function visit(node, at){
+    if(Array.isArray(node)){
+      node.forEach((child, i)=>{
+        const next = `${at}[${i}]`;
+        if(Array.isArray(child)) paths.push(next);
+        visit(child, next);
+      });
+    }else if(node && typeof node==='object'){
+      Object.keys(node).forEach(key=>visit(node[key], `${at}.${key}`));
+    }
+  }
+  visit(value, path);
+  return paths;
+}
 function splitIntoChunks(arr, size){
   const out = [];
   for(let i=0;i<arr.length;i+=size) out.push(arr.slice(i,i+size));
@@ -2319,7 +2337,7 @@ async function writeShardedState(ms=15000){
         if(foldLesionMergesIntoState(rst, writeMerges).changed) remoteData = rst.data;
         // meta remoto (cópia): chaves de id fundido escritas por PC antigo
         // não voltam à nuvem pelo merge de REVIEW/progresso/override/revisões.
-        const rm = { data: [], review: clone(remoteMeta.review), reviewStamps: clone(remoteMeta.reviewUpdatedAt), reviewProgress: clone(remoteMeta.reviewProgress),
+        const rm = { data: [], review: clone(remoteMeta.review), reviewStamps: clone(remoteMeta.reviewUpdatedAt), reviewProgress: reviewProgressFromFirestore(remoteMeta.reviewProgress),
           reviewOverride: clone(remoteMeta.reviewOverride), lesionRevisions: clone(remoteMeta.lesionRevisions) };
         if(foldLesionMergesIntoState(rm, writeMerges).changed){
           remoteMeta = { ...remoteMeta, review: rm.review, reviewUpdatedAt: rm.reviewStamps, reviewProgress: rm.reviewProgress, reviewOverride: rm.reviewOverride, lesionRevisions: rm.lesionRevisions };
@@ -2349,7 +2367,7 @@ async function writeShardedState(ms=15000){
       const writeReview = mergeReviewByRecency(txBase.review, remoteMeta.review, txBase.reviewUpdatedAt, remoteMeta.reviewUpdatedAt);
       // PROTEÇÃO 090 — histórico do Quiz (união) e override (mais recente)
       // também dentro da transação; o REVIEW gravado é o materializado.
-      const writeProgress = mergeReviewProgress(txBase.reviewProgress, remoteMeta.reviewProgress);
+      const writeProgress = mergeReviewProgress(txBase.reviewProgress, reviewProgressFromFirestore(remoteMeta.reviewProgress));
       const writeOverride = mergeReviewOverrides(txBase.reviewOverride, remoteMeta.reviewOverride);
       const metaPayload = {...txBase, lesionMerges: writeMerges, review: stripUndefinedDeep(materializeReviewState(writeReview.review, writeProgress, writeOverride)), reviewUpdatedAt: writeReview.stamps,
         reviewProgress: writeProgress, reviewOverride: writeOverride, tombstones: stripUndefinedDeep(writeTombstones), lesionRevisions: writeLesionRevisions,
@@ -2359,7 +2377,20 @@ async function writeShardedState(ms=15000){
         err.code = 'chunk_too_large';
         throw err;
       }
-      tx.set(FB_META_REF(), {...metaPayload, [CLOUD_REVISION_FIELD]: nextRevision});
+      // Só a representação do histórico 090 cruza a fronteira: as tentativas
+      // continuam tuplas no IndexedDB/backup/Quiz, mas objetos no Firestore.
+      const firestoreMeta = {...metaPayload, reviewProgress: reviewProgressToFirestore(writeProgress), [CLOUD_REVISION_FIELD]: nextRevision};
+      const nested = findNestedArrayPaths(firestoreMeta, 'atlas_state/main');
+      nested.push(...findNestedArrayPaths(gated.data, 'DATA'));
+      if(nested.length){
+        const err = new Error('Arrays aninhados no payload Firestore: ' + nested.join(', '));
+        err.code = 'firestore_nested_arrays';
+        throw err; // nunca escrever um estado parcial nem descartar a edição local
+      }
+      if(!checkChunkSize(firestoreMeta, 'documento principal (revisão/SRS/histórico)')){
+        const err = new Error('documento principal grande demais'); err.code = 'chunk_too_large'; throw err;
+      }
+      tx.set(FB_META_REF(), firestoreMeta);
       for(let i=0;i<gatedChunks.length;i++){
         tx.set(FB_CHUNK_REF(i), {items: gatedChunks[i]});
       }
@@ -2439,7 +2470,7 @@ async function readShardedState(ms=15000){
 
   return { data: combinedData, review: meta.review, srs: meta.srs, sessionLog: meta.sessionLog,
     reviewUpdatedAt: normalizeReviewStamps(meta.reviewUpdatedAt), // PROTEÇÃO 089 — ausente = sem carimbo
-    reviewProgress: normalizeReviewProgress(meta.reviewProgress), reviewOverride: normalizeReviewOverrides(meta.reviewOverride), // PROTEÇÃO 090
+    reviewProgress: reviewProgressFromFirestore(meta.reviewProgress), reviewOverride: normalizeReviewOverrides(meta.reviewOverride), // PROTEÇÃO 090
     lesionMerges: normalizeLesionMerges(meta.lesionMerges), // PROTEÇÃO 091c
     sectionOrder: meta.sectionOrder, siteOrder: meta.siteOrder,
     orderUpdatedAt: normalizeOrderStamps(meta.orderUpdatedAt), // PROTEÇÃO 085 — ausente = sem carimbo
@@ -5471,6 +5502,27 @@ function normalizeReviewProgress(v){
     for(const [id, e] of Object.entries(v)){ const n = normalizeReviewProgressEntry(e); if(n) out[id] = n; }
   }
   return out;
+}
+// Firestore não admite [[t,ok,graded]] dentro de reviewProgress[id].a.
+// Apenas na fronteira da nuvem: a tupla local vira objeto e volta idêntica
+// ao ler (incluindo documento legado ausente e estado local/backups antigos).
+function reviewProgressToFirestore(progress){
+  const out = {};
+  for(const [id, p] of Object.entries(normalizeReviewProgress(progress))){
+    out[id] = { b:p.b, f:p.f, a:p.a.map(x=>({t:x[0], ok:x[1], graded:x[2]})) };
+  }
+  return out;
+}
+function reviewProgressFromFirestore(progress){
+  const out = {};
+  if(progress && typeof progress==='object' && !Array.isArray(progress)){
+    for(const [id, p] of Object.entries(progress)){
+      if(!p || typeof p!=='object' || Array.isArray(p)) continue;
+      out[id] = {...p, a:(Array.isArray(p.a) ? p.a : []).map(x=>
+        x && !Array.isArray(x) && typeof x==='object' ? [x.t, x.ok, x.graded] : x)};
+    }
+  }
+  return normalizeReviewProgress(out);
 }
 function normalizeReviewOverrides(v){
   const out = {};

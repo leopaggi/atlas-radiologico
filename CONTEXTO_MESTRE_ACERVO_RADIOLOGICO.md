@@ -8,6 +8,22 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**Correção de sincronização em preparação (2026-09-26, ainda sem validação real):**
+o payload de `atlas_state/main` continha `reviewProgress[lesionId].a[0]`
+como array dentro de array. O Firestore recusa esse formato na transação.
+A correção em elaboração codifica somente essas tentativas como objetos ao
+escrever na nuvem e restaura as tuplas ao ler/mesclar. `findNestedArrayPaths`
+inspeciona, somente em memória e sem valores clínicos no relatório, o payload
+final da meta e dos chunks antes do primeiro `tx.set`. Testes de dois PCs com
+mock que rejeita arrays aninhados cobrem o transporte (180/180 PASS; teste
+novo 4/4; bootstrap 42/42; 090 19/19; fluxos críticos 23/23). A suíte
+ampla no Windows mostrou 11 FAIL inicialmente: 1 âncora de linha agora
+atualizada, 3 falhas históricas e 7 testes que pressupõem LF mas leem o
+`index.html` em CRLF (falham antes das asserções funcionais). O smoke com Firebase
+autenticado em navegador real permanece obrigatório antes de declarar sucesso
+em produção. Usuário autorizou commit/publicação antes desse smoke para poder
+testar o site publicado; confirmar banner e outro perfil depois do deploy.
+
 *Atualizado em 2026-09-26, junto do commit "Protecao 093d: contexto clinico por imagem no quiz".*
 
 - **Branch local de trabalho:** `master` (publicação: `git push origin master:main`).

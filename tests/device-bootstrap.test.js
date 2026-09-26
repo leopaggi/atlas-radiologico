@@ -98,7 +98,7 @@ const normalizeTombstoneMapFn = extractFunction(html, 'normalizeTombstoneMap');
 const reviewFns089 = ['normalizeReviewStamps', 'saveReviewStamps', 'mergeReviewByRecency',
   // PROTEÇÃO 090 — histórico do Quiz + override (funções reais)
   'reviewPromotionReached', 'reviewDemotionTriggered', 'replayAutoReview', 'normalizeReviewAttempts', 'foldReviewProgress', 'autoReviewBase', 'hasRealReviewAttempts', 'autoReviewStateFromProgress',
-  'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'normalizeReviewOverrides', 'mergeReviewProgress',
+  'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'reviewProgressToFirestore', 'reviewProgressFromFirestore', 'normalizeReviewOverrides', 'mergeReviewProgress',
   'mergeReviewOverrides', 'materializeReviewState', 'saveReviewProgressState']
   .map((n) => extractFunction(html, n).source).join('\n');
 // PROTEÇÃO 091c — mapa de fusão clínica (módulo real: normalize/merge/fold).
@@ -230,6 +230,7 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
     "const REVIEW_PROGRESS_KEY = 'atlas:reviewProgress'; const REVIEW_OVERRIDE_KEY = 'atlas:reviewOverride'; const REVIEW_ATTEMPTS_MAX = 8; let REVIEW_PROGRESS = {}; let REVIEW_OVERRIDE = {};\n" + reviewFns089 + '\n' +
     lesionMergesModule091c + '\n' +
     'function stripUndefinedDeep(v){try{return JSON.parse(JSON.stringify(v));}catch(_e){return v;}}\n' +
+    extractFunction(html, 'findNestedArrayPaths').source + '\n' +
     'function splitIntoChunks(arr,size){const out=[];for(let i=0;i<arr.length;i+=size)out.push(arr.slice(i,i+size));return out;}\n' +
     'function checkChunkSize(){return true;}\n' +
     imageIdentityKeysFn079b.source + '\n' +

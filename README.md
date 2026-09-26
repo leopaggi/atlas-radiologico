@@ -1,5 +1,15 @@
 # Atlas Radiológico
 
+### Sincronização do histórico do Quiz (2026-09-26)
+
+O histórico local de tentativas do Quiz continua no formato original; para
+escrever no Firestore, as tentativas são representadas como objetos, pois o
+serviço não aceita arrays dentro de arrays. Ao ler da nuvem, o Atlas restaura
+o formato local. Antes de gravar, uma checagem somente-leitura identifica o
+caminho de qualquer outro array aninhado e impede uma escrita parcial.
+Teste: `node tests/firestore-no-nested-arrays.test.js`. A confirmação da
+sincronização real entre perfis precisa ser feita no navegador autenticado.
+
 Atlas de padrões radiológicos — um banco de lesões organizado por seção
 (Neurorradiologia, Tórax, Musculoesquelético, etc.), com tags de imagem,
 descrição do padrão radiológico, classificação de frequência e imagens

@@ -249,10 +249,10 @@ test('090 F5: histórico e override persistem e recarregam', async () => {
 
 test('090 PIPELINE: write (merge na transação + REVIEW materializado), read, reconcile, no-op, adoção, backup e snapshot', () => {
   const w = extractFunction(html, 'writeShardedState');
-  assert.match(w, /const writeProgress = mergeReviewProgress\((?:metaPayloadBase|txBase)\.reviewProgress, remoteMeta\.reviewProgress\);/);
+  assert.match(w, /const writeProgress = mergeReviewProgress\((?:metaPayloadBase|txBase)\.reviewProgress, reviewProgressFromFirestore\(remoteMeta\.reviewProgress\)\);/);
   assert.match(w, /const writeOverride = mergeReviewOverrides\((?:metaPayloadBase|txBase)\.reviewOverride, remoteMeta\.reviewOverride\);/);
   assert.match(w, /review: stripUndefinedDeep\(materializeReviewState\(writeReview\.review, writeProgress, writeOverride\)\)/);
-  assert.match(extractFunction(html, 'readShardedState'), /reviewProgress: normalizeReviewProgress\(meta\.reviewProgress\), reviewOverride: normalizeReviewOverrides\(meta\.reviewOverride\)/);
+  assert.match(extractFunction(html, 'readShardedState'), /reviewProgress: reviewProgressFromFirestore\(meta\.reviewProgress\), reviewOverride: normalizeReviewOverrides\(meta\.reviewOverride\)/);
   const rec = extractFunction(html, 'reconcileStateWithRemote');
   assert.match(rec, /REVIEW = materializeReviewState\(REVIEW, REVIEW_PROGRESS, REVIEW_OVERRIDE\);/);
   const pre = extractFunction(html, 'reconcileBeforePush');

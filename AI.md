@@ -1,5 +1,17 @@
 # AI.md — instruções para assistentes de IA (Claude, DeepSeek, ChatGPT, etc.)
 
+## Correção do payload Firestore (2026-09-26; validação real pendente)
+
+`reviewProgress[id].a` permanece como tuplas `[t,ok,graded]` no Quiz,
+IndexedDB e backup (090/090b). O Firestore **recusa** esse array de arrays
+em `atlas_state/main`. No limite de `writeShardedState`, somente esse campo
+é codificado como `a:[{t,ok,graded}]`; a leitura e o merge transacional
+decodificam antes de chamar o motor existente. `findNestedArrayPaths`
+inspeciona o payload final da meta e dos chunks antes de qualquer `tx.set`:
+se houver outro array aninhado, aborta com os caminhos, sem alterar dados
+nem achatar coleções. Conferir em navegador autenticado a sincronização real
+e a recepção em outro PC antes de declarar resolvido em produção.
+
 Este arquivo existe porque esse projeto já foi mexido por mais de uma IA,
 sem contexto uma da outra, e isso já causou regressões reais (bugs já
 corrigidos voltando, porque uma IA reescreveu do zero sem saber do

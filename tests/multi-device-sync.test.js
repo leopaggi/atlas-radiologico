@@ -152,7 +152,7 @@ const reviewFns089 = ['normalizeReviewStamps', 'loadReviewStamps', 'saveReviewSt
   'mergeReviewByRecency', 'consolidateReviewOnMerge', 'getReview', 'setReview',
   // PROTEÇÃO 090 — estado AUTO pelo Quiz + override manual (funções reais)
   'reviewPromotionReached', 'reviewDemotionTriggered', 'replayAutoReview', 'normalizeReviewAttempts', 'foldReviewProgress', 'autoReviewBase', 'hasRealReviewAttempts', 'autoReviewStateFromProgress',
-  'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'normalizeReviewOverrides', 'mergeReviewProgress',
+  'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'reviewProgressToFirestore', 'reviewProgressFromFirestore', 'normalizeReviewOverrides', 'mergeReviewProgress',
   'mergeReviewOverrides', 'materializeReviewState', 'isReviewManual', 'computeAutomaticReviewState', 'effectiveReviewState',
   'ensureReviewProgressBase', 'recordReviewAttempt', 'gradeReviewAttempt', 'getReviewStateExplanation',
   'loadReviewProgressState', 'saveReviewProgressState', 'stampRestoredReviewOverrides', 'setReviewAuto', 'markLesionForReviewAgain']
@@ -428,6 +428,7 @@ function makeDevice(cloud, { seed = [] } = {}) {
     ${imageIdentityDivergenceForEntryFn.source}
     ${buildImageIdentityDivergenceReportFn.source}
     function stripUndefinedDeep(v){try{return JSON.parse(JSON.stringify(v));}catch(_e){return v;}}
+    ${extractFunction(html, 'findNestedArrayPaths').source}
     function splitIntoChunks(arr,size){const out=[];for(let i=0;i<arr.length;i+=size)out.push(arr.slice(i,i+size));return out;}
     function checkChunkSize(){return true;}
     ${markSyncDirtyFn.source}
@@ -519,6 +520,39 @@ function makeSeedEntry(over) {
     id: 'seed_1', name: 'Lesão 1', s: 'Seção', site: 'Sítio', images: [], links: [], inc: 1
   }, over || {});
 }
+
+test('Firestore estrito: histórico 090b + conteúdo 093/093b/093d cruzam a transação e chegam a outro PC sem array aninhado', async () => {
+  const cloud = makeFakeCloud();
+  const lesion = makeSeedEntry({
+    images:[img({assetId:'asset1', label:'Quadro', panels:[{seq:'STIR'}],
+      metaUpdatedAt:{label:22}, clinicalContext:{presentation:'História'}, clinicalContextUpdatedAt:{presentation:23}})],
+    clinicalCases:[{id:'case1', title:'Caso', patientAge:'40', imageRefs:[{imageId:'asset:asset1', order:0, quizPick:'on', quizPickAt:25}]}],
+    radiologicSigns:[{id:'sign1', title:'Sinal', imageRefs:[{imageId:'asset:asset1', order:0}]}],
+    classificationSchemes:[{id:'scheme1', title:'Esquema', links:[{url:'https://example.org/guide'}], imageRefs:[{imageId:'asset:asset1', order:0}]}]
+  });
+  const a = makeDevice(cloud, {seed:[lesion]});
+  await a.boot();
+  a.context.REVIEW_PROGRESS = {seed_1:{b:0,f:0,a:[[100,1,0],[101,1,1]]}};
+  // O mock rejeita exatamente a limitação do SDK real, antes de gravar.
+  const run = cloud.runTransaction;
+  a.context.fbDb = {runTransaction: fn => run(tx => fn({
+    get: tx.get,
+    set: (ref, payload) => {
+      const paths = a.context.findNestedArrayPaths(payload, ref.__kind);
+      if(paths.length) throw new Error('Nested arrays are not supported: ' + paths.join(', '));
+      tx.set(ref, payload);
+    }
+  }))};
+  await a.markDirty();
+  await a.save();
+  assert.equal(cloud.peekMeta().reviewProgress.seed_1.a[1].graded, 1);
+  const b = makeDevice(cloud, {seed:[makeSeedEntry()]});
+  await b.boot();
+  assert.deepEqual(JSON.parse(JSON.stringify(b.context.REVIEW_PROGRESS.seed_1.a)), [[100,1,0],[101,1,1]]);
+  assert.equal(b.context.DATA[0].clinicalCases[0].imageRefs[0].quizPick, 'on');
+  assert.equal(b.context.DATA[0].radiologicSigns[0].title, 'Sinal');
+  assert.equal(b.context.DATA[0].classificationSchemes[0].title, 'Esquema');
+});
 
 // ===========================================================================
 // CENÁRIO A — dispositivo stale recebe automaticamente o que a nuvem tem, e
