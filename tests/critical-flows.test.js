@@ -558,10 +558,15 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // hasRealReviewAttempts/autoReviewStateFromProgress, materializacao de todo
   // id) + auditoria somente leitura — antes da primeira ancora; +1 (REVIEW
   // derivado no boot) dentro de loadData.
-  assert.equal(recovery.line, 9095);
-  assert.equal(brokenArtifacts.line, 9085);
-  assert.equal(loadData.line, 11646);
-  assert.equal(importHandler.line, 15945);
+  // +12 nas tres primeiras ancoras / +64 no importHandler (Protecao 093b,
+  // 2026-09-26): CSS dos vinculos de imagem e merge POR VINCULO (imageRefs)
+  // em mergeDidacticItems — antes da primeira ancora; +52 entre loadData e o
+  // importHandler: botao 🔗 na galeria do detalhe (host re-renderizavel) e
+  // do formulario, imageCtx da galeria para o editor do item.
+  assert.equal(recovery.line, 9107);
+  assert.equal(brokenArtifacts.line, 9097);
+  assert.equal(loadData.line, 11658);
+  assert.equal(importHandler.line, 16009);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

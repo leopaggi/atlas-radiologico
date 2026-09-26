@@ -84,7 +84,7 @@ const isValidAssignedAtFn = extractFunction(html, 'isValidAssignedAt');
 const adoptOldestFn = extractFunction(html, 'adoptOldestAssignedAt');
 const unionClinicalCasesFn = extractFunction(html, 'unionClinicalCases');
 // PROTEÇÃO 093 — merge por item do conteúdo didático (usado por mergeEntryNonDestructive).
-const didacticFns093 = ['genDidacticId', 'didacticItemTime', 'isDidacticItemVisible', 'sortDidacticItems', 'mergeDidacticItems', 'mergeClinicalCaseLists'].map((n) => extractFunction(html, n).source).join('\n');
+const didacticFns093 = ['genDidacticId', 'didacticItemTime', 'isDidacticItemVisible', 'sortDidacticItems', 'mergeDidacticItems', 'mergeClinicalCaseLists', 'imageRefTime', 'mergeImageRefLists'].map((n) => extractFunction(html, n).source).join('\n');
 const clinicalCaseIdentityKeyFn = extractFunction(html, 'clinicalCaseIdentityKey');
 const normalizeExternalTitleFn = extractFunction(html, 'normalizeExternalTitle');
 // ALTERAÇÃO 078 (2026-09-24): "carregar da nuvem" em device novo agora adota

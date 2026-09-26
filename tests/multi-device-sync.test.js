@@ -92,7 +92,7 @@ const adoptOldestFn = extractFunction(html, 'adoptOldestAssignedAt');
 const mergeForPushFn = extractFunction(html, 'mergeEntryForImagePush');
 const unionClinicalCasesFn = extractFunction(html, 'unionClinicalCases');
 // PROTEÇÃO 093 — merge por item do conteúdo didático (usado por mergeEntryNonDestructive).
-const didacticFns093 = ['genDidacticId', 'didacticItemTime', 'isDidacticItemVisible', 'sortDidacticItems', 'mergeDidacticItems', 'mergeClinicalCaseLists'].map((n) => extractFunction(html, n).source).join('\n');
+const didacticFns093 = ['genDidacticId', 'didacticItemTime', 'isDidacticItemVisible', 'sortDidacticItems', 'mergeDidacticItems', 'mergeClinicalCaseLists', 'imageRefTime', 'mergeImageRefLists'].map((n) => extractFunction(html, n).source).join('\n');
 const clinicalCaseIdentityKeyFn = extractFunction(html, 'clinicalCaseIdentityKey');
 const normalizeExternalTitleFn = extractFunction(html, 'normalizeExternalTitle');
 const imageOwnerIdFn = extractFunction(html, 'imageOwnerIdV1');
@@ -4107,6 +4107,52 @@ test('PROTEÇÃO 093 - sinal criado no PC A aparece no B; edição no B volta ao
   eb = b.context.DATA.find((x) => x.id === 'seed_1');
   assert.deepEqual(visible093(eb.radiologicSigns), ['s1:Sinal s1 editado'], 'PC B converge');
   assert.equal(cl.notes, 'edição qualquer do PC B');
+});
+
+// ===========================================================================
+// PROTEÇÃO 093b — vínculos imagem↔item (imageRefs) atravessam o sync:
+// vínculos concorrentes nos dois PCs se somam (merge POR vínculo), o
+// desvincular (tombstone do vínculo) não ressuscita por PC desatualizado, e
+// o asset continua UMA vez só em entry.images.
+// ===========================================================================
+test('PROTEÇÃO 093b - vínculo A→B, vínculos concorrentes somam, desvincular não ressuscita, asset nunca duplica', async () => {
+  const I1 = img({ publicId: 'atlas-radiologico/p093b-1' });
+  const I2 = img({ publicId: 'atlas-radiologico/p093b-2' });
+  const k1 = 'public:atlas-radiologico/p093b-1', k2 = 'public:atlas-radiologico/p093b-2';
+  const seedEntry = () => makeSeedEntry({ images: [Object.assign({}, I1), Object.assign({}, I2)], radiologicSigns: [sign093('s1')] });
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [seedEntry()]);
+  const a = makeDevice(cloud, { seed: [seedEntry()] }); await a.boot();
+  const b = makeDevice(cloud, { seed: [seedEntry()] }); await b.boot();
+  const refsOf = (e) => JSON.parse(JSON.stringify((e.radiologicSigns || []).find((x) => x.id === 's1').imageRefs || []));
+  const active = (e) => refsOf(e).filter((r) => !r.deletedAt).map((r) => r.imageId).sort();
+  // A vincula I1 como o botão 🔗 do detalhe faz: sem mexer no updatedAt do
+  // item NEM no _userUpdatedAt da lesão (só saveData + push)
+  const ea0 = a.context.DATA.find((x) => x.id === 'seed_1');
+  const userTsBefore = ea0._userUpdatedAt;
+  ea0.radiologicSigns = ea0.radiologicSigns.map((x) => Object.assign({}, x, { imageRefs: [{ imageId: k1, order: 0, createdAt: 2000, updatedAt: 2000 }] }));
+  await a.context.saveData();
+  await a.context.pushToFirebaseNow();
+  assert.equal(a.context.DATA.find((x) => x.id === 'seed_1')._userUpdatedAt, userTsBefore);
+  assert.deepEqual(active(cloudLesion093(cloud)), [k1], 'vínculo sobe sem carimbar a lesão');
+  // B (sem puxar) vincula I2 E edita o texto do sinal (item mais novo)
+  await editLesion093(b, (e) => { e.radiologicSigns = e.radiologicSigns.map((x) => Object.assign({}, x, { title: 'Sinal editado no B', updatedAt: 5000, imageRefs: [{ imageId: k2, order: 0, createdAt: 3000, updatedAt: 3000 }] })); });
+  let cl = cloudLesion093(cloud);
+  assert.equal(cl.radiologicSigns[0].title, 'Sinal editado no B', 'edição de texto preservada');
+  assert.deepEqual(active(cl), [k1, k2], 'vínculos concorrentes somam (nenhum some)');
+  await a.context.syncFromFirebase();
+  let ea = a.context.DATA.find((x) => x.id === 'seed_1');
+  assert.deepEqual(active(ea), [k1, k2], 'PC A recebe o vínculo do B');
+  // A desvincula I1 (tombstone do vínculo)
+  await editLesion093(a, (e) => { e.radiologicSigns = e.radiologicSigns.map((x) => Object.assign({}, x, { imageRefs: (x.imageRefs || []).map((r) => r.imageId === k1 ? Object.assign({}, r, { deletedAt: 9000, updatedAt: 9000 }) : r) })); });
+  // B desatualizado (ainda com I1 ativo) salva outra coisa
+  await editLesion093(b, (e) => { e.notes = 'nota do PC B'; });
+  cl = cloudLesion093(cloud);
+  assert.deepEqual(active(cl), [k2], 'desvincular não ressuscita pelo PC desatualizado');
+  assert.deepEqual(active(b.context.DATA.find((x) => x.id === 'seed_1')), [k2], 'PC B converge');
+  // imagem continua na galeria, UMA vez (vincular/desvincular nunca duplica nem apaga asset)
+  assert.deepEqual(Array.from(cl.images, (x) => x.publicId).sort(), ['atlas-radiologico/p093b-1', 'atlas-radiologico/p093b-2']);
+  assert.equal(cl.notes, 'nota do PC B');
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');

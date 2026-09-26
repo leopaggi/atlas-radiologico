@@ -90,7 +90,7 @@ function loadPure() {
     extractFunction(html, 'removeClinicalCaseFromLesion'),
     extractFunction(html, 'clinicalCaseIdentityKey'),
     extractFunction(html, 'unionClinicalCases'),
-    ...['genDidacticId', 'didacticItemTime', 'isDidacticItemVisible', 'sortDidacticItems', 'mergeDidacticItems', 'mergeClinicalCaseLists'].map((n) => extractFunction(html, n)), // 093
+    ...['genDidacticId', 'didacticItemTime', 'isDidacticItemVisible', 'sortDidacticItems', 'mergeDidacticItems', 'mergeClinicalCaseLists', 'imageRefTime', 'mergeImageRefLists'].map((n) => extractFunction(html, n)), // 093
     extractFunction(html, 'findExternalImportCandidatesForLink'),
     extractFunction(html, 'searchExistingLesionsForLink'),
     extractFunction(html, 'externalLinkCandidateRowHtml'),
