@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.2.0
+// @version      1.3.0
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e abre o Atlas com o payload no fragmento da URL. Não captura imagens, não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -61,10 +61,29 @@
   // (/cases/<slug>) é derivado do título clínico pelo próprio Radiopaedia e
   // serve de âncora: candidato sem nenhum termo em comum com o slug, ou igual
   // a um nome de autor/perfil, é descartado.
+  // 091f: helper CENTRAL — remove o branding do Radiopaedia do FIM do título
+  // ("| Radiology Case | Radiopaedia.org", "| Radiopaedia.org",
+  // "- Radiology Case | Radiopaedia.org"...), tolerando caracteres invisíveis,
+  // barra de largura total e maiúsculas/minúsculas. Não toca no meio do título.
+  // O Atlas aplica a MESMA regra ao receber (userscripts antigos instalados).
+  function normalizeRadiopaediaCaseTitle(title) {
+    var t = String(title || '')
+      .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+      .replace(/[\uFF5C\u00A6]/g, '|')
+      .replace(/\s+/g, ' ')
+      .trim();
+    var prev;
+    do {
+      prev = t;
+      t = t.replace(/\s*[|–—-]\s*Radiopaedia(?:\.org)?\s*$/i, '')
+        .replace(/\s*[|–—-]\s*Radiology\s+(?:Case|Reference\s+Article)\s*$/i, '')
+        .trim();
+    } while (t !== prev);
+    return t;
+  }
+
   function stripSiteSuffix(s) {
-    return cleanText(String(s || '')
-      .replace(/\s*\|\s*Radiology Case\s*\|\s*Radiopaedia\.org\s*$/i, '')
-      .replace(/\s*[|–—-]\s*Radiopaedia(\.org)?\s*$/i, ''));
+    return cleanText(normalizeRadiopaediaCaseTitle(s));
   }
 
   function titleTokens(s) {
@@ -159,7 +178,8 @@
   // no index.html). Campos ausentes são omitidos — nunca inventados.
   function buildExternalPayload(parts) {
     var payload = { source: 'Radiopaedia' };
-    if (parts.title) payload.title = String(parts.title).slice(0, 300);
+    var title = normalizeRadiopaediaCaseTitle(parts.title); // 091f: payload NUNCA leva o branding
+    if (title) payload.title = title.slice(0, 300);
     if (parts.sourceUrl) payload.sourceUrl = String(parts.sourceUrl).slice(0, 500);
     if (parts.patientAge) payload.patientAge = String(parts.patientAge).slice(0, 20);
     if (parts.patientSex) payload.patientSex = String(parts.patientSex).slice(0, 20);

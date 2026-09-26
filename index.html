@@ -5722,6 +5722,27 @@ function completeGlobalReview(reviewId){
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
 }
+/* PROTEÇÃO 091f — ✓ MARCAR COMO RESOLVIDA: decisão humana explícita para
+   qualquer revisão ATIVA (lesão ou geral) cujo problema o usuário já
+   resolveu manualmente — sem proposta de IA, sem colar solução, sem passar
+   por applied_pending_validation. status -> 'accepted' + histórico
+   'manually_resolved'. NUNCA toca DATA/a lesão, não executa solução e não
+   apaga histórico. Fusão clínica (091c) só redireciona a revisão para o
+   keeper — a conclusão continua sendo esta ação humana. */
+function resolveReviewManually(reviewId){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return { ok:false, reason:'not_found', review:null };
+  if(!ACTIVE_LESION_REVIEW_STATUSES.includes(review.status)) return { ok:false, reason:'not_active', status:review.status, review };
+  const previousStatus = review.status;
+  review.status = 'accepted';
+  review.updatedAt = Date.now();
+  review.completedAt = review.updatedAt;
+  review.resolvedManually = true;
+  pushLesionReviewHistory(review, 'manually_resolved', { previousStatus });
+  saveLesionRevisions();
+  updateReviewCenterBadges();
+  return { ok:true, reason:null, review };
+}
 function createLesionReview(lesionId, requestText){
   const text = (requestText||'').trim();
   if(!lesionId || !text) return { created:false, reason:'invalid_input', review:null };
@@ -13952,7 +13973,8 @@ const REVIEW_HISTORY_ACTION_LABELS = {
   manual_action_reopened:'devolvida à fila de pendentes',
   ai_analysis_no_change:'análise da IA: sem alteração',
   placement_applied:'localização adicional aplicada (provisória)',
-  request_edited:'motivo do pedido editado' // PROTEÇÃO 091d
+  request_edited:'motivo do pedido editado', // PROTEÇÃO 091d
+  manually_resolved:'Concluída manualmente pelo usuário' // PROTEÇÃO 091f
 };
 
 const LESION_REVIEW_FIELD_LABELS = { name:'nome', notes:'descrição', classification:'classificação', tags:'tags', enTerm:'termo em inglês' };
@@ -14004,6 +14026,29 @@ function reviewRequestHistoryHtml(review){
   const items = h.map(x=>`<li><b>${x.action==='edited'?'alterado':'criado'}</b> ${x.at?new Date(x.at).toLocaleString('pt-BR'):'—'}<div class="review-history-item-detail">${escAttr(x.text||'')}</div></li>`).join('');
   return `<details class="review-request-history"><summary>Histórico do pedido (${h.length})</summary><ul style="margin:6px 0 0 16px;padding:0;">${items}</ul></details>`;
 }
+// PROTEÇÃO 091f — ✓ Marcar como resolvida (confirmação curta; nunca toca DATA).
+const REVIEW_MANUAL_RESOLVE_CONFIRM = 'Marcar esta revisão como resolvida?\nNenhum dado da lesão será alterado.';
+function reviewResolveButtonHtml(r){
+  if(!r || !ACTIVE_LESION_REVIEW_STATUSES.includes(r.status)) return '';
+  // pendência geral já proposta/ação manual: o "✓ Concluir" existente faz o mesmo papel
+  if(isGlobalReview(r) && (r.status==='proposed' || r.status==='manual_action_required')) return '';
+  return '<button type="button" class="btn btn-ghost review-resolve-manual">✓ Marcar como resolvida</button>';
+}
+async function confirmAndResolveReviewManually(reviewId, onDone){
+  if(!confirm(REVIEW_MANUAL_RESOLVE_CONFIRM)) return { ok:false, reason:'cancelled' };
+  const res = resolveReviewManually(reviewId);
+  if(res.ok){
+    await saveLesionRevisions();
+    toast('Revisão marcada como resolvida — nenhum dado da lesão foi alterado.');
+    if(typeof onDone==='function') onDone();
+  } else toast('Não foi possível concluir esta revisão (' + (res.reason||'erro') + ').');
+  return res;
+}
+function wireReviewResolveButton(row, reviewId, onDone){
+  const b = row && row.querySelector('.review-resolve-manual');
+  if(b) b.onclick = ()=> confirmAndResolveReviewManually(reviewId, onDone);
+}
+
 function openEditReviewRequestModal(reviewId, onSaved){
   const review = LESION_REVISIONS[reviewId];
   if(!review) return;
@@ -14067,6 +14112,7 @@ function openReviewSummaryModal(reviewId){
         <div class="modal-actions" style="flex-wrap:wrap;">
           <button class="btn btn-ghost" id="rsm-close">fechar</button>
           <button class="btn btn-ghost" id="rsm-central">Abrir Central completa</button>
+          ${isReviewRequestEditable(r)?'<button class="btn btn-ghost" id="rsm-resolve">✓ Marcar como resolvida</button>':''}
           ${isReviewRequestEditable(r)?'<button class="btn btn-primary" id="rsm-edit">✏ Editar solicitação</button>':''}
         </div>
       </div>`;
@@ -14077,6 +14123,8 @@ function openReviewSummaryModal(reviewId){
     };
     const editBtn = ov.querySelector('#rsm-edit');
     if(editBtn) editBtn.onclick = ()=> openEditReviewRequestModal(reviewId, paint);
+    const resolveBtn = ov.querySelector('#rsm-resolve'); // PROTEÇÃO 091f
+    if(resolveBtn) resolveBtn.onclick = async ()=>{ const res = await confirmAndResolveReviewManually(reviewId); if(res.ok) cleanup(); };
   };
   paint();
   document.body.appendChild(ov);
@@ -14694,13 +14742,14 @@ function openPendingReviewsModal(){
         <div class="review-center-row-actions">
           ${meta.found?'<button type="button" class="btn btn-ghost review-open-lesion">ver lesão</button>':''}
           ${reviewAcceptsAiProposal(r)?'<button type="button" class="btn btn-ghost review-ai-prepare">🤖 Preparar para IA</button>':''}
-          <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}
+          <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}${reviewResolveButtonHtml(r)}
           ${cancellable?'<button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>':''}
         </div>`;
       if(meta.found) row.querySelector('.review-open-lesion').onclick = ()=>{ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); openDetail(meta.lesion.id); };
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
       const editReqBtn = row.querySelector('.review-edit-request'); // PROTEÇÃO 091d
       if(editReqBtn) editReqBtn.onclick = ()=> openEditReviewRequestModal(r.id, renderList);
+      wireReviewResolveButton(row, r.id, renderList); // PROTEÇÃO 091f
       const cancelBtn = row.querySelector('.review-cancel-request');
       if(cancelBtn) cancelBtn.onclick = ()=> openCancelReviewModal(r.id, renderList);
       const aiBtn = row.querySelector('.review-ai-prepare');
@@ -14931,7 +14980,7 @@ function openReadySolutionsModal(){
             <div class="review-center-row-solution" style="white-space:pre-wrap;"><b>Análise / resultado:</b> ${escAttr((r.solution&&r.solution.text)||'')}</div>
           </div>
           <div class="review-center-row-actions">
-            <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}
+            <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}${reviewResolveButtonHtml(r)}
             <button type="button" class="btn btn-primary review-global-complete">✓ Concluir</button>
             <button type="button" class="btn btn-ghost review-reject-proposal">↩ devolver / pedir nova análise</button>
             <button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>
@@ -14939,6 +14988,7 @@ function openReadySolutionsModal(){
         grow.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
         const gEditBtn = grow.querySelector('.review-edit-request'); // PROTEÇÃO 091d
         if(gEditBtn) gEditBtn.onclick = ()=> openEditReviewRequestModal(r.id, renderBothLists);
+        wireReviewResolveButton(grow, r.id, renderBothLists); // PROTEÇÃO 091f
         grow.querySelector('.review-global-complete').onclick = async ()=>{
           const res = completeGlobalReview(r.id);
           if(res.ok){ await saveLesionRevisions(); toast('Pendência concluída.'); renderBothLists(); }
@@ -14967,7 +15017,7 @@ function openReadySolutionsModal(){
         </div>
         <div class="review-center-row-actions">
           ${meta.found?'<button type="button" class="btn btn-ghost review-open-lesion">ver lesão</button>':''}
-          <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}
+          <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}${reviewResolveButtonHtml(r)}
           <button type="button" class="btn btn-primary review-authorize">✓ autorizar correção</button>
           <button type="button" class="btn btn-ghost review-reject-proposal">✕ recusar proposta</button>
           <button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>
@@ -14976,6 +15026,7 @@ function openReadySolutionsModal(){
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
       const pEditBtn = row.querySelector('.review-edit-request'); // PROTEÇÃO 091d
       if(pEditBtn) pEditBtn.onclick = ()=> openEditReviewRequestModal(r.id, renderBothLists);
+      wireReviewResolveButton(row, r.id, renderBothLists); // PROTEÇÃO 091f
       row.querySelector('.review-authorize').onclick = async ()=>{
         const res = authorizeAndApplyReviewSolution(r.id);
         if(res.ok){
@@ -15027,7 +15078,7 @@ function openReadySolutionsModal(){
         </div>
         <div class="review-center-row-actions">
           ${meta.found?'<button type="button" class="btn btn-ghost review-open-lesion">👁 ver lesão corrigida</button>':''}
-          <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}
+          <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}${reviewResolveButtonHtml(r)}
           <button type="button" class="btn btn-primary review-approve">✓ funcionou — manter</button>
           <button type="button" class="btn btn-ghost review-rollback">↩ não funcionou — desfazer</button>
         </div>`;
@@ -15035,6 +15086,7 @@ function openReadySolutionsModal(){
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
       const aEditBtn = row.querySelector('.review-edit-request'); // PROTEÇÃO 091d
       if(aEditBtn) aEditBtn.onclick = ()=> openEditReviewRequestModal(r.id, renderBothLists);
+      wireReviewResolveButton(row, r.id, renderBothLists); // PROTEÇÃO 091f
       row.querySelector('.review-approve').onclick = async ()=>{
         const res = approveAppliedReviewSolution(r.id);
         if(res.ok){ await saveLesionRevisions(); toast('Correção mantida.'); renderBothLists(); }
@@ -15086,7 +15138,7 @@ function openReadySolutionsModal(){
         <div class="review-center-row-actions">
           ${sug.applicable?`<button type="button" class="btn btn-primary review-manual-apply-placement">✓ Aplicar localização sugerida</button>`:''}
           ${meta.found?`<button type="button" class="btn btn-ghost review-manual-open">${isImage?'🖼 Abrir lesão para ajustar imagens':'✏ Abrir lesão'}</button>`:''}
-          <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}
+          <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}${reviewResolveButtonHtml(r)}
           ${isGlobalReview(r)?'<button type="button" class="btn btn-primary review-global-complete">✓ Concluir</button>':''}
           <button type="button" class="btn btn-ghost review-manual-reopen">↩ Voltar para revisões</button>
           <button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>
@@ -15100,6 +15152,7 @@ function openReadySolutionsModal(){
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
       const mEditBtn = row.querySelector('.review-edit-request'); // PROTEÇÃO 091d
       if(mEditBtn) mEditBtn.onclick = ()=> openEditReviewRequestModal(r.id, renderBothLists);
+      wireReviewResolveButton(row, r.id, renderBothLists); // PROTEÇÃO 091f
       row.querySelector('.review-manual-reopen').onclick = ()=>{
         openReasonPromptModal(r.id, async (reason)=>{
           const res = reopenManualActionReview(r.id, reason);
@@ -17470,8 +17523,30 @@ function externalCaseSlugTitle(sourceUrl){
   const t = words.join(' ');
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
+/* PROTEÇÃO 091f — MESMA regra do userscript (normalizeRadiopaediaCaseTitle):
+   remove do FIM do título o branding do Radiopaedia ("| Radiology Case |
+   Radiopaedia.org", "| Radiopaedia.org", "- Radiology Case | …"), tolerando
+   invisíveis/barra larga/caixa. Aplicada ao RECEBER o caso, então um
+   userscript antigo instalado no navegador também é corrigido. */
+function normalizeRadiopaediaCaseTitle(title){
+  let t = String(title || '')
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+    .replace(/[\uFF5C\u00A6]/g, '|')
+    .replace(/\s+/g, ' ')
+    .trim();
+  let prev;
+  do {
+    prev = t;
+    t = t.replace(/\s*[|–—-]\s*Radiopaedia(?:\.org)?\s*$/i, '')
+      .replace(/\s*[|–—-]\s*Radiology\s+(?:Case|Reference\s+Article)\s*$/i, '')
+      .trim();
+  } while (t !== prev);
+  return t;
+}
 function reconcileExternalImportTitle(p){
   if (!p || typeof p !== 'object') return p;
+  const cleanTitle = normalizeRadiopaediaCaseTitle(p.title);
+  if (cleanTitle && cleanTitle !== p.title) p = Object.assign({}, p, { title: cleanTitle }); // 091f
   const slugTitle = externalCaseSlugTitle(p.sourceUrl);
   const slugTokens = tokenizeExternalTitle(slugTitle);
   if (!slugTokens.length) return p;
@@ -17586,7 +17661,11 @@ const EXTERNAL_IMPORT_TRANSLATIONS = {
   // PROTEÇÃO 091d — alias explícito (caso real do usuário). Sem "acute" no
   // título, NÃO vira "Apendicite aguda".
   "appendicitis in pregnancy": "Apendicite na gestação",
-  "appendicitis during pregnancy": "Apendicite na gestação"
+  "appendicitis during pregnancy": "Apendicite na gestação",
+  // PROTEÇÃO 091f — caso real (Radiopaedia). Termos próximos, mas cada um
+  // mantém o próprio nome e o enTerm original da fonte (nunca fundidos aqui).
+  "paraovarian cyst": "Cisto paraovariano",
+  "paratubal cyst": "Cisto paratubário"
 };
 // Modalidade (termo da fonte, minúsculo) → tag PT. Mapa fechado: sem
 // tradução livre, só equivalências confiáveis desta lista.

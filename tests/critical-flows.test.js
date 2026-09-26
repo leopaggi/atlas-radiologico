@@ -543,10 +543,14 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // + CSS — antes da primeira ancora; +136 entre loadData e o importHandler:
   // criacao da revisao do ✨ no Salvar do openForm e os modais de edicao/
   // resumo/lista + botoes ✏ na Central.
-  assert.equal(recovery.line, 8988);
-  assert.equal(brokenArtifacts.line, 8978);
-  assert.equal(loadData.line, 11539);
-  assert.equal(importHandler.line, 15795);
+  // +21 nas tres primeiras ancoras / +53 no importHandler (Protecao 091f,
+  // 2026-09-26): resolveReviewManually() no modulo da Central antes da
+  // primeira ancora; +32 entre loadData e o importHandler: botao/confirmacao
+  // "✓ Marcar como resolvida" nas listas da Central e no resumo do ⚠.
+  assert.equal(recovery.line, 9009);
+  assert.equal(brokenArtifacts.line, 8999);
+  assert.equal(loadData.line, 11560);
+  assert.equal(importHandler.line, 15848);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

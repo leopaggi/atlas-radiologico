@@ -390,6 +390,7 @@ test('14. fragmento é removido após consumo', () => {
     + '\n' + extractFunction(html, 'normalizeExternalTitle')
     + '\n' + extractFunction(html, 'tokenizeExternalTitle')
     + '\n' + extractFunction(html, 'externalCaseSlugTitle')
+    + '\n' + extractFunction(html, 'normalizeRadiopaediaCaseTitle') // 091f
     + '\n' + extractFunction(html, 'reconcileExternalImportTitle')
     + '\n' + extractFunction(html, 'maybeHandleExternalImport');
   const replaced = [];
@@ -1067,7 +1068,7 @@ test('userscript: builder gera payload que o Atlas aceita (ida-e-volta)', () => 
   const maxField = /var MAX_FIELD\s*=\s*\d+;/.exec(userscript);
   assert.ok(maxField, 'MAX_FIELD existe no userscript');
   const ctx = vm.createContext({});
-  vm.runInContext(maxField[0] + '\n' + userscript.slice(m.index, start) + block + '\nthis.__p = buildExternalPayload({ title: "Polyethene wear", sourceUrl: "https://radiopaedia.org/cases/polyethene-wear-1", patientAge: "55", patientSex: "Female", modality: "x-ray", presentation: "Worsening left hip pain." });', ctx);
+  vm.runInContext(maxField[0] + '\n' + extractFunction(userscript, 'normalizeRadiopaediaCaseTitle') /* 091f */ + '\n' + userscript.slice(m.index, start) + block + '\nthis.__p = buildExternalPayload({ title: "Polyethene wear", sourceUrl: "https://radiopaedia.org/cases/polyethene-wear-1", patientAge: "55", patientSex: "Female", modality: "x-ray", presentation: "Worsening left hip pain." });', ctx);
   const api = loadPure();
   const r = api.validateExternalImportPayload(ctx.__p);
   assert.equal(r.ok, true, 'payload do userscript passa na validação do Atlas: ' + JSON.stringify(r.errors));
@@ -1086,7 +1087,7 @@ test('userscript: builder gera payload que o Atlas aceita (ida-e-volta)', () => 
 
 // Carrega as funções REAIS do userscript num vm com uma DOM falsa mínima.
 function loadUserscriptTitle(page) {
-  const names = ['cleanText', 'firstText', 'extractSourceUrl', 'stripSiteSuffix', 'titleTokens', 'slugTitleFromUrl', 'authorNames', 'extractTitle', 'buildExternalPayload'];
+  const names = ['cleanText', 'firstText', 'extractSourceUrl', 'normalizeRadiopaediaCaseTitle', 'stripSiteSuffix', 'titleTokens', 'slugTitleFromUrl', 'authorNames', 'extractTitle', 'buildExternalPayload'];
   const maxField = /var MAX_FIELD\s*=\s*\d+;/.exec(userscript)[0];
   const src = maxField + '\n' + names.map((n) => extractFunction(userscript, n)).join('\n');
   const el = (text, attrs) => ({ innerText: text || '', getAttribute: (k) => (attrs && Object.prototype.hasOwnProperty.call(attrs, k)) ? attrs[k] : null });
@@ -1116,6 +1117,7 @@ function loadTitleGuard() {
     extractFunction(html, 'normalizeExternalTitle'),
     extractFunction(html, 'tokenizeExternalTitle'),
     extractFunction(html, 'externalCaseSlugTitle'),
+    extractFunction(html, 'normalizeRadiopaediaCaseTitle'), // 091f
     extractFunction(html, 'reconcileExternalImportTitle')
   ].join('\n');
   const ctx = vm.createContext({ URL });
