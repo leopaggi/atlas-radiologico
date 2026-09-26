@@ -288,7 +288,8 @@ body{
 .card-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;}
 .card-title-row .card-title{margin-bottom:0;}
 /* PROTEÇÃO 086 — alerta de revisão ativa junto ao nome da lesão */
-.lesion-review-warning{display:inline-flex;align-items:center;justify-content:center;margin-left:6px;padding:0 4px;min-width:1.25em;height:1.25em;border-radius:4px;background:#facc15;color:#1c1917;border:1px solid #a16207;font-size:.78em;font-weight:700;line-height:1;vertical-align:middle;white-space:nowrap;flex:none;cursor:help;}
+.lesion-review-warning{display:inline-flex;align-items:center;justify-content:center;margin-left:6px;padding:0 4px;min-width:1.25em;height:1.25em;border-radius:4px;background:#facc15;color:#1c1917;border:1px solid #a16207;font-size:.78em;font-weight:700;line-height:1;vertical-align:middle;white-space:nowrap;flex:none;cursor:pointer;}
+.lesion-review-warning:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
 .inc-badge{
   font-size:10px;font-weight:600;padding:2px 8px;border-radius:9px;border:1px solid;
   white-space:nowrap;flex-shrink:0;
@@ -5523,6 +5524,20 @@ function mergeLesionRevisions(localRevs, remoteRevs){
         f => (f && (f.at != null ? f.at : f.timestamp)) + '|' + (f && f.text),
         f => f && (f.at != null ? f.at : f.timestamp));
     }
+    // PROTEÇÃO 091d — motivo do pedido: a edição MAIS RECENTE vence por
+    // carimbo PRÓPRIO (requestTextUpdatedAt), independente de quem venceu
+    // status/solução; requestHistory é UNIDO sem duplicar (edições feitas em
+    // PCs diferentes nunca se perdem).
+    const lrt = Number(l.requestTextUpdatedAt)||0, rrt = Number(r.requestTextUpdatedAt)||0;
+    if(lrt || rrt){
+      const src = lrt !== rrt ? (lrt > rrt ? l : r) : win;
+      merged.requestText = src.requestText;
+      merged.requestTextUpdatedAt = Math.max(lrt, rrt);
+    }
+    if(Array.isArray(win.requestHistory) || Array.isArray(lose.requestHistory)){
+      merged.requestHistory = unionBy(win.requestHistory, lose.requestHistory,
+        h => (h && h.at) + '|' + (h && h.action) + '|' + (h && h.text), h => h && h.at);
+    }
     out[id] = merged;
   }
   return out;
@@ -5732,6 +5747,51 @@ function createLesionReview(lesionId, requestText){
   return { created:true, reason:null, review };
 }
 
+/* PROTEÇÃO 091d — EDITAR O MOTIVO (requestText) de uma revisão ATIVA, sem
+   criar outra. Mesmo reviewId; status/solution/attempts/humanFeedback/
+   createdAt/scope/lesionId/category intocados (o 🔔/💡 não muda). Finais
+   (accepted/cancelled) são somente leitura. requestHistory (retrocompatível,
+   criado só na 1ª edição): [{at, text, action:'created'|'edited'}] — a 1ª
+   entrada preserva o texto anterior. Carimbo próprio requestTextUpdatedAt
+   (NÃO mexe em updatedAt: uma edição de texto nunca faz outro PC perder uma
+   proposta/decisão mais nova no merge da 084). */
+const REVIEW_REQUEST_TEXT_MAX = 2000;
+function isReviewRequestEditable(review){
+  return !!review && ACTIVE_LESION_REVIEW_STATUSES.includes(review.status);
+}
+function normalizeReviewRequestText(t){
+  return String(t||'').replace(/\s+/g,' ').trim().toLowerCase();
+}
+// Leitura para a UI: revisão antiga sem histórico mostra o pedido como "criado".
+function reviewRequestHistory(review){
+  const h = Array.isArray(review && review.requestHistory) ? review.requestHistory.filter(x=>x && typeof x==='object') : [];
+  if(!h.length && review) return [{ at: Number(review.createdAt)||0, text: String(review.requestText||''), action:'created' }];
+  return h.slice().sort((a,b)=>(Number(a.at)||0)-(Number(b.at)||0));
+}
+function editReviewRequestText(reviewId, newText){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return { ok:false, reason:'not_found', review:null };
+  if(!isReviewRequestEditable(review)) return { ok:false, reason:'not_editable', status:review.status, review };
+  const text = String(newText||'').trim().slice(0, REVIEW_REQUEST_TEXT_MAX);
+  if(!text) return { ok:false, reason:'empty', review };
+  const prev = String(review.requestText||'');
+  if(text === prev.trim()) return { ok:false, reason:'unchanged', review };
+  let now = Date.now();
+  if(!Array.isArray(review.requestHistory) || !review.requestHistory.length){
+    review.requestHistory = [{ at: Number(review.createdAt)||now, text: prev, action:'created' }];
+  }
+  const last = review.requestHistory.reduce((m,h)=>Math.max(m, Number(h && h.at)||0), Number(review.requestTextUpdatedAt)||0);
+  if(now <= last) now = last + 1; // ordem estável mesmo com duas edições no mesmo ms
+  review.requestHistory.push({ at: now, text, action:'edited' });
+  review.requestText = text;
+  review.requestTextUpdatedAt = now;
+  review.history = Array.isArray(review.history) ? review.history : [];
+  review.history.push({ timestamp: now, action:'request_edited', details:{ from: prev, to: text } });
+  saveLesionRevisions();
+  updateReviewCenterBadges();
+  return { ok:true, reason:null, review };
+}
+
 /* status "rejected" também conta como pendente: uma proposta recusada, ou
    uma correção aplicada e desfeita (rollback), volta automaticamente para
    a fila de revisões pendentes — pronta pra uma nova tentativa. */
@@ -5785,10 +5845,44 @@ function hasActiveLesionReview(lesionId){
   if(!lesionId) return false;
   return Object.values(LESION_REVISIONS || {}).some(r=>r && reviewScope(r)==='lesion' && r.lesionId===lesionId && ACTIVE_LESION_REVIEW_STATUSES.includes(r.status)); // PROTEÇÃO 091: global nunca gera ⚠
 }
+// PROTEÇÃO 091d — o ⚠ é um atalho: role="button" + tabindex (teclado);
+// o clique é tratado por handleLesionReviewWarningEvent (captura), que
+// impede o card/lista de abrir o detalhe por acidente.
 function lesionReviewWarningHtml(lesionId){
   return hasActiveLesionReview(lesionId)
-    ? `<span class="lesion-review-warning" role="img" title="${LESION_REVIEW_WARNING_TEXT}" aria-label="${LESION_REVIEW_WARNING_TEXT}">\u26A0\uFE0E</span>`
+    ? `<span class="lesion-review-warning" role="button" tabindex="0" title="${LESION_REVIEW_WARNING_TEXT}" aria-label="${LESION_REVIEW_WARNING_TEXT}">\u26A0\uFE0E</span>`
     : '';
+}
+function activeLesionReviewsFor(lesionId){
+  if(!lesionId) return [];
+  return Object.values(LESION_REVISIONS || {})
+    .filter(r=>r && reviewScope(r)==='lesion' && r.lesionId===lesionId && ACTIVE_LESION_REVIEW_STATUSES.includes(r.status))
+    .sort((a,b)=>(Number(b.updatedAt)||0)-(Number(a.updatedAt)||0));
+}
+// Uma revisão ativa -> abre ela; várias -> lista (nunca escolhe uma sozinho).
+function openLesionActiveReviewsShortcut(lesionId){
+  const list = activeLesionReviewsFor(lesionId);
+  if(!list.length){ if(typeof toast==='function') toast('Nenhuma revisão ativa nesta lesão.'); return { mode:'none', reviewIds:[] }; }
+  if(list.length===1){ openReviewSummaryModal(list[0].id); return { mode:'single', reviewIds:[list[0].id] }; }
+  openLesionReviewsListModal(lesionId, list.map(r=>r.id));
+  return { mode:'list', reviewIds: list.map(r=>r.id) };
+}
+function handleLesionReviewWarningEvent(ev){
+  const t = ev && ev.target;
+  const icon = t && typeof t.closest==='function' ? t.closest('.lesion-review-warning') : null;
+  if(!icon) return false;
+  if(ev.type==='keydown' && ev.key!=='Enter' && ev.key!==' ') return false;
+  if(typeof ev.preventDefault==='function') ev.preventDefault();
+  if(typeof ev.stopPropagation==='function') ev.stopPropagation();
+  if(typeof ev.stopImmediatePropagation==='function') ev.stopImmediatePropagation();
+  const host = typeof icon.closest==='function' ? icon.closest('[data-review-warning-host]') : null;
+  const id = host && host.getAttribute('data-review-warning-host');
+  if(id) openLesionActiveReviewsShortcut(id);
+  return true;
+}
+if(typeof document!=='undefined' && document && typeof document.addEventListener==='function'){
+  document.addEventListener('click', handleLesionReviewWarningEvent, true);
+  document.addEventListener('keydown', handleLesionReviewWarningEvent, true);
 }
 /* Atualização AO VIVO, sem reconstruir nada: todo elemento que exibe o nome
    da lesão carrega data-review-warning-host="<lesionId>"; aqui o ícone é
@@ -12476,6 +12570,7 @@ function openForm(id, opts){
   // um duplo-clique durante o envio executava o handler 2x e fazia DATA.push
   // 2x com o MESMO formEntryId (duplicata idêntica, inclusive via importador).
   let formSaving = false;
+  const externalAiReviewInstruction = consumePendingExternalAiReviewForForm(); // PROTEÇÃO 091d
   editingId = id || null;
   const existing = id ? DATA.find(x=>x.id===id) : null;
   const formEntryId = existing ? existing.id : ('u_'+Date.now()+'_'+Math.random().toString(36).slice(2,8));
@@ -13408,6 +13503,14 @@ function openForm(id, opts){
         }
       }
     }
+    // PROTEÇÃO 091d — ✨ do importador externo: a lesão já tem o id REAL
+    // (entryId) e está em DATA; cria a pendência real (sincronizada).
+    let externalAiReviewNotice = '';
+    if(!existing && externalAiReviewInstruction){
+      const aiRes = createExternalImportAiReview(entryId, externalAiReviewInstruction);
+      if(aiRes.ok) await saveLesionRevisions();
+      externalAiReviewNotice = externalAiReviewResultMessage(aiRes);
+    }
 
     // A partir daqui, a tela SEMPRE fecha ao final (sucesso ou falha na nuvem) —
     // o try/finally garante isso. O botão mostra "salvando" pra não parecer
@@ -13469,9 +13572,10 @@ function openForm(id, opts){
       openSections = openSectionsBeforeForm;
       renderAll();
       try{ refreshStudyDashboardLive(); }catch(_e){} // dashboard reflete a nova imagem sem F5
-      toast(cloudOk
+      toast((cloudOk
         ? (existing?'Alterações salvas.':'Lesão adicionada ao seu banco.')
-        : '⚠ Salvo neste dispositivo, mas a sincronização com a nuvem falhou — veja o aviso na barra lateral.');
+        : '⚠ Salvo neste dispositivo, mas a sincronização com a nuvem falhou — veja o aviso na barra lateral.')
+        + (externalAiReviewNotice ? ' ' + externalAiReviewNotice : ''));
       // Avisa quem abriu o formulário (ex: o Quiz) que os dados mudaram, para
       // atualizar a questão atual SEM reiniciar a sessão.
       if(onSaved){ try{ onSaved(); }catch(_e){ console.error('onSaved do formulário falhou', _e); } }
@@ -13847,7 +13951,8 @@ const REVIEW_HISTORY_ACTION_LABELS = {
   manual_action_required:'exige ação manual',
   manual_action_reopened:'devolvida à fila de pendentes',
   ai_analysis_no_change:'análise da IA: sem alteração',
-  placement_applied:'localização adicional aplicada (provisória)'
+  placement_applied:'localização adicional aplicada (provisória)',
+  request_edited:'motivo do pedido editado' // PROTEÇÃO 091d
 };
 
 const LESION_REVIEW_FIELD_LABELS = { name:'nome', notes:'descrição', classification:'classificação', tags:'tags', enTerm:'termo em inglês' };
@@ -13889,6 +13994,120 @@ function reviewCenterLesionMeta(lesionId, review){
     : { name: '(lesão não encontrada — id: '+lesionId+')', sub: '', found:false, lesion:null };
 }
 
+/* PROTEÇÃO 091d — editar o motivo do pedido (Central e atalho do ⚠).
+   Modais pequenos por cima do que estiver aberto (ov.remove(), nunca
+   closeOverlay()) — o detalhe/lista por baixo continua como estava. */
+const REVIEW_REQUEST_STATUS_LABELS = { pending:'pendente', rejected:'recusada — reaberta', proposed:'proposta aguardando decisão', applied_pending_validation:'aplicada — aguardando validação', manual_action_required:'exige ação manual', accepted:'concluída', cancelled:'cancelada' };
+function reviewRequestHistoryHtml(review){
+  const h = reviewRequestHistory(review);
+  if(h.length < 2) return '';
+  const items = h.map(x=>`<li><b>${x.action==='edited'?'alterado':'criado'}</b> ${x.at?new Date(x.at).toLocaleString('pt-BR'):'—'}<div class="review-history-item-detail">${escAttr(x.text||'')}</div></li>`).join('');
+  return `<details class="review-request-history"><summary>Histórico do pedido (${h.length})</summary><ul style="margin:6px 0 0 16px;padding:0;">${items}</ul></details>`;
+}
+function openEditReviewRequestModal(reviewId, onSaved){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return;
+  if(!isReviewRequestEditable(review)){ toast('Esta revisão já foi encerrada — o motivo não pode mais ser alterado.'); return; }
+  const meta = reviewCenterLesionMeta(review.lesionId, review);
+  const ov = document.createElement('div');
+  ov.className = 'overlay review-edit-request-overlay';
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) cleanup(); };
+  const cleanup = ()=>{ ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+  ov.onclick = e=>{ if(e.target===ov) cleanup(); };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = `
+    <div class="modal review-cancel-modal">
+      <h2>Editar motivo da revisão</h2>
+      <div class="modal-sub">${meta.name}${meta.sub?' · '+escAttr(meta.sub):''} — o status e o histórico da revisão continuam os mesmos</div>
+      <div class="field"><textarea id="rer-text" rows="4" maxlength="${REVIEW_REQUEST_TEXT_MAX}"></textarea></div>
+      <div id="rer-error" style="color:var(--red);font-size:12px;min-height:14px;"></div>
+      ${reviewRequestHistoryHtml(review)}
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="rer-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="rer-save">Salvar alteração</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const ta = ov.querySelector('#rer-text');
+  ta.value = review.requestText || ''; // via .value (nunca HTML)
+  ov.querySelector('#rer-cancel').onclick = cleanup;
+  ov.querySelector('#rer-save').onclick = async ()=>{
+    const res = editReviewRequestText(reviewId, ta.value);
+    if(!res.ok){
+      const msg = { empty:'O motivo não pode ficar vazio.', unchanged:'Nenhuma alteração no texto.', not_editable:'Esta revisão já foi encerrada.', not_found:'Revisão não encontrada.' };
+      ov.querySelector('#rer-error').textContent = msg[res.reason] || ('Não foi possível salvar (' + res.reason + ').');
+      return;
+    }
+    await saveLesionRevisions();
+    cleanup();
+    toast('Motivo da revisão atualizado.');
+    if(typeof onSaved==='function') onSaved();
+  };
+}
+function openReviewSummaryModal(reviewId){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return;
+  const meta = reviewCenterLesionMeta(review.lesionId, review);
+  const ov = document.createElement('div');
+  ov.className = 'overlay review-summary-overlay';
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) cleanup(); };
+  const cleanup = ()=>{ ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+  ov.onclick = e=>{ if(e.target===ov) cleanup(); };
+  document.addEventListener('keydown', closeOnEsc);
+  const paint = ()=>{
+    const r = LESION_REVISIONS[reviewId] || review;
+    const when = r.createdAt ? new Date(r.createdAt).toLocaleString('pt-BR') : '';
+    ov.innerHTML = `
+      <div class="modal review-cancel-modal">
+        <h2>⚠ Revisão ativa</h2>
+        <div class="modal-sub">${meta.name}${meta.sub?' · '+escAttr(meta.sub):''}${when?' · criada em '+when:''}</div>
+        <div><span class="review-status-tag ${escAttr(r.status)}">${REVIEW_REQUEST_STATUS_LABELS[r.status]||escAttr(r.status)}</span></div>
+        <div class="review-center-row-request" style="margin-top:8px;"><b>Motivo atual:</b> ${escAttr(r.requestText||'')}</div>
+        ${reviewRequestHistoryHtml(r)}
+        <div class="modal-actions" style="flex-wrap:wrap;">
+          <button class="btn btn-ghost" id="rsm-close">fechar</button>
+          <button class="btn btn-ghost" id="rsm-central">Abrir Central completa</button>
+          ${isReviewRequestEditable(r)?'<button class="btn btn-primary" id="rsm-edit">✏ Editar solicitação</button>':''}
+        </div>
+      </div>`;
+    ov.querySelector('#rsm-close').onclick = cleanup;
+    ov.querySelector('#rsm-central').onclick = ()=>{
+      cleanup(); closeOverlay();
+      if(r.status==='pending' || r.status==='rejected') openPendingReviewsModal(); else openReadySolutionsModal();
+    };
+    const editBtn = ov.querySelector('#rsm-edit');
+    if(editBtn) editBtn.onclick = ()=> openEditReviewRequestModal(reviewId, paint);
+  };
+  paint();
+  document.body.appendChild(ov);
+}
+function openLesionReviewsListModal(lesionId, reviewIds){
+  const meta = reviewCenterLesionMeta(lesionId);
+  const ov = document.createElement('div');
+  ov.className = 'overlay review-summary-overlay';
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) cleanup(); };
+  const cleanup = ()=>{ ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+  ov.onclick = e=>{ if(e.target===ov) cleanup(); };
+  document.addEventListener('keydown', closeOnEsc);
+  const rows = (reviewIds||[]).map(id=>LESION_REVISIONS[id]).filter(Boolean).map(r=>{
+    const txt = String(r.requestText||'');
+    return `<div class="review-center-row"><div class="review-center-row-main">
+        <div class="review-center-row-request">${escAttr(txt.length>120?txt.slice(0,117)+'...':txt)}</div>
+        <div class="review-center-row-meta"><span class="review-status-tag ${escAttr(r.status)}">${REVIEW_REQUEST_STATUS_LABELS[r.status]||escAttr(r.status)}</span></div>
+      </div><div class="review-center-row-actions"><button type="button" class="btn btn-ghost rlm-open" data-review-id="${escAttr(r.id)}">abrir / editar</button></div></div>`;
+  }).join('');
+  ov.innerHTML = `
+    <div class="modal review-cancel-modal">
+      <h2>⚠ Esta lesão possui ${(reviewIds||[]).length} revisões ativas</h2>
+      <div class="modal-sub">${meta.name}${meta.sub?' · '+escAttr(meta.sub):''}</div>
+      <div class="review-center-list">${rows}</div>
+      <div class="modal-actions"><button class="btn btn-ghost" id="rlm-close">fechar</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#rlm-close').onclick = cleanup;
+  ov.querySelectorAll('.rlm-open').forEach(b=>{ b.onclick = ()=>{ cleanup(); openReviewSummaryModal(b.getAttribute('data-review-id')); }; });
+}
+
 function openReviewHistoryModal(reviewId){
   const review = LESION_REVISIONS[reviewId];
   if(!review) return;
@@ -13903,7 +14122,8 @@ function openReviewHistoryModal(reviewId){
     <div class="modal review-history-modal">
       <h2>Histórico da revisão</h2>
       <div class="modal-sub">${meta.name}${meta.sub?' · '+meta.sub:''}</div>
-      <div class="review-history-request"><b>Pedido original:</b> ${(review.requestText||'').replace(/</g,'&lt;')}</div>
+      <div class="review-history-request"><b>${reviewRequestHistory(review).length>1?'Pedido atual':'Pedido original'}:</b> ${(review.requestText||'').replace(/</g,'&lt;')}</div>
+      ${reviewRequestHistoryHtml(review)}
       ${review.status==='cancelled' ? `
         <div class="review-cancelled-info">
           <div><b>Status:</b> Cancelado pelo usuário</div>
@@ -14474,11 +14694,13 @@ function openPendingReviewsModal(){
         <div class="review-center-row-actions">
           ${meta.found?'<button type="button" class="btn btn-ghost review-open-lesion">ver lesão</button>':''}
           ${reviewAcceptsAiProposal(r)?'<button type="button" class="btn btn-ghost review-ai-prepare">🤖 Preparar para IA</button>':''}
-          <button type="button" class="btn btn-ghost review-open-history">histórico</button>
+          <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}
           ${cancellable?'<button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>':''}
         </div>`;
       if(meta.found) row.querySelector('.review-open-lesion').onclick = ()=>{ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); openDetail(meta.lesion.id); };
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
+      const editReqBtn = row.querySelector('.review-edit-request'); // PROTEÇÃO 091d
+      if(editReqBtn) editReqBtn.onclick = ()=> openEditReviewRequestModal(r.id, renderList);
       const cancelBtn = row.querySelector('.review-cancel-request');
       if(cancelBtn) cancelBtn.onclick = ()=> openCancelReviewModal(r.id, renderList);
       const aiBtn = row.querySelector('.review-ai-prepare');
@@ -14709,12 +14931,14 @@ function openReadySolutionsModal(){
             <div class="review-center-row-solution" style="white-space:pre-wrap;"><b>Análise / resultado:</b> ${escAttr((r.solution&&r.solution.text)||'')}</div>
           </div>
           <div class="review-center-row-actions">
-            <button type="button" class="btn btn-ghost review-open-history">histórico</button>
+            <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}
             <button type="button" class="btn btn-primary review-global-complete">✓ Concluir</button>
             <button type="button" class="btn btn-ghost review-reject-proposal">↩ devolver / pedir nova análise</button>
             <button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>
           </div>`;
         grow.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
+        const gEditBtn = grow.querySelector('.review-edit-request'); // PROTEÇÃO 091d
+        if(gEditBtn) gEditBtn.onclick = ()=> openEditReviewRequestModal(r.id, renderBothLists);
         grow.querySelector('.review-global-complete').onclick = async ()=>{
           const res = completeGlobalReview(r.id);
           if(res.ok){ await saveLesionRevisions(); toast('Pendência concluída.'); renderBothLists(); }
@@ -14743,13 +14967,15 @@ function openReadySolutionsModal(){
         </div>
         <div class="review-center-row-actions">
           ${meta.found?'<button type="button" class="btn btn-ghost review-open-lesion">ver lesão</button>':''}
-          <button type="button" class="btn btn-ghost review-open-history">histórico</button>
+          <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}
           <button type="button" class="btn btn-primary review-authorize">✓ autorizar correção</button>
           <button type="button" class="btn btn-ghost review-reject-proposal">✕ recusar proposta</button>
           <button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>
         </div>`;
       if(meta.found) row.querySelector('.review-open-lesion').onclick = ()=>{ closeAllAndCleanup(); openDetail(meta.lesion.id); };
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
+      const pEditBtn = row.querySelector('.review-edit-request'); // PROTEÇÃO 091d
+      if(pEditBtn) pEditBtn.onclick = ()=> openEditReviewRequestModal(r.id, renderBothLists);
       row.querySelector('.review-authorize').onclick = async ()=>{
         const res = authorizeAndApplyReviewSolution(r.id);
         if(res.ok){
@@ -14801,12 +15027,14 @@ function openReadySolutionsModal(){
         </div>
         <div class="review-center-row-actions">
           ${meta.found?'<button type="button" class="btn btn-ghost review-open-lesion">👁 ver lesão corrigida</button>':''}
-          <button type="button" class="btn btn-ghost review-open-history">histórico</button>
+          <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}
           <button type="button" class="btn btn-primary review-approve">✓ funcionou — manter</button>
           <button type="button" class="btn btn-ghost review-rollback">↩ não funcionou — desfazer</button>
         </div>`;
       if(meta.found) row.querySelector('.review-open-lesion').onclick = ()=>{ closeAllAndCleanup(); openDetail(meta.lesion.id); };
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
+      const aEditBtn = row.querySelector('.review-edit-request'); // PROTEÇÃO 091d
+      if(aEditBtn) aEditBtn.onclick = ()=> openEditReviewRequestModal(r.id, renderBothLists);
       row.querySelector('.review-approve').onclick = async ()=>{
         const res = approveAppliedReviewSolution(r.id);
         if(res.ok){ await saveLesionRevisions(); toast('Correção mantida.'); renderBothLists(); }
@@ -14858,7 +15086,7 @@ function openReadySolutionsModal(){
         <div class="review-center-row-actions">
           ${sug.applicable?`<button type="button" class="btn btn-primary review-manual-apply-placement">✓ Aplicar localização sugerida</button>`:''}
           ${meta.found?`<button type="button" class="btn btn-ghost review-manual-open">${isImage?'🖼 Abrir lesão para ajustar imagens':'✏ Abrir lesão'}</button>`:''}
-          <button type="button" class="btn btn-ghost review-open-history">histórico</button>
+          <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}
           ${isGlobalReview(r)?'<button type="button" class="btn btn-primary review-global-complete">✓ Concluir</button>':''}
           <button type="button" class="btn btn-ghost review-manual-reopen">↩ Voltar para revisões</button>
           <button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>
@@ -14870,6 +15098,8 @@ function openReadySolutionsModal(){
       const openBtn = row.querySelector('.review-manual-open');
       if(openBtn) openBtn.onclick = ()=> openManualActionModal(r.id, { onReopened: renderBothLists });
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
+      const mEditBtn = row.querySelector('.review-edit-request'); // PROTEÇÃO 091d
+      if(mEditBtn) mEditBtn.onclick = ()=> openEditReviewRequestModal(r.id, renderBothLists);
       row.querySelector('.review-manual-reopen').onclick = ()=>{
         openReasonPromptModal(r.id, async (reason)=>{
           const res = reopenManualActionReview(r.id, reason);
@@ -17352,7 +17582,11 @@ function externalBandLabel(band){
 // Glossário local, pequeno e extensível (chave = título normalizado).
 const EXTERNAL_IMPORT_TRANSLATIONS = {
   "polyethene wear": "Desgaste de polietileno",
-  "polyethylene wear": "Desgaste de polietileno"
+  "polyethylene wear": "Desgaste de polietileno",
+  // PROTEÇÃO 091d — alias explícito (caso real do usuário). Sem "acute" no
+  // título, NÃO vira "Apendicite aguda".
+  "appendicitis in pregnancy": "Apendicite na gestação",
+  "appendicitis during pregnancy": "Apendicite na gestação"
 };
 // Modalidade (termo da fonte, minúsculo) → tag PT. Mapa fechado: sem
 // tradução livre, só equivalências confiáveis desta lista.
@@ -17369,19 +17603,49 @@ const EXTERNAL_IMPORT_MODALITY_TAGS = {
 };
 const EXTERNAL_IMPORT_MAX_TAGS = 8;
 
-// A) sinônimo conhecido no próprio catálogo (enTerm ↔ name), B) glossário,
-// C) original preservado + pendente de revisão. Nunca inventa tradução.
+// PROTEÇÃO 091d — ordem: 1) lesão do catálogo com enTerm exato; 2) EN_TERMS
+// invertido (termo em inglês -> nome PT) com correspondência EXATA
+// normalizada e INEQUÍVOCA (dois nomes PT para o mesmo termo = ambíguo, não
+// usa); 3) glossário/aliases explícitos (EXTERNAL_IMPORT_TRANSLATIONS);
+// 4) original preservado + pendente de revisão. Nunca tradução fuzzy.
+let EXTERNAL_EN_TERMS_INDEX = null;
+function externalEnTermsIndex(){
+  if(EXTERNAL_EN_TERMS_INDEX) return EXTERNAL_EN_TERMS_INDEX;
+  const idx = new Map();
+  const src = (typeof EN_TERMS!=='undefined' && EN_TERMS && typeof EN_TERMS==='object') ? EN_TERMS : {};
+  for(const [pt, en] of Object.entries(src)){
+    const n = normalizeExternalTitle(en);
+    if(!n || typeof pt!=='string' || !pt.trim()) continue;
+    if(!idx.has(n)) idx.set(n, { names: new Set(), en: String(en) });
+    idx.get(n).names.add(pt.trim());
+  }
+  EXTERNAL_EN_TERMS_INDEX = idx;
+  return idx;
+}
 function suggestPortugueseLesionName(originalTitle, catalog){
   const norm = normalizeExternalTitle(originalTitle);
   const list = Array.isArray(catalog) ? catalog : [];
   const viaCatalog = list.find(e => e && typeof e.enTerm === 'string'
     && normalizeExternalTitle(e.enTerm) === norm
     && typeof e.name === 'string' && e.name.trim());
-  if (viaCatalog) return { name: viaCatalog.name, source: 'catalogo', needsReview: false };
+  if (viaCatalog) return { name: viaCatalog.name, source: 'catalogo', needsReview: false, canonicalEnTerm: viaCatalog.enTerm };
+  const viaEnTerms = norm ? externalEnTermsIndex().get(norm) : null;
+  if (viaEnTerms && viaEnTerms.names.size === 1) {
+    return { name: [...viaEnTerms.names][0], source: 'en_terms', needsReview: false, canonicalEnTerm: viaEnTerms.en };
+  }
   if (norm && Object.prototype.hasOwnProperty.call(EXTERNAL_IMPORT_TRANSLATIONS, norm)) {
     return { name: EXTERNAL_IMPORT_TRANSLATIONS[norm], source: 'glossario', needsReview: false };
   }
   return { name: String(originalTitle || '').trim(), source: 'original', needsReview: true };
+}
+// PROTEÇÃO 091d — enTerm do caso externo: o termo canônico do acervo quando
+// houve correspondência segura; senão o título ORIGINAL da fonte (só espaços
+// normalizados). Título com grafia portuguesa não vira enTerm (nunca PT).
+function suggestExternalEnTerm(originalTitle, nameSug){
+  if (nameSug && typeof nameSug.canonicalEnTerm === 'string' && nameSug.canonicalEnTerm.trim()) return nameSug.canonicalEnTerm.trim();
+  const t = String(originalTitle || '').replace(/\s+/g, ' ').trim();
+  if (!t || /[ãõçâêôáéíóúàü]/i.test(t)) return '';
+  return t.slice(0, 200);
 }
 
 // Vocabulário canônico: norma → grafia usada no acervo (primeira vence).
@@ -17456,6 +17720,7 @@ function buildExternalSuggestion(draft, catalog, matches){
     originalTitle: draft.title,
     name: nameSug.name,
     nameSource: nameSug.source,
+    enTerm: suggestExternalEnTerm(draft.title, nameSug), // PROTEÇÃO 091d
     needsReview: nameSug.needsReview,
     tags: suggestExternalTags(draft, nameSug, catalog, list),
     description: suggestExternalDescription(draft, nameSug, top).text,
@@ -17565,7 +17830,7 @@ function externalSuggestionHtml(suggestion){
   const s = suggestion || { name: '', tags: [], description: '', status: 'automatic', aiReview: 'none', needsReview: false };
   const tags = Array.isArray(s.tags) ? s.tags.join(', ') : '';
   const aiLine = s.aiReview === 'pending'
-    ? '<div id="external-ai-state" style="font-size:12px;color:var(--teal);">✨ Revisão com IA: pendente (nada foi enviado; concluir no fluxo de Revisões).</div>'
+    ? '<div id="external-ai-state" style="font-size:12px;color:var(--teal);">✨ Ao salvar, esta solicitação será adicionada às Revisões pendentes.</div>'
     : '<div id="external-ai-state" style="font-size:12px;color:var(--muted-2);"></div>';
   return `<div class="detail-links-label">SUGESTÃO PARA O ATLAS (editável — nada salvo ainda)</div>`
     + `<div class="field"><label>Nome da lesão no Atlas</label>`
@@ -17613,6 +17878,7 @@ function externalImportModalHtml(draft, matches, suggestion, catalog){
     + `<div id="external-alert"></div>`
     + `</div>`
     + `<div id="external-link-pane" hidden>`
+    + `<div id="external-ai-state-link" style="font-size:12px;color:var(--teal);"></div>`
     + `<div class="detail-links-label">CANDIDATOS AUTOMÁTICOS PARA VÍNCULO</div>`
     + `<div id="external-link-candidates">` + externalLinkCandidatesHtml(linkMatches) + `</div>`
     + `<div class="field" style="margin-top:10px;">`
@@ -17639,11 +17905,15 @@ function wireExternalOpenButtons(ov, draft){
 // (regra 7).
 function wireExternalLinkCaseButtons(ov, draft){
   ov.querySelectorAll('.external-link-case-btn').forEach(btn => {
-    btn.onclick = () => { const id = btn.getAttribute('data-lesion-id'); handleExternalLinkCaseClick(draft, id); };
+    btn.onclick = () => {
+      const id = btn.getAttribute('data-lesion-id');
+      const sug = ov && ov.__externalSuggestion; // PROTEÇÃO 091d — ✨ marcado no modal
+      handleExternalLinkCaseClick(draft, id, sug && sug.aiReview === 'pending' ? sug.aiReviewInstruction : null);
+    };
   });
 }
 
-async function handleExternalLinkCaseClick(draft, lesionId){
+async function handleExternalLinkCaseClick(draft, lesionId, aiInstruction){
   const entry = (Array.isArray(DATA) ? DATA : []).find(e => e && e.id === lesionId);
   if (!entry) { toast('Lesão não encontrada no acervo.'); return; }
   const confirmed = await openClinicalCaseLinkConfirm(entry);
@@ -17658,7 +17928,13 @@ async function handleExternalLinkCaseClick(draft, lesionId){
   if (result.ok) {
     pendingExternalCase = null;
     closeOverlay();
-    toast('Caso clínico vinculado a "' + entry.name + '".');
+    let aiNotice = '';
+    if (aiInstruction) { // PROTEÇÃO 091d — pendência REAL; nunca mexe nos campos da lesão
+      const ai = createExternalImportAiReview(entry.id, aiInstruction);
+      if (ai.ok) await saveLesionRevisions();
+      aiNotice = ' ' + externalAiReviewResultMessage(ai);
+    }
+    toast('Caso clínico vinculado a "' + entry.name + '".' + aiNotice);
     openDetail(entry.id);
     return;
   }
@@ -17711,6 +17987,38 @@ function refreshExternalLinkCandidates(ov, draftProbe, suggestion, realDraft){
 }
 
 const EXTERNAL_AI_DEFAULT_INSTRUCTION = 'Revisar nome, tags e descrição da lesão.';
+// PROTEÇÃO 091d — "✨ Revisar com IA" do importador vira uma revisão REAL na
+// Central (createReviewRequest), criada só DEPOIS de a lesão existir (Salvar
+// da nova lesão ou vínculo a uma existente). Não há IA integrada: a revisão
+// segue pela ponte manual (📋 copiar pedido -> 📥 colar solução).
+let pendingExternalAiReviewForForm = null;
+function consumePendingExternalAiReviewForForm(){
+  const v = pendingExternalAiReviewForForm;
+  pendingExternalAiReviewForForm = null;
+  return v;
+}
+function createExternalImportAiReview(lesionId, instruction){
+  const text = String(instruction || '').trim() || EXTERNAL_AI_DEFAULT_INSTRUCTION;
+  if (!lesionId) return { ok:false, created:false, reason:'invalid_input', review:null };
+  try {
+    const norm = normalizeReviewRequestText(text);
+    const dup = Object.values(LESION_REVISIONS || {}).find(r => r && reviewScope(r) === 'lesion' && r.lesionId === lesionId
+      && ACTIVE_LESION_REVIEW_STATUSES.includes(r.status) && normalizeReviewRequestText(r.requestText) === norm);
+    if (dup) return { ok:true, created:false, reason:'duplicate', review:dup };
+    const res = createReviewRequest({ scope:'lesion', lesionId, requestText: text });
+    if (res && res.created) return { ok:true, created:true, reason:null, review:res.review };
+    if (res && res.reason === 'duplicate') return { ok:true, created:false, reason:'duplicate', review:res.review };
+    return { ok:false, created:false, reason:(res && res.reason) || 'error', review:null };
+  } catch (e) {
+    console.error('Falha ao criar a revisão do importador externo.', e);
+    return { ok:false, created:false, reason:'error', review:null };
+  }
+}
+function externalAiReviewResultMessage(res){
+  if (res && res.ok && res.created) return '✨ Revisão adicionada à Central.';
+  if (res && res.ok && res.reason === 'duplicate') return '✨ Já existe uma revisão ativa idêntica para esta lesão — não foi duplicada.';
+  return '⚠ A lesão foi salva, mas a revisão com IA NÃO foi criada (' + ((res && res.reason) || 'erro') + ') — crie pela Central (🔔 → + Nova pendência).';
+}
 
 // Pura e testada: confirma a marcação (sem API, sem salvar, sem DATA).
 // Vazio usa a instrução genérica; reedição só troca o texto.
@@ -17758,9 +18066,11 @@ function openExternalAiInstructionModal(ov, draft, suggestion){
     const state = ov.querySelector('#external-ai-state');
     if (state) {
       state.style.color = 'var(--teal)';
-      state.textContent = '✨ Revisão com IA pendente: "' + truncateExternalAiInstruction(suggestion.aiReviewInstruction) + '"';
+      state.textContent = '✨ Ao salvar, esta solicitação será adicionada às Revisões pendentes: "' + truncateExternalAiInstruction(suggestion.aiReviewInstruction) + '"';
     }
-    toast('Marcado para revisão com IA — nada foi enviado automaticamente.');
+    const linkState = ov.querySelector('#external-ai-state-link');
+    if (linkState) linkState.textContent = '✨ Ao vincular, esta solicitação será adicionada às Revisões pendentes: "' + truncateExternalAiInstruction(suggestion.aiReviewInstruction) + '"';
+    toast('✨ Solicitação guardada — ao salvar/vincular vira uma revisão na Central (nada foi enviado agora).');
     aiOv.remove();
   };
   const cancelBtn = document.getElementById('external-ai-cancel-btn');
@@ -17786,6 +18096,7 @@ function openExternalImportModal(draft){
   const ov = document.createElement('div');
   ov.className = 'overlay external-import-overlay';
   ov.innerHTML = externalImportModalHtml(draft, matches, suggestion, DATA);
+  ov.__externalSuggestion = suggestion; // PROTEÇÃO 091d — ✨ também vale no "Vincular existente"
   ov.onclick = (ev) => { if (ev.target === ov) { pendingExternalCase = null; closeOverlay(); } };
   document.body.appendChild(ov);
   wireExternalOpenButtons(ov, draft);
@@ -17868,10 +18179,16 @@ function openExternalDraft(draft, suggestion){
     originalTitle: draft.title, name: draft.title, tags: [], description: '',
     status: 'automatic', aiReview: 'none', needsReview: false
   };
+  // PROTEÇÃO 091d — a instrução do ✨ segue para ESTE formulário (consumida
+  // no início do openForm); a revisão real só nasce no Salvar, com o id real.
+  pendingExternalAiReviewForForm = sug.aiReview === 'pending'
+    ? String(sug.aiReviewInstruction || EXTERNAL_AI_DEFAULT_INSTRUCTION) : null;
   openForm(null);
   try {
     const nameEl = document.getElementById('f-name');
     if (nameEl && !nameEl.value) nameEl.value = sug.name || draft.title;
+    const enEl = document.getElementById('f-en-term'); // PROTEÇÃO 091d
+    if (enEl && !enEl.value && typeof sug.enTerm === 'string' && sug.enTerm.trim()) enEl.value = sug.enTerm.trim();
     // Auditoria 2026-09-21 (links:[] nos duplicados): a referência externa
     // dependia do clique manual em "+ usar esta referência". Agora ela já sai
     // encaminhada nos campos de link (via mecânica normal do formulário, só
@@ -17901,9 +18218,9 @@ function openExternalDraft(draft, suggestion){
     if (modal) {
       const tmp = document.createElement('div');
       const aiLine = sug.aiReview === 'pending'
-        ? '<div style="font-size:12px;color:var(--teal);">✨ Revisão com IA pendente'
+        ? '<div style="font-size:12px;color:var(--teal);">✨ Ao salvar, esta solicitação será adicionada às Revisões pendentes'
           + (sug.aiReviewInstruction ? ': &ldquo;' + esc(sug.aiReviewInstruction).slice(0, 200) + '&rdquo;' : '')
-          + ' — concluir manualmente no fluxo de Revisões.</div>'
+          + '.</div>'
         : '';
       tmp.innerHTML = externalPendingBlockHtml(draft) + aiLine
         + `<button type="button" class="btn btn-ghost" id="external-use-link-btn">+ usar esta referência nos links</button>`;

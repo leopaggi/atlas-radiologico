@@ -167,7 +167,9 @@ const lesionRevisionsFns084 = ['mergeLesionRevisions', 'saveLesionRevisions', 'u
   // PROTEÇÃO 086 — ⚠ junto ao nome da lesão (chamado por updateReviewCenterBadges)
   'hasActiveLesionReview', 'lesionReviewWarningHtml', 'refreshLesionReviewWarnings',
   // PROTEÇÃO 091 — escopo lesão × pendência geral
-  'reviewScope', 'isGlobalReview', 'createReviewRequest', 'setGlobalReviewSolution', 'completeGlobalReview', 'pushLesionReviewHistory', 'genLesionReviewId']
+  'reviewScope', 'isGlobalReview', 'createReviewRequest', 'setGlobalReviewSolution', 'completeGlobalReview', 'pushLesionReviewHistory', 'genLesionReviewId',
+  // PROTEÇÃO 091d — edição do motivo (requestText/requestHistory)
+  'isReviewRequestEditable', 'normalizeReviewRequestText', 'reviewRequestHistory', 'editReviewRequestText']
   .map((n) => extractFunction(html, n).source).join('\n');
 
 // Nuvem falsa COMPARTILHADA entre "dispositivos" — simula um único projeto
@@ -438,6 +440,7 @@ function makeDevice(cloud, { seed = [] } = {}) {
     const GLOBAL_REVIEW_NO_TARGET = 'global_review_has_no_direct_target';
     function reviewAcceptsAiProposal(review){ return !!review && (review.status==='pending' || review.status==='rejected'); }
     const LESION_REVIEW_WARNING_TEXT = 'Esta lesão possui revisão ativa';
+    const REVIEW_REQUEST_TEXT_MAX = 2000; // PROTEÇÃO 091d
     ${lesionRevisionsFns084}
     const ORDER_STAMPS_KEY = 'atlas:orderUpdatedAt';
     ${orderFns085}
@@ -4009,6 +4012,36 @@ test('PROTEÇÃO 091c - F5 / reload no PC B mantém a convergência; boot sem ma
   const rev = cloud.peekRevision();
   await b.context.syncFromFirebase();
   assert.equal(cloud.peekRevision(), rev, 'pull idempotente não gasta escrita');
+});
+
+// ===========================================================================
+// PROTEÇÃO 091d — motivo editado da revisão atravessa o sync (084) entre PCs.
+// ===========================================================================
+test('PROTEÇÃO 091d - motivo editado no PC A chega ao PC B; edição posterior no B volta ao A; histórico é UNIÃO; 🔔 e status intactos', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = await device084(cloud, { R1: rev084('R1') });
+  await a.context.saveLesionRevisions();
+  await a.context.pushToFirebaseNow();
+  const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await b.boot();
+  const pendingBefore = b.context.countPendingLesionReviews();
+  assert.equal(a.context.editReviewRequestText('R1', 'pedido R1 + revisar classificação').ok, true);
+  await a.context.pushToFirebaseNow();
+  await b.context.syncFromFirebase();
+  const rb = b.context.LESION_REVISIONS.R1;
+  assert.equal(rb.requestText, 'pedido R1 + revisar classificação');
+  assert.equal(rb.status, 'pending');
+  assert.equal(b.context.syncDirty, false, 'pull nunca marca dirty');
+  assert.equal(b.context.countPendingLesionReviews(), pendingBefore, '🔔 não muda');
+  await new Promise((r) => setTimeout(r, 3));
+  assert.equal(b.context.editReviewRequestText('R1', 'versão final do B').ok, true);
+  await b.context.pushToFirebaseNow();
+  await a.context.syncFromFirebase();
+  const ra = a.context.LESION_REVISIONS.R1;
+  assert.equal(ra.requestText, 'versão final do B');
+  assert.deepEqual(Array.from(ra.requestHistory, (h) => h.text), ['pedido R1', 'pedido R1 + revisar classificação', 'versão final do B']);
+  assert.deepEqual(Object.keys(a.context.LESION_REVISIONS), ['R1'], 'mesmo reviewId, nenhuma revisão nova');
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');

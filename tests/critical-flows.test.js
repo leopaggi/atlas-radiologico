@@ -537,10 +537,16 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // persist/pull/adocao/snapshot — antes da primeira ancora; +1 (fold no boot
   // conta so a partir de loadData); +69 (modal de relatorio/execucao, botao e
   // export/import do mapa) antes do importHandler.
-  assert.equal(recovery.line, 8894);
-  assert.equal(brokenArtifacts.line, 8884);
-  assert.equal(loadData.line, 11445);
-  assert.equal(importHandler.line, 15565);
+  // +94 nas tres primeiras ancoras / +230 no importHandler (Protecao 091d,
+  // 2026-09-26): editReviewRequestText/requestHistory, merge do motivo por
+  // carimbo proprio e o atalho clicavel do ⚠ (captura) no modulo da Central
+  // + CSS — antes da primeira ancora; +136 entre loadData e o importHandler:
+  // criacao da revisao do ✨ no Salvar do openForm e os modais de edicao/
+  // resumo/lista + botoes ✏ na Central.
+  assert.equal(recovery.line, 8988);
+  assert.equal(brokenArtifacts.line, 8978);
+  assert.equal(loadData.line, 11539);
+  assert.equal(importHandler.line, 15795);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

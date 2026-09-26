@@ -99,6 +99,9 @@ function loadPure() {
     extractConst(html, 'EXTERNAL_IMPORT_TRANSLATIONS'),
     extractConst(html, 'EXTERNAL_IMPORT_MODALITY_TAGS'),
     extractConst(html, 'EXTERNAL_IMPORT_MAX_TAGS'),
+    'let EXTERNAL_EN_TERMS_INDEX = null;', // PROTEÇÃO 091d
+    extractFunction(html, 'externalEnTermsIndex'),
+    extractFunction(html, 'suggestExternalEnTerm'),
     extractFunction(html, 'suggestPortugueseLesionName'),
     extractFunction(html, 'canonicalTagVocabulary'),
     extractFunction(html, 'suggestExternalTags'),

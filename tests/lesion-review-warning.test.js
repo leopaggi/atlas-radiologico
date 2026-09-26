@@ -29,7 +29,7 @@ function makeHost(lesionId) {
     },
     insertAdjacentHTML(pos, markup) {
       assert.equal(pos, 'beforeend');
-      const m = /^<span class="lesion-review-warning" role="img" title="([^"]*)" aria-label="([^"]*)">([\s\S]*)<\/span>$/.exec(markup);
+      const m = /^<span class="lesion-review-warning" role="button" tabindex="0" title="([^"]*)" aria-label="([^"]*)">([\s\S]*)<\/span>$/.exec(markup); // PROTEÇÃO 091d: ⚠ clicável
       assert.ok(m, 'marcação inesperada: ' + markup);
       const child = { className: 'lesion-review-warning', title: m[1], ariaLabel: m[2], text: m[3], remove() { host.children = host.children.filter((c) => c !== child); } };
       host.children.push(child);
@@ -106,7 +106,8 @@ test('086: tooltip e aria-label presentes; símbolo de atenção sem dependênci
   assert.match(markup, /class="lesion-review-warning"/);
   assert.match(markup, /title="Esta lesão possui revisão ativa"/);
   assert.match(markup, /aria-label="Esta lesão possui revisão ativa"/);
-  assert.match(markup, /role="img"/);
+  assert.match(markup, /role="button"/, 'PROTEÇÃO 091d: ⚠ virou atalho clicável (antes role="img")');
+  assert.match(markup, /tabindex="0"/);
   assert.match(markup, /⚠/);
   assert.doesNotMatch(markup, /<img|url\(|https?:/);
 });
