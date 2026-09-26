@@ -164,10 +164,9 @@ test('DETALHE: clicar na imagem no grid abre o lightbox já com a descrição (s
 // ===========================================================================
 
 test('LIGHTBOX: assinatura aceita descrição opcional; ferramenta de auditoria técnica continua chamando sem ela (inalterada)', () => {
-  // Ajuste 22/09/2026: 2 parâmetros novos e opcionais (navImages/startIndex)
-  // para a navegação — a auditoria técnica (chamada de 1 argumento) continua
-  // funcionando exatamente igual (undefined nos dois novos = sem setas).
-  assert.match(html, /function openImageLightbox\(src, description, navImages, startIndex\)\{/);
+  // navImages/startIndex/onNavigate são opcionais: a auditoria técnica
+  // (chamada de 1 argumento) continua sem setas e sem callback.
+  assert.match(html, /function openImageLightbox\(src, description, navImages, startIndex, onNavigate\)\{/);
   assert.match(html, /thumb\.onclick = \(e\)=>\{ e\.stopPropagation\(\); openImageLightbox\(thumb\.src\); \};/, 'auditoria de vínculo de imagens continua sem passar descrição');
 });
 
@@ -356,7 +355,7 @@ test('QUIZ (regressão): gate continua idêntico — nada antes de responder, me
 });
 
 test('LIGHTBOX (regressão): continua sem descrição antes da resposta e com a descrição completa depois — mesmo call site/gate de antes', () => {
-  assert.match(html, /openImageLightbox\(cur\.data, st\.answered \? cur\.label : ''\)/, 'gate do carrossel do Quiz intacto');
+  assert.match(html, /openImageLightbox\(\s*cur\.data, st\.answered \? cur\.label : ''/, 'gate do carrossel do Quiz intacto');
 });
 
 test('LIGHTBOX/LARGURA: a coluna da descrição NÃO fica presa à largura da imagem — usa largura própria, responsiva à tela', () => {
@@ -392,6 +391,6 @@ test('AJUSTE VISUAL: nenhuma regressão nas Alterações 055/056 — testes dedi
   // continuam de pé textualmente após os ajustes de CSS/wiring desta tarefa.
   assert.match(html, /let deviceBootstrapPending = false;/, 'Alteração 055: flag de bootstrap intacta');
   assert.match(html, /async function runNewDeviceBootstrapFlow\(\)\{/, 'Alteração 055: orquestrador intacto');
-  assert.match(html, /function openImageLightbox\(src, description, navImages, startIndex\)\{/, 'Alteração 056: assinatura do lightbox intacta (2 parâmetros novos e opcionais em 22/09/2026, comportamento de descrição inalterado)');
+  assert.match(html, /function openImageLightbox\(src, description, navImages, startIndex, onNavigate\)\{/, 'Alteração 056: descrição permanece opcional; callback de navegação também é opcional');
   assert.match(openCollageBuilderFn.body, /<textarea id="collage-desc" rows="3"/, 'Alteração 056: textarea do quadro intacto');
 });

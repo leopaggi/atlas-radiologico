@@ -1,5 +1,14 @@
 # Atlas Radiológico
 
+### Lightbox do Quiz (2026-09-26)
+
+Ao ampliar uma imagem do Quiz, as setas e as teclas ←/→ navegam pelas mesmas
+imagens da questão, com contador e retorno circular. Fechar com Esc mantém no
+Quiz a imagem escolhida, incluindo o contexto clínico correspondente; abrir
+novamente começa nela. Antes de responder, nenhuma descrição de imagem é
+exibida ao navegar no lightbox. Verificação sem navegador:
+`node tests/quiz-lightbox-navigation.test.js`.
+
 ### Sincronização do histórico do Quiz (2026-09-26)
 
 O histórico local de tentativas do Quiz continua no formato original; para

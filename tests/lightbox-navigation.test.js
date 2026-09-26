@@ -206,9 +206,8 @@ test('15. openForm passa SÓ pendingImgs (galeria da própria lesão em edição
   assert.match(src, /openImageLightbox\(img\.data, img\.label, pendingImgs, idx\)/);
 });
 
-test('15. Quiz/coleção de busca de imagens/auditoria técnica NÃO foram alterados (fora de escopo, pedido explícito)', () => {
-  // Chamadas de 2 argumentos que continuam exatamente como antes.
-  assert.match(html, /openImageLightbox\(cur\.data, st\.answered \? cur\.label : ''\)/, 'Quiz intocado');
+test('15. Quiz compartilha a coleção; modal de imagem e auditoria técnica continuam sem navegação', () => {
+  assert.match(html, /st\.answered \? quizImgs : quizImgs\.map\(img=>\(\{\.\.\.img, label:''\}\)\), quizImgIdx,/);
   assert.match(html, /openImageLightbox\(src, img\.label\);/, 'modal de imagem do Quiz intocado');
   assert.match(html, /openImageLightbox\(thumb\.src\);/, 'auditoria técnica de imagens intocada');
 });

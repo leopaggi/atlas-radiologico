@@ -1,5 +1,18 @@
 # AI.md — instruções para assistentes de IA (Claude, DeepSeek, ChatGPT, etc.)
 
+## Quiz — navegação do lightbox (2026-09-26)
+
+O lightbox genérico recebe `navImages`/`startIndex` do carrossel do Quiz e
+aceita um callback opcional `onNavigate`. O Quiz usa esse callback para mudar
+o seu único `quizImgIdx` e chamar `renderMedia()`, que já renderiza o contexto
+por imagem da 093d. O handler de teclado do Quiz ignora a tecla enquanto
+`.lightbox-overlay` estiver aberta; o lightbox navega com a mesma regra
+circular e reseta o zoom por imagem. Antes de responder, o Quiz passa uma
+visão da coleção com `label:''` em cada imagem, para nenhuma legenda ser
+revelada ao avançar dentro do lightbox. Detalhe/editor continuam usando a
+assinatura sem callback. Teste dedicado:
+`node tests/quiz-lightbox-navigation.test.js`.
+
 ## Correção do payload Firestore (2026-09-26; validação real pendente)
 
 `reviewProgress[id].a` permanece como tuplas `[t,ok,graded]` no Quiz,

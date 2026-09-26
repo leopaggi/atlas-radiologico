@@ -492,10 +492,10 @@ test('PREVIEW QUADRO: ampliar/lightbox recebe a MESMA src local do pending (e a 
   const src = openQuizAddImageModalFn.source;
   // Chamada de dentro do Quiz continua com só 2 argumentos, de propósito —
   // ajuste 22/09/2026 (navegação do lightbox) não mexeu no Quiz; a função
-  // ganhou 2 parâmetros opcionais (navImages/startIndex) que ficam undefined
+  // aceita parâmetros opcionais (navImages/startIndex/onNavigate), não usados
   // aqui, mantendo o comportamento antigo (sem setas/contador) intacto.
   assert.match(src, /item\.querySelector\('\.img-gallery-thumb'\)\.onclick = \(\)=> openImageLightbox\(src, img\.label\);/);
-  assert.match(html, /function openImageLightbox\(src, description, navImages, startIndex\)\{/);
+  assert.match(html, /function openImageLightbox\(src, description, navImages, startIndex, onNavigate\)\{/);
 });
 
 test('PREVIEW QUADRO: callback do Quiz registra a blob URL do quadro e NÃO faz upload', () => {
@@ -798,7 +798,7 @@ test('CARROSSEL: navegação circular e índice sempre dentro dos limites', () =
 
 test('CARROSSEL: clicar nos controles NÃO abre o lightbox (lightbox só no clique da imagem)', () => {
   const src = renderQuizCardIntegratedFn.source;
-  assert.match(src, /const im=media\.querySelector\('img'\); if\(im\) im\.onclick=\(\)=>openImageLightbox\(cur\.data, st\.answered \? cur\.label : ''\);/);
+  assert.match(src, /const im=media\.querySelector\('img'\); if\(im\) im\.onclick=\(\)=>openImageLightbox\(\s*cur\.data, st\.answered \? cur\.label : ''/);
   const controlsBlock = src.slice(src.indexOf('quiz-carousel-overlay'), src.indexOf('const im=media.querySelector'));
   assert.doesNotMatch(controlsBlock, /openImageLightbox/);
 });
@@ -810,7 +810,8 @@ test('CARROSSEL/LIGHTBOX: maximizar a imagem só recebe a descrição DEPOIS de 
   // chamada a openImageLightbox neste arquivo, e ela precisa ser condicional.
   assert.equal((src.match(/openImageLightbox\(/g) || []).length, 1, 'só pode existir uma chamada ao lightbox no carrossel do Quiz');
   assert.doesNotMatch(src, /openImageLightbox\(cur\.data\)[;,)]/, 'nunca pode chamar sem o segundo argumento (isso voltaria a mostrar a legenda sempre)');
-  assert.match(src, /openImageLightbox\(cur\.data, st\.answered \? cur\.label : ''\)/, 'só passa cur.label quando st.answered===true; senão, string vazia (sem caixa no lightbox)');
+  assert.match(src, /openImageLightbox\(\s*cur\.data, st\.answered \? cur\.label : ''/, 'só passa cur.label quando st.answered===true; senão, string vazia (sem caixa no lightbox)');
+  assert.match(src, /st\.answered \? quizImgs : quizImgs\.map\(img=>\(\{\.\.\.img, label:''\}\)\)/, 'nenhuma legenda de outra imagem vaza ao navegar no lightbox antes de responder');
 });
 
 test('CARROSSEL: contador do overlay é dinâmico (quizImgIdx+1 / total) e o índice é único', () => {

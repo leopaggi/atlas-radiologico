@@ -1,5 +1,26 @@
 # Diario de desenvolvimento
 
+## Lightbox das imagens do Quiz — 26/09/2026
+
+Ao maximizar uma imagem, o Quiz enviava ao visualizador apenas aquela imagem.
+Por isso as setas e o teclado funcionavam no Quiz normal, mas desapareciam na
+ampliação. O visualizador já sabia percorrer uma coleção de imagens: agora
+recebe a coleção e a posição da questão, e devolve cada troca à própria
+questão. Ao fechar, a imagem selecionada e seu contexto clínico permanecem.
+Antes de responder, as legendas de todas as imagens seguem ocultas, mesmo
+durante a navegação ampliada. Quadro continua sendo uma imagem.
+
+Arquivos desta entrega: `index.html`, `tests/quiz-lightbox-navigation.test.js`,
+`tests/lightbox-navigation.test.js`, `tests/quiz-images.test.js`,
+`tests/image-description.test.js`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`,
+`tests/image-clinical-context.test.js`, `AI.md`, `README.md` e este diário.
+Testes: 6/6 para o fluxo expandido, 25/25 na galeria genérica, 103/103 no
+Quiz, 31/31 descrições, 13/13 contexto clínico, 23/23 fluxos críticos e 4/4
+no teste de compatibilidade Firestore. A suíte ampla passou 1408 de 1423
+(10 falhas pré-existentes no Windows e 5 pendentes; nenhuma nova). Smoke real
+em navegador com login e verificação do console não pôde ser feito deste
+ambiente. Nenhuma migração de dados é necessária.
+
 ## Correção do envio ao Firestore — 26/09/2026 (em validação)
 
 O envio do Atlas falhava porque o histórico das respostas do Quiz tinha um

@@ -8,6 +8,26 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**Quiz/lightbox (2026-09-26, após `12e971c`):** o Quiz passa ao lightbox
+genérico a coleção e o índice da própria questão; cada navegação no lightbox
+devolve o índice ao `renderMedia()` existente, que atualiza imagem, contador e
+contexto clínico 093d. Índice persiste ao fechar/reabrir; navegação circular,
+zoom/reset e bloqueio do teclado do Quiz enquanto há lightbox seguem as regras
+anteriores. Legendas de TODAS as imagens continuam ocultas no lightbox antes
+de responder. Nenhum dado, upload ou sincronização foi modificado. Testes
+focados: `quiz-lightbox-navigation` 6/6, `lightbox-navigation` 25/25,
+`quiz-images` 103/103, `image-description` 31/31,
+`image-clinical-context` 13/13, `critical-flows` 23/23 e
+`firestore-no-nested-arrays` 4/4. Suíte ampla no Windows: 1423 testes,
+1408 PASS, 10 FAIL já existentes na base (7 dependem de LF onde o checkout
+Windows usa CRLF, 1 duplicatas históricas, 2 datas fixas), 5 TODO; nenhum
+FAIL adicional. Smoke real com navegador autenticado/console permanece
+pendente (indisponível neste ambiente).
+
+**Validação da correção Firestore:** o usuário confirmou em produção no commit
+`12e971c` que o banner vermelho desapareceu e a sincronização voltou a
+funcionar (relato posterior ao checkpoint abaixo).
+
 **Correção de sincronização em preparação (2026-09-26, ainda sem validação real):**
 o payload de `atlas_state/main` continha `reviewProgress[lesionId].a[0]`
 como array dentro de array. O Firestore recusa esse formato na transação.

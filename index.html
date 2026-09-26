@@ -16432,10 +16432,10 @@ function lightboxNavList(images){
 }
 function lightboxNextIndex(idx, total){ return total > 0 ? (idx + 1) % total : 0; }
 function lightboxPrevIndex(idx, total){ return total > 0 ? (idx - 1 + total) % total : 0; }
-// navImages/startIndex são OPCIONAIS: sem eles (ou com 0/1 imagem), o
+// navImages/startIndex/onNavigate são OPCIONAIS: sem eles (ou com 0/1 imagem), o
 // lightbox continua exatamente como antes — sem setas, sem contador, sem
 // teclado de navegação (só ESC, como sempre).
-function openImageLightbox(src, description, navImages, startIndex){
+function openImageLightbox(src, description, navImages, startIndex, onNavigate){
   const navList = lightboxNavList(navImages);
   const hasNav = navList.length > 1;
   let navIdx = (hasNav && Number.isInteger(startIndex) && startIndex >= 0 && startIndex < navList.length) ? startIndex : 0;
@@ -16498,6 +16498,7 @@ function openImageLightbox(src, description, navImages, startIndex){
     if(descEl){ descEl.hidden = !newDesc; descEl.textContent = newDesc; }
     const counterEl = lbFind('.lightbox-nav-counter');
     if(counterEl) counterEl.textContent = (navIdx + 1) + ' / ' + navList.length;
+    if(typeof onNavigate === 'function') onNavigate(navIdx);
     zbReset();
   }
   if(hasNav){
@@ -17308,7 +17309,13 @@ function renderQuizCardIntegrated(host){
       </div>`;
     // Só passa a descrição pro lightbox DEPOIS de responder — antes disso,
     // maximizar a imagem não pode vazar a legenda (mesmo gate de quizImageDescHtml).
-    const im=media.querySelector('img'); if(im) im.onclick=()=>openImageLightbox(cur.data, st.answered ? cur.label : '');
+    const im=media.querySelector('img'); if(im) im.onclick=()=>openImageLightbox(
+      cur.data, st.answered ? cur.label : '',
+      // O lightbox recebe as MESMAS imagens/ordem; sem resposta, suas legendas
+      // continuam ocultas inclusive ao navegar dentro da ampliação.
+      st.answered ? quizImgs : quizImgs.map(img=>({...img, label:''})), quizImgIdx,
+      idx=>{ quizImgIdx=idx; renderMedia(); } // estado único: contexto 093d vem do renderMedia existente
+    );
     if(hasMultiple){
       // Setas laterais e setas do overlay superior controlam o MESMO quizImgIdx —
       // um único estado de carrossel. Navegação circular (o wrap acontece no
