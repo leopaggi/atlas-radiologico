@@ -5567,6 +5567,83 @@ function buildReviewAiAttempts(review){
    ou seja, sempre uma decisão manual da pessoa usando o Atlas. A futura IA
    nunca deve chamar esta função — ela só processa revisões já existentes
    (ver getPendingReviews()/setReviewSolution() mais abaixo). */
+/* PROTEÇÃO 091 — PENDÊNCIA GERAL DO ATLAS. Mesma fila (LESION_REVISIONS),
+   mesma máquina de estados e mesmo sync (084). `scope`: 'lesion' (padrão;
+   revisões antigas sem o campo) ou 'global' (lesionId null, texto livre,
+   categoria opcional só para organizar). Uma pendência global é um PEDIDO,
+   nunca autorização para mexer no catálogo: não tem alvo direto em DATA
+   (authorize/rollback/placement recusam com
+   'global_review_has_no_direct_target'); a solução é textual e a conclusão
+   é humana (completeGlobalReview). */
+const GLOBAL_REVIEW_CATEGORIES = { audit:'Auditoria', duplicates:'Duplicatas', classifications:'Classificações', descriptions:'Descrições', images:'Imagens', taxonomy:'Taxonomia', organization:'Organização', other:'Outro' };
+const GLOBAL_REVIEW_NO_TARGET = 'global_review_has_no_direct_target';
+function reviewScope(review){ return (review && review.scope==='global') ? 'global' : 'lesion'; }
+function isGlobalReview(review){ return reviewScope(review)==='global'; }
+function createReviewRequest(opts){
+  const o = (opts && typeof opts==='object') ? opts : {};
+  const scope = o.scope==='global' ? 'global' : 'lesion';
+  const text = (o.requestText||'').trim();
+  if(!text) return { created:false, reason:'invalid_input', review:null };
+  if(scope==='lesion') return createLesionReview(o.lesionId, text);
+  const dup = Object.values(LESION_REVISIONS).find(r=>r && isGlobalReview(r) && ACTIVE_LESION_REVIEW_STATUSES.includes(r.status) && r.requestText===text);
+  if(dup) return { created:false, reason:'duplicate', review:dup };
+  const now = Date.now();
+  const review = {
+    id: genLesionReviewId(),
+    scope: 'global',
+    lesionId: null,
+    category: Object.prototype.hasOwnProperty.call(GLOBAL_REVIEW_CATEGORIES, o.category) ? o.category : null,
+    createdAt: now,
+    updatedAt: now,
+    status: 'pending',
+    requestText: text,
+    solution: null,
+    attempts: [],
+    humanFeedback: [],
+    history: []
+  };
+  pushLesionReviewHistory(review, 'created', { requestText: text, scope: 'global', category: review.category });
+  LESION_REVISIONS[review.id] = review;
+  saveLesionRevisions();
+  updateReviewCenterBadges();
+  return { created:true, reason:null, review };
+}
+/* Solução TEXTUAL de uma pendência global (análise/plano/resultado de
+   auditoria). Nunca carrega proposedChanges aplicáveis; vai para 'proposed'
+   (💡) aguardando a decisão humana: ✓ Concluir, ↩ devolver ou cancelar. */
+function setGlobalReviewSolution(reviewId, solutionText, meta){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return { ok:false, reason:'not_found', review:null };
+  if(!isGlobalReview(review)) return { ok:false, reason:'not_global', review };
+  if(!reviewAcceptsAiProposal(review)) return { ok:false, reason:'not_proposable', status:review.status, review };
+  const m = (meta && typeof meta==='object') ? meta : {};
+  const summary = typeof m.summary==='string' ? m.summary.trim() : '';
+  const reasoning = typeof m.reasoning==='string' ? m.reasoning.trim() : '';
+  const text = (solutionText||'').trim() || [summary, reasoning].filter(Boolean).join('\n\n');
+  if(!text) return { ok:false, reason:'empty_solution', review };
+  if(review.status==='rejected') pushLesionReviewHistory(review, 'reopened', null);
+  review.solution = { text, summary, reasoning, proposedChanges: {}, createdAt: Date.now(), global: true };
+  review.status = 'proposed';
+  review.updatedAt = Date.now();
+  pushLesionReviewHistory(review, 'solution_proposed', { solution: review.solution });
+  saveLesionRevisions();
+  updateReviewCenterBadges();
+  return { ok:true, reason:null, review };
+}
+// ✓ Concluir — decisão humana; NUNCA toca DATA.
+function completeGlobalReview(reviewId){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return { ok:false, reason:'not_found', review:null };
+  if(!isGlobalReview(review)) return { ok:false, reason:'not_global', review };
+  if(review.status!=='proposed' && review.status!=='manual_action_required') return { ok:false, reason:'not_completable', status:review.status, review };
+  review.status = 'accepted';
+  review.updatedAt = Date.now();
+  review.completedAt = review.updatedAt;
+  pushLesionReviewHistory(review, 'global_completed', null);
+  saveLesionRevisions();
+  updateReviewCenterBadges();
+  return { ok:true, reason:null, review };
+}
 function createLesionReview(lesionId, requestText){
   const text = (requestText||'').trim();
   if(!lesionId || !text) return { created:false, reason:'invalid_input', review:null };
@@ -5643,7 +5720,7 @@ const ACTIVE_LESION_REVIEW_STATUSES = ['pending', 'rejected', 'proposed', 'appli
 const LESION_REVIEW_WARNING_TEXT = 'Esta lesão possui revisão ativa';
 function hasActiveLesionReview(lesionId){
   if(!lesionId) return false;
-  return Object.values(LESION_REVISIONS || {}).some(r=>r && r.lesionId===lesionId && ACTIVE_LESION_REVIEW_STATUSES.includes(r.status));
+  return Object.values(LESION_REVISIONS || {}).some(r=>r && reviewScope(r)==='lesion' && r.lesionId===lesionId && ACTIVE_LESION_REVIEW_STATUSES.includes(r.status)); // PROTEÇÃO 091: global nunca gera ⚠
 }
 function lesionReviewWarningHtml(lesionId){
   return hasActiveLesionReview(lesionId)
@@ -5719,6 +5796,7 @@ function validateProposedChanges(proposedChanges){
 function setReviewSolution(reviewId, solutionText, proposedChanges, meta){
   const review = LESION_REVISIONS[reviewId];
   if(!review) return { ok:false, reason:'not_found', review:null };
+  if(isGlobalReview(review)) return { ok:false, reason:GLOBAL_REVIEW_NO_TARGET, review }; // PROTEÇÃO 091: usar setGlobalReviewSolution
   if(review.status==='applied_pending_validation'){
     return { ok:false, reason:'awaiting_validation', review };
   }
@@ -5774,6 +5852,7 @@ function rejectProposedReviewSolution(reviewId, reasonText){
    até o 2º aceite (approveAppliedReviewSolution/rollbackAppliedReviewSolution). */
 function authorizeAndApplyReviewSolution(reviewId, opts){
   const review = LESION_REVISIONS[reviewId];
+  if(isGlobalReview(review)) return { ok:false, reason:GLOBAL_REVIEW_NO_TARGET, review }; // PROTEÇÃO 091: nunca escolhe lesão
   if(!review || review.status!=='proposed') return { ok:false, reason:'not_proposed', review:review||null };
   if(!review.solution || !review.solution.proposedChanges) return { ok:false, reason:'no_changes', review };
   const check = validateProposedChanges(review.solution.proposedChanges);
@@ -5838,6 +5917,7 @@ function approveAppliedReviewSolution(reviewId){
    pra uma nova proposta/tentativa com seu próprio snapshot novo. */
 function rollbackAppliedReviewSolution(reviewId, reasonText){
   const review = LESION_REVISIONS[reviewId];
+  if(isGlobalReview(review)) return { ok:false, reason:GLOBAL_REVIEW_NO_TARGET, review }; // PROTEÇÃO 091
   if(!review || review.status!=='applied_pending_validation') return { ok:false, reason:'not_awaiting_validation', review:review||null };
   const attempt = review.attempts && review.attempts[review.attempts.length-1];
   if(!attempt || !attempt.beforeSnapshot) return { ok:false, reason:'no_snapshot', review };
@@ -5989,6 +6069,7 @@ function normalizeReviewAltPlacementKey(section, site){
 function applyReviewAiSuggestedPlacement(reviewId, siteOverride){
   const review = LESION_REVISIONS[reviewId];
   if(!review) return { ok:false, reason:'not_found' };
+  if(isGlobalReview(review)) return { ok:false, reason:GLOBAL_REVIEW_NO_TARGET }; // PROTEÇÃO 091
   if(review.status!=='manual_action_required') return { ok:false, reason:'not_manual_action' };
   const ma = review.manualAction || {};
   if(ma.type!=='additional_section_placement') return { ok:false, reason:'not_placement_action' };
@@ -6061,6 +6142,27 @@ function buildReviewAiPacket(reviewId){
   const review = LESION_REVISIONS[reviewId];
   if(!review) return { ok:false, reason:'not_found' };
   if(!reviewAcceptsAiProposal(review)) return { ok:false, reason:'not_proposable', status:review.status };
+  if(isGlobalReview(review)){
+    // PROTEÇÃO 091 — pendência GERAL: sem lesão alvo; sem lesionId, sem
+    // campos/imagens de lesão; a resposta esperada é análise/plano textual.
+    const gAttempts = buildReviewAiAttempts(review);
+    return {
+      ok:true,
+      packet:{
+        reviewId: review.id,
+        scope: 'global',
+        category: review.category || null,
+        categoryLabel: review.category ? (GLOBAL_REVIEW_CATEGORIES[review.category] || null) : null,
+        requestText: review.requestText || '',
+        targetLesion: null,
+        previousAttempts: gAttempts,
+        previousSolution: review.solution ? { text: review.solution.text||'', summary: review.solution.summary||'', reasoning: review.solution.reasoning||'', createdAt: review.solution.createdAt||null } : null,
+        latestHumanFeedback: resolveLatestHumanFeedback(review, gAttempts),
+        rejectionReason: review.rejectionReason || null,
+        allowedResults: ['analysis', 'manual_action_required', 'no_change']
+      }
+    };
+  }
   const lesion = DATA.find(e=>e && e.id===review.lesionId) || null;
   // Metadados de imagem apenas (nunca blobs/binários).
   const images = (lesion && Array.isArray(lesion.images) ? lesion.images : []).map(img=>({
@@ -6074,6 +6176,7 @@ function buildReviewAiPacket(reviewId){
     ok:true,
     packet:{
       reviewId: review.id,
+      scope: 'lesion', // PROTEÇÃO 091
       lesionId: review.lesionId,
       lesionName: lesion ? lesion.name : review.lesionId,
       section: lesion ? lesion.s : '',
@@ -6105,10 +6208,28 @@ function buildReviewAiPacket(reviewId){
   };
 }
 // Texto pronto para colar numa IA (OpenCode/Claude/DeepSeek). Só lê; não altera nada.
+const GLOBAL_REVIEW_AI_RULES = [
+  'Esta é uma PENDÊNCIA GERAL do Atlas (scope "global"): uma solicitação de auditoria/manutenção, SEM uma lesão alvo única.',
+  'NÃO invente lesionId e NÃO proponha alteração automática de dados (nada de proposedChanges): o Atlas não aplica nada a partir desta resposta.',
+  'Produza a análise, o plano ou o resultado da auditoria em texto (summary + reasoning), citando as lesões por nome quando útil; ou indique "manual_action_required" se exigir trabalho manual.'
+];
 function buildReviewAiPrompt(reviewId){
   const built = buildReviewAiPacket(reviewId);
   if(!built.ok) return built;
   const p = built.packet;
+  if(p.scope==='global'){
+    const gl = [
+      'Você é uma IA assistente do Atlas Radiológico. Esta é uma PONTE MANUAL: a pendência abaixo foi criada por uma PESSOA.',
+      ...GLOBAL_REVIEW_AI_RULES,
+      '',
+      'Retorne SOMENTE um JSON válido (sem texto fora dele), neste formato:',
+      '{"reviewId":"'+p.reviewId+'","result":"analysis","summary":"...","reasoning":"..."}',
+      'result: "analysis" (análise/plano/resultado) ou "manual_action_required" (exige trabalho manual).'
+    ];
+    if(Array.isArray(p.previousAttempts) && p.previousAttempts.length) gl.push('', 'Há tentativas anteriores: use o feedback humano (latestHumanFeedback) e não repita uma análise já devolvida.');
+    gl.push('', '=== PACOTE DA PENDÊNCIA (JSON) ===', JSON.stringify(p, null, 2));
+    return { ok:true, reviewId, text: gl.join('\n'), packet:p };
+  }
   const lines = [
     'Você é uma IA assistente do Atlas Radiológico. Esta é uma PONTE MANUAL: a revisão abaixo foi criada por uma PESSOA.',
     'Sua tarefa: propor uma correção SOMENTE para os campos permitidos. NÃO aplique nada, NÃO crie revisão, NÃO altere ownership de imagens, NÃO mexa em imagens/IDs/progresso.',
@@ -6171,6 +6292,7 @@ function importReviewAiSolution(reviewId, rawText){
   catch(_e){ return { ok:false, reason:'invalid_json' }; }
   if(!parsed || typeof parsed!=='object' || Array.isArray(parsed)) return { ok:false, reason:'invalid_shape' };
   if(String(parsed.reviewId||'') !== String(reviewId)) return { ok:false, reason:'review_id_mismatch' };
+  if(isGlobalReview(review)) return importGlobalReviewAiResult(review, parsed); // PROTEÇÃO 091
   const rawChanges = (parsed.proposedChanges===undefined || parsed.proposedChanges===null) ? {} : parsed.proposedChanges;
   if(typeof rawChanges!=='object' || Array.isArray(rawChanges)) return { ok:false, reason:'invalid_shape' };
   const keys = Object.keys(rawChanges);
@@ -6211,6 +6333,34 @@ function importReviewAiSolution(reviewId, rawText){
   return { ok:true, review: applied.review, attempt: applied.attempt, applied:true };
 }
 
+/* PROTEÇÃO 091 — resultado da IA para pendência GLOBAL: só texto. Qualquer
+   proposedChanges não vazio é recusado (sem alvo direto em DATA). */
+function importGlobalReviewAiResult(review, parsed){
+  const changes = parsed.proposedChanges;
+  if(changes && typeof changes==='object' && !Array.isArray(changes) && Object.keys(changes).length) return { ok:false, reason:GLOBAL_REVIEW_NO_TARGET };
+  if(parsed.lesionId) return { ok:false, reason:GLOBAL_REVIEW_NO_TARGET, detail:'lesionId_in_global_result' };
+  const summary = String(parsed.summary||'').trim();
+  const reasoning = String(parsed.reasoning||'').trim();
+  const solutionText = [summary, reasoning].filter(Boolean).join('\n\n');
+  const result = String(parsed.result||'analysis').trim();
+  if(result==='manual_action_required'){
+    const flagged = flagManualActionRequired(review.id, solutionText || 'Exige ação manual.', summary || 'manual_action_required');
+    if(!flagged.ok) return { ok:false, reason:flagged.reason };
+    return { ok:true, applied:false, outcome:'manual_action_required', review: flagged.review };
+  }
+  if(result==='no_change'){
+    review.lastAiAnalysis = { result:'no_change', summary, reasoning, at: Date.now() };
+    review.updatedAt = Date.now();
+    saveLesionRevisions();
+    updateReviewCenterBadges();
+    return { ok:true, applied:false, outcome:'no_change', review };
+  }
+  if(result!=='analysis') return { ok:false, reason:'invalid_result', detail:result };
+  const res = setGlobalReviewSolution(review.id, solutionText, { summary, reasoning });
+  if(!res.ok) return { ok:false, reason:res.reason };
+  return { ok:true, applied:false, outcome:'global_solution', review: res.review };
+}
+
 /* ============================================================
    FLUXO EM LOTE — várias revisões em UM prompt e UM JSON.
    Cada revisão é processada ISOLADAMENTE (um item inválido não
@@ -6218,7 +6368,7 @@ function importReviewAiSolution(reviewId, rawText){
    histórico, status e rollback. Sem API, sem segredo, sem
    autoaceite: apply só aplica PROVISORIAMENTE.
    ============================================================ */
-const REVIEW_AI_BATCH_RESULTS = ['apply', 'manual_action_required', 'no_change'];
+const REVIEW_AI_BATCH_RESULTS = ['apply', 'manual_action_required', 'no_change', 'analysis']; // 'analysis': só pendência global (091)
 // Elegíveis para o lote: exatamente as revisões pendentes (pending + rejected).
 function getBatchEligibleReviews(){
   return getPendingReviews();
@@ -6255,6 +6405,7 @@ function buildReviewAiBatchPrompt(reviewIds){
     '- "proposedChanges" é sempre um objeto (pode ser {}).',
     '- Para revisões com tentativas anteriores (previousAttempts), use OBRIGATORIAMENTE o feedback humano (humanFeedback/latestHumanFeedback). Não repita uma solução já recusada (rejected/rolledback) sem corrigir o motivo indicado.',
     '- Se a correção exigir ADICIONAR a lesão a outra seção/localização, use result "manual_action_required" com manualAction.type "additional_section_placement" e suggestedPlacement {section, site} usando SOMENTE seções/sítios da lista abaixo.',
+    '- Itens com "scope":"global" são PENDÊNCIAS GERAIS do Atlas (sem lesão alvo): use result "analysis" (análise/plano em summary+reasoning), "manual_action_required" ou "no_change"; NUNCA "apply", nunca proposedChanges, nunca invente lesionId.',
     '- Responda SOMENTE com JSON válido, sem nenhum texto fora dele.',
     '',
     'Formato exato:',
@@ -6279,6 +6430,14 @@ function processReviewAiBatchItem(raw, seen){
   if(!reviewAcceptsAiProposal(review)) return { reviewId, status:'failed', reason:'not_proposable', detail:review.status };
   const result = String(raw.result||'').trim();
   if(!REVIEW_AI_BATCH_RESULTS.includes(result)) return { reviewId, status:'failed', reason:'invalid_result', detail:result||null };
+  // PROTEÇÃO 091 — pendência global no lote: só texto (analysis/manual/no_change).
+  if(isGlobalReview(review)){
+    if(result==='apply') return { reviewId, status:'failed', reason:GLOBAL_REVIEW_NO_TARGET };
+    const g = importGlobalReviewAiResult(review, raw);
+    if(!g.ok) return { reviewId, status:'failed', reason:g.reason };
+    return { reviewId, status: g.outcome==='global_solution' ? 'global_solution' : g.outcome, review: g.review };
+  }
+  if(result==='analysis') return { reviewId, status:'failed', reason:'invalid_result', detail:'analysis_only_for_global' };
   const summary = String(raw.summary||'').trim();
   const reasoning = String(raw.reasoning||'').trim();
   const solutionText = [summary, reasoning].filter(Boolean).join('\n\n') || 'Análise importada da IA (lote).';
@@ -6383,6 +6542,7 @@ function importReviewAiBatch(rawText){
     if(item.status==='applied') summary.applied += 1;
     else if(item.status==='manual_action_required') summary.manual += 1;
     else if(item.status==='no_change') summary.noChange += 1;
+    else if(item.status==='global_solution') summary.globalSolutions = (summary.globalSolutions||0) + 1; // PROTEÇÃO 091
     else summary.failed += 1;
   }
   return { ok:true, summary, items };
@@ -13276,7 +13436,13 @@ function renderFieldChangesHtml(rows){
   `).join('')}</div>`;
 }
 
-function reviewCenterLesionMeta(lesionId){
+function reviewCenterLesionMeta(lesionId, review){
+  // PROTEÇÃO 091 — pendência GERAL (sem lesão): nunca procura lesão, nunca
+  // oferece "ver lesão"; mostra o rótulo global + categoria.
+  if(!lesionId || (review && isGlobalReview(review))){
+    const cat = review && review.category ? (GLOBAL_REVIEW_CATEGORIES[review.category] || '') : '';
+    return { name: '🌐 Atlas / solicitação geral', sub: cat ? 'categoria: ' + cat : '', found:false, lesion:null, global:true };
+  }
   const lesion = DATA.find(e=>e.id===lesionId);
   return lesion
     ? { name: lesion.name, sub: `${lesion.s} · ${lesion.site}`, found:true, lesion }
@@ -13423,7 +13589,7 @@ function openReviewAiBridgeModal(reviewId, onImported){
   document.addEventListener('keydown', closeOnEsc);
   ov.innerHTML = `<div class="modal review-ai-modal">
     <h2>🤖 Preparar para IA</h2>
-    <div class="modal-sub">${meta.name}${meta.sub?' · '+meta.sub:''} — ponte manual: a correção é aplicada provisoriamente e você decide manter/desfazer.</div>
+    <div class="modal-sub">${meta.name}${meta.sub?' · '+meta.sub:''} — ${built.packet.scope==='global' ? 'ponte manual: pendência geral — a resposta da IA vira uma análise textual; nada é aplicado ao catálogo.' : 'ponte manual: a correção é aplicada provisoriamente e você decide manter/desfazer.'}</div>
     <div class="review-center-row-request"><b>Pedido:</b> ${(built.packet.requestText||'').replace(/</g,'&lt;')}</div>
     <div class="field"><label>1) Copie este pedido e cole numa IA (OpenCode/Claude/DeepSeek)</label>
       <textarea id="review-ai-prompt" readonly style="min-height:180px;font-family:'IBM Plex Mono',monospace;font-size:11px;">${escAttr(built.text)}</textarea></div>
@@ -13464,13 +13630,21 @@ function openReviewAiBridgeModal(reviewId, onImported){
       return;
     }
     // Resultado 2: nenhuma alteração aplicável — não altera os dados nem o status.
-    if(res.outcome==='no_applicable_changes'){
+    if(res.outcome==='no_applicable_changes' || res.outcome==='no_change'){
       errEl.style.color = 'var(--muted)';
       errEl.textContent = 'Esta revisão não possui alteração aplicável nos campos permitidos.';
       return;
     }
     importBtn.disabled = true;
     await saveLesionRevisions();
+    // PROTEÇÃO 091 — pendência geral: análise registrada (💡) ou ação manual;
+    // nenhuma tela de validação de lesão (não há lesão alvo).
+    if(res.outcome==='global_solution' || (res.outcome==='manual_action_required' && isGlobalReview(LESION_REVISIONS[reviewId]))){
+      toast(res.outcome==='global_solution' ? 'Análise registrada — veja em 💡 Soluções disponíveis.' : 'Pendência geral marcada como ação manual.');
+      close();
+      if(typeof onImported==='function') onImported();
+      return;
+    }
     // Resultado 3: exige ação manual (imagem/ownership/estrutura) — não altera os dados.
     if(res.outcome==='manual_action_required'){
       toast('Esta revisão exige ação manual.');
@@ -13827,6 +14001,7 @@ function openPendingReviewsModal(){
       <h2>🔔 Revisões pendentes</h2>
       <div class="modal-sub">pedidos de revisão aguardando uma solução — mais recentes primeiro</div>
       <div class="modal-actions" style="justify-content:flex-start;">
+        <button type="button" class="btn btn-ghost" id="pending-reviews-new">+ Nova pendência</button>
         <button type="button" class="btn btn-primary" id="pending-reviews-batch-ai">🤖 Analisar pendências com IA</button>
       </div>
       <div class="review-center-list" id="pending-reviews-list"></div>
@@ -13842,7 +14017,7 @@ function openPendingReviewsModal(){
       return;
     }
     reviews.forEach(r=>{
-      const meta = reviewCenterLesionMeta(r.lesionId);
+      const meta = reviewCenterLesionMeta(r.lesionId, r);
       const when = r.updatedAt ? new Date(r.updatedAt).toLocaleString('pt-BR') : '';
       const statusTag = r.status==='rejected'
         ? '<span class="review-status-tag rejected">recusada — reaberta pra nova proposta</span>'
@@ -13873,6 +14048,7 @@ function openPendingReviewsModal(){
   };
   renderList();
   const batchBtn = ov.querySelector('#pending-reviews-batch-ai');
+  ov.querySelector('#pending-reviews-new').onclick = ()=> openNewReviewRequestModal(()=>{ renderList(); if(batchBtn) batchBtn.hidden = getBatchEligibleReviews().length===0; }); // PROTEÇÃO 091
   if(batchBtn){
     batchBtn.hidden = getBatchEligibleReviews().length===0;
     batchBtn.onclick = ()=> openReviewAiBatchModal(renderList);
@@ -13880,6 +14056,84 @@ function openPendingReviewsModal(){
   ov.querySelector('#pending-reviews-close').onclick = ()=>{ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); };
 }
 
+/* PROTEÇÃO 091 — "+ Nova pendência": Atlas/solicitação geral (padrão) ou
+   lesão específica (busca por nome, sem dropdown gigante). Só CRIA o pedido
+   (createReviewRequest); nada é auditado/alterado automaticamente. */
+function searchLesionsForReviewRequest(query, limit){
+  const norm = v=>String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const q = norm(query).trim();
+  if(q.length < 2) return [];
+  return (Array.isArray(DATA)?DATA:[]).filter(e=>e && e.id && norm(e.name).includes(q)).slice(0, limit||20);
+}
+function openNewReviewRequestModal(onCreated){
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected){ cleanup(); } };
+  const cleanup = ()=>{ ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+  ov.onclick = e=>{ if(e.target===ov) cleanup(); };
+  document.addEventListener('keydown', closeOnEsc);
+  const catOptions = Object.entries(GLOBAL_REVIEW_CATEGORIES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
+  ov.innerHTML = `
+    <div class="modal review-cancel-modal">
+      <h2>+ Nova pendência</h2>
+      <div class="modal-sub">um pedido para depois — nada é alterado agora</div>
+      <div class="field"><label>Tipo</label>
+        <label style="display:block;"><input type="radio" name="nrr-scope" value="global" checked> Atlas / solicitação geral</label>
+        <label style="display:block;"><input type="radio" name="nrr-scope" value="lesion"> Lesão específica</label>
+      </div>
+      <div id="nrr-lesion-box" hidden>
+        <div class="field"><label>Lesão</label><input id="nrr-lesion-search" type="text" placeholder="digite parte do nome (mín. 2 letras)"></div>
+        <div id="nrr-lesion-results" class="review-center-list" style="max-height:180px;overflow:auto;"></div>
+        <div id="nrr-lesion-selected" class="modal-sub"></div>
+      </div>
+      <div class="field"><label id="nrr-text-label">Solicitação / otimização</label>
+        <textarea id="nrr-text" rows="4" placeholder="Ex.: auditar possíveis duplicatas em neurorradiologia, revisar classificações O-RADS, verificar lesões sem imagens..."></textarea></div>
+      <div class="field" id="nrr-cat-box"><label>Categoria (opcional)</label><select id="nrr-category"><option value="">—</option>${catOptions}</select></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="nrr-cancel">voltar</button>
+        <button class="btn btn-primary" id="nrr-create">Criar pendência</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  let selectedLesionId = null;
+  const lesionBox = ov.querySelector('#nrr-lesion-box');
+  const catBox = ov.querySelector('#nrr-cat-box');
+  const results = ov.querySelector('#nrr-lesion-results');
+  const selected = ov.querySelector('#nrr-lesion-selected');
+  const scopeNow = ()=> (ov.querySelector('input[name="nrr-scope"]:checked')||{}).value==='lesion' ? 'lesion' : 'global';
+  const paintScope = ()=>{
+    const lesion = scopeNow()==='lesion';
+    lesionBox.hidden = !lesion; catBox.hidden = lesion;
+    ov.querySelector('#nrr-text-label').textContent = lesion ? 'Pedido de revisão desta lesão' : 'Solicitação / otimização';
+  };
+  ov.querySelectorAll('input[name="nrr-scope"]').forEach(r=>r.onchange = paintScope);
+  ov.querySelector('#nrr-lesion-search').oninput = (ev)=>{
+    results.innerHTML = '';
+    searchLesionsForReviewRequest(ev.target.value, 20).forEach(e=>{
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn btn-ghost'; b.style.cssText = 'display:block;width:100%;text-align:left;';
+      b.textContent = `${e.name} — ${e.s} · ${e.site}`;
+      b.onclick = ()=>{ selectedLesionId = e.id; selected.textContent = 'Selecionada: ' + e.name + ' (' + e.s + ' · ' + e.site + ')'; };
+      results.appendChild(b);
+    });
+  };
+  ov.querySelector('#nrr-cancel').onclick = cleanup;
+  ov.querySelector('#nrr-create').onclick = async ()=>{
+    const scope = scopeNow();
+    const text = ov.querySelector('#nrr-text').value.trim();
+    if(!text){ toast('Escreva a solicitação.'); return; }
+    if(scope==='lesion' && !selectedLesionId){ toast('Escolha a lesão.'); return; }
+    const res = createReviewRequest({ scope, lesionId: selectedLesionId, requestText: text, category: ov.querySelector('#nrr-category').value || null });
+    if(res.reason==='duplicate'){ toast('Já existe uma pendência ativa idêntica — não foi duplicada.'); return; }
+    if(!res.created){ toast('Não foi possível criar a pendência.'); return; }
+    await saveLesionRevisions();
+    cleanup();
+    toast(scope==='global' ? 'Pendência geral criada.' : 'Pendência da lesão criada.');
+    if(typeof onCreated==='function') onCreated(res.review);
+  };
+  paintScope();
+  ov.querySelector('#nrr-text').focus();
+}
 /* 💡 Soluções disponíveis prioriza VALIDAR CORREÇÕES (status
    "applied_pending_validation" — a correção já foi aplicada provisoriamente
    em DATA e aguarda a decisão humana: manter ou desfazer/rollback). A aba
@@ -13938,8 +14192,41 @@ function openReadySolutionsModal(){
       return;
     }
     reviews.forEach(r=>{
-      const meta = reviewCenterLesionMeta(r.lesionId);
+      const meta = reviewCenterLesionMeta(r.lesionId, r);
       const when = r.solution && r.solution.createdAt ? new Date(r.solution.createdAt).toLocaleString('pt-BR') : '';
+      if(isGlobalReview(r)){
+        // PROTEÇÃO 091 — solução TEXTUAL de pendência geral: ✓ Concluir /
+        // ↩ devolver / cancelar. Nada aqui toca DATA.
+        const grow = document.createElement('div');
+        grow.className = 'review-center-row';
+        grow.innerHTML = `
+          <div class="review-center-row-main">
+            <div class="review-center-row-title">${meta.name}</div>
+            <div class="review-center-row-meta">${meta.sub?escAttr(meta.sub)+' · ':''}análise em ${when}</div>
+            <div class="review-center-row-request"><b>Pedido:</b> ${escAttr(r.requestText||'')}</div>
+            <div class="review-center-row-solution" style="white-space:pre-wrap;"><b>Análise / resultado:</b> ${escAttr((r.solution&&r.solution.text)||'')}</div>
+          </div>
+          <div class="review-center-row-actions">
+            <button type="button" class="btn btn-ghost review-open-history">histórico</button>
+            <button type="button" class="btn btn-primary review-global-complete">✓ Concluir</button>
+            <button type="button" class="btn btn-ghost review-reject-proposal">↩ devolver / pedir nova análise</button>
+            <button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>
+          </div>`;
+        grow.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
+        grow.querySelector('.review-global-complete').onclick = async ()=>{
+          const res = completeGlobalReview(r.id);
+          if(res.ok){ await saveLesionRevisions(); toast('Pendência concluída.'); renderBothLists(); }
+        };
+        grow.querySelector('.review-reject-proposal').onclick = ()=>{
+          openReasonPromptModal(r.id, async (reason)=>{
+            const res = rejectProposedReviewSolution(r.id, reason);
+            if(res.ok){ await saveLesionRevisions(); toast('Análise devolvida — a pendência voltou para o 🔔.'); renderBothLists(); }
+          }, { title: '↩ Devolver / pedir nova análise', subtitle: 'O que faltou nesta análise? (opcional) — vira feedback para a próxima tentativa.', confirmLabel: '↩ devolver' });
+        };
+        grow.querySelector('.review-cancel-request').onclick = ()=> openCancelReviewModal(r.id, renderBothLists);
+        proposedList.appendChild(grow);
+        return;
+      }
       const changes = (r.solution && r.solution.proposedChanges) || {};
       const diffRows = describeLesionReviewFieldChanges(meta.lesion, changes, Object.keys(changes));
       const row = document.createElement('div');
@@ -14052,7 +14339,7 @@ function openReadySolutionsModal(){
       return;
     }
     reviews.forEach(r=>{
-      const meta = reviewCenterLesionMeta(r.lesionId);
+      const meta = reviewCenterLesionMeta(r.lesionId, r);
       const reason = r.manualActionReason || (r.solution && r.solution.reason) || '';
       const isImage = /imagem|imagens|image|images|foto|figura/i.test(reason);
       const sug = reviewPlacementSuggestion(r);
@@ -14070,9 +14357,12 @@ function openReadySolutionsModal(){
           ${sug.applicable?`<button type="button" class="btn btn-primary review-manual-apply-placement">✓ Aplicar localização sugerida</button>`:''}
           ${meta.found?`<button type="button" class="btn btn-ghost review-manual-open">${isImage?'🖼 Abrir lesão para ajustar imagens':'✏ Abrir lesão'}</button>`:''}
           <button type="button" class="btn btn-ghost review-open-history">histórico</button>
+          ${isGlobalReview(r)?'<button type="button" class="btn btn-primary review-global-complete">✓ Concluir</button>':''}
           <button type="button" class="btn btn-ghost review-manual-reopen">↩ Voltar para revisões</button>
           <button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>
         </div>`;
+      const completeBtn = row.querySelector('.review-global-complete');
+      if(completeBtn) completeBtn.onclick = async ()=>{ const res = completeGlobalReview(r.id); if(res.ok){ await saveLesionRevisions(); toast('Pendência concluída.'); renderBothLists(); } };
       const applyBtn = row.querySelector('.review-manual-apply-placement');
       if(applyBtn) applyBtn.onclick = ()=> openApplyPlacementConfirmModal(r.id, ()=>{ renderBothLists(); showTab('applied'); });
       const openBtn = row.querySelector('.review-manual-open');

@@ -522,10 +522,15 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // manual e "revisar novamente", CSS AUTO/MANUAL e snapshot — antes da
   // primeira ancora; +2 (load) antes de loadData; +29 (card/detalhe, export/
   // import) antes do importHandler.
-  assert.equal(recovery.line, 8301);
-  assert.equal(brokenArtifacts.line, 8291);
-  assert.equal(loadData.line, 10851);
-  assert.equal(importHandler.line, 14770);
+  // +160 nas tres primeiras ancoras / +290 no importHandler (Protecao 091,
+  // 2026-09-26): pendencias gerais (scope global) no modulo da Central —
+  // createReviewRequest/setGlobalReviewSolution/completeGlobalReview, guardas
+  // e caminho da IA — antes da primeira ancora; +130 (modal "+ Nova
+  // pendencia", meta global e acoes do 💡) antes do importHandler.
+  assert.equal(recovery.line, 8461);
+  assert.equal(brokenArtifacts.line, 8451);
+  assert.equal(loadData.line, 11011);
+  assert.equal(importHandler.line, 15060);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

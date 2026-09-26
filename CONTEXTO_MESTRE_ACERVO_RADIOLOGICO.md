@@ -8,25 +8,24 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
-*Atualizado em 2026-09-26, junto do commit "Protecao 090: automatiza dominio com override manual".*
+*Atualizado em 2026-09-26, junto do commit "Protecao 091: adiciona pendencias gerais do Atlas".*
 
 - **Branch local de trabalho:** `master` (publicação: `git push origin master:main`).
-- **origin/main antes da 090:** `8dbcaa1` (Protecao 089). **Último commit:** Protecao 090 (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
-- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 090:** 1301 testes · 1293 pass · 3 fail conhecidos · 5 todo (era 1280/1272/3/5 após a 089; +21 testes novos da 090). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
-  - Medido no ambiente remoto (sem os arquivos protegidos): 1291 · 1256 · 30 · 5 (base `8dbcaa1` no mesmo ambiente: 1270 · 1235 · 30 · 5; conjunto de falhas idêntico). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
-- **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 090. Nenhuma escrita deliberada nesta tarefa. A 090 adiciona `reviewProgress` (histórico compacto do Quiz, até 8 tentativas por lesão) e `reviewOverride` (override manual) no documento principal; a 089 adicionou `reviewUpdatedAt` (carimbos de mudança manual do estado de estudo) no documento principal, na próxima publicação real. A 088 adicionou só o campo opcional `clinicalContext` DENTRO do objeto da imagem (viaja nos chunks como qualquer metadado de imagem). A 087 reaproveitou `img.label`/`panels[].seq`; a 086 também não (alerta derivado de `lesionRevisions`). Desde a 085 o documento principal tem `orderUpdatedAt`.
-- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), 088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44), 089 (estado de estudo estável — seção 45), **090 (estado AUTOMÁTICO pelo Quiz + override manual — seção 46; corrige o modelo da 089)**.
-- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087); `img.clinicalContext` é pré-diagnóstico, digitado pelo usuário, visível no Quiz antes e depois da resposta — a descrição (`label`) continua só depois (088); REVIEW (Não revisado/Revisando/Dominado) é AUTOMÁTICO pelo histórico do Quiz (`REVIEW_PROGRESS`, regra determinística `replayAutoReview`) salvo override MANUAL explícito (`REVIEW_OVERRIDE`), que o Quiz nunca sobrescreve; boot/render/pull não mudam nada sem dado novo; conflitos por recência, nunca Math.max (089/090)**.
-- **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 090. Não restaurar sem decisão explícita do usuário.
+- **origin/main antes da 091:** `2275137` (Protecao 090). **Último commit:** Protecao 091 (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
+- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 091:** 1314 testes · 1306 pass · 3 fail conhecidos · 5 todo (era 1301/1293/3/5 após a 090; +13 testes novos da 091). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
+  - Medido no ambiente remoto (sem os arquivos protegidos): 1304 · 1269 · 30 · 5 (base `2275137` no mesmo ambiente: 1291 · 1256 · 30 · 5; conjunto de falhas idêntico). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
+- **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 091. Nenhuma escrita deliberada nesta tarefa. A 091 não cria campo/documento novo (pendências gerais vivem em `lesionRevisions`, sincronizado desde a 084). A 090 adicionou `reviewProgress` (histórico compacto do Quiz, até 8 tentativas por lesão) e `reviewOverride` (override manual) no documento principal; a 089 adicionou `reviewUpdatedAt` (carimbos de mudança manual do estado de estudo) no documento principal, na próxima publicação real. A 088 adicionou só o campo opcional `clinicalContext` DENTRO do objeto da imagem (viaja nos chunks como qualquer metadado de imagem). A 087 reaproveitou `img.label`/`panels[].seq`; a 086 também não (alerta derivado de `lesionRevisions`). Desde a 085 o documento principal tem `orderUpdatedAt`.
+- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), 088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44), 089 (estado de estudo estável — seção 45), 090 (estado AUTOMÁTICO pelo Quiz + override manual — seção 46; corrige o modelo da 089), **091 (pendências gerais do Atlas na Central de Revisões — seção 47)**.
+- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087); `img.clinicalContext` é pré-diagnóstico, digitado pelo usuário, visível no Quiz antes e depois da resposta — a descrição (`label`) continua só depois (088); REVIEW (Não revisado/Revisando/Dominado) é AUTOMÁTICO pelo histórico do Quiz (`REVIEW_PROGRESS`, regra determinística `replayAutoReview`) salvo override MANUAL explícito (`REVIEW_OVERRIDE`), que o Quiz nunca sobrescreve; boot/render/pull não mudam nada sem dado novo; conflitos por recência, nunca Math.max (089/090); pendência GERAL (`scope:'global'`, `lesionId:null`) é só um pedido: nunca aplica nada em DATA (`global_review_has_no_direct_target`), nunca gera ⚠ em lesão, conclusão é humana (091)**.
+- **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 091. Não restaurar sem decisão explícita do usuário.
 - **Passo manual pós-deploy (085):** ordens personalizadas feitas ANTES da 085 não têm carimbo. No PC que tem a ordem CORRETA, fazer uma reordenação qualquer (ex.: descer uma seção e subir de volta; idem um sítio em cada seção personalizada) — isso carimba e publica. Depois abrir o outro PC: ordem default/automática cede para a da nuvem sozinha. (Revisões pré-084: mesma lógica, ver seção 40.)
-- **Próximo passo exato:** Proteção 091 (ver BACKLOG abaixo).
+- **Próximo passo exato:** Proteção 092 (ver BACKLOG abaixo).
 
 ## BACKLOG
 
-- **PRÓXIMA PRIORIDADE: Proteção 091 — pendências gerais/livres na Central de Revisões, sem exigir uma lesão específica** (proposta do usuário: estender `LESION_REVISIONS` com `scope: "lesion" | "global"`; global = `lesionId: null`, texto livre, categoria opcional; botão "+ Nova pendência" no 🔔).
-- Sequência combinada depois da 091:
-  - **092** — merge de edição de metadados/contexto de imagem entre PCs (ver pendência abaixo);
-  - **093** — conteúdo complementar/classificações/estadiamento separado dos casos clínicos, oculto antes da resposta e exibido depois no Quiz.
+- **PRÓXIMA PRIORIDADE: Proteção 092 — corrigir o merge de edição de metadados/contexto de imagens JÁ EXISTENTES entre PCs** (ver pendência abaixo).
+- **093** — conteúdo complementar/classificações/estadiamento exibidos somente após responder no Quiz.
+- **Auditoria semântica de duplicatas:** está sendo feita separadamente, em modo READ-ONLY, fora do app. NÃO confundir com `LESION_REVISIONS` (a Central só guarda pedidos/pendências; nada nela executa auditoria ou fusão).
 - **Pendência de sync encontrada na 088 (pré-existente, recomendável tratar logo):** em `mergeEntryNonDestructive`, `unionEntryImages(local.images, remote.images)` mantém SEMPRE a versão local de uma imagem que existe nos dois lados. Uma EDIÇÃO posterior de metadados de uma imagem já existente (`label`, `clinicalContext`, `panels`…) chega à nuvem, mas um PC que já tinha a imagem mantém a cópia antiga no pull — e pode republicá-la no próximo envio dele. Imagens NOVAS (com label/contexto) propagam normalmente. `tests/image-description.test.js` proíbe hoje lógica específica de `label` nesse merge: a correção exige decisão explícita (ex.: metadados de imagem pelo `_userUpdatedAt` da lesão) e testes próprios.
 - **Pendência pré-existente observada:** `uploadPendingImage()` copia só `label` + campos de fonte/licença (+ `clinicalContext` desde a 088); `panels` de um quadro novo criado no editor não são copiados no upload do Salvar (o quadro salvo não fica reeditável). Não alterado.
 - Pendências funcionais posteriores:
@@ -233,7 +232,7 @@ Untracked, intocados. Nunca devem entrar em commit sem pedido explícito:
 
 Fila própria, separada de `REVIEW` (estudo) e `SRS` (quiz). Persistida em
 IndexedDB sob `atlas:lesionRevisions`; sobrevive a F5; incluída no backup
-completo. **Desde a Proteção 084 sincroniza entre dispositivos** pelo campo
+completo. **Desde a Proteção 091 aceita também pendências GERAIS do Atlas** (`scope:'global'`, sem lesão — ver seção 47). **Desde a Proteção 084 sincroniza entre dispositivos** pelo campo
 `lesionRevisions` do documento principal do Firestore, com merge por reviewId
 (`mergeLesionRevisions`) — ver seção 40. (Até a 083 era local por dispositivo.)
 
@@ -2001,3 +2000,76 @@ seletor/tooltip e do inventário de `setReview` ajustadas),
   falhas). Esperado no local: 1301 · 1293 · 3 · 5.
 - Sem teste em navegador real; conferir visualmente card (AUTO/MANUAL,
   seletor) e detalhe (⚙ Automático, ↺ revisar novamente, explicação).
+
+## 47. Proteção 091 — pendências gerais do Atlas na Central de Revisões (2026-09-26)
+
+### Schema (retrocompatível, sem sistema paralelo)
+- Mesma fila `LESION_REVISIONS`, mesma máquina de estados, mesmo sync (084),
+  backup e snapshot (o objeto inteiro já viajava).
+- `scope`: `'lesion'` (padrão — revisões antigas sem o campo continuam lesão;
+  o formato delas não muda) ou `'global'`. Global: `lesionId: null`,
+  `requestText` obrigatório (trim), `category` opcional
+  (`GLOBAL_REVIEW_CATEGORIES`: audit/Auditoria, duplicates/Duplicatas,
+  classifications/Classificações, descriptions/Descrições, images/Imagens,
+  taxonomy/Taxonomia, organization/Organização, other/Outro — só organização).
+- Helpers centrais: `reviewScope(review)`, `isGlobalReview(review)`.
+- Criação: `createReviewRequest({scope, lesionId, requestText, category})`;
+  `createLesionReview(lesionId, texto)` continua existindo (API intacta) e é
+  usado por ela para scope lesion. Duplicata EXATA de global ATIVA (mesmo
+  texto) não cria outra; textos diferentes coexistem; após concluir/cancelar
+  o mesmo texto pode ser pedido de novo.
+
+### UI
+- 🔔 Revisões pendentes: botão "+ Nova pendência" → modal com Tipo (padrão
+  "Atlas / solicitação geral" | "Lesão específica"). Geral: "Solicitação /
+  otimização" + categoria opcional. Lesão: busca por nome (mín. 2 letras,
+  até 20 resultados, sem dropdown gigante) + pedido. Só cria o pedido.
+- Linhas globais: "🌐 Atlas / solicitação geral" + "categoria: …"; sem "ver
+  lesão" (`reviewCenterLesionMeta(null|global)` nunca procura lesão).
+- 💡 Soluções: pendência global com análise aparece em "Propostas" com
+  "✓ Concluir", "↩ devolver / pedir nova análise" (volta ao 🔔 com feedback
+  humano) e "✕ Cancelar pedido"; em "Ações manuais" ganha "✓ Concluir".
+- Badges: global ativa conta no 🔔/💡 pela mesma regra; o ⚠ junto ao nome
+  (086) considera SÓ scope lesion (`hasActiveLesionReview`).
+
+### Solução textual e conclusão
+- `setGlobalReviewSolution(id, texto, {summary, reasoning})`: guarda a
+  análise/plano/resultado (`solution.proposedChanges = {}`, `global:true`) e
+  vai para `proposed`.
+- `completeGlobalReview(id)` (de `proposed` ou `manual_action_required`) →
+  `accepted`. Devolver = `rejectProposedReviewSolution` (→ `rejected`, volta
+  ao 🔔); ação manual/cancelar/reabrir reaproveitam as funções existentes.
+  Nenhuma delas toca DATA.
+
+### Proteção contra mutação automática
+- Para global, `authorizeAndApplyReviewSolution`, `rollbackAppliedReviewSolution`,
+  `applyReviewAiSuggestedPlacement` e `setReviewSolution` (com proposedChanges)
+  devolvem `{ ok:false, reason:'global_review_has_no_direct_target' }` — nunca
+  escolhem uma lesão.
+- IA: `buildReviewAiPacket` global = `{scope:'global', category,
+  categoryLabel, requestText, targetLesion:null, …}` sem lesionId/campos/
+  imagens; o prompt explica que é auditoria/manutenção geral, sem lesão alvo,
+  sem proposedChanges. Import (`importGlobalReviewAiResult`) e lote
+  (`processReviewAiBatchItem`, novo result `"analysis"` só para global)
+  aceitam só texto (`analysis`/`manual_action_required`/`no_change`); recusam
+  `apply`, qualquer proposedChanges e lesionId. Pacotes de lesão ganham
+  `scope:'lesion'` (campo extra, nada removido).
+- Fora do escopo (não implementado): execução automática de auditoria,
+  fusão/renomeação/classificação em massa, agente autônomo.
+
+### Arquivos alterados
+`index.html`, `tests/global-review.test.js` (novo, 12 — cobre os 26 itens
+pedidos), `tests/multi-device-sync.test.js` (+1: global A→B e conclusão B→A;
+harness), `tests/critical-flows.test.js` (âncoras +160/+160/+160/+290),
+`CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`.
+
+### Testes
+- Focados: `global-review` 12/12; `lesion-review` 138/138;
+  `lesion-revisions-sync` 15/15; `lesion-review-warning` 16/16;
+  `multi-device-sync` 170/171 (F2 = arquivo protegido ausente);
+  `modal-cleanup` 14/14; `critical-flows` 23/23; `review-auto-mode` 18/18;
+  `snapshots-ownership` 48/48.
+- Suíte (remoto): 1304 · 1269 · 30 · 5 (base 1291 · 1256 · 30 · 5; mesmas
+  falhas). Esperado no local: 1314 · 1306 · 3 · 5.
+- Sem teste em navegador real; conferir o modal "+ Nova pendência" e as ações
+  do 💡 para pendência global.

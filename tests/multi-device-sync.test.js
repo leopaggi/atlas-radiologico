@@ -163,7 +163,9 @@ const lesionRevisionsFns084 = ['mergeLesionRevisions', 'saveLesionRevisions', 'u
   'getPendingReviews', 'getProposedSolutions', 'getAppliedSolutionsAwaitingValidation', 'getManualActionSolutions',
   'getReadySolutions', 'countPendingLesionReviews', 'countReadyLesionSolutions',
   // PROTEÇÃO 086 — ⚠ junto ao nome da lesão (chamado por updateReviewCenterBadges)
-  'hasActiveLesionReview', 'lesionReviewWarningHtml', 'refreshLesionReviewWarnings']
+  'hasActiveLesionReview', 'lesionReviewWarningHtml', 'refreshLesionReviewWarnings',
+  // PROTEÇÃO 091 — escopo lesão × pendência geral
+  'reviewScope', 'isGlobalReview', 'createReviewRequest', 'setGlobalReviewSolution', 'completeGlobalReview', 'pushLesionReviewHistory', 'genLesionReviewId']
   .map((n) => extractFunction(html, n).source).join('\n');
 
 // Nuvem falsa COMPARTILHADA entre "dispositivos" — simula um único projeto
@@ -430,6 +432,9 @@ function makeDevice(cloud, { seed = [] } = {}) {
     ${addImageToLesionDataFn.source}
     const LESION_REVISIONS_KEY = 'atlas:lesionRevisions';
     const ACTIVE_LESION_REVIEW_STATUSES = ['pending', 'rejected', 'proposed', 'applied_pending_validation', 'manual_action_required'];
+    const GLOBAL_REVIEW_CATEGORIES = { audit:'Auditoria', duplicates:'Duplicatas', classifications:'Classificações', descriptions:'Descrições', images:'Imagens', taxonomy:'Taxonomia', organization:'Organização', other:'Outro' };
+    const GLOBAL_REVIEW_NO_TARGET = 'global_review_has_no_direct_target';
+    function reviewAcceptsAiProposal(review){ return !!review && (review.status==='pending' || review.status==='rejected'); }
     const LESION_REVIEW_WARNING_TEXT = 'Esta lesão possui revisão ativa';
     ${lesionRevisionsFns084}
     const ORDER_STAMPS_KEY = 'atlas:orderUpdatedAt';
@@ -3871,6 +3876,36 @@ test('PROTEÇÃO 090 - F5 preserva modo e histórico; PC novo recebe o modo corr
   assert.equal(b2.context.getReview('seed_1'), 1);
   assert.equal(b2.context.isReviewManual('seed_1'), true);
   assert.equal(b2.context.syncDirty, false);
+});
+
+// ===========================================================================
+// PROTEÇÃO 091 — pendência GERAL do Atlas atravessa o sync da 084.
+// ===========================================================================
+test('PROTEÇÃO 091 - pendência geral criada no PC A chega ao PC B (scope/categoria/lesionId null/solução/histórico) sem ⚠ em lesão', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = await device084(cloud);
+  a.context.appStateReady = true;
+  const g = a.context.createReviewRequest({ scope: 'global', requestText: 'Auditar duplicatas de fígado', category: 'duplicates' });
+  assert.equal(g.created, true);
+  a.context.setGlobalReviewSolution(g.review.id, '7 grupos candidatos', { summary: '7 grupos' });
+  await new Promise((r) => setImmediate(r));
+  await a.context.pushToFirebaseNow();
+  const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await b.boot();
+  const got = JSON.parse(JSON.stringify(b.context.LESION_REVISIONS[g.review.id]));
+  assert.deepEqual([got.scope, got.lesionId, got.category, got.requestText, got.status], ['global', null, 'duplicates', 'Auditar duplicatas de fígado', 'proposed']);
+  assert.equal(got.solution.text, '7 grupos candidatos');
+  assert.ok(got.history.length >= 2);
+  assert.equal(b.context.hasActiveLesionReview('seed_1'), false);
+  assert.equal(b.context.syncDirty, false);
+  // B conclui; A recebe a conclusão
+  b.context.appStateReady = true;
+  assert.equal(b.context.completeGlobalReview(g.review.id).ok, true);
+  await new Promise((r) => setImmediate(r));
+  await b.context.pushToFirebaseNow();
+  await a.context.syncFromFirebase();
+  assert.equal(a.context.LESION_REVISIONS[g.review.id].status, 'accepted');
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');
