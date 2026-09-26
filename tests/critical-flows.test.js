@@ -510,10 +510,16 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // 2026-09-26): CSS do contexto clinico por imagem antes da primeira ancora;
   // campos no editor, preservacao na troca/salvar entre loadData e o
   // importHandler.
-  assert.equal(recovery.line, 7960);
-  assert.equal(brokenArtifacts.line, 7950);
-  assert.equal(loadData.line, 10507);
-  assert.equal(importHandler.line, 14381);
+  // +88 nas duas primeiras ancoras / +89 em loadData / +105 no importHandler
+  // (Protecao 089, 2026-09-26): REVIEW_STAMPS + normalize/load/save/
+  // stampRestoredReview/mergeReviewByRecency/consolidateReviewOnMerge, CSS do
+  // seletor explicito, merge por recencia em write/read/reconcile/persist/
+  // pull/adocao — antes da primeira ancora; +1 (load dos carimbos) antes de
+  // loadData; +16 (seletor do card, export/import) antes do importHandler.
+  assert.equal(recovery.line, 8048);
+  assert.equal(brokenArtifacts.line, 8038);
+  assert.equal(loadData.line, 10596);
+  assert.equal(importHandler.line, 14486);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -694,6 +700,7 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
     sectionOrder: [],
     siteOrder: {},
     loadOrderStamps: async () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085
+    loadReviewStamps: async () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089
     appStateReady: false,
     SEED: seed,
     STORAGE_KEY: 'data',
@@ -923,6 +930,7 @@ async function runImportScenario(raw, { confirmResult = true } = {}) {
     saveSessionLog: async () => writes.push('saveSessionLog'),
     saveOrder: async () => writes.push('saveOrder'),
     saveSiteOrder: async () => writes.push('saveSiteOrder'),
+    stampRestoredReview: () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089 (coberto em review-state.test.js)
     markRestoredOrderManual: () => {}, // PROTEÇÃO 085 — carimbo da ordem importada (coberto em order-sync.test.js)
     scope: { section: 'Original', site: 'Original' },
     activeTags: new Set(['original']),

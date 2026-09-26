@@ -8,22 +8,25 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
-*Atualizado em 2026-09-26, junto do commit "Protecao 088: adiciona contexto clinico por imagem".*
+*Atualizado em 2026-09-26, junto do commit "Protecao 089: estabiliza estado manual de estudo".*
 
 - **Branch local de trabalho:** `master` (publicação: `git push origin master:main`).
-- **origin/main antes da 088:** `e445bae` (Protecao 087). **Último commit:** Protecao 088 (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
-- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 088:** 1265 testes · 1257 pass · 3 fail conhecidos · 5 todo (era 1250/1242/3/5 após a 087; +15 testes novos da 088). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
-  - Medido no ambiente remoto (sem os arquivos protegidos): 1255 · 1220 · 30 · 5 (base `e445bae` no mesmo ambiente: 1240 · 1205 · 30 · 5; conjunto de falhas idêntico). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
-- **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 088. Nenhuma escrita deliberada nesta tarefa. A 088 adiciona só o campo opcional `clinicalContext` DENTRO do objeto da imagem (viaja nos chunks como qualquer metadado de imagem). A 087 reaproveitou `img.label`/`panels[].seq`; a 086 também não (alerta derivado de `lesionRevisions`). Desde a 085 o documento principal tem `orderUpdatedAt`.
-- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), **088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44)**.
-- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087); `img.clinicalContext` é pré-diagnóstico, digitado pelo usuário, visível no Quiz antes e depois da resposta — a descrição (`label`) continua só depois (088)**.
-- **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 088. Não restaurar sem decisão explícita do usuário.
+- **origin/main antes da 089:** `700f58c` (Protecao 088). **Último commit:** Protecao 089 (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
+- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 089:** 1280 testes · 1272 pass · 3 fail conhecidos · 5 todo (era 1265/1257/3/5 após a 088; +15 testes novos da 089). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
+  - Medido no ambiente remoto (sem os arquivos protegidos): 1270 · 1235 · 30 · 5 (base `700f58c` no mesmo ambiente: 1255 · 1220 · 30 · 5; conjunto de falhas idêntico). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
+- **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 089. Nenhuma escrita deliberada nesta tarefa. A 089 adiciona o campo `reviewUpdatedAt` (carimbos de mudança manual do estado de estudo) no documento principal, na próxima publicação real. A 088 adicionou só o campo opcional `clinicalContext` DENTRO do objeto da imagem (viaja nos chunks como qualquer metadado de imagem). A 087 reaproveitou `img.label`/`panels[].seq`; a 086 também não (alerta derivado de `lesionRevisions`). Desde a 085 o documento principal tem `orderUpdatedAt`.
+- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), 088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44), **089 (estado manual de estudo estável — seção 45)**.
+- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087); `img.clinicalContext` é pré-diagnóstico, digitado pelo usuário, visível no Quiz antes e depois da resposta — a descrição (`label`) continua só depois (088); REVIEW (Não revisado/Revisando/Dominado) só muda por ação manual (`setReview`) — Quiz/SRS/boot/render nunca o alteram; conflito entre PCs = mudança manual mais recente (`REVIEW_STAMPS`/`reviewUpdatedAt`) (089)**.
+- **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 089. Não restaurar sem decisão explícita do usuário.
 - **Passo manual pós-deploy (085):** ordens personalizadas feitas ANTES da 085 não têm carimbo. No PC que tem a ordem CORRETA, fazer uma reordenação qualquer (ex.: descer uma seção e subir de volta; idem um sítio em cada seção personalizada) — isso carimba e publica. Depois abrir o outro PC: ordem default/automática cede para a da nuvem sozinha. (Revisões pré-084: mesma lógica, ver seção 40.)
-- **Próximo passo exato:** Proteção 089 (ver BACKLOG abaixo). Atenção à limitação de sync de metadados de imagem já existente (BACKLOG).
+- **Próximo passo exato:** Proteção 090 (ver BACKLOG abaixo).
 
 ## BACKLOG
 
-- **PRÓXIMA PRIORIDADE: Proteção 089 — conteúdo complementar/classificações/estadiamento separado dos casos clínicos, oculto antes da resposta e exibido após a resposta no Quiz.**
+- **PRÓXIMA PRIORIDADE: Proteção 090 — permitir criar pendências gerais/livres na Central de Revisões, sem exigir uma lesão específica** (proposta do usuário: estender `LESION_REVISIONS` com `scope: "lesion" | "global"`; global = `lesionId: null`, texto livre, categoria opcional; botão "+ Nova pendência" no 🔔).
+- Sequência combinada depois da 090:
+  - **091** — corrigir merge de edição de metadados/contexto de imagem entre PCs (ver pendência abaixo);
+  - **092** — conteúdo complementar/classificações/estadiamento separado dos casos clínicos, oculto antes da resposta e exibido depois no Quiz.
 - **Pendência de sync encontrada na 088 (pré-existente, recomendável tratar logo):** em `mergeEntryNonDestructive`, `unionEntryImages(local.images, remote.images)` mantém SEMPRE a versão local de uma imagem que existe nos dois lados. Uma EDIÇÃO posterior de metadados de uma imagem já existente (`label`, `clinicalContext`, `panels`…) chega à nuvem, mas um PC que já tinha a imagem mantém a cópia antiga no pull — e pode republicá-la no próximo envio dele. Imagens NOVAS (com label/contexto) propagam normalmente. `tests/image-description.test.js` proíbe hoje lógica específica de `label` nesse merge: a correção exige decisão explícita (ex.: metadados de imagem pelo `_userUpdatedAt` da lesão) e testes próprios.
 - **Pendência pré-existente observada:** `uploadPendingImage()` copia só `label` + campos de fonte/licença (+ `clinicalContext` desde a 088); `panels` de um quadro novo criado no editor não são copiados no upload do Salvar (o quadro salvo não fica reeditável). Não alterado.
 - Pendências funcionais posteriores:
@@ -1808,3 +1811,81 @@ preservam; bloco no Quiz), `tests/image-clinical-context.test.js` (novo, 13),
 - Suíte (remoto): 1255 · 1220 · 30 · 5 (base 1240 · 1205 · 30 · 5; mesmas
   falhas). Esperado no local: 1265 · 1257 · 3 · 5.
 - Sem teste em navegador real; conferir visualmente o editor e o Quiz.
+
+## 45. Proteção 089 — estado manual de estudo estável (2026-09-26)
+
+### Problema
+Lesões pareciam mudar sozinhas entre Não revisado / Revisando / Dominado
+(`REVIEW`: {id: 0|1|2}).
+
+### Causa raiz (auditoria de TODAS as mutações)
+| Ponto | Classe | Antes | Agora |
+|---|---|---|---|
+| `srsGradeLevel()` — toda resposta do Quiz | D (indevida) | `setReview()` automático: acerto com intervalo ≥30 d → Dominado; senão/erro/difícil → Revisando | removido: o grau só atualiza SRS |
+| `reconcileStateWithRemote` / `mergeThisDeviceImagesToCloud` (pull, pre-push, merge de imagens) | C (sync) | `mergeReviewPreservingProgress`: maior estágio sempre vence → rebaixamento manual desfeito pelo outro PC | `mergeReviewByRecency` (carimbo) |
+| `writeShardedState` (inclui force/syncThisDevice) | C | gravava o REVIEW local inteiro | merge por recência DENTRO da transação |
+| `runDuplicateCleanup` / `deduplicateV171` | B (consolidação) | promovia o keeper ao maior estágio | `consolidateReviewOnMerge`: preserva sem promover |
+| card da lista (`cycleReview`) | A (usuário) | ciclo cego a cada clique | seletor explícito ○/◐/● |
+| botões do detalhe | A | explícitos | inalterado (agora carimbam) |
+| import de backup / restaurar snapshot | explícito | substituem | substituem + carimbam (vale sobre a nuvem, como antes) |
+| aplicar reconciliação V2 | B (ids remapeados) | substitui | substitui + zera carimbos (ids mudaram) |
+| recuperação de dados antigos (inspetor) | explícito | `mergeReviewPreservingProgress` (maior) | inalterado (ação manual com confirmação; dados antigos sem carimbo) |
+| adoção de PC novo | exceção aceita | adota remoto | adota remoto + carimbos |
+| boot/render/load | — | não escreviam REVIEW | idem (verificado por teste) |
+
+A "aleatoriedade" percebida vinha principalmente do Quiz (cada resposta
+reescrevia o estado manual) somado ao "maior vence" do sync.
+
+### Regra final
+"Não revisado / Revisando / Dominado só muda por ação explícita do usuário"
+(`setReview`: seletor do card e botões do detalhe). Exceções: consolidação de
+duplicata (preserva, não promove), restore/import explícito, adoção inicial em
+PC novo, reconciliação V2 manual.
+
+### Estratégia de conflito
+- REVIEW continua `{id: 0|1|2}` (nenhum leitor mudou). Carimbos à parte:
+  `REVIEW_STAMPS {id: ms}` — IndexedDB `atlas:reviewUpdatedAt`, Firestore
+  `reviewUpdatedAt` (documento principal), backup `reviewUpdatedAt`.
+- `mergeReviewByRecency(local, remoto, carimbosL, carimbosR)` (pura): carimbo
+  mais novo vence (valor + carimbo), inclusive para estágio menor; empate de
+  carimbo = maior (determinístico); sem carimbo nos DOIS lados (estado
+  legado) = maior (regra antiga, única informação disponível). Quarentena 075
+  filtrada. No-op do pre-push compara também os carimbos.
+- `consolidateReviewOnMerge(keep, drop)`: mantém o do keeper; herda o da
+  duplicata só se o keeper não tem estado (0 sem carimbo) ou se a mudança
+  manual da duplicata é mais recente.
+
+### UI
+Card: clique no estado abre ○ Não revisado / ◐ Revisando / ● Dominado
+(`.card-review-picker`), tooltip "Estado manual de estudo — clique para
+escolher"; escolher o mesmo estado não grava nada. Detalhe: botões explícitos
+de sempre.
+
+### Impacto para o usuário
+- Responder o Quiz não muda mais o estado manual (o SRS continua decidindo
+  quando rever). Estados antigos seguem válidos, sem migração.
+- Rebaixar manualmente (Dominado → Revisando/Não revisado) agora propaga para
+  os outros PCs e não é desfeito.
+
+### Arquivos alterados
+`index.html`, `tests/review-state.test.js` (novo, 12),
+`tests/multi-device-sync.test.js` (+3 ponta a ponta; funções no harness),
+`tests/device-bootstrap.test.js` (harness), `tests/snapshots-ownership.test.js`
+(stubs + assert estático do merge de imagens agora exige `mergeReviewByRecency`),
+`tests/legacy-id-migration.test.js` (stub), `tests/critical-flows.test.js`
+(âncoras +88/+88/+89/+105; stubs), `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`.
+
+### Testes
+- Focados: `review-state` 12/12 (default; escolher/voltar com carimbo; Quiz/
+  SRS não tocam REVIEW em nenhum grau; boot/render sem escrita; inventário de
+  chamadas de `setReview`; seletor do card; merge sem conflito; recência vence
+  Math.max; legado sem carimbo + quarentena; consolidação sem promoção; F5;
+  restore/import carimbam; pipeline); `multi-device-sync` 166/167 (novos:
+  rebaixamento em B chega em A e resiste a envio forçado stale; boot/F5/no-op
+  sem escrita com legado; PC novo recebe estado + carimbos; F2 = arquivo
+  protegido ausente); `device-bootstrap` 41/42; `critical-flows` 23/23;
+  `quiz-images` 103/103; `snapshots-ownership` 48/48; `legacy-id-migration`
+  132/156 (24 = fixture protegida ausente); `srs-dashboard` 17/17;
+  `modal-cleanup` 14/14.
+- Suíte (remoto): 1270 · 1235 · 30 · 5 (base 1255 · 1220 · 30 · 5; mesmas
+  falhas). Esperado no local: 1280 · 1272 · 3 · 5.

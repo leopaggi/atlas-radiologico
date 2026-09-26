@@ -71,6 +71,7 @@ function makeSnapshotContext(backing) {
     canonicalRestoreInProgress: false,
     saveLesionRevisions: async () => {},
     markRestoredOrderManual: () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085
+    stampRestoredReview: () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089
     renderAll: () => {}
   };
   vm.createContext(ctx);
@@ -658,7 +659,9 @@ test('MERGE PUSH (estático): servidor-only, union aditiva, preserva SRS/REVIEW/
   assert.match(src, /readShardedState\(/, 'lê do servidor');
   assert.match(src, /mergeEntryForImagePush\(l, r\)/);
   assert.match(src, /mergeSRSPreservingNewest\(SRS, remote && remote\.srs\)/, 'SRS remoto preservado (mais novo vence)');
-  assert.match(src, /mergeReviewPreservingProgress\(REVIEW, remote && remote\.review\)/);
+  // PROTEÇÃO 089 — REVIEW agora é mesclado pela mudança manual mais recente
+  // (não mais "maior estágio sempre vence"); continua preservado no merge.
+  assert.match(src, /mergeReviewByRecency\(REVIEW, remote && remote\.review, REVIEW_STAMPS, remote && remote\.reviewUpdatedAt\)/);
   assert.match(src, /mergeSessionLogPreservingProgress\(SESSIONLOG, remote && remote\.sessionLog\)/);
   assert.match(src, /writeShardedStateSerialized\(20000\)/);
   assert.match(src, /readCloudAuditFromServer\(\)/, 'verificação pós-merge no servidor');

@@ -143,6 +143,10 @@ const pendingAddsFns079d = ['normalizePendingLocalImageAdds', 'hasPendingLocalIm
   'confirmPendingLocalImageAdds', 'loadPendingLocalImageAdds', 'savePendingLocalImageAdds']
   .map((n) => extractFunction(html, n).source).join('\n');
 const addImageToLesionDataFn = extractFunction(html, 'addImageToLesionData');
+// PROTEÇÃO 089 — estado manual de estudo com carimbo (funções reais).
+const reviewFns089 = ['normalizeReviewStamps', 'loadReviewStamps', 'saveReviewStamps', 'stampRestoredReview',
+  'mergeReviewByRecency', 'consolidateReviewOnMerge', 'getReview', 'setReview']
+  .map((n) => extractFunction(html, n).source).join('\n');
 // PROTEÇÃO 085 — ordem de seções/sítios com carimbo de reordenação manual.
 const orderFns085 = ['normalizeOrderStamps', 'loadOrderStamps', 'saveOrderStamps', 'markSectionOrderManual',
   'markSiteOrderManual', 'markRestoredOrderManual', 'dedupeOrderList', 'isAutoSectionOrder', 'isAutoSiteList',
@@ -348,6 +352,7 @@ function makeDevice(cloud, { seed = [] } = {}) {
     // forceThisDeviceToCloud() reais (verificação pós-envio e confirm()).
     LESION_REVISIONS: {},
     ORDER_STAMPS: { section: 0, sites: {} }, // PROTEÇÃO 085
+    REVIEW_STAMPS: {}, // PROTEÇÃO 089
     syncAuditCounters: () => ({}),
     readCloudAuditFromServer: async () => null,
     syncCountersMatch: () => false,
@@ -422,6 +427,8 @@ function makeDevice(cloud, { seed = [] } = {}) {
     ${lesionRevisionsFns084}
     const ORDER_STAMPS_KEY = 'atlas:orderUpdatedAt';
     ${orderFns085}
+    const REVIEW_STAMPS_KEY = 'atlas:reviewUpdatedAt';
+    ${reviewFns089}
     let lastWriteStaleImagesBlocked = 0;
     ${gateStaleImagesFn.source}
     ${writeShardedStateFn.source}
@@ -3705,6 +3712,76 @@ test('PROTEÇÃO 088 - merge/reconcile: imagens diferentes nos dois PCs mantêm 
   const lb = b.context.DATA.find((e) => e.id === 'seed_1');
   assert.ok(lb.images.find((i) => i.assetId === 'B088').clinicalContext.presentation, 'merge nunca remove o contexto');
   assert.equal(lb.images.find((i) => i.assetId === 'A088').clinicalContext.presentation, 'Caso A — cefaleia', 'merge não remove contexto');
+});
+
+// ===========================================================================
+// PROTEÇÃO 089 — estado manual de estudo (REVIEW) entre PCs: vence a mudança
+// manual mais recente; boot/pull/no-op não mudam nada.
+// ===========================================================================
+test('PROTEÇÃO 089 - PC A marca Dominado; PC B (depois) rebaixa para Revisando -> A recebe Revisando (não "maior vence")', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await a.boot();
+  a.context.appStateReady = true;
+  a.context.setReview('seed_1', 2);
+  await a.context.pushToFirebaseNow();
+  assert.equal(cloud.peekMeta().review.seed_1, 2);
+  const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await b.boot();
+  assert.equal(b.context.getReview('seed_1'), 2, 'PC B recebe o estado remoto');
+  assert.equal(b.context.syncDirty, false, 'pull não marca dirty');
+  await new Promise((r) => setTimeout(r, 5));
+  b.context.setReview('seed_1', 1);
+  await b.context.pushToFirebaseNow();
+  assert.equal(cloud.peekMeta().review.seed_1, 1, 'nuvem aceita o rebaixamento manual mais recente');
+  await a.context.syncFromFirebase();
+  assert.equal(a.context.getReview('seed_1'), 1, 'A adota Revisando — mudança manual mais recente');
+  assert.equal(a.context.syncDirty, false);
+  // A com estado antigo NÃO desfaz a mudança de B nem num envio forçado
+  a.context.REVIEW = { seed_1: 2 }; a.context.REVIEW_STAMPS = { seed_1: 1 };
+  await a.context.forceThisDeviceToCloud();
+  assert.equal(cloud.peekMeta().review.seed_1, 1, 'merge por recência dentro da transação');
+});
+
+test('PROTEÇÃO 089 - boot/F5 e sync no-op não mudam REVIEW nem gastam escrita; estado legado sem carimbo continua válido', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry(), makeSeedEntry({ id: 'seed_2', name: 'Lesão 2' })]);
+  const meta = cloud.peekMeta();
+  await cloud.FB_META_REF().set({ ...meta, review: { seed_1: 2, seed_2: 1 } }); // legado, sem reviewUpdatedAt
+  const d = makeDevice(cloud, { seed: [makeSeedEntry(), makeSeedEntry({ id: 'seed_2', name: 'Lesão 2' })] });
+  await d.boot();
+  const rev0 = cloud.peekRevision();
+  assert.deepEqual(JSON.parse(JSON.stringify(d.context.REVIEW)), { seed_1: 2, seed_2: 1 });
+  await d.boot(); // F5
+  assert.deepEqual(JSON.parse(JSON.stringify(d.context.REVIEW)), { seed_1: 2, seed_2: 1 });
+  assert.equal(cloud.peekRevision(), rev0, 'boot/F5 não publicam');
+  // a nuvem de teste foi semeada sem campos que o app grava (localImg/img):
+  // uma primeira escrita real converge; a partir daí, nada muda = no-op.
+  await d.markDirty();
+  await d.context.pushToFirebaseNow();
+  const rev1 = cloud.peekRevision();
+  assert.deepEqual(JSON.parse(JSON.stringify(cloud.peekMeta().review)), { seed_1: 2, seed_2: 1 }, 'escrita não altera REVIEW');
+  await d.markDirty();
+  await d.context.pushToFirebaseNow();
+  assert.equal(cloud.peekRevision(), rev1, 'no-op: nada publicado');
+  assert.equal(d.context.syncDirty, false);
+  assert.deepEqual(JSON.parse(JSON.stringify(cloud.peekMeta().review)), { seed_1: 2, seed_2: 1 });
+});
+
+test('PROTEÇÃO 089 - PC NOVO recebe o estado remoto com os carimbos (e F5 mantém)', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const meta = cloud.peekMeta();
+  await cloud.FB_META_REF().set({ ...meta, review: { seed_1: 1 }, reviewUpdatedAt: { seed_1: 12345 } });
+  const b = makeOrderDevice085(cloud, { fresh: true });
+  await b.boot();
+  assert.equal(b.context.getReview('seed_1'), 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(b.context.REVIEW_STAMPS)), { seed_1: 12345 });
+  const b2 = makeOrderDevice085(cloud, { backing: b.store });
+  await b2.boot();
+  assert.equal(b2.context.getReview('seed_1'), 1);
+  assert.equal(b2.context.syncDirty, false);
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');

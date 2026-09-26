@@ -305,6 +305,10 @@ body{
   cursor:pointer;margin:2px 0 8px 0;font-family:inherit;
 }
 .card-review-btn:hover{filter:brightness(1.2);}
+/* PROTEÇÃO 089 — escolha explícita do estado manual de estudo no card */
+.card-review-picker{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;}
+.card-review-option{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:2px 8px;font-size:11px;cursor:pointer;font-family:inherit;}
+.card-review-option.active{border-color:currentColor;font-weight:700;}
 #empty-state{color:var(--muted-2);text-align:center;padding:60px 20px;font-size:13.5px;}
 
 /* ---------- Modal ---------- */
@@ -2183,6 +2187,7 @@ async function writeShardedState(ms=15000){
 
   const metaPayloadBase = {
     review: stripUndefinedDeep(quarantineIndexedByLesionId(REVIEW)),
+    reviewUpdatedAt: normalizeReviewStamps(quarantineIndexedByLesionId(REVIEW_STAMPS)), // PROTEÇÃO 089
     srs: stripUndefinedDeep(quarantineIndexedByLesionId(SRS)),
     sessionLog: stripUndefinedDeep(SESSIONLOG),
     sectionOrder: stripUndefinedDeep(sectionOrder),
@@ -2252,7 +2257,11 @@ async function writeShardedState(ms=15000){
       const writeOrder = stripUndefinedDeep(mergeOrderState(
         { sectionOrder: metaPayloadBase.sectionOrder, siteOrder: metaPayloadBase.siteOrder, stamps: metaPayloadBase.orderUpdatedAt },
         { sectionOrder: remoteMeta.sectionOrder, siteOrder: remoteMeta.siteOrder, stamps: remoteMeta.orderUpdatedAt }));
-      const metaPayload = {...metaPayloadBase, tombstones: stripUndefinedDeep(writeTombstones), lesionRevisions: writeLesionRevisions,
+      // PROTEÇÃO 089 — estado de estudo: mudança manual mais recente vence
+      // também DENTRO da transação (force/syncThisDevice não desfazem uma
+      // mudança manual mais nova de outro PC).
+      const writeReview = mergeReviewByRecency(metaPayloadBase.review, remoteMeta.review, metaPayloadBase.reviewUpdatedAt, remoteMeta.reviewUpdatedAt);
+      const metaPayload = {...metaPayloadBase, review: stripUndefinedDeep(writeReview.review), reviewUpdatedAt: writeReview.stamps, tombstones: stripUndefinedDeep(writeTombstones), lesionRevisions: writeLesionRevisions,
         sectionOrder: writeOrder.sectionOrder, siteOrder: writeOrder.siteOrder, orderUpdatedAt: writeOrder.stamps, chunkCount: gatedChunks.length};
       if(!checkChunkSize(metaPayload, 'documento principal (revisão/SRS/histórico)')){
         const err = new Error('documento principal grande demais');
@@ -2338,6 +2347,7 @@ async function readShardedState(ms=15000){
   }
 
   return { data: combinedData, review: meta.review, srs: meta.srs, sessionLog: meta.sessionLog,
+    reviewUpdatedAt: normalizeReviewStamps(meta.reviewUpdatedAt), // PROTEÇÃO 089 — ausente = sem carimbo
     sectionOrder: meta.sectionOrder, siteOrder: meta.siteOrder,
     orderUpdatedAt: normalizeOrderStamps(meta.orderUpdatedAt), // PROTEÇÃO 085 — ausente = sem carimbo
     tombstones: (meta.tombstones && typeof meta.tombstones === 'object' && !Array.isArray(meta.tombstones)) ? meta.tombstones : {},
@@ -3385,6 +3395,7 @@ async function adoptRemoteStateForNewDevice(){
   if(!remote) return; // nuvem nunca escrita — mantém o SEED que já estava em DATA
   DATA = (Array.isArray(remote.data) ? remote.data : []).filter(e => e && !isQuarantinedSeedId(e.id));
   REVIEW = (remote.review && typeof remote.review === 'object' && !Array.isArray(remote.review)) ? remote.review : {};
+  REVIEW_STAMPS = normalizeReviewStamps(remote.reviewUpdatedAt); // PROTEÇÃO 089
   SRS = (remote.srs && typeof remote.srs === 'object' && !Array.isArray(remote.srs)) ? remote.srs : {};
   SESSIONLOG = (remote.sessionLog && typeof remote.sessionLog === 'object' && !Array.isArray(remote.sessionLog)) ? remote.sessionLog : {};
   // PROTEÇÃO 085 — ordem remota adotada integralmente (só normalizada:
@@ -3400,6 +3411,7 @@ async function adoptRemoteStateForNewDevice(){
   LESION_REVISIONS = mergeLesionRevisions(LESION_REVISIONS, remote.lesionRevisions);
   await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
   await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
+  await saveReviewStamps(); // PROTEÇÃO 089
   await storage.set(SRS_KEY, JSON.stringify(SRS), false);
   await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
   await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
@@ -4123,7 +4135,7 @@ async function mergeThisDeviceImagesToCloud(opts){
     }
     // SRS/REVIEW/SESSIONLOG/ordens: remoto é a base; local só soma o que for mais novo.
     DATA = merged.filter(Boolean);
-    REVIEW = mergeReviewPreservingProgress(REVIEW, remote && remote.review);
+    { const rm = mergeReviewByRecency(REVIEW, remote && remote.review, REVIEW_STAMPS, remote && remote.reviewUpdatedAt); REVIEW = rm.review; REVIEW_STAMPS = rm.stamps; await saveReviewStamps(); } // PROTEÇÃO 089
     SRS = mergeSRSPreservingNewest(SRS, remote && remote.srs);
     SESSIONLOG = mergeSessionLogPreservingProgress(SESSIONLOG, remote && remote.sessionLog);
     // PROTEÇÃO 085 — mesmo merge de ordem do reconcile (carimbo de reordenação manual).
@@ -4275,7 +4287,7 @@ function reconcileStateWithRemote(remote){
   pendingWriteImageExclusionsById = Object.keys(untimedLocalOnlyImageKeysById).length ? untimedLocalOnlyImageKeysById : null;
 
   for(const e of reconciled){ if(!e||!Array.isArray(e.links)) continue; const seen=new Set(); e.links=e.links.filter(l=>{ const k=String(l&&l.url||'').trim().replace(/\/+$/,''); if(!k) return true; if(seen.has(k)) return false; seen.add(k); return true; }); }
-  for(const e of reconciled){ if(!e||!Array.isArray(e.links)) continue; const seen=new Set(); e.links=e.links.filter(l=>{ const k=String(l&&l.url||'').trim().replace(/\/+$/,''); if(!k) return true; if(seen.has(k)) return false; seen.add(k); return true; }); } DATA = reconciled.filter(Boolean);   REVIEW = mergeReviewPreservingProgress(REVIEW, remote && remote.review);
+  for(const e of reconciled){ if(!e||!Array.isArray(e.links)) continue; const seen=new Set(); e.links=e.links.filter(l=>{ const k=String(l&&l.url||'').trim().replace(/\/+$/,''); if(!k) return true; if(seen.has(k)) return false; seen.add(k); return true; }); } DATA = reconciled.filter(Boolean);   { const rm = mergeReviewByRecency(REVIEW, remote && remote.review, REVIEW_STAMPS, remote && remote.reviewUpdatedAt); REVIEW = rm.review; REVIEW_STAMPS = rm.stamps; } // PROTEÇÃO 089
   SRS = mergeSRSPreservingNewest(SRS, remote && remote.srs);
   SESSIONLOG = mergeSessionLogPreservingProgress(SESSIONLOG, remote && remote.sessionLog);
   // PROTEÇÃO 084 — revisões/soluções: merge por reviewId (nunca overwrite cego).
@@ -4298,6 +4310,7 @@ function reconcileStateWithRemote(remote){
 async function persistLocalStateNow(){
   try{ await storage.set(STORAGE_KEY, JSON.stringify(DATA), false); }catch(_e){}
   try{ await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false); }catch(_e){}
+  await saveReviewStamps(); // PROTEÇÃO 089
   try{ await storage.set(SRS_KEY, JSON.stringify(SRS), false); }catch(_e){}
   try{ await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false); }catch(_e){}
   try{ await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false); }catch(_e){}
@@ -4355,6 +4368,7 @@ async function reconcileBeforePush(reason){
         PENDING_LOCAL_IMAGE_ADDS
       ).data,
       review: quarantineIndexedByLesionId(REVIEW), srs: quarantineIndexedByLesionId(SRS),
+      reviewUpdatedAt: normalizeReviewStamps(quarantineIndexedByLesionId(REVIEW_STAMPS)), // PROTEÇÃO 089
       sessionLog: SESSIONLOG, sectionOrder, siteOrder, tombstones: IMAGE_TOMBSTONES,
       lesionRevisions: LESION_REVISIONS || {}, // PROTEÇÃO 084 — mudança só de revisão NÃO é no-op
       orderUpdatedAt: normalizeOrderStamps(ORDER_STAMPS) // PROTEÇÃO 085
@@ -4362,6 +4376,7 @@ async function reconcileBeforePush(reason){
     const remoteSnapshot = {
       data: (Array.isArray(remote.data)?remote.data:[]).filter(e=>e && !isQuarantinedSeedId(e.id)),
       review: quarantineIndexedByLesionId(remote.review||{}), srs: quarantineIndexedByLesionId(remote.srs||{}),
+      reviewUpdatedAt: normalizeReviewStamps(quarantineIndexedByLesionId(remote.reviewUpdatedAt||{})),
       sessionLog: remote.sessionLog||{}, sectionOrder: remote.sectionOrder||[], siteOrder: remote.siteOrder||{},
       tombstones: remote.tombstones||{},
       lesionRevisions: remote.lesionRevisions||{},
@@ -4418,6 +4433,7 @@ async function syncFromFirebase(){
 
       await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
       await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
+      await saveReviewStamps(); // PROTEÇÃO 089
       await storage.set(SRS_KEY, JSON.stringify(SRS), false);
       await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
       await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
@@ -4906,6 +4922,15 @@ const REVIEW_LABELS = {0:"Não revisado",1:"Revisando",2:"Dominado"};
 const REVIEW_COLORS = {0:"#64748B",1:"#FACC15",2:"#22C55E"};
 const REVIEW_ICONS = {0:"○",1:"◐",2:"●"};
 let REVIEW = {};
+/* PROTEÇÃO 089 — REVIEW (Não revisado/Revisando/Dominado) é estado MANUAL
+   de estudo: só muda por ação explícita do usuário (setReview). O Quiz/SRS
+   não o altera mais. REVIEW continua {id: 0|1|2} (compatível); o carimbo da
+   última mudança MANUAL fica à parte em REVIEW_STAMPS {id: ms} (IndexedDB
+   atlas:reviewUpdatedAt; Firestore `reviewUpdatedAt`). Conflito entre PCs:
+   vence a mudança manual mais recente (mergeReviewByRecency); só estados
+   antigos sem carimbo nos dois lados caem na regra legada (maior estágio). */
+const REVIEW_STAMPS_KEY = 'atlas:reviewUpdatedAt';
+let REVIEW_STAMPS = {};
 
 /* ============================================================
    REPETIÇÃO ESPAÇADA (para o Modo Quiz) — estilo Leitner simples
@@ -4939,6 +4964,10 @@ function isDue(id){
   if(!s) return true; // nunca estudada = sempre pendente
   return s.due <= Date.now();
 }
+// PROTEÇÃO 089 — o grau do Quiz só atualiza o SRS (quando rever). Antes,
+// cada resposta chamava setReview(): Dominado virava Revisando ao errar e
+// Revisando virava Dominado quando o intervalo chegava a 30 dias — era a
+// "mudança sozinha" percebida. REVIEW agora só muda por ação manual.
 function srsGradeLevel(id, grade){
   const s = SRS[id] || {interval:0, due:0, streak:0};
   const now=Date.now(), day=24*60*60*1000;
@@ -4946,20 +4975,16 @@ function srsGradeLevel(id, grade){
     s.streak=(s.streak||0)+1;
     const steps=[3,7,14,30,60,120,180];
     s.interval=steps[Math.min(s.streak-1,steps.length-1)];
-    setReview(id,s.interval>=30?2:1);
   }else if(grade==='medium'){
     s.streak=(s.streak||0)+1;
     const steps=[1,3,7,14,30,60,120];
     s.interval=steps[Math.min(s.streak-1,steps.length-1)];
-    setReview(id,s.interval>=30?2:1);
   }else if(grade==='hard'){
     s.streak=Math.max(0,(s.streak||0)-1);
     s.interval=1;
-    setReview(id,1);
   }else{
     s.streak=0;
     s.interval=0.25; // rever em ~6 horas
-    setReview(id,1);
   }
   s.lastGrade=grade;
   s.due=now+s.interval*day;
@@ -5003,14 +5028,74 @@ function logSessionResult(right, wrong){
   saveSessionLog();
 }
 function getReview(id){ return REVIEW[id] || 0; }
-function setReview(id, status){ REVIEW[id] = status; saveReview(); }
+function setReview(id, status){ REVIEW[id] = status; REVIEW_STAMPS[id] = Date.now(); saveReview(); } // PROTEÇÃO 089: única porta manual
 function cycleReview(id){ setReview(id, (getReview(id)+1)%3); }
+function normalizeReviewStamps(v){
+  const out = {};
+  if(v && typeof v==='object' && !Array.isArray(v)){
+    for(const [k, t] of Object.entries(v)){ const n = Number(t)||0; if(n > 0) out[k] = n; }
+  }
+  return out;
+}
+async function loadReviewStamps(){
+  try{ const r = await storage.get(REVIEW_STAMPS_KEY, false); REVIEW_STAMPS = normalizeReviewStamps(JSON.parse(r.value)); }
+  catch(e){ REVIEW_STAMPS = {}; }
+}
+async function saveReviewStamps(){
+  try{ await storage.set(REVIEW_STAMPS_KEY, JSON.stringify(normalizeReviewStamps(REVIEW_STAMPS)), false); }
+  catch(e){ console.error('storage error', e); }
+}
+// Restauração/importação MANUAL: os estados restaurados são intenção do
+// usuário agora (vencem mudanças anteriores de outro PC).
+function stampRestoredReview(){
+  const now = Date.now();
+  REVIEW_STAMPS = {};
+  for(const id of Object.keys((REVIEW && typeof REVIEW==='object') ? REVIEW : {})) REVIEW_STAMPS[id] = now;
+}
+/* Pura. Por id: carimbo mais novo vence (valor + carimbo); empate com
+   carimbo = maior estágio (determinístico); sem carimbo nos DOIS lados =
+   regra legada (maior estágio). Quarentena 075 filtrada dos dois lados. */
+function mergeReviewByRecency(localReview, remoteReview, localStamps, remoteStamps){
+  const obj = v => (v && typeof v==='object' && !Array.isArray(v)) ? v : {};
+  const lr = quarantineIndexedByLesionId(obj(localReview)), rr = quarantineIndexedByLesionId(obj(remoteReview));
+  const ls = normalizeReviewStamps(quarantineIndexedByLesionId(obj(localStamps)));
+  const rs = normalizeReviewStamps(quarantineIndexedByLesionId(obj(remoteStamps)));
+  const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  const review = {}, stamps = {};
+  for(const id of new Set([...Object.keys(lr), ...Object.keys(rr), ...Object.keys(ls), ...Object.keys(rs)])){
+    if(!has(lr, id) && !has(rr, id)) continue;
+    const lv = Number(lr[id])||0, rv = Number(rr[id])||0, lt = ls[id]||0, rt = rs[id]||0;
+    let v, t;
+    if(lt || rt){
+      if(rt > lt){ v = rv; t = rt; } else if(lt > rt){ v = lv; t = lt; } else { v = Math.max(lv, rv); t = lt; }
+    } else { v = Math.max(lv, rv); t = 0; }
+    review[id] = v;
+    if(t) stamps[id] = t;
+  }
+  return { review, stamps };
+}
+// Consolidação de duplicata (mesma lesão, ids diferentes): PRESERVA o estado
+// sem promover — o do keeper fica; o da duplicata só entra se o keeper não
+// tem estado, ou se a mudança manual da duplicata é mais recente.
+function consolidateReviewOnMerge(keepId, dropId){
+  if(!REVIEW || !Object.prototype.hasOwnProperty.call(REVIEW, dropId)) return false;
+  const kv = Number(REVIEW[keepId])||0, dv = Number(REVIEW[dropId])||0;
+  const kt = Number(REVIEW_STAMPS[keepId])||0, dt = Number(REVIEW_STAMPS[dropId])||0;
+  const keeperHasState = kv > 0 || kt > 0;
+  if((!keeperHasState && dv > 0) || dt > kt){
+    REVIEW[keepId] = dv;
+    if(dt) REVIEW_STAMPS[keepId] = dt; else delete REVIEW_STAMPS[keepId];
+    return true;
+  }
+  return false;
+}
 // ALTERAÇÃO 072: mesmo raciocínio de saveSRS() acima — internal=true (só a
 // migração dupResult dentro de loadData()) persiste local sem marcar dirty
 // nem publicar.
 async function saveReview(internal){
   try{ await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false); }
   catch(e){ console.error('storage error', e); }
+  await saveReviewStamps(); // PROTEÇÃO 089
   if(internal) return;
   await markSyncDirty();
   pushToFirebase();
@@ -7470,9 +7555,10 @@ function runDuplicateCleanup(){
     if(newTags.length !== (keeper.tags||[]).length){ keeper.tags = newTags; changed = true; }
 
     others.forEach(o=>{
-      if((REVIEW[o.id]||0) > (REVIEW[keeper.id]||0)){ REVIEW[keeper.id] = REVIEW[o.id]; reviewOrSrsChanged = true; }
+      if(consolidateReviewOnMerge(keeper.id, o.id)) reviewOrSrsChanged = true; // PROTEÇÃO 089: preserva sem promover
       if(SRS[o.id] && !SRS[keeper.id]){ SRS[keeper.id] = SRS[o.id]; reviewOrSrsChanged = true; }
       if(REVIEW[o.id]!==undefined){ delete REVIEW[o.id]; reviewOrSrsChanged = true; }
+      delete REVIEW_STAMPS[o.id];
       if(SRS[o.id]!==undefined){ delete SRS[o.id]; reviewOrSrsChanged = true; }
       toRemoveIds.add(o.id);
     });
@@ -7925,6 +8011,7 @@ async function restoreSafetySnapshot(id){
   createSafetySnapshot('antes de restaurar snapshot de segurança'); // captura o estado atual
   DATA = JSON.parse(JSON.stringify(snapshot.data));
   REVIEW = JSON.parse(JSON.stringify(snapshot.review||{}));
+  stampRestoredReview(); // PROTEÇÃO 089 — restauração manual vale sobre a nuvem (como antes)
   SRS = JSON.parse(JSON.stringify(snapshot.srs||{}));
   SESSIONLOG = JSON.parse(JSON.stringify(snapshot.sessionLog||{}));
   LESION_REVISIONS = JSON.parse(JSON.stringify(snapshot.lesionRevisions||{}));
@@ -7935,6 +8022,7 @@ async function restoreSafetySnapshot(id){
   fbSyncing = true;
   await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
   await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
+  await saveReviewStamps(); // PROTEÇÃO 089
   await storage.set(SRS_KEY, JSON.stringify(SRS), false);
   await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
   await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
@@ -8311,17 +8399,17 @@ async function deduplicateV171(){
     if(!keep||!drop) continue;
     mergeDuplicateEntryV171(keep,drop);
     if(REVIEW){
-      const keepReview=Number(REVIEW[keepId])||0, dropReview=Number(REVIEW[dropId])||0;
-      if(dropReview>keepReview) REVIEW[keepId]=dropReview;
+      consolidateReviewOnMerge(keepId, dropId); // PROTEÇÃO 089: preserva sem promover
     }
     if(SRS && SRS[dropId] && !SRS[keepId]) SRS[keepId]=SRS[dropId];
     remove.add(dropId); merged++;
   }
   if(!merged) return 0;
   DATA=DATA.filter(e=>!remove.has(e.id));
-  remove.forEach(id=>{ if(REVIEW) delete REVIEW[id]; if(SRS) delete SRS[id]; });
+  remove.forEach(id=>{ if(REVIEW) delete REVIEW[id]; delete REVIEW_STAMPS[id]; if(SRS) delete SRS[id]; });
   try{ await storage.set(STORAGE_KEY,JSON.stringify(DATA),false); }catch(_e){}
   try{ await storage.set(REVIEW_KEY,JSON.stringify(REVIEW),false); }catch(_e){}
+  await saveReviewStamps();
   // ALTERAÇÃO 072: chamada tanto pelo boot (migração automática, nunca deve
   // publicar sozinha) quanto pela importação de backup (ação real do
   // usuário, que já chamou saveData() — REAL — antes desta função, deixando
@@ -9762,6 +9850,7 @@ async function applyReconcileV2(options){
 
   DATA = preview.state.data;
   REVIEW = preview.state.review;
+  REVIEW_STAMPS = {}; await saveReviewStamps(); // PROTEÇÃO 089 — ids remapeados: carimbos antigos não valem mais
   SRS = preview.state.srs;
   await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
   await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
@@ -10620,6 +10709,7 @@ async function loadData(){
     // ALTERAÇÃO 079 (Parte A) — mesma quarentena de loadSRS() acima.
     REVIEW = quarantineIndexedByLesionId(JSON.parse(r3.value));
   }catch(e){ REVIEW = {}; }
+  await loadReviewStamps(); // PROTEÇÃO 089
   // ALTERAÇÃO 072 (2026-09-23) — carrega o marcador PERSISTENTE de dirty
   // (sobrevive a reload/offline — ver declaração de syncDirty perto de
   // syncPushPending). Se a chave nunca existiu (dispositivo novo, ou
@@ -11307,12 +11397,26 @@ function renderResults(){
     reviewBtn.style.color = REVIEW_COLORS[rv];
     reviewBtn.style.borderColor = REVIEW_COLORS[rv]+'66';
     reviewBtn.innerHTML = `${REVIEW_ICONS[rv]} ${REVIEW_LABELS[rv]}`;
-    reviewBtn.title = 'clique para mudar o status de revisão';
+    reviewBtn.title = 'Estado manual de estudo — clique para escolher';
+    // PROTEÇÃO 089 — escolha EXPLÍCITA (nada de ciclo cego: um clique
+    // acidental não muda mais o estado).
     reviewBtn.onclick = (ev)=>{
       ev.stopPropagation();
-      cycleReview(e.id);
-      renderReviewBar();
-      renderResults();
+      const open = body.querySelector('.card-review-picker');
+      if(open){ open.remove(); return; }
+      const picker = document.createElement('div');
+      picker.className = 'card-review-picker';
+      picker.title = 'Estado manual de estudo';
+      [0,1,2].forEach(st=>{
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'card-review-option' + (st===rv ? ' active' : '');
+        b.style.color = REVIEW_COLORS[st];
+        b.textContent = `${REVIEW_ICONS[st]} ${REVIEW_LABELS[st]}`;
+        b.onclick = (e2)=>{ e2.stopPropagation(); if(st!==getReview(e.id)) setReview(e.id, st); renderReviewBar(); renderResults(); };
+        picker.appendChild(b);
+      });
+      reviewBtn.insertAdjacentElement('afterend', picker);
     };
     body.appendChild(reviewBtn);
     const tagsDiv = document.createElement('div');
@@ -14353,6 +14457,7 @@ document.getElementById('btn-export').onclick = async ()=>{
     exportedAt: now.toISOString(),
     data: DATA,
     review: REVIEW,
+    reviewUpdatedAt: REVIEW_STAMPS, // PROTEÇÃO 089
     srs: SRS,
     sessionLog: SESSIONLOG,
     sectionOrder: sectionOrder,
@@ -14434,6 +14539,7 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
     // handler, agora também em REVIEW/SRS (um backup antigo pode carregar
     // high ids residuais).
     REVIEW = quarantineIndexedByLesionId((parsed.review && typeof parsed.review==='object') ? parsed.review : {});
+    stampRestoredReview(); await saveReviewStamps(); // PROTEÇÃO 089 — import explícito vale sobre a nuvem (como antes)
     SRS = quarantineIndexedByLesionId((parsed.srs && typeof parsed.srs==='object') ? parsed.srs : {});
     SESSIONLOG = (parsed.sessionLog && typeof parsed.sessionLog==='object') ? parsed.sessionLog : {};
     sectionOrder = Array.isArray(parsed.sectionOrder) && parsed.sectionOrder.length

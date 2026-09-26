@@ -2001,6 +2001,7 @@ function makeToolContext({ data, review, srs, seed }) {
     STORAGE_KEY: 'atlas:pathologies',
     REVIEW_KEY: 'atlas:review',
     SRS_KEY: 'atlas:srs',
+    REVIEW_STAMPS: {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089 (carimbos zerados na aplicação V2; coberto em review-state.test.js)
     storage: { set: async (key, value) => { storageSetLog.push({ key, value }); } }
   };
   const context = vm.createContext(contextObj);
