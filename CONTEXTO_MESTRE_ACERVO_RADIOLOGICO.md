@@ -8,16 +8,17 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
-*Atualizado em 2026-09-26, junto do commit "Protecao 091: adiciona pendencias gerais do Atlas".*
+*Atualizado em 2026-09-26, junto dos commits "Protecao 091b: corrige UX da central e estado de estudo" (`44ec839`) e do registro deste checkpoint.*
 
 - **Branch local de trabalho:** `master` (publicação: `git push origin master:main`).
-- **origin/main antes da 091:** `2275137` (Protecao 090). **Último commit:** Protecao 091 (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
-- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 091:** 1314 testes · 1306 pass · 3 fail conhecidos · 5 todo (era 1301/1293/3/5 após a 090; +13 testes novos da 091). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
-  - Medido no ambiente remoto (sem os arquivos protegidos): 1304 · 1269 · 30 · 5 (base `2275137` no mesmo ambiente: 1291 · 1256 · 30 · 5; conjunto de falhas idêntico). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
-- **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 091. Nenhuma escrita deliberada nesta tarefa. A 091 não cria campo/documento novo (pendências gerais vivem em `lesionRevisions`, sincronizado desde a 084). A 090 adicionou `reviewProgress` (histórico compacto do Quiz, até 8 tentativas por lesão) e `reviewOverride` (override manual) no documento principal; a 089 adicionou `reviewUpdatedAt` (carimbos de mudança manual do estado de estudo) no documento principal, na próxima publicação real. A 088 adicionou só o campo opcional `clinicalContext` DENTRO do objeto da imagem (viaja nos chunks como qualquer metadado de imagem). A 087 reaproveitou `img.label`/`panels[].seq`; a 086 também não (alerta derivado de `lesionRevisions`). Desde a 085 o documento principal tem `orderUpdatedAt`.
-- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), 088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44), 089 (estado de estudo estável — seção 45), 090 (estado AUTOMÁTICO pelo Quiz + override manual — seção 46; corrige o modelo da 089), **091 (pendências gerais do Atlas na Central de Revisões — seção 47)**.
+- **origin/main antes da 091b:** `817429a` (Protecao 091). **Últimos commits:** Protecao 091b (`44ec839`, código/testes) + registro no Contexto Mestre (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
+- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 091b:** 1316 testes · 1308 pass · 3 fail conhecidos · 5 todo (era 1314/1306/3/5 após a 091; +2 testes estruturais da 091b). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
+  - Medido no ambiente remoto (sem os arquivos protegidos): 1306 · 1271 · 30 · 5 (base `817429a` no mesmo ambiente: 1304 · 1269 · 30 · 5; conjunto de falhas idêntico). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
+- **Validação real do usuário após a 091 (navegador):** `LESION_REVISIONS` sincronizou entre navegadores/PCs; as pendências apareceram no Edge; a lógica da 091 funciona; só foram encontrados problemas visuais (contraste/alinhamento) — corrigidos na 091b.
+- **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 091b (só CSS/markup). Nenhuma escrita deliberada nesta tarefa. A 091 não cria campo/documento novo (pendências gerais vivem em `lesionRevisions`, sincronizado desde a 084). A 090 adicionou `reviewProgress` (histórico compacto do Quiz, até 8 tentativas por lesão) e `reviewOverride` (override manual) no documento principal; a 089 adicionou `reviewUpdatedAt` (carimbos de mudança manual do estado de estudo) no documento principal, na próxima publicação real. A 088 adicionou só o campo opcional `clinicalContext` DENTRO do objeto da imagem (viaja nos chunks como qualquer metadado de imagem). A 087 reaproveitou `img.label`/`panels[].seq`; a 086 também não (alerta derivado de `lesionRevisions`). Desde a 085 o documento principal tem `orderUpdatedAt`.
+- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), 088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44), 089 (estado de estudo estável — seção 45), 090 (estado AUTOMÁTICO pelo Quiz + override manual — seção 46; corrige o modelo da 089), 091 (pendências gerais do Atlas na Central de Revisões — seção 47), **091b (ajuste visual após validação real no navegador — seção 48)**.
 - **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087); `img.clinicalContext` é pré-diagnóstico, digitado pelo usuário, visível no Quiz antes e depois da resposta — a descrição (`label`) continua só depois (088); REVIEW (Não revisado/Revisando/Dominado) é AUTOMÁTICO pelo histórico do Quiz (`REVIEW_PROGRESS`, regra determinística `replayAutoReview`) salvo override MANUAL explícito (`REVIEW_OVERRIDE`), que o Quiz nunca sobrescreve; boot/render/pull não mudam nada sem dado novo; conflitos por recência, nunca Math.max (089/090); pendência GERAL (`scope:'global'`, `lesionId:null`) é só um pedido: nunca aplica nada em DATA (`global_review_has_no_direct_target`), nunca gera ⚠ em lesão, conclusão é humana (091)**.
-- **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 091. Não restaurar sem decisão explícita do usuário.
+- **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 091b. Não restaurar sem decisão explícita do usuário.
 - **Passo manual pós-deploy (085):** ordens personalizadas feitas ANTES da 085 não têm carimbo. No PC que tem a ordem CORRETA, fazer uma reordenação qualquer (ex.: descer uma seção e subir de volta; idem um sítio em cada seção personalizada) — isso carimba e publica. Depois abrir o outro PC: ordem default/automática cede para a da nuvem sozinha. (Revisões pré-084: mesma lógica, ver seção 40.)
 - **Próximo passo exato:** Proteção 092 (ver BACKLOG abaixo).
 
@@ -2073,3 +2074,50 @@ harness), `tests/critical-flows.test.js` (âncoras +160/+160/+160/+290),
   falhas). Esperado no local: 1314 · 1306 · 3 · 5.
 - Sem teste em navegador real; conferir o modal "+ Nova pendência" e as ações
   do 💡 para pendência global.
+
+## 48. Proteção 091b — ajuste visual após validação manual no navegador (2026-09-26)
+
+### Validação real do usuário (091)
+- `LESION_REVISIONS` sincronizou entre navegadores/PCs; pendências apareceram
+  no Edge; a lógica da 091 está funcionando.
+- Encontrados só problemas VISUAIS: (1) contraste dos controles da 090 no
+  detalhe da lesão; (2) radios desalinhados no modal "+ Nova pendência".
+
+### Causa e correção (só CSS/markup; nenhuma lógica, sync ou schema)
+1. `.review-set-btn` usa cor inline (dada pelos 3 estados); os botões
+   "⚙ Automático pelo Quiz" e "↺ Marcar para revisar novamente" (090) não
+   recebiam cor e herdavam a do navegador (escura sobre fundo escuro).
+   Nova classe `.review-secondary-btn` nos dois: `color:var(--text)`,
+   `background:var(--panel-2)`, `border:1px solid var(--line)`; hover e
+   ativo em `var(--teal)`/`var(--teal-dim)`; foco visível. Explicação
+   `.review-mode-info` passou de `--muted-2` para `--muted` (legível, mais
+   discreta que o nome); o selo AUTO/MANUAL dentro dela usa `--text` a 85%.
+   Só variáveis do tema (o app tem apenas o tema escuro em `:root`).
+2. `.field input{width:100%}` esticava os radios. Cada opção agora é UMA
+   `<label class="nrr-scope-option">` com `<input type="radio">` + `<span>` do
+   texto (clicar no texto seleciona), dentro de
+   `<div class="nrr-scope-options" role="radiogroup" aria-labelledby=…>`;
+   CSS dedicado (`display:flex; align-items:center; gap:8px`, radio
+   `width:auto`, sem `position:absolute`). Mesmos `name`/`value`/default
+   (global) e mesmos ids/handlers.
+- Conferido no Chromium: radio a 8 px do texto, centros verticais iguais,
+  clique no texto marca a opção; botões legíveis no tema escuro.
+
+### Arquivos alterados
+`index.html`, `tests/global-review.test.js` (+1 estrutural; asserção do
+markup do radio atualizada), `tests/review-auto-mode.test.js` (+1
+estrutural), `tests/critical-flows.test.js` (âncoras +13/+13/+13/+15) — no
+commit `44ec839`; `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` num commit de
+registro logo depois (a atualização do Contexto falhou no primeiro commit por
+âncora de texto desatualizada e o commit seguiu sem ele; corrigido sem
+reescrever histórico).
+
+### Testes
+- `global-review` 13/13; `review-auto-mode` 19/19; `modal-cleanup` 14/14;
+  `critical-flows` 23/23.
+- Suíte (remoto): 1306 · 1271 · 30 · 5 (base 1304 · 1269 · 30 · 5; mesmas
+  falhas). Esperado no local: 1316 · 1308 · 3 · 5.
+
+### Próximo passo (inalterado)
+Proteção 092 — sync de edição de metadados/contexto de imagens já existentes
+entre PCs.
