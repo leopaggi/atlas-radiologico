@@ -1,5 +1,14 @@
 # AI.md — instruções para assistentes de IA (Claude, DeepSeek, ChatGPT, etc.)
 
+## Proteção 091c-b — fusões clínicas sem perda (2026-09-26; nenhuma fusão executada)
+
+- Keeper SÓ por imagem real: `isRealPersistedImageForMerge` (assetId/publicId/URL Cloudinary; nunca `pending`, placeholder ou `img` textual) alimenta `lesionHasRealImageForMerge`, usada pelo plano. `lesionHasImagesForMerge` segue por compatibilidade.
+- Casos equivalentes no fold: `mergeClinicalCasesForFold`/`mergeTwoClinicalCasesForFold` (antes do bloco do plano, para entrar também no motor multi-PC) — união de `imageRefs` via `mergeImageRefLists`, textos complementares somados sem duplicar, escalares pelo `updatedAt` mais novo, `order` mínimo, `createdAt` mínimo/`updatedAt` máximo, vivo vence tombstone unilateral.
+- Sinais/classificações no fold continuam por `mergeDidacticItems` (união por id + refs); itens distintos sempre somam.
+- Aliases: `applyApprovedMergeFinalContent091c` grava nomes removidos e enTerms alternativos como tags (precedente: `migrateLesionSite`); busca principal e manual já cobrem tags — sem campo novo.
+- Links do fold reaproveitam a normalização 080–082 (`lesionMergeLinkKey`: trim + barra final); sem normalizador paralelo.
+- Testes: `controlled-duplicate-merge` 27/27, `multi-device-sync` 181/181, `critical-flows` 23/23 (âncoras +122). Em checkout Windows com CRLF, `controlled-duplicate-merge` (e outros que usam `sliceBetween` com `\n`) falha no load — pré-existente; validar com shim `\r\n`→`\n` quando preciso.
+
 ## Card de caso clínico — textos narrativos (2026-09-26)
 
 `clinicalCasePresentationHtml` e `wireClinicalCasePresentations` da 093d são

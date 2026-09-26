@@ -8851,6 +8851,7 @@ async function saveLesionMerges(){
   try{ await storage.set(LESION_MERGES_KEY, JSON.stringify(normalizeLesionMerges(LESION_MERGES)), false); }
   catch(e){ console.error('storage error', e); }
 }
+// 091c-b: reaproveita a normalização semântica 080–082 (trim + barra final) — sem normalizador paralelo.
 function lesionMergeLinkKey(l){ return String((l && l.url) || '').trim().replace(/\/+$/,''); }
 /* Pura (muta só o objeto `st` recebido): aplica o mapa. st = { data, review,
    reviewStamps, reviewProgress, reviewOverride, srs, lesionRevisions,
@@ -8890,11 +8891,11 @@ function foldLesionMergesIntoState(st, merges, opts){
       k.links = Array.isArray(k.links) ? k.links : [];
       for(const l of (Array.isArray(d.links) ? d.links : [])){ const key = lesionMergeLinkKey(l); if(key && !lk.has(key)){ lk.add(key); k.links.push(l); } }
       k.tags = [...new Set([...(Array.isArray(k.tags) ? k.tags : []), ...(Array.isArray(d.tags) ? d.tags : [])])];
+      // 091c-b: casos equivalentes fundidos campo a campo (imageRefs nunca perdidos).
       if(Array.isArray(d.clinicalCases) && d.clinicalCases.length){
-        const ck = c => (typeof clinicalCaseIdentityKey==='function' ? clinicalCaseIdentityKey(c) : '') || JSON.stringify(c);
-        const cs = new Set((Array.isArray(k.clinicalCases) ? k.clinicalCases : []).map(ck));
-        k.clinicalCases = Array.isArray(k.clinicalCases) ? k.clinicalCases : [];
-        d.clinicalCases.forEach(c=>{ const key = ck(c); if(!cs.has(key)){ cs.add(key); k.clinicalCases.push(c); } });
+        k.clinicalCases = (typeof mergeClinicalCasesForFold==='function')
+          ? mergeClinicalCasesForFold(k.clinicalCases, d.clinicalCases)
+          : (Array.isArray(k.clinicalCases) ? k.clinicalCases.concat(d.clinicalCases) : d.clinicalCases.slice());
       }
       // PROTEÇÃO 093 — sinais/classificações do fundido vão para o keeper (por id).
       if(typeof mergeDidacticItems === 'function'){
@@ -8956,6 +8957,105 @@ function lesionMergeGlobalState(){
 function foldLesionMergesIntoGlobals(opts){
   if(!LESION_MERGES || !Object.keys(LESION_MERGES).length) return { changed:false, folded:[], movedImages:0 };
   return foldLesionMergesIntoState(lesionMergeGlobalState(), LESION_MERGES, opts);
+}
+/* PROTEÇÃO 091c-b — imagem REAL para a regra do keeper: só asset persistido
+   (assetId, publicId ou URL Cloudinary). Placeholder, link de busca, objeto
+   incompleto, imagem pendente (source:'pending') e o campo img textual legado
+   NUNCA forçam keeper. lesionHasImagesForMerge() segue existindo por
+   compatibilidade, mas o plano usa SÓ esta detecção. */
+function isRealPersistedImageForMerge(im){
+  if(!im || typeof im!=='object') return false;
+  if(im.source === 'pending') return false;
+  if(im.assetId || im.publicId) return true;
+  const urls = [im.data, im.thumb, im.originalUrl].filter(v=>typeof v==='string' && v);
+  return urls.some(u=>/res\.cloudinary\.com/i.test(u));
+}
+function lesionRealImagesForMerge(e){
+  if(!e) return [];
+  return (Array.isArray(e.images) ? e.images : []).filter(isRealPersistedImageForMerge);
+}
+function lesionHasRealImageForMerge(e){ return lesionRealImagesForMerge(e).length > 0; }
+/* PROTEÇÃO 091c-b — merge de casos clínicos equivalentes no fold: em vez de
+   descartar o caso do fundido quando a identidade coincide, une campo a campo
+   (imageRefs nunca se perdem; textos complementares se somam sem duplicar;
+   escalares vazios herdam do outro lado; conflito real usa o updatedAt mais
+   novo). Tombstone só vence quando os DOIS lados excluíram (um lado vivo
+   mantém o caso vivo). Pura. */
+function clinicalCaseTimeForFold(c){ return Math.max(Number(c&&c.updatedAt)||0, Number(c&&c.deletedAt)||0, Number(c&&c.createdAt)||0); }
+function mergeClinicalCaseTextForFold(a, b){
+  const A = String(a==null?'':a).trim(), B = String(b==null?'':b).trim();
+  if(!A) return B;
+  if(!B) return A;
+  if(A===B || A.includes(B)) return A;
+  if(B.includes(A)) return B;
+  return A + '\n' + B;
+}
+function mergeTwoClinicalCasesForFold(a, b){
+  if(!a) return b ? Object.assign({}, b) : null;
+  if(!b) return Object.assign({}, a);
+  const ta = clinicalCaseTimeForFold(a), tb = clinicalCaseTimeForFold(b);
+  const newerIsB = tb > ta;
+  const pickScalar = (fa, fb) => {
+    const A = fa==null?'':String(fa).trim(), B = fb==null?'':String(fb).trim();
+    if(!A) return fb;
+    if(!B) return fa;
+    if(A===B) return fa;
+    return newerIsB ? fb : fa;
+  };
+  const merged = Object.assign({}, b, a);
+  merged.id = a.id || b.id;
+  if(a.legacyKey || b.legacyKey) merged.legacyKey = a.legacyKey || b.legacyKey;
+  merged.title = pickScalar(a.title, b.title);
+  merged.presentation = mergeClinicalCaseTextForFold(a.presentation, b.presentation);
+  merged.notes = mergeClinicalCaseTextForFold(a.notes, b.notes);
+  merged.patientAge = pickScalar(a.patientAge, b.patientAge);
+  merged.patientSex = pickScalar(a.patientSex, b.patientSex);
+  merged.modality = pickScalar(a.modality, b.modality);
+  merged.source = pickScalar(a.source, b.source);
+  merged.sourceUrl = pickScalar(a.sourceUrl, b.sourceUrl);
+  merged.origin = pickScalar(a.origin, b.origin);
+  const oa = Number(a.order), ob = Number(b.order);
+  if(Number.isFinite(oa) && Number.isFinite(ob)) merged.order = Math.min(oa, ob);
+  else if(Number.isFinite(oa)) merged.order = oa;
+  else if(Number.isFinite(ob)) merged.order = ob;
+  const ca = Number(a.createdAt)||0, cb = Number(b.createdAt)||0;
+  if(ca || cb) merged.createdAt = (ca && cb) ? Math.min(ca, cb) : (ca || cb);
+  merged.updatedAt = Math.max(ta, tb, Number(merged.updatedAt)||0) || undefined;
+  if(a.addedAt || b.addedAt) merged.addedAt = a.addedAt || b.addedAt;
+  if(a.deletedAt && b.deletedAt) merged.deletedAt = Math.max(Number(a.deletedAt)||0, Number(b.deletedAt)||0);
+  else delete merged.deletedAt;
+  if(Array.isArray(a.imageRefs) || Array.isArray(b.imageRefs)){
+    if(typeof mergeImageRefLists === 'function') merged.imageRefs = mergeImageRefLists(a.imageRefs, b.imageRefs);
+    else {
+      const seen = new Set(), uni = [];
+      for(const r of [].concat(Array.isArray(a.imageRefs)?a.imageRefs:[], Array.isArray(b.imageRefs)?b.imageRefs:[])){
+        if(!r || typeof r!=='object' || !r.imageId || seen.has(r.imageId)) continue;
+        seen.add(r.imageId); uni.push(r);
+      }
+      merged.imageRefs = uni;
+    }
+  }
+  const ai = Array.isArray(a.images) ? a.images : [], bi = Array.isArray(b.images) ? b.images : [];
+  if(ai.length || bi.length){
+    const seen = new Set(), uni = [];
+    for(const im of ai.concat(bi)){ const k = JSON.stringify(im); if(!seen.has(k)){ seen.add(k); uni.push(im); } }
+    merged.images = uni;
+  }
+  return merged;
+}
+function mergeClinicalCasesForFold(keeperCases, droppedCases){
+  const out = [], idxByKey = new Map();
+  const take = (c) => {
+    if(!c || typeof c!=='object') return;
+    const key = (typeof clinicalCaseIdentityKey==='function' ? clinicalCaseIdentityKey(c) : '') || JSON.stringify(c);
+    if(!key){ out.push(Object.assign({}, c)); return; }
+    const i = idxByKey.get(key);
+    if(i==null){ idxByKey.set(key, out.length); out.push(Object.assign({}, c)); return; }
+    out[i] = mergeTwoClinicalCasesForFold(out[i], c);
+  };
+  (Array.isArray(keeperCases)?keeperCases:[]).forEach(take);
+  (Array.isArray(droppedCases)?droppedCases:[]).forEach(take);
+  return out;
 }
 
 /* Plano APROVADO pelo usuário (091c). notesSeed = notas do SEED de cada
@@ -9022,11 +9122,12 @@ function planApprovedClinicalMerges091c(st, plan, merges){
       out.status = 'paused'; out.reason = 'membro_ausente'; groups.push(out); continue;
     }
     const entries = members.map(m=>m.matches[0]);
-    const withImages = entries.filter(lesionHasImagesForMerge);
+    // 091c-b: keeper SÓ por imagem REAL persistida (placeholder/link/img legado não contam).
+    const withImages = entries.filter(lesionHasRealImageForMerge);
     let keeper = null;
     if(withImages.length > 1){
       out.status = 'paused'; out.reason = 'mais_de_um_com_imagem';
-      out.imageOwners = withImages.map(e=>({ id: e.id, name: e.name, images: (e.images||[]).map(im=>({ label: im.label||'', source: im.source||'', sourcePage: im.sourcePage||'', lesionId: im.lesionId||'', lesionName: im.lesionName||'', clinicalContext: !!im.clinicalContext, panels: Array.isArray(im.panels) ? im.panels.length : 0 })) }));
+      out.imageOwners = withImages.map(e=>({ id: e.id, name: e.name, images: lesionRealImagesForMerge(e).map(im=>({ label: im.label||'', source: im.source||'', sourcePage: im.sourcePage||'', lesionId: im.lesionId||'', lesionName: im.lesionName||'', clinicalContext: !!im.clinicalContext, panels: Array.isArray(im.panels) ? im.panels.length : 0 })) }));
       groups.push(out); continue;
     }
     if(withImages.length===1){ keeper = withImages[0]; out.keeperReason = 'única com imagem (regra 1)'; }
@@ -9045,8 +9146,9 @@ function planApprovedClinicalMerges091c(st, plan, merges){
   return groups;
 }
 // Conteúdo final (só no fluxo explícito), depois do fold.
-function applyApprovedMergeFinalContent091c(keeperEntry, planGroup, planRow, droppedNotes){
+function applyApprovedMergeFinalContent091c(keeperEntry, planGroup, planRow, droppedNotes, droppedTerms){
   const k = keeperEntry;
+  const prevName = k.name, prevEnTerm = k.enTerm;
   k.name = planGroup.finalName;
   if(planRow.notesAllSeed) k.notes = planGroup.finalNotes;
   else {
@@ -9062,6 +9164,25 @@ function applyApprovedMergeFinalContent091c(keeperEntry, planGroup, planRow, dro
   const good = { label:'Radiopaedia — buscar casos', url: radiopaediaSearchUrl(k.enTerm || planGroup.finalEnTerm) };
   if(!k.links.some(l=>lesionMergeLinkKey(l)===lesionMergeLinkKey(good))) k.links.unshift(good);
   k.images = (Array.isArray(k.images) ? k.images : []).map(im=>im && im.lesionId===k.id ? { ...im, lesionName: k.name } : im);
+  // 091c-b: títulos removidos e enTerms alternativos viram tags (sinônimos pesquisáveis;
+  // precedente: migrateLesionSite guarda o sítio antigo como tag; busca cobre name/notes/tags).
+  k.tags = Array.isArray(k.tags) ? k.tags : [];
+  const tagHas = (v) => k.tags.some(t=>String(t||'').toLowerCase()===String(v||'').toLowerCase());
+  const aliasTerms = [];
+  if(prevName) aliasTerms.push(prevName);
+  if(prevEnTerm) aliasTerms.push(prevEnTerm);
+  for(const t of (Array.isArray(droppedTerms) ? droppedTerms : [])){
+    if(t && t.name) aliasTerms.push(t.name);
+    if(t && t.enTerm) aliasTerms.push(t.enTerm);
+  }
+  for(const v of aliasTerms){
+    const s = String(v||'').trim();
+    if(!s) continue;
+    if(s.toLowerCase()===String(k.name||'').toLowerCase()) continue;
+    if(k.enTerm && s.toLowerCase()===String(k.enTerm||'').toLowerCase()) continue;
+    if(tagHas(s)) continue;
+    k.tags.push(s);
+  }
 }
 // Auditoria pós-fusão (pura): referências que ainda apontam para ids fundidos.
 function auditLesionMergeOrphans(st, merges){
@@ -9107,13 +9228,14 @@ function applyApprovedMergeGroup091c(st, row, at){
   const before = data.find(e=>e && e.id===row.keeperId);
   const prevImages = before && Array.isArray(before.images) ? before.images.slice() : [];
   const droppedNotes = row.dropIds.map(id=>(data.find(e=>e && e.id===id)||{}).notes);
+  const droppedTerms = row.dropIds.map(id=>{ const e = data.find(x=>x && x.id===id)||{}; return { name: e.name, enTerm: e.enTerm }; });
   const expectedImages = new Set();
   [row.keeperId, ...row.dropIds].forEach(id=>{ const e = data.find(x=>x && x.id===id); (e && e.images || []).forEach(im=>{ const k = imageIdentityKeys(im)[0]; if(k) expectedImages.add(k); }); });
   const entries = {};
   row.dropIds.forEach(id=>{ entries[id] = { into: row.keeperId, at, group: row.group, finalName: g.finalName }; });
   const f = foldLesionMergesIntoState(st, entries, { explicit:true });
   const keeper = data.find(e=>e && e.id===row.keeperId);
-  applyApprovedMergeFinalContent091c(keeper, g, row, droppedNotes);
+  applyApprovedMergeFinalContent091c(keeper, g, row, droppedNotes, droppedTerms);
   keeper._userUpdatedAt = Date.now();
   const audit = auditLesionMergeOrphans(st, entries);
   const keeperImageKeys = new Set((keeper.images||[]).map(im=>imageIdentityKeys(im)[0]).filter(Boolean));
@@ -15267,6 +15389,7 @@ function clinicalMergeMemberReport091c(id){
   const p = REVIEW_PROGRESS[id];
   return {
     id, name: e.name||'', s: e.s||'', site: e.site||'', images: imgs.length + (e.img ? 1 : 0) + (e.localImg ? 1 : 0),
+    realImages: (typeof lesionRealImagesForMerge==='function' ? lesionRealImagesForMerge(e).length : 0), // 091c-b: só asset persistido decide keeper
     imageDetail: imgs.map(im=>({ label: im.label||'', source: im.source||'', sourcePage: im.sourcePage||'', panels: Array.isArray(im.panels) ? im.panels.length : 0, clinicalContext: !!im.clinicalContext, lesionId: im.lesionId||'', lesionName: im.lesionName||'' })),
     links: (e.links||[]).length, clinicalCases: (e.clinicalCases||[]).length, tags: (e.tags||[]).join(', '), classification: e.classification||null, enTerm: e.enTerm||'',
     notes: e.notes||'', review: REVIEW[id]||0, reviewStamp: REVIEW_STAMPS[id]||0, progress: p ? p.a.length : 0, override: REVIEW_OVERRIDE[id] ? (REVIEW_OVERRIDE[id].m===1 ? 'manual:'+REVIEW_OVERRIDE[id].s : 'auto') : '',
@@ -15286,7 +15409,7 @@ function openClinicalMergesModal091c(){
     const members = ids.map(id=>{
       const r = clinicalMergeMemberReport091c(id);
       const role = id===g.keeperId ? ' <b>(fica)</b>' : (g.dropIds.includes(id) ? ' (será fundido)' : '');
-      return `<li><code>${escAttr(id)}</code> ${escAttr(r.name)}${role} — imagens ${r.images}, casos ${r.clinicalCases}, links ${r.links}, estado ${r.review}${r.override?' ('+escAttr(r.override)+')':''}, tentativas ${r.progress}, SRS ${escAttr(r.srs||'—')}, revisões ${r.revisions}, classificação ${escAttr(r.classification||'—')}, editado ${r.userUpdatedAt?new Date(r.userUpdatedAt).toLocaleDateString('pt-BR'):'—'}</li>`;
+      return `<li><code>${escAttr(id)}</code> ${escAttr(r.name)}${role} — imagens ${r.images} (reais ${r.realImages||0}), casos ${r.clinicalCases}, links ${r.links}, estado ${r.review}${r.override?' ('+escAttr(r.override)+')':''}, tentativas ${r.progress}, SRS ${escAttr(r.srs||'—')}, revisões ${r.revisions}, classificação ${escAttr(r.classification||'—')}, editado ${r.userUpdatedAt?new Date(r.userUpdatedAt).toLocaleDateString('pt-BR'):'—'}</li>`;
     }).join('');
     const why = g.status==='paused' ? ` — ${escAttr(g.reason||'')}` : (g.keeperReason ? ` — keeper: ${escAttr(g.keeperReason)}` : '');
     const notes = g.status==='ready' ? `<div class="modal-sub">${g.notesAllSeed ? 'notas: texto final aprovado' : 'notas foram editadas por você — serão combinadas sem apagar nada (revise depois)'}</div>` : '';

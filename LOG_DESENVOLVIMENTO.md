@@ -1,5 +1,21 @@
 # Diario de desenvolvimento
 
+## Protecao 091c-b — fusoes clinicas sem perda de conteudo (26/09/2026, sem executar fusao)
+
+A infraestrutura de fusao de duplicatas (091c) foi fortalecida antes de qualquer execucao real. O que mudou, em linguagem simples:
+
+- quem decide o registro que fica agora so considera imagem de verdade (arquivo Cloudinary com assetId/publicId); imagem de exemplo, link de busca ou campo antigo de texto nao forcam mais a escolha;
+- casos clinicos iguais vindos dos dois lados sao somados campo a campo (textos complementares se juntam, vinculos de imagem e escolha do Quiz preservados) em vez de um apagar o outro;
+- sinais e classificacoes diferentes de cada lado sao todos mantidos no registro final;
+- os nomes antigos removidos viram etiquetas pesquisaveis no registro final, entao a busca continua achando pelo nome antigo;
+- links repetidos com a mesma pagina (mesmo com barra final diferente) nao duplicam;
+- notas e termos em ingles complementares sao preservados.
+
+Nenhuma fusao foi executada nesta etapa; nenhum dado do catalogo foi alterado. O botao de fusao continua exigindo backup recente, ensaio e confirmacao.
+
+Arquivos desta etapa: `index.html`, `tests/controlled-duplicate-merge.test.js`, `tests/multi-device-sync.test.js`, `tests/critical-flows.test.js`, `AI.md`, `README.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` e este diario.
+Testes: `controlled-duplicate-merge` 27/27 (17 anteriores + 10 novos da 091c-b), `multi-device-sync` 181/181 (+1 cenário 091c-b), `critical-flows` 23/23, `clinical-cases` 47/47, demais focados sem regressao. Suite ampla: 1431 testes, 1416 PASS, 10 FAIL ja conhecidos na base Windows, 5 TODO — nenhuma falha nova.
+
 ## Cards de casos clínicos — textos longos recolhíveis (26/09/2026)
 
 A história clínica já começava compacta, mas as observações do caso e a

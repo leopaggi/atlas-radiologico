@@ -8,6 +8,8 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**Proteção 091c-b (2026-09-26, sem executar fusão):** keeper só por imagem real persistida (`isRealPersistedImageForMerge`: assetId/publicId/Cloudinary; placeholder/`img` legado nunca forçam); casos equivalentes fundidos campo a campo no fold (`mergeClinicalCasesForFold`: união de `imageRefs`/`quizPick`, textos complementares, escalares por `updatedAt`); sinais/classificações distintos sempre somam (`mergeDidacticItems`); nomes removidos e enTerms alternativos viram tags pesquisáveis; links pela normalização 080–082; progresso/revisões/tombstones/sync inalterados. Testes: `controlled-duplicate-merge` 27/27, `multi-device-sync` 181/181, `critical-flows` 23/23; suíte ampla 1431 testes · 1416 PASS · 10 FAIL já conhecidos na base Windows · 5 TODO, nenhuma falha nova. Dry-run real continua pendente de backup fresco + relatório do Atlas autenticado; NADA foi fundido.
+
 **Cards de casos clínicos (2026-09-26, após validação real do lightbox):**
 o usuário confirmou que o lightbox do Quiz funciona em produção no commit
 `d6eb345`. `clinicalCases[].presentation` já tinha clamp 093d, mas as notas
@@ -2292,6 +2294,17 @@ transação após o fold); `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`.
 - Chromium (rede bloqueada): script carrega sem erro, botão e modal
   aparecem; o fluxo completo exige login Firebase (validação no navegador do
   usuário).
+
+## 49b. Proteção 091c-b — fusões clínicas sem perda (2026-09-26; sem executar)
+
+Endurece a 091c antes de qualquer fusão real (dry-run real com os 4 grupos `ready`, keepers seed_683/seed_560/seed_595/seed_1088, 9 registros sem imagem real — backup fresco citado não presente neste workspace, não inspecionado):
+
+- Keeper só por imagem real (`isRealPersistedImageForMerge`/`lesionHasRealImageForMerge`: assetId, publicId ou URL Cloudinary; `pending`/placeholder/link/`img` textual nunca forçam; >1 real bloqueia o grupo). Relatório do membro ganha `realImages`; modal exibe "imagens N (reais M)".
+- Fold funde casos equivalentes campo a campo (`mergeClinicalCasesForFold`: `imageRefs` via `mergeImageRefLists` com `quizPick`, textos complementares sem duplicar, escalares vazios herdam, conflito por `updatedAt`, `order` mínimo, vivo vence tombstone unilateral, `images` legados unidos).
+- Sinais/classificações: `mergeDidacticItems` inalterado (união por id + refs); só o harness de teste ganhou as funções que faltavam.
+- Conteúdo final grava nomes removidos + enTerms alternativos (inclusive o nome pré-renomeação do keeper) como tags pesquisáveis; `notes`/`enTerm` seguem final aprovado/fallback; links pela chave semântica 080–082 documentada no código.
+- REVIEW/PROGRESS/OVERRIDE/STAMPS/SRS/revisões/pending/map/tombstones: lógica inalterada; fusão nunca conclui revisão (testado).
+- Testes: `controlled-duplicate-merge` 27/27 (A1–A4 imagem real, E/E2 casos+quizPick, F/G sinais+classificações, H alias via busca, I links, J notes/enTerm), `multi-device-sync` 181/181 (+1 K: A funde, B stale converge sem ressuscitar), `critical-flows` 23/23 (âncoras +122), suíte ampla 1431 · 1416 · 10 · 5 (mesmos 10 FAIL da base). Nenhuma fusão executada; nenhum dado alterado.
 
 ## 50. Proteção 091d — revisões editáveis + importador de caso externo (2026-09-26)
 

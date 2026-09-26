@@ -43,7 +43,7 @@ function seedRuntime() {
   return s;
 }
 
-const deps = ['normalizeExternalTitle', 'exactLesionIdentityKey', 'clinicalCaseIdentityKey', 'imageIdentityKeys', 'radiopaediaSearchUrl',
+const deps = ['normalizeExternalTitle', 'tokenizeExternalTitle', 'exactLesionIdentityKey', 'clinicalCaseIdentityKey', 'imageIdentityKeys', 'imageRefTime', 'mergeImageRefLists', 'didacticItemTime', 'mergeDidacticItems', 'radiopaediaSearchUrl',
   'reviewPromotionReached', 'reviewDemotionTriggered', 'replayAutoReview', 'normalizeReviewAttempts', 'foldReviewProgress', 'autoReviewBase', 'hasRealReviewAttempts', 'autoReviewStateFromProgress',
   'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'normalizeReviewOverrides', 'mergeReviewProgress',
   'mergeReviewOverrides', 'materializeReviewState'].map((n) => extractFunction(html, n)).join('\n');
@@ -196,8 +196,10 @@ test('091c GRUPO 1: tags unidas, links deduplicados, imagem/ownership/clinicalCo
   const { data, before, idsBefore } = await runScenario();
   const k = data.find((e) => e.id === idsBefore.hyper);
   const tagsBefore = new Set(before.filter((e) => GROUP_NAMES.hep.includes(e.name)).flatMap((e) => e.tags || []));
-  assert.deepEqual(new Set(k.tags), tagsBefore, 'união de tags, nenhuma perdida');
-  assert.equal(new Set(k.tags).size, k.tags.length, 'sem tag repetida');
+  for(const t of tagsBefore) assert.ok(new Set(k.tags).has(t), 'união de tags, nenhuma perdida: ' + t);
+  assert.equal(new Set(k.tags.map((t) => String(t).toLowerCase())).size, k.tags.length, 'sem tag repetida');
+  assert.ok(k.tags.includes('Metástase hepática'), '091c-b: título removido vira alias pesquisável');
+  assert.ok(k.tags.includes('Metástases hepáticas hipervasculares'), '091c-b: padrão hipervascular preservado como alias, não como lesão');
   const urls = k.links.map((l) => l.url);
   assert.equal(new Set(urls).size, urls.length, 'links deduplicados');
   assert.ok(urls.includes('https://radiopaedia.org/search?lang=us&q=liver%20metastases'));
@@ -338,7 +340,7 @@ test('091c CASOS CLÍNICOS: deduplicados e preservados; keeper sem imagem escolh
     byName(d, 'Osteomielite da mandíbula')[0].clinicalCases = [{ ...caseA }];
   });
   const k = byName(data, 'Osteomielite mandibular')[0];
-  assert.deepEqual(k.clinicalCases.map((c) => c.sourceUrl), ['https://radiopaedia.org/cases/1', 'https://radiopaedia.org/cases/2']);
+  assert.deepEqual(plain(k.clinicalCases.map((c) => c.sourceUrl)), ['https://radiopaedia.org/cases/1', 'https://radiopaedia.org/cases/2']);
 });
 
 test('091c UI/PIPELINE: botão manual, modal de relatório, mapa em write/read/reconcile/adoção/snapshot/backup e fold no boot', () => {
@@ -361,6 +363,127 @@ test('091c RÓTULOS LEGADOS: imagem de OUTRA lesão com lesionId histórico igua
   assert.ok(holder, 'o SEED real tem rótulo legado coincidente (' + vertDrop + ')');
   assert.deepEqual(plain(data.find((e) => e.id === holder.id)), plain(holder), 'ownership protegido: nada muda na outra lesão');
   assert.equal(res.ok, true);
+});
+
+test('091c-b A1: images[] só com placeholder/link (sem assetId/publicId/Cloudinary) NÃO força keeper', () => {
+  const data = seedRuntime();
+  const a = byName(data, 'Linfoma mediastinal')[0], b = byName(data, 'Linfoma do mediastino')[0];
+  a.images = [{ data: 'https://radiopaedia.org/cases/busca', source: 'url', label: 'resultado de busca' }];
+  const app = makeApp(data);
+  const g = plain(app.ctx.planApprovedClinicalMerges091c(app.ctx.lesionMergeGlobalState(), app.ctx.APPROVED_CLINICAL_MERGES_091C, {})).find((x) => x.group === 'linfoma-mediastinal');
+  assert.equal(g.status, 'ready');
+  assert.equal(g.keeperId, b.id, 'placeholder não conta: vale a regra 3 (preferido)');
+  assert.match(g.keeperReason, /regra 3/);
+});
+
+test('091c-b A2: campo img textual legado (sem asset) NÃO força keeper', () => {
+  const data = seedRuntime();
+  const a = byName(data, 'Linfoma mediastinal')[0], b = byName(data, 'Linfoma do mediastino')[0];
+  a.img = 'https://example.org/legado.jpg';
+  const app = makeApp(data);
+  const g = plain(app.ctx.planApprovedClinicalMerges091c(app.ctx.lesionMergeGlobalState(), app.ctx.APPROVED_CLINICAL_MERGES_091C, {})).find((x) => x.group === 'linfoma-mediastinal');
+  assert.equal(g.status, 'ready');
+  assert.equal(g.keeperId, b.id);
+});
+
+test('091c-b A3: ÚNICO asset Cloudinary real (só publicId + URL) força keeper mesmo fora do preferido', () => {
+  const data = seedRuntime();
+  const a = byName(data, 'Linfoma mediastinal')[0], b = byName(data, 'Linfoma do mediastino')[0];
+  a.images = [{ data: 'https://res.cloudinary.com/soegtip6/image/upload/v1/atlas-radiologico/real.jpg', publicId: 'atlas-radiologico/real', source: 'cloudinary', label: 'TC' }];
+  const app = makeApp(data);
+  const g = plain(app.ctx.planApprovedClinicalMerges091c(app.ctx.lesionMergeGlobalState(), app.ctx.APPROVED_CLINICAL_MERGES_091C, {})).find((x) => x.group === 'linfoma-mediastinal');
+  assert.equal(g.status, 'ready');
+  assert.equal(g.keeperId, a.id);
+  assert.match(g.keeperReason, /regra 1/);
+});
+
+test('091c-b A4: 1 real + 1 placeholder NÃO bloqueia (só o real conta); keeper é o real', () => {
+  const data = seedRuntime();
+  const a = byName(data, 'Linfoma mediastinal')[0], b = byName(data, 'Linfoma do mediastino')[0];
+  a.images = [{ data: 'https://res.cloudinary.com/soegtip6/image/upload/v1/atlas-radiologico/real.jpg', assetId: 'REAL1', source: 'cloudinary' }];
+  b.images = [{ data: 'https://radiopaedia.org/cases/busca', source: 'url' }];
+  const app = makeApp(data);
+  const g = plain(app.ctx.planApprovedClinicalMerges091c(app.ctx.lesionMergeGlobalState(), app.ctx.APPROVED_CLINICAL_MERGES_091C, {})).find((x) => x.group === 'linfoma-mediastinal');
+  assert.equal(g.status, 'ready');
+  assert.equal(g.keeperId, a.id);
+});
+
+test('091c-b E: casos equivalentes fundem campo a campo — união de imageRefs, textos complementares e quizPick', async () => {
+  const { data } = await runScenario((d, opts) => {
+    const k = byName(d, 'Osteomielite da mandíbula')[0], f = byName(d, 'Osteomielite mandibular')[0];
+    k.clinicalCases = [{ id: 'kc', title: 'Caso', sourceUrl: 'https://x/caso', presentation: 'Dor mandibular.', imageRefs: [{ imageId: 'asset:KA', order: 0, quizPick: 'on', quizPickAt: 5, updatedAt: 5 }] }];
+    f.clinicalCases = [{ title: 'Caso', sourceUrl: 'https://x/caso', notes: 'Edema associado.', imageRefs: [{ imageId: 'asset:KB', order: 0, updatedAt: 6 }] }];
+    opts.progress = {};
+  });
+  const k = byName(data, 'Osteomielite mandibular')[0];
+  assert.equal(k.clinicalCases.length, 1, 'mesma identidade vira um caso só');
+  const c = k.clinicalCases[0];
+  assert.equal(c.id, 'kc', 'id do keeper preservado');
+  assert.match(c.presentation, /Dor mandibular/);
+  assert.match(c.notes, /Edema associado/);
+  assert.deepEqual(plain(c.imageRefs.map((r) => r.imageId).sort()), ['asset:KA', 'asset:KB'], 'imageRefs nunca perdidos');
+  assert.equal(c.imageRefs.find((r) => r.imageId === 'asset:KA').quizPick, 'on', 'quizPick preservado');
+});
+
+test('091c-b E2: mesmo vínculo com quizPick divergente — updatedAt mais novo vence (determinístico)', async () => {
+  const { data } = await runScenario((d, opts) => {
+    const k = byName(d, 'Osteomielite da mandíbula')[0], f = byName(d, 'Osteomielite mandibular')[0];
+    k.clinicalCases = [{ id: 'kc', title: 'Caso', sourceUrl: 'https://x/caso2', imageRefs: [{ imageId: 'asset:X', order: 0, captionOverride: 'antiga', updatedAt: 5 }] }];
+    f.clinicalCases = [{ title: 'Caso', sourceUrl: 'https://x/caso2', imageRefs: [{ imageId: 'asset:X', order: 0, captionOverride: 'nova', quizPick: 'on', quizPickAt: 9, updatedAt: 9 }] }];
+    opts.progress = {};
+  });
+  const c = byName(data, 'Osteomielite mandibular')[0].clinicalCases[0];
+  assert.equal(c.imageRefs.length, 1);
+  assert.equal(c.imageRefs[0].captionOverride, 'nova');
+  assert.equal(c.imageRefs[0].quizPick, 'on');
+});
+
+test('091c-b F/G: sinais e classificações de membros diferentes — survivor contém todos', async () => {
+  const { data } = await runScenario((d) => {
+    byName(d, 'Osteomielite da mandíbula')[0].radiologicSigns = [{ id: 'sg1', title: 'Sinal A' }];
+    byName(d, 'Osteomielite mandibular')[0].radiologicSigns = [{ id: 'sg2', title: 'Sinal B' }];
+    byName(d, 'Osteomielite da mandíbula')[0].classificationSchemes = [{ id: 'cs1', title: 'Esquema A' }];
+    byName(d, 'Osteomielite mandibular')[0].classificationSchemes = [{ id: 'cs2', title: 'Esquema B' }];
+  });
+  const k = byName(data, 'Osteomielite mandibular')[0];
+  assert.deepEqual(plain(k.radiologicSigns.map((s) => s.id).sort()), ['sg1', 'sg2']);
+  assert.deepEqual(plain(k.classificationSchemes.map((s) => s.id).sort()), ['cs1', 'cs2']);
+});
+
+test('091c-b H: título removido continua encontrando o survivor via busca (alias em tags)', async () => {
+  const { data } = await runScenario();
+  const stopwords = /const EXTERNAL_IMPORT_STOPWORDS = \[[^\]]*\];/.exec(html)[0];
+  const searchCtx = vm.createContext({ console });
+  vm.runInContext(stopwords + '\n' + ['normalizeExternalTitle', 'tokenizeExternalTitle', 'searchExistingLesionsForLink'].map((n) => extractFunction(html, n)).join('\n'), searchCtx);
+  const hits = plain(searchCtx.searchExistingLesionsForLink('Linfoma do mediastino', plain(data)));
+  assert.ok(hits.some((e) => e.name === 'Linfoma mediastinal'), 'busca pelo título removido acha o keeper');
+  assert.match(html, /e\.tags\.some\(t=>t\.toLowerCase\(\).includes\(q\)\)/, 'busca principal cobre tags (aliases)');
+});
+
+test('091c-b I: links semanticamente iguais (barra final) não duplicam na fusão', async () => {
+  const { data } = await runScenario((d) => {
+    byName(d, 'Osteomielite da mandíbula')[0].links = [{ label: 'Guia', url: 'https://example.org/guia' }];
+    byName(d, 'Osteomielite mandibular')[0].links = [{ label: 'Guia', url: 'https://example.org/guia/' }];
+  });
+  const k = byName(data, 'Osteomielite mandibular')[0];
+  const guia = k.links.filter((l) => String(l.url || '').includes('example.org/guia'));
+  assert.equal(guia.length, 1, 'deduplicação semântica 080–082 reaproveitada, sem normalizador novo');
+  assert.match(html, /reaproveita a normalização semântica 080–082/, 'fold documenta o reuso');
+});
+
+test('091c-b J: notes complementares se unem e enTerm alternativo vira alias (nunca se perde)', async () => {
+  const { data } = await runScenario((d) => {
+    byName(d, 'Linfoma do mediastino')[0].notes = 'Nota própria do keeper sobre seguimento.';
+    byName(d, 'Linfoma do mediastino')[0].enTerm = '';
+    byName(d, 'Linfoma mediastinal')[0].notes = 'Massa anterior volumosa.';
+    byName(d, 'Linfoma mediastinal')[0].enTerm = 'termo alternativo util';
+  });
+  const k = byName(data, 'Linfoma mediastinal')[0];
+  assert.match(k.notes, /Nota própria do keeper sobre seguimento/);
+  assert.match(k.notes, /Massa anterior volumosa/);
+  assert.equal(k.enTerm, 'mediastinal lymphoma');
+  assert.ok(k.tags.includes('termo alternativo util'), 'enTerm alternativo preservado como sinônimo pesquisável');
+  assert.ok(k.tags.includes('Linfoma do mediastino'), 'nome anterior do keeper preservado como alias');
 });
 
 test('091c ENSAIO: se a cópia de ensaio acusar órfão/imagem perdida, NADA é alterado (sem mapa, sem snapshot, sem save)', async () => {

@@ -4058,6 +4058,48 @@ test('PROTEÇÃO 091c - F5 / reload no PC B mantém a convergência; boot sem ma
   assert.equal(cloud.peekRevision(), rev, 'pull idempotente não gasta escrita');
 });
 
+test('PROTEÇÃO 091c-b - fusão em A com casos/refs/sinais; B stale converge sem ressuscitar nem apagar conteúdo', async () => {
+  const cloud = makeFakeCloud();
+  const keeperSeed = makeSeedEntry({ id: 'seed_1', name: 'Keeper', tags: ['Keeper'],
+    images: [img({ assetId: 'KA', publicId: 'atlas-radiologico/ka', lesionId: 'seed_1', lesionName: 'Keeper' })],
+    clinicalCases: [{ id: 'kc1', title: 'Caso', sourceUrl: 'https://x/caso', presentation: 'Apresentação do keeper',
+      imageRefs: [{ imageId: 'asset:KA', order: 0, quizPick: 'on', quizPickAt: 5, updatedAt: 5 }] }],
+    radiologicSigns: [{ id: 'sg1', title: 'Sinal do keeper' }] });
+  const droppedSeed = makeSeedEntry({ id: 'seed_2', name: 'Removido', tags: ['Removido'],
+    clinicalCases: [{ title: 'Caso', sourceUrl: 'https://x/caso', notes: 'Nota complementar do fundido',
+      imageRefs: [{ imageId: 'asset:KB', order: 0, updatedAt: 6 }] }],
+    radiologicSigns: [{ id: 'sg2', title: 'Sinal do fundido' }],
+    classificationSchemes: [{ id: 'cs2', title: 'Esquema do fundido' }] });
+  const seeds = [keeperSeed, droppedSeed, makeSeedEntry({ id: 'seed_3', name: 'Outra' })];
+  await seedCleanCloud079c(cloud, seeds);
+  const a = makeDevice(cloud, { seed: seeds }); await a.boot();
+  const b = makeDevice(cloud, { seed: seeds }); await b.boot();
+  b.context.REVIEW.seed_2 = 2; b.context.REVIEW_OVERRIDE.seed_2 = { m: 1, s: 2, at: 5 };
+  b.context.LESION_REVISIONS.R1 = { id: 'R1', lesionId: 'seed_2', status: 'pending', createdAt: 1, updatedAt: 1, history: [] };
+  const entries = { seed_2: { into: 'seed_1', at: 1700000000000, group: 't', finalName: 'Keeper' } };
+  a.context.__setLesionMerges091c(a.context.mergeLesionMergeMaps(a.context.__getLesionMerges091c(), entries));
+  a.context.foldLesionMergesIntoState(a.context.lesionMergeGlobalState(), entries, { explicit: true });
+  await a.context.saveData();
+  await a.context.pushToFirebaseNow();
+  await b.context.syncFromFirebase();
+  const ka = b.context.DATA.find((e) => e.id === 'seed_1');
+  assert.ok(ka, 'keeper existe em B');
+  assert.equal(b.context.DATA.some((e) => e.id === 'seed_2'), false, 'fundido não ressuscita em B');
+  assert.equal(ka.clinicalCases.length, 1, 'casos equivalentes viram um só');
+  assert.match(ka.clinicalCases[0].presentation, /Apresentação do keeper/);
+  assert.match(ka.clinicalCases[0].notes, /Nota complementar do fundido/);
+  assert.deepEqual(JSON.parse(JSON.stringify(ka.clinicalCases[0].imageRefs.map((r) => r.imageId).sort())), ['asset:KA', 'asset:KB'], 'imageRefs unidos');
+  assert.equal(ka.clinicalCases[0].imageRefs.find((r) => r.imageId === 'asset:KA').quizPick, 'on');
+  assert.deepEqual(JSON.parse(JSON.stringify(ka.radiologicSigns.map((s) => s.id).sort())), ['sg1', 'sg2']);
+  assert.deepEqual(JSON.parse(JSON.stringify(ka.classificationSchemes.map((s) => s.id))), ['cs2']);
+  assert.equal(b.context.REVIEW.seed_1, 2, 'progresso do fundido chega ao keeper');
+  assert.equal(b.context.LESION_REVISIONS.R1.lesionId, 'seed_1', 'revisão pendente redirecionada, status intacto');
+  assert.equal(b.context.LESION_REVISIONS.R1.status, 'pending', 'fusão não conclui revisão');
+  b.context.markSyncDirty();
+  await b.context.pushToFirebaseNow();
+  assert.deepEqual(cloudIds091c(cloud), ['seed_1', 'seed_3'], 'B publica sem ressuscitar o fundido');
+});
+
 // ===========================================================================
 // PROTEÇÃO 091d — motivo editado da revisão atravessa o sync (084) entre PCs.
 // ===========================================================================
