@@ -1,5 +1,9 @@
 # Atlas Radiológico
 
+### Save do editor com outro PC (2026-09-26)
+
+Se outro computador adicionar uma imagem enquanto o formulário está aberto, o Salvar mantém essa imagem: só o que foi removido de propósito na tela gera exclusão. Teste: `node tests/editor-stale-save.test.js`.
+
 ### Fusões clínicas aprovadas — proteção 091c-b (2026-09-26)
 
 Antes de qualquer fusão real, a 091c foi fortalecida: só imagem Cloudinary com asset conta para escolher o registro que fica; casos clínicos equivalentes se somam (sem perder vínculos, textos ou escolha do Quiz); sinais e classificações de ambos os lados são mantidos; nomes antigos viram etiquetas pesquisáveis; links iguais não duplicam. Nenhuma fusão foi executada. Testes: `controlled-duplicate-merge` 27/27, `multi-device-sync` 181/181.

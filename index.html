@@ -13043,6 +13043,35 @@ function openDetail(id, opts){
   };
 }
 
+/* Proteção contra SAVE STALE de imagens no editor (pura): o formulário pode ter
+   sido aberto antes de outro PC adicionar imagens à mesma lesão. A ausência de
+   uma imagem nova remota na galeria antiga NUNCA é intenção de remover.
+   openList: imagens como o formulário ABRIU (cópias por valor); galleryImages:
+   conjunto final da galeria (uploads já normalizados); freshImages: estado
+   ATUAL da lesão em DATA no momento do Save. Devolve { images, removed } —
+   images = galeria + remotas novas (metadados remotos intactos); removed =
+   SÓ chaves que estavam no open e sumiram da galeria (intenção explícita).
+   Identidade sempre por stableImageKeyV208 (nunca posição). Pura. */
+function mergeStaleFormImagesForSave(openList, galleryImages, freshImages){
+  const keyOf = (im)=> (im && typeof stableImageKeyV208==='function') ? stableImageKeyV208(im) : '';
+  const openKeys = new Set();
+  for(const im of (Array.isArray(openList) ? openList : [])){ const k = keyOf(im); if(k) openKeys.add(k); }
+  const gallery = Array.isArray(galleryImages) ? galleryImages : [];
+  const have = new Set();
+  for(const im of gallery){ const k = keyOf(im); if(k) have.add(k); }
+  const out = gallery.slice();
+  for(const im of (Array.isArray(freshImages) ? freshImages : [])){
+    if(!im || typeof im!=='object') continue;
+    const k = keyOf(im);
+    if(!k || openKeys.has(k) || have.has(k)) continue;
+    out.push(Object.assign({}, im));
+    have.add(k);
+  }
+  const removed = [];
+  for(const k of openKeys){ if(!have.has(k)) removed.push(k); }
+  return { images: out, removed };
+}
+
 function openForm(id, opts){
   opts = opts || {};
   // Modo "sobre o Quiz": o formulário é aberto por cima da overlay do estudo
@@ -13589,6 +13618,10 @@ function openForm(id, opts){
 
   /* --- imagens: Cloudinary por padrão quando configurado; local continua como fallback compatível --- */
   let pendingImgs = [];       // [{label,data,source,...}]
+  // SAVE STALE: imagens como o formulário ABRIU (cópias por valor, identidade
+  // estável). Só o que estava aqui e sumiu da galeria vira remoção explícita;
+  // o que chegou de outro PC depois é unido no Save, nunca tombstonado.
+  let formImagesOpenList = [];
   // Seletores de sequência/modalidade começam recolhidos por imagem; o
   // WeakSet preserva o estado expandido entre re-renders (mesmo objeto).
   // Preview, descrição, tags da imagem e ações ficam sempre visíveis.
@@ -13806,6 +13839,7 @@ function openForm(id, opts){
     getEntryImgs(existing).then(imgs=>{
       pendingImgs = imgs.map(i=>({...i, label:[i.modality,i.label].filter(Boolean).join(' ').trim(), source:i.source||'local'}));
       formImageMetaBaseline = snapshotImageMetaByKey(pendingImgs);
+      formImagesOpenList = pendingImgs.map(i=>({...i})); // base anti-stale: cópias (edição na galeria não contamina)
       renderImgGallery();
     });
   }
@@ -13938,8 +13972,16 @@ function openForm(id, opts){
     }
     const entryId = formEntryId;
     const pendingImageRefMap = {}; // 093c — pending:… -> stableImageKeyV208 (só após upload OK)
-    let localImgFlag = existing ? !!existing.localImg : false;
-    let remoteImgs = existing && Array.isArray(existing.images) ? existing.images : [];
+    // SAVE STALE: um pull/reconcile pode ter substituído o objeto DATA enquanto o
+    // formulário estava aberto — a partir daqui, lê e grava no objeto ATUAL.
+    let saveEntry = existing;
+    if(existing){
+      const fresh = DATA.find(x=>x && x.id===entryId);
+      if(fresh && fresh !== existing) saveEntry = fresh;
+    }
+    const saveEntryImages = (saveEntry && Array.isArray(saveEntry.images)) ? saveEntry.images : [];
+    let localImgFlag = saveEntry ? !!saveEntry.localImg : false;
+    let remoteImgs = saveEntryImages;
     if(imgsChanged){
       // Só AGORA (no Salvar) as imagens NOVAS temporárias vão ao Cloudinary.
       // Imagens já existentes (cloudinary/url) são mantidas como estão; as
@@ -13977,33 +14019,42 @@ function openForm(id, opts){
       })).map(withNormalizedImageClinicalContext); // PROTEÇÃO 088 — contexto vazio não gera campo
       // PROTEÇÃO 092 — carimba só os metadados que o usuário mudou nesta tela;
       // o resto adota o estado ATUAL da lesão (pode ter vindo de outro PC).
-      remoteImgs = applyImageMetadataEdits(formImageMetaBaseline, existing && Array.isArray(existing.images) ? existing.images : [], remoteImgs, Date.now());
+      remoteImgs = applyImageMetadataEdits(formImageMetaBaseline, saveEntryImages, remoteImgs, Date.now());
+      // SAVE STALE: une imagens que chegaram de outro PC depois da abertura
+      // (ausência na galeria antiga NÃO é remoção); metadados remotos intactos.
+      // Só aqui a intenção explícita vira remoção (bloco 073 abaixo, pela base).
+      let staleRemovedKeys = [];
+      try{
+        const staleMerge = mergeStaleFormImagesForSave(formImagesOpenList, remoteImgs, saveEntryImages);
+        remoteImgs = staleMerge.images.filter(im=>!isImageTombstoned(im, entryId, IMAGE_TOMBSTONES));
+        staleRemovedKeys = staleMerge.removed;
+      }catch(_e){ staleRemovedKeys = []; }
       // Produtividade: carimba assignedAt (ISO) SÓ nas imagens novas
       // confirmadas neste Salvar. Mantidas/históricas ficam como estão —
       // sem timestamp inventado. Falha de upload acima já abortou o save.
-      try{ stampNewImagesAssignedAt(existing && Array.isArray(existing.images) ? existing.images : [], remoteImgs, new Date().toISOString()); }catch(_e){}
+      try{ stampNewImagesAssignedAt(saveEntryImages, remoteImgs, new Date().toISOString()); }catch(_e){}
       // ALTERAÇÃO 079d — marcador explícito SÓ para imagens que não estavam
       // na lesão antes deste Salvar (lesão nova: todas as do formulário).
       // Imagens já existentes (inclusive stale do IndexedDB) nunca marcam.
+      // SAVE STALE: a base é o estado ATUAL (não o snapshot antigo), então uma
+      // imagem vinda de outro PC nunca é marcada como "adicionada aqui".
       try{
-        const prevForMark = existing ? existing.images : ((DATA.find(x=>x && x.id===entryId) || {}).images);
-        if(markPendingLocalImageAdds(entryId, prevForMark, remoteImgs)) await savePendingLocalImageAdds();
+        if(markPendingLocalImageAdds(entryId, saveEntryImages, remoteImgs)) await savePendingLocalImageAdds();
       }catch(_e){}
-      // ALTERAÇÃO 073 — tombstone de exclusão EXPLÍCITA: o que existia antes
-      // do Salvar e sumiu do conjunto final foi removido de propósito pelo
-      // usuário (✕ na galeria + Salvar confirmado). Só em edição de lesão
-      // existente (lesão nova não tem "antes"); cancelar a edição nunca
-      // chega aqui, então nada é registrado à toa. A escrita abaixo leva os
-      // tombstones no documento principal; se ela não for confirmada, o
-      // dirty garante nova tentativa depois (nunca perde a intenção).
-      if(existing && Array.isArray(existing.images) && existing.images.length){
+      // ALTERAÇÃO 073 — tombstone de exclusão EXPLÍCITA: SÓ o que existia na
+      // ABERTURA do formulário e sumiu da galeria foi removido de propósito
+      // pelo usuário (✕ na galeria + Salvar confirmado). Imagem que chegou de
+      // outro PC depois da abertura nunca estava na base — jamais vira
+      // tombstone por esse Save. Só em edição de lesão existente (lesão nova
+      // não tem "antes"); cancelar a edição nunca chega aqui.
+      if(existing && Array.isArray(formImagesOpenList) && formImagesOpenList.length){
         try{
-          const finalKeys = new Set();
-          for(const x of remoteImgs){ const k = stableImageKeyV208(x); if(k) finalKeys.add(k); }
+          const openByKey = new Map();
+          for(const im of formImagesOpenList){ const k = stableImageKeyV208(im); if(k && !openByKey.has(k)) openByKey.set(k, im); }
           let tombstonedHere = 0;
-          for(const prev of existing.images){
-            const k = stableImageKeyV208(prev);
-            if(k && !finalKeys.has(k) && await recordImageTombstone(prev, entryId)) tombstonedHere++;
+          for(const k of staleRemovedKeys){
+            const prev = openByKey.get(k);
+            if(prev && await recordImageTombstone(prev, entryId)) tombstonedHere++;
           }
           if(tombstonedHere) await markSyncDirty();
         }catch(_e){}
@@ -14017,14 +14068,16 @@ function openForm(id, opts){
     radiologicSignsDraft = remapPendingImageRefs(radiologicSignsDraft, pendingImageRefMap);
     classificationSchemesDraft = remapPendingImageRefs(classificationSchemesDraft, pendingImageRefMap);
     if(existing){
-      existing.name=name; existing.s=sec; existing.site=site; existing.tags=tags; existing.img=img; existing.notes=notes; existing.links=links; existing.enTerm=enTerm; existing.inc=inc; existing.localImg=localImgFlag; existing.images=remoteImgs; existing.classification=classification; existing._userUpdatedAt=Date.now();
-      if(altPlacementsDraft.length) existing.altPlacements = JSON.parse(JSON.stringify(altPlacementsDraft)); else delete existing.altPlacements;
+      // SAVE STALE: grava no objeto ATUAL em DATA (saveEntry), nunca no destacado.
+      const t = saveEntry || existing;
+      t.name=name; t.s=sec; t.site=site; t.tags=tags; t.img=img; t.notes=notes; t.links=links; t.enTerm=enTerm; t.inc=inc; t.localImg=localImgFlag; t.images=remoteImgs; t.classification=classification; t._userUpdatedAt=Date.now();
+      if(altPlacementsDraft.length) t.altPlacements = JSON.parse(JSON.stringify(altPlacementsDraft)); else delete t.altPlacements;
       // Casos clínicos exemplo: só reflete remoções feitas nesta tela (nunca
       // adiciona aqui — vincular é exclusivo do importador). Sem draft (form
       // de lesão nova), o campo nem é tocado.
-      if(clinicalCasesDraft.length) existing.clinicalCases = JSON.parse(JSON.stringify(clinicalCasesDraft)); else delete existing.clinicalCases;
-      if(radiologicSignsDraft.length) existing.radiologicSigns = JSON.parse(JSON.stringify(radiologicSignsDraft)); else delete existing.radiologicSigns; // 093
-      if(classificationSchemesDraft.length) existing.classificationSchemes = JSON.parse(JSON.stringify(classificationSchemesDraft)); else delete existing.classificationSchemes; // 093
+      if(clinicalCasesDraft.length) t.clinicalCases = JSON.parse(JSON.stringify(clinicalCasesDraft)); else delete t.clinicalCases;
+      if(radiologicSignsDraft.length) t.radiologicSigns = JSON.parse(JSON.stringify(radiologicSignsDraft)); else delete t.radiologicSigns; // 093
+      if(classificationSchemesDraft.length) t.classificationSchemes = JSON.parse(JSON.stringify(classificationSchemesDraft)); else delete t.classificationSchemes; // 093
     } else if(DATA.some(x=>x && x.id===entryId)){
       // Rede de segurança anti-mesmo-id (auditoria 2026-09-21): se o id já
       // está no acervo (ex.: submit duplicado que escapou da trava), atualiza

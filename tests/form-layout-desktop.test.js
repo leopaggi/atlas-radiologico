@@ -155,5 +155,6 @@ test('10. nenhuma regressão de save/edit (ids e fluxo preservados)', () => {
     assert.ok(src.includes(`id="${id}"`), `campo preservado: ${id}`);
   }
   assert.match(src, /\bDATA\.push\(newEntry\)/);
-  assert.match(src, /existing\.name\s*=\s*name;/);
+  // SAVE STALE: a escrita vai para `t` (saveEntry, o objeto ATUAL em DATA).
+  assert.match(src, /(existing|t)\.name\s*=\s*name;/);
 });

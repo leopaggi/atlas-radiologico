@@ -8,6 +8,8 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**Save stale do editor (2026-09-26):** o Salvar registrava tombstone para tudo que não estava na galeria da tela — inclusive imagem que chegou de outro PC com o formulário aberto — e gravava no objeto DATA destacado pelo pull. Agora o formulário fotografa as imagens da abertura (`formImagesOpenList`), resolve o objeto ATUAL em DATA no Save (`saveEntry`), une remotas novas via `mergeStaleFormImagesForSave` (identidade estável, metadados remotos intactos) e só tombstona o que estava na base e sumiu; 092 faz rebase no estado atual, stamp/079d usam a base atual. Teste `editor-stale-save` 18/18; `critical-flows` 23/23, `multi-device-sync` 181/181, demais sem regressão. Smoke em navegador real pendente.
+
 **Proteção 091c-b (2026-09-26, sem executar fusão):** keeper só por imagem real persistida (`isRealPersistedImageForMerge`: assetId/publicId/Cloudinary; placeholder/`img` legado nunca forçam); casos equivalentes fundidos campo a campo no fold (`mergeClinicalCasesForFold`: união de `imageRefs`/`quizPick`, textos complementares, escalares por `updatedAt`); sinais/classificações distintos sempre somam (`mergeDidacticItems`); nomes removidos e enTerms alternativos viram tags pesquisáveis; links pela normalização 080–082; progresso/revisões/tombstones/sync inalterados. Testes: `controlled-duplicate-merge` 27/27, `multi-device-sync` 181/181, `critical-flows` 23/23; suíte ampla 1431 testes · 1416 PASS · 10 FAIL já conhecidos na base Windows · 5 TODO, nenhuma falha nova. Dry-run real continua pendente de backup fresco + relatório do Atlas autenticado; NADA foi fundido.
 
 **Cards de casos clínicos (2026-09-26, após validação real do lightbox):**

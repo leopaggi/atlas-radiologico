@@ -584,7 +584,10 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
   // importHandler; as tres primeiras ancoras nao mudam.
-  assert.equal(importHandler.line, 16381);
+  // SAVE STALE (+53 só no importHandler): helper puro mergeStaleFormImagesForSave
+  // + base formImagesOpenList + resolução saveEntry/união/tombstones no f-save —
+  // tudo depois de loadData; recovery/boot intactos.
+  assert.equal(importHandler.line, 16434);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -1221,7 +1224,10 @@ test('ALTERAÇÃO 076: markSyncDirty() roda ANTES de reconcileBeforePush no Salv
   assert.notEqual(start, -1, 'handler de salvar do editor não encontrado');
   const end = html.indexOf(endMarker, start);
   assert.notEqual(end, -1, 'ponto de referência (write real do Salvar) não encontrado após o handler');
-  assert.ok(end - start < 15000, 'os marcadores precisam estar próximos (mesma função) — distância suspeita indica handler mudou de lugar');
+  // SAVE STALE (proteção anti-stale do editor): base formImagesOpenList +
+  // saveEntry/união/tombstones explícitos cresceram o handler (~15,4k);
+  // limite acompanha o crescimento legítimo — continua mesma função.
+  assert.ok(end - start < 16000, 'os marcadores precisam estar próximos (mesma função) — distância suspeita indica handler mudou de lugar');
   const window = html.slice(start, end);
   const dirtyIdx = window.indexOf('await markSyncDirty();');
   const reconIdx = window.indexOf("reconcileBeforePush('editor-save')");

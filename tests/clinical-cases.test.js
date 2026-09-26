@@ -578,7 +578,9 @@ test('REMOCAO: url inexistente nao remove nada (ok=false)', () => {
 
 test('REMOCAO (editor): openForm so grava clinicalCasesDraft no ramo "existing" (visualizar/remover), nunca ao criar', () => {
   const src = stripJsComments(extractFunction(html, 'openForm'));
-  assert.match(src, /if\(clinicalCasesDraft\.length\) existing\.clinicalCases = JSON\.parse\(JSON\.stringify\(clinicalCasesDraft\)\); else delete existing\.clinicalCases;/);
+  // SAVE STALE: a escrita vai para `t` (saveEntry, o objeto ATUAL em DATA) em vez
+  // de `existing` direto — mesmo ramo "existing", mesma regra de draft.
+  assert.match(src, /if\(clinicalCasesDraft\.length\) (existing|t)\.clinicalCases = JSON\.parse\(JSON\.stringify\(clinicalCasesDraft\)\); else delete (existing|t)\.clinicalCases;/);
   const newEntryLine = src.match(/const newEntry = \{[^}]*\};/);
   assert.ok(newEntryLine, 'newEntry literal encontrado');
   assert.doesNotMatch(newEntryLine[0], /clinicalCases/, 'lesão nova nunca inventa clinicalCases');

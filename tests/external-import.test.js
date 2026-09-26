@@ -907,7 +907,9 @@ test('dup-8. salvar existente atualiza, não duplica', () => {
   const idx = src.indexOf('DATA.push');
   const elseIdx = src.lastIndexOf('} else {', idx);
   assert.ok(elseIdx !== -1 && src.slice(elseIdx, idx).includes('newEntry'), 'push só no ramo de lesão nova');
-  assert.match(src, /existing\.name\s*=\s*name;/, 'edição atualiza campos');
+  // SAVE STALE: a escrita vai para `t` (saveEntry, o objeto ATUAL em DATA) —
+  // mesmo ramo de edição, mesma atualização de campos.
+  assert.match(src, /(existing|t)\.name\s*=\s*name;/, 'edição atualiza campos');
 });
 
 function dupFixture() {

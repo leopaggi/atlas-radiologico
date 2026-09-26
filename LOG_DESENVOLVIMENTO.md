@@ -1,5 +1,12 @@
 # Diario de desenvolvimento
 
+## Save stale de imagens no editor (26/09/2026)
+
+Se o formulário ficava aberto enquanto outro PC adicionava uma imagem, o Salvar apagava essa imagem: a galeria antiga virava a verdade e tudo fora dela era tratado como remoção. Agora o Atlas fotografa as imagens da abertura; no Save, busca o estado atual, junta as imagens novas do outro PC e só registra remoção do que o usuário tirou de propósito. Metadados, contexto clínico, vínculos didáticos e sincronização seguem iguais.
+
+Arquivos desta etapa: `index.html`, `tests/editor-stale-save.test.js`, `tests/critical-flows.test.js`, `tests/clinical-cases.test.js`, `tests/external-import.test.js`, `tests/form-layout-desktop.test.js`, `AI.md`, `README.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` e este diário.
+Testes: `editor-stale-save` 18/18; `critical-flows` 23/23; `multi-device-sync` 181/181; demais focados sem regressão (falhas amplas iguais às já conhecidas na base Windows). Smoke com dois perfis reais ainda depende do usuário.
+
 ## Protecao 091c-b — fusoes clinicas sem perda de conteudo (26/09/2026, sem executar fusao)
 
 A infraestrutura de fusao de duplicatas (091c) foi fortalecida antes de qualquer execucao real. O que mudou, em linguagem simples:

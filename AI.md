@@ -1,5 +1,9 @@
 # AI.md — instruções para assistentes de IA (Claude, DeepSeek, ChatGPT, etc.)
 
+## Save stale do editor (2026-09-26)
+
+`formImagesOpenList` fotografa as imagens da abertura (cópias por valor). No Save, `saveEntry` resolve o objeto ATUAL em DATA (o pull pode ter substituído o `existing`), `mergeStaleFormImagesForSave` une remotas novas (fora da base, metadados intactos, sem tombstone) e só a base ausente da galeria vira remoção explícita (073). 092/`stamp`/079d operam sobre o estado atual. Quiz, didático, 091c e sync inalterados. Teste: `node tests/editor-stale-save.test.js` (18/18).
+
 ## Proteção 091c-b — fusões clínicas sem perda (2026-09-26; nenhuma fusão executada)
 
 - Keeper SÓ por imagem real: `isRealPersistedImageForMerge` (assetId/publicId/URL Cloudinary; nunca `pending`, placeholder ou `img` textual) alimenta `lesionHasRealImageForMerge`, usada pelo plano. `lesionHasImagesForMerge` segue por compatibilidade.
