@@ -4001,14 +4001,157 @@ function tryNormalizeLegacyPullImage(img, keys, targetId, holdersByKey, sourceLa
   });
   return { ok:true, image, stableKey: k, from: owner, to: targetId };
 }
-function unionEntryImages(baseImgs, addImgs, targetEntry, conflictSink, sourceLabel, legacyCatalog){
+/* ============================================================
+   PROTEÇÃO 092 — METADADOS DA MESMA IMAGEM: MERGE POR CAMPO ENTRE PCs
+   ------------------------------------------------------------
+   Causa raiz (auditada): unionEntryImages mantinha o objeto INTEIRO da
+   imagem do lado-base (o PC local, no pull e no reconcile-before-push) e
+   descartava o do outro lado quando era o mesmo asset — a legenda editada
+   no PC A sumia quando o PC B (desatualizado) salvava QUALQUER coisa na
+   lesão: o reconcile do B mantinha o label antigo e o publicava.
+   Agora: MESMA imagem (identidade de sempre: imageIdentityKeys /
+   stableImageKeyV208) -> UM objeto, com merge CAMPO A CAMPO dos metadados:
+     img.metaUpdatedAt            = { label, sourcePage, sourceSite, license,
+                                     artist, attribution }  (ms)
+     img.clinicalContextUpdatedAt = { presentation, patientAge, patientSex,
+                                      notes }               (ms, por subcampo)
+   Carimbo mais novo vence o campo. Limpar um campo GRAVA o carimbo (valor
+   vazio carimbado vence valor antigo). Empate de carimbo -> valor
+   canônico maior (determinístico). Sem carimbo dos dois lados (legado):
+   valor preenchido vence vazio; dois preenchidos diferentes -> no sync
+   (reconcile) a lesão com _userUpdatedAt mais novo, depois lexical; fora do
+   sync o lado-base (comportamento anterior). merge(A,B) == merge(B,A) nos
+   metadados; idempotente. Demais campos (asset, ownership, panels do
+   quadro — um quadro editado vira OUTRO asset —, assignedAt) seguem as
+   regras de antes. Tombstone continua sendo aplicado depois da união (a
+   imagem excluída não volta por metadado mais novo). Só o Salvar (form)
+   e o Concluído (Quiz) carimbam, e só os campos realmente alterados em
+   relação ao que o usuário abriu (rebase no estado atual para o resto).
+   captionOverride/creditOverride da 093b ficam no VÍNCULO, nunca aqui.
+   ============================================================ */
+function imageMetaFields(){
+  return { top: ['label', 'sourcePage', 'sourceSite', 'license', 'artist', 'attribution'], ctx: ['presentation', 'patientAge', 'patientSex', 'notes'] };
+}
+function imageMetaNorm(v){ return (typeof v === 'string' || typeof v === 'number') ? String(v).trim() : ''; }
+function imageMetaTopValue(img, f){ return imageMetaNorm(img && img[f]); }
+function imageMetaCtxValue(img, k){ const c = img && img.clinicalContext; return (c && typeof c === 'object' && !Array.isArray(c)) ? imageMetaNorm(c[k]) : ''; }
+function imageMetaStamp(map, k){ const n = Number(map && typeof map === 'object' ? map[k] : 0); return Number.isFinite(n) && n > 0 ? n : 0; }
+// true = lado A vence o campo. Puro e simétrico (trocar A/B inverte).
+function imageMetaAWins(va, sa, vb, sb, opts){
+  if (sa || sb) {
+    if (sa !== sb) return sa > sb;
+    return va >= vb; // mesmo carimbo: valor canônico maior (igual = indiferente)
+  }
+  if (va === vb) return true;
+  if (!va) return false; // legado: vazio sem carimbo nunca apaga valor preenchido
+  if (!vb) return true;
+  const o = opts || {};
+  if (!o.symmetric) return true; // fora do sync: lado-base (como antes)
+  const ha = Number(o.hintA) || 0, hb = Number(o.hintB) || 0;
+  if (ha !== hb) return ha > hb;
+  return va > vb;
+}
+// Mesma imagem (a = base, b = outro lado) -> NOVO objeto: campos não-meta de
+// `a`; cada metadado do vencedor do campo; carimbos = maior dos dois.
+function mergeImageMetadata(a, b, opts){
+  if (!a || typeof a !== 'object') return b;
+  if (!b || typeof b !== 'object') return a;
+  const F = imageMetaFields();
+  const o = opts || {};
+  const out = Object.assign({}, a);
+  const ma = a.metaUpdatedAt, mb = b.metaUpdatedAt;
+  const meta = {};
+  for (const f of F.top) {
+    const sa = imageMetaStamp(ma, f), sb = imageMetaStamp(mb, f);
+    const win = imageMetaAWins(imageMetaTopValue(a, f), sa, imageMetaTopValue(b, f), sb, o) ? a : b;
+    if (Object.prototype.hasOwnProperty.call(win, f) && win[f] !== undefined) out[f] = win[f]; else delete out[f];
+    if (Math.max(sa, sb)) meta[f] = Math.max(sa, sb);
+  }
+  const ca = a.clinicalContextUpdatedAt, cb = b.clinicalContextUpdatedAt;
+  const ctx = {}, ctxStamps = {};
+  for (const k of F.ctx) {
+    const va = imageMetaCtxValue(a, k), vb = imageMetaCtxValue(b, k);
+    const sa = imageMetaStamp(ca, k), sb = imageMetaStamp(cb, k);
+    const v = imageMetaAWins(va, sa, vb, sb, o) ? va : vb;
+    if (v) ctx[k] = v; // valor normalizado (mesma forma que o Salvar grava — 088)
+    if (Math.max(sa, sb)) ctxStamps[k] = Math.max(sa, sb);
+  }
+  if (Object.keys(ctx).length) out.clinicalContext = ctx; else delete out.clinicalContext;
+  if (Object.keys(meta).length) out.metaUpdatedAt = meta; else delete out.metaUpdatedAt;
+  if (Object.keys(ctxStamps).length) out.clinicalContextUpdatedAt = ctxStamps; else delete out.clinicalContextUpdatedAt;
+  return out;
+}
+// Cópia dos metadados como o usuário os ABRIU (base do "o que mudou").
+function snapshotImageMetaByKey(images){
+  const map = new Map();
+  for (const img of (Array.isArray(images) ? images : [])) {
+    const k = img && typeof stableImageKeyV208 === 'function' ? stableImageKeyV208(img) : '';
+    if (!k || map.has(k)) continue;
+    const F = imageMetaFields();
+    const snap = { top: {}, ctx: {} };
+    F.top.forEach(f => { snap.top[f] = imageMetaTopValue(img, f); });
+    F.ctx.forEach(c => { snap.ctx[c] = imageMetaCtxValue(img, c); });
+    map.set(k, snap);
+  }
+  return map;
+}
+// Salvar/Concluído: carimba SÓ o que o usuário mudou em relação ao que abriu;
+// o que ele não mexeu é rebaseado no estado ATUAL da lesão (valor + carimbo
+// que podem ter chegado de outro PC enquanto a tela estava aberta). Imagem
+// nova nesta edição não recebe carimbo (criação). Puro: devolve cópias.
+function applyImageMetadataEdits(baselineByKey, currentImages, nextImages, now){
+  const t = Number(now) || Date.now();
+  const F = imageMetaFields();
+  const curByKey = new Map();
+  for (const c of (Array.isArray(currentImages) ? currentImages : [])) {
+    const k = c && typeof stableImageKeyV208 === 'function' ? stableImageKeyV208(c) : '';
+    if (k && !curByKey.has(k)) curByKey.set(k, c);
+  }
+  return (Array.isArray(nextImages) ? nextImages : []).map(img => {
+    if (!img || typeof img !== 'object') return img;
+    const k = typeof stableImageKeyV208 === 'function' ? stableImageKeyV208(img) : '';
+    const base = k && baselineByKey && typeof baselineByKey.get === 'function' ? baselineByKey.get(k) : null;
+    if (!base) return img;
+    const cur = curByKey.get(k) || null;
+    const out = Object.assign({}, img);
+    const meta = Object.assign({}, (img.metaUpdatedAt && typeof img.metaUpdatedAt === 'object') ? img.metaUpdatedAt : {});
+    const curMeta = cur && cur.metaUpdatedAt;
+    for (const f of F.top) {
+      if (imageMetaTopValue(img, f) !== base.top[f]) {
+        meta[f] = Math.max(t, Math.max(imageMetaStamp(meta, f), imageMetaStamp(curMeta, f)) + 1); // edição (inclusive limpar)
+        if (!imageMetaTopValue(img, f) && f !== 'label') delete out[f];
+      } else if (cur) {
+        if (Object.prototype.hasOwnProperty.call(cur, f) && cur[f] !== undefined) out[f] = cur[f]; else delete out[f];
+        if (imageMetaStamp(curMeta, f)) meta[f] = imageMetaStamp(curMeta, f); else delete meta[f];
+      }
+    }
+    const ctx = {};
+    const ctxStamps = Object.assign({}, (img.clinicalContextUpdatedAt && typeof img.clinicalContextUpdatedAt === 'object') ? img.clinicalContextUpdatedAt : {});
+    const curCtxStamps = cur && cur.clinicalContextUpdatedAt;
+    for (const c of F.ctx) {
+      let v = imageMetaCtxValue(img, c);
+      if (v !== base.ctx[c]) ctxStamps[c] = Math.max(t, Math.max(imageMetaStamp(ctxStamps, c), imageMetaStamp(curCtxStamps, c)) + 1);
+      else if (cur) {
+        v = imageMetaCtxValue(cur, c);
+        if (imageMetaStamp(curCtxStamps, c)) ctxStamps[c] = imageMetaStamp(curCtxStamps, c); else delete ctxStamps[c];
+      }
+      if (v) ctx[c] = v;
+    }
+    if (Object.keys(ctx).length) out.clinicalContext = ctx; else delete out.clinicalContext;
+    if (Object.keys(meta).length) out.metaUpdatedAt = meta; else delete out.metaUpdatedAt;
+    if (Object.keys(ctxStamps).length) out.clinicalContextUpdatedAt = ctxStamps; else delete out.clinicalContextUpdatedAt;
+    return out;
+  });
+}
+function unionEntryImages(baseImgs, addImgs, targetEntry, conflictSink, sourceLabel, legacyCatalog, metaOpts){
   const targetId = String((targetEntry && targetEntry.id) || '');
   const out = [];
   const seen = new Set();
+  const idxByKey = new Map(); // PROTEÇÃO 092 — onde está a MESMA imagem em `out`
   const pushImg = (img) => {
     const keys = imageIdentityKeys(img);
     if(keys.some(k=>seen.has(k))) return false; // mesmo asset (publicId ou URL)
-    keys.forEach(k=>seen.add(k));
+    keys.forEach(k=>{ seen.add(k); idxByKey.set(k, out.length); });
     out.push(img);
     return true;
   };
@@ -4024,7 +4167,14 @@ function unionEntryImages(baseImgs, addImgs, targetEntry, conflictSink, sourceLa
   for(const img of (Array.isArray(addImgs)?addImgs:[])){
     if(!img) continue;
     const keys = imageIdentityKeys(img);
-    if(keys.some(k=>seen.has(k))) continue;
+    if(keys.some(k=>seen.has(k))){
+      // PROTEÇÃO 092 — MESMA imagem dos dois lados: continua UM objeto, mas
+      // os metadados são mesclados campo a campo (antes: o outro lado era
+      // descartado inteiro e a edição feita nele se perdia).
+      const at = keys.map(k=>idxByKey.get(k)).find(i=>i!==undefined);
+      if(at!==undefined && typeof mergeImageMetadata === 'function') out[at] = mergeImageMetadata(out[at], img, metaOpts);
+      continue;
+    }
     const owner = imageOwnerIdV1(img);
     if(owner && !canChangeImageOwnership(img, targetId, null)){
       // SOMENTE pull remoto (addImgs = remoteEntry.images, sourceLabel
@@ -4039,7 +4189,7 @@ function unionEntryImages(baseImgs, addImgs, targetEntry, conflictSink, sourceLa
         if(!legacyHoldersBuilt){ legacyHoldersBuilt = true; legacyHolders = legacyImageHoldersByKey(legacyCatalog); }
         normalizeAttempt = tryNormalizeLegacyPullImage(img, keys, targetId, legacyHolders, sourceLabel, (targetEntry&&targetEntry.name)||'');
         if(normalizeAttempt.ok){
-          keys.forEach(k=>seen.add(k));
+          keys.forEach(k=>{ seen.add(k); idxByKey.set(k, out.length); });
           out.push(normalizeAttempt.image); // cópia normalizada; o objeto remoto original não é mutado
           continue;
         }
@@ -4048,7 +4198,7 @@ function unionEntryImages(baseImgs, addImgs, targetEntry, conflictSink, sourceLa
       if(conflictSink) conflictSink.push({ stableKey:keys[0], fromLesionId:owner, toLesionId:targetId, lesionName:(targetEntry&&targetEntry.name)||'' });
       continue;
     }
-    keys.forEach(k=>seen.add(k));
+    keys.forEach(k=>{ seen.add(k); idxByKey.set(k, out.length); });
     out.push(img);
   }
   // Produtividade (assignedAt): entre as versões local/remota da mesma imagem
@@ -4102,7 +4252,9 @@ function mergeEntryNonDestructive(localEntry, remoteEntry, legacyCatalog, tombst
   // que existiam só na nuvem.)
   // 072b: imagem remota com etiqueta legada segura é normalizada (só o
   // lesionId) e adotada normalmente; conflito real continua bloqueado.
-  merged.images = unionEntryImages(local.images, remote.images, merged, PULL_IMAGE_OWNERSHIP_CONFLICTS, 'pull', pullCatalog);
+  // PROTEÇÃO 092 — metadados da mesma imagem por campo; no sync (reconcile)
+  // o desempate sem carimbo é simétrico (converge nos dois PCs).
+  merged.images = unionEntryImages(local.images, remote.images, merged, PULL_IMAGE_OWNERSHIP_CONFLICTS, 'pull', pullCatalog, { symmetric: !!preferRemoteWhenUntimed, hintA: lt, hintB: rt });
   // ALTERAÇÃO 079b — achado real (rev26): 57 das 146 divergências eram
   // imagem só-local sendo unida de volta a um remoto já corrigido, sem
   // NENHUMA evidência de edição (lt===0 && rt===0 — entradas herdadas do
@@ -4185,6 +4337,7 @@ function mergeEntryNonDestructive(localEntry, remoteEntry, legacyCatalog, tombst
    o merge não destrutivo (edição mais nova domina). Nunca apaga/move. */
 function mergeEntryForImagePush(localEntry, remoteEntry){
   const merged = mergeEntryNonDestructive(localEntry, remoteEntry);
+  // 092: sem metaOpts = metadados por carimbo; sem carimbo, a base (remoto) como antes
   merged.images = unionEntryImages(remoteEntry.images, localEntry.images, merged, PUSH_IMAGE_OWNERSHIP_CONFLICTS, 'push');
   return merged;
 }
@@ -8429,7 +8582,13 @@ function removeImageFromLesionData(lesion, imageIndex){
    mesma alteração na lesão do Quiz e preserva todos os demais metadados. */
 function updateLesionImageLabel(lesion, imageIndex, label){
   if(!lesion || !Array.isArray(lesion.images) || !lesion.images[imageIndex]) return null;
-  lesion.images[imageIndex].label = String(label||'');
+  const im = lesion.images[imageIndex];
+  if(String(im.label||'') !== String(label||'')){
+    // PROTEÇÃO 092 — carimbo só do campo alterado
+    const prevStamp = Number(im.metaUpdatedAt && im.metaUpdatedAt.label) || 0;
+    im.metaUpdatedAt = { ...(im.metaUpdatedAt && typeof im.metaUpdatedAt === 'object' ? im.metaUpdatedAt : {}), label: Math.max(Date.now(), prevStamp + 1) };
+  }
+  im.label = String(label||'');
   lesion._userUpdatedAt = Date.now();
   return lesion.images[imageIndex];
 }
@@ -13462,9 +13621,11 @@ function openForm(id, opts){
       imgGallery.appendChild(item);
     });
   }
+  let formImageMetaBaseline = new Map(); // PROTEÇÃO 092 — metadados como abertos
   if(existing){
     getEntryImgs(existing).then(imgs=>{
       pendingImgs = imgs.map(i=>({...i, label:[i.modality,i.label].filter(Boolean).join(' ').trim(), source:i.source||'local'}));
+      formImageMetaBaseline = snapshotImageMetaByKey(pendingImgs);
       renderImgGallery();
     });
   }
@@ -13634,6 +13795,9 @@ function openForm(id, opts){
         lesionId:x.lesionId||entryId,
         lesionName:x.lesionName||name
       })).map(withNormalizedImageClinicalContext); // PROTEÇÃO 088 — contexto vazio não gera campo
+      // PROTEÇÃO 092 — carimba só os metadados que o usuário mudou nesta tela;
+      // o resto adota o estado ATUAL da lesão (pode ter vindo de outro PC).
+      remoteImgs = applyImageMetadataEdits(formImageMetaBaseline, existing && Array.isArray(existing.images) ? existing.images : [], remoteImgs, Date.now());
       // Produtividade: carimba assignedAt (ISO) SÓ nas imagens novas
       // confirmadas neste Salvar. Mantidas/históricas ficam como estão —
       // sem timestamp inventado. Falha de upload acima já abortou o save.
@@ -16781,6 +16945,7 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
      Cloudinary e aplica o rascunho à lesão. Esc/clique fora/cancelar descarta
      tudo — a lesão fica exatamente como estava. */
   const draftImgs = (Array.isArray(lesion.images) ? lesion.images : []).map(x=>({...x}));
+  const quizImageMetaBaseline = snapshotImageMetaByKey(draftImgs); // PROTEÇÃO 092
   const draftObjectUrls = new Set();
   function trackDraftObjectUrl(file){ const url=URL.createObjectURL(file); draftObjectUrls.add(url); return url; }
   function revokeDraftObjectUrl(url){ if(url&&draftObjectUrls.has(url)){ try{ URL.revokeObjectURL(url); }catch(_e){} draftObjectUrls.delete(url); } }
@@ -16917,6 +17082,8 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
     // Só agora o rascunho vira estado real da lesão.
     const prevQuizImgs = Array.isArray(lesion.images) ? lesion.images : [];
     lesion.images = draftImgs.map(x=>({...x, lesionId:lesion.id, lesionName:lesion.name}));
+    // PROTEÇÃO 092 — carimba só o que mudou no modal; o resto adota o estado atual
+    lesion.images.splice(0, lesion.images.length, ...applyImageMetadataEdits(quizImageMetaBaseline, prevQuizImgs, lesion.images, Date.now()));
     // ALTERAÇÃO 073 — tombstone de exclusão explícita também no Quiz: o que
     // estava na lesão e sumiu do rascunho confirmado foi removido de
     // propósito. O salvamento real abaixo (dirty+push) leva os tombstones.

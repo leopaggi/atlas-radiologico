@@ -563,14 +563,20 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // em mergeDidacticItems — antes da primeira ancora; +52 entre loadData e o
   // importHandler: botao 🔗 na galeria do detalhe (host re-renderizavel) e
   // do formulario, imageCtx da galeria para o editor do item.
-  assert.equal(recovery.line, 9107);
-  assert.equal(brokenArtifacts.line, 9097);
-  assert.equal(loadData.line, 11658);
+  // +159 nas tres primeiras ancoras / +164 no importHandler (Protecao 092,
+  // 2026-09-26): modulo de merge POR CAMPO dos metadados da mesma imagem
+  // (mergeImageMetadata/applyImageMetadataEdits) antes de unionEntryImages e
+  // a chamada simetrica no pull — antes da primeira ancora; +5 entre loadData
+  // e o importHandler: baseline/rebase no Salvar do formulario e no Concluido
+  // do Quiz e carimbo em updateLesionImageLabel.
+  assert.equal(recovery.line, 9266);
+  assert.equal(brokenArtifacts.line, 9256);
+  assert.equal(loadData.line, 11817);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
   // importHandler; as tres primeiras ancoras nao mudam.
-  assert.equal(importHandler.line, 16036);
+  assert.equal(importHandler.line, 16200);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

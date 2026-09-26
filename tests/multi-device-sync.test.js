@@ -92,7 +92,9 @@ const adoptOldestFn = extractFunction(html, 'adoptOldestAssignedAt');
 const mergeForPushFn = extractFunction(html, 'mergeEntryForImagePush');
 const unionClinicalCasesFn = extractFunction(html, 'unionClinicalCases');
 // PROTEÇÃO 093 — merge por item do conteúdo didático (usado por mergeEntryNonDestructive).
-const didacticFns093 = ['genDidacticId', 'didacticItemTime', 'isDidacticItemVisible', 'sortDidacticItems', 'mergeDidacticItems', 'mergeClinicalCaseLists', 'imageRefTime', 'mergeImageRefLists'].map((n) => extractFunction(html, n).source).join('\n');
+const didacticFns093 = ['genDidacticId', 'didacticItemTime', 'isDidacticItemVisible', 'sortDidacticItems', 'mergeDidacticItems', 'mergeClinicalCaseLists', 'imageRefTime', 'mergeImageRefLists',
+  // PROTEÇÃO 092 — merge por campo dos metadados da mesma imagem (usado por unionEntryImages)
+  'imageMetaFields', 'imageMetaNorm', 'imageMetaTopValue', 'imageMetaCtxValue', 'imageMetaStamp', 'imageMetaAWins', 'mergeImageMetadata'].map((n) => extractFunction(html, n).source).join('\n');
 const clinicalCaseIdentityKeyFn = extractFunction(html, 'clinicalCaseIdentityKey');
 const normalizeExternalTitleFn = extractFunction(html, 'normalizeExternalTitle');
 const imageOwnerIdFn = extractFunction(html, 'imageOwnerIdV1');
@@ -4153,6 +4155,70 @@ test('PROTEÇÃO 093b - vínculo A→B, vínculos concorrentes somam, desvincula
   // imagem continua na galeria, UMA vez (vincular/desvincular nunca duplica nem apaga asset)
   assert.deepEqual(Array.from(cl.images, (x) => x.publicId).sort(), ['atlas-radiologico/p093b-1', 'atlas-radiologico/p093b-2']);
   assert.equal(cl.notes, 'nota do PC B');
+});
+
+// ===========================================================================
+// PROTEÇÃO 092 — metadados da MESMA imagem: merge por campo entre PCs
+// (write/read/reconcile/pull REAIS). As edições gravam valor + carimbo do
+// campo exatamente como o Salvar/Concluído fazem (applyImageMetadataEdits,
+// coberto em image-metadata-sync.test.js).
+// ===========================================================================
+async function editImage092(device, mutate, bumpLesion) {
+  const e = device.context.DATA.find((x) => x.id === 'seed_1');
+  const im = e.images.find((x) => x.publicId === 'atlas-radiologico/p092');
+  mutate(im, e);
+  if (bumpLesion !== false) e._userUpdatedAt = Date.now();
+  await device.context.saveData();
+  await device.context.pushToFirebaseNow();
+}
+const img092Of = (entry) => JSON.parse(JSON.stringify((entry.images || []).filter((x) => x.publicId === 'atlas-radiologico/p092')));
+
+test('PROTEÇÃO 092 - PC A edita label, PC B edita sourcePage/contexto: convergem para os dois; limpeza intencional sincroniza; tombstone vence', async () => {
+  const base = () => makeSeedEntry({ images: [img({ publicId: 'atlas-radiologico/p092', label: 'legenda original', sourcePage: 'https://commons.wikimedia.org/wiki/File:x.png', attribution: 'autor antigo', clinicalContext: { presentation: 'dor abdominal' } })] });
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [base()]);
+  const a = makeDevice(cloud, { seed: [base()] }); await a.boot();
+  const b = makeDevice(cloud, { seed: [base()] }); await b.boot();
+  // A edita label (carimbo só do label)
+  await editImage092(a, (im) => { im.label = 'RM T2 axial — editado no A'; im.metaUpdatedAt = { label: 5000 }; });
+  // B, SEM puxar, edita sourcePage e a idade do contexto clínico e salva
+  await editImage092(b, (im) => {
+    im.sourcePage = 'https://radiopaedia.org/cases/novo'; im.metaUpdatedAt = { sourcePage: 6000 };
+    im.clinicalContext = Object.assign({}, im.clinicalContext, { patientAge: '40' }); im.clinicalContextUpdatedAt = { patientAge: 6000 };
+  });
+  let cl = img092Of(cloudLesion093(cloud));
+  assert.equal(cl.length, 1, 'uma imagem só (sem clone)');
+  assert.equal(cl[0].label, 'RM T2 axial — editado no A', 'o PC B desatualizado NÃO desfez o label do A');
+  assert.equal(cl[0].sourcePage, 'https://radiopaedia.org/cases/novo');
+  assert.deepEqual(cl[0].clinicalContext, { presentation: 'dor abdominal', patientAge: '40' }, 'contexto por subcampo');
+  await a.context.syncFromFirebase();
+  await b.context.syncFromFirebase();
+  for (const [name, dev] of [['A', a], ['B', b]]) {
+    const im = img092Of(dev.context.DATA.find((x) => x.id === 'seed_1'));
+    assert.equal(im.length, 1, name);
+    assert.equal(im[0].label, 'RM T2 axial — editado no A', name + ': label');
+    assert.equal(im[0].sourcePage, 'https://radiopaedia.org/cases/novo', name + ': sourcePage');
+    assert.deepEqual(im[0].metaUpdatedAt, { label: 5000, sourcePage: 6000 }, name + ': carimbos por campo');
+  }
+  // A LIMPA a legenda (intencional); B (sem puxar) edita o crédito (attribution)
+  await editImage092(a, (im) => { im.label = ''; im.metaUpdatedAt = Object.assign({}, im.metaUpdatedAt, { label: 7000 }); });
+  await editImage092(b, (im) => { im.attribution = 'Autor novo (CC-BY)'; im.metaUpdatedAt = Object.assign({}, im.metaUpdatedAt, { attribution: 7100 }); });
+  cl = img092Of(cloudLesion093(cloud));
+  assert.equal(cl[0].label, '', 'limpeza intencional NÃO é desfeita pelo valor antigo do outro PC');
+  assert.equal(cl[0].attribution, 'Autor novo (CC-BY)');
+  // PC desatualizado salva OUTRA coisa na lesão: metadado novo continua
+  await editLesion093(b, (e) => { e.notes = 'nota qualquer do B'; });
+  await a.context.syncFromFirebase();
+  const ea = img092Of(a.context.DATA.find((x) => x.id === 'seed_1'))[0];
+  assert.equal(ea.label, ''); assert.equal(ea.attribution, 'Autor novo (CC-BY)'); assert.equal(ea.sourcePage, 'https://radiopaedia.org/cases/novo');
+  // tombstone: A exclui a imagem; B desatualizado edita o label com carimbo MAIS novo -> não ressuscita
+  const ea2 = a.context.DATA.find((x) => x.id === 'seed_1');
+  await a.context.recordImageTombstone(ea2.images.find((x) => x.publicId === 'atlas-radiologico/p092'), 'seed_1');
+  ea2.images = ea2.images.filter((x) => x.publicId !== 'atlas-radiologico/p092'); ea2._userUpdatedAt = Date.now();
+  await a.context.markSyncDirty(); await a.context.saveData(); await a.context.pushToFirebaseNow();
+  await editImage092(b, (im) => { im.label = 'editado depois da exclusão'; im.metaUpdatedAt = Object.assign({}, im.metaUpdatedAt, { label: 9e12 }); });
+  assert.equal(img092Of(cloudLesion093(cloud)).length, 0, 'imagem excluída não volta por metadado mais novo');
+  assert.equal(img092Of(b.context.DATA.find((x) => x.id === 'seed_1')).length, 0, 'PC B converge para a exclusão');
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');

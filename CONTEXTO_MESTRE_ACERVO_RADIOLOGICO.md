@@ -8,21 +8,21 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
-*Atualizado em 2026-09-26, junto do commit "Protecao 093c: restaura upload somente no salvar".*
+*Atualizado em 2026-09-26, junto do commit "Protecao 092: sincroniza metadados de imagem por campo".*
 
 - **Branch local de trabalho:** `master` (publicação: `git push origin master:main`).
-- **origin/main antes da 093c:** `5e9b59b` (Protecao 093b). **Último commit:** Protecao 093c (código + testes + este checkpoint; hash exato em `git log -1`).
-- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 093c:** 1447 testes · 1439 pass · 3 fail conhecidos · 5 todo (+8 `didactic-pending-images`). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
-  - Medido no ambiente remoto (sem os arquivos protegidos): 1437 · 1402 · 30 · 5 (base `5e9b59b` no mesmo ambiente: 1429 · 1394 · 30 · 5; conjunto de falhas idêntico, arquivo a arquivo). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
+- **origin/main antes da 092:** `3c6afc4` (Protecao 093c). **Último commit:** Protecao 092 (código + testes + este checkpoint; hash exato em `git log -1`).
+- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 092:** 1461 testes · 1453 pass · 3 fail conhecidos · 5 todo (+13 `image-metadata-sync`, +1 `multi-device-sync`). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
+  - Medido no ambiente remoto (sem os arquivos protegidos): 1451 · 1416 · 30 · 5 (base `3c6afc4` no mesmo ambiente: 1437 · 1402 · 30 · 5; conjunto de falhas idêntico, arquivo a arquivo). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
 - **Validação real do usuário após a 091 (navegador):** `LESION_REVISIONS` sincronizou entre navegadores/PCs; as pendências apareceram no Edge; a lógica da 091 funciona; só foram encontrados problemas visuais (contraste/alinhamento) — corrigidos na 091b.
 - **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 091b (só CSS/markup). Nenhuma escrita deliberada nesta tarefa. A 091 não cria campo/documento novo (pendências gerais vivem em `lesionRevisions`, sincronizado desde a 084). A 090 adicionou `reviewProgress` (histórico compacto do Quiz, até 8 tentativas por lesão) e `reviewOverride` (override manual) no documento principal; a 089 adicionou `reviewUpdatedAt` (carimbos de mudança manual do estado de estudo) no documento principal, na próxima publicação real. A 088 adicionou só o campo opcional `clinicalContext` DENTRO do objeto da imagem (viaja nos chunks como qualquer metadado de imagem). A 087 reaproveitou `img.label`/`panels[].seq`; a 086 também não (alerta derivado de `lesionRevisions`). Desde a 085 o documento principal tem `orderUpdatedAt`.
-- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), 088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44), 089 (estado de estudo estável — seção 45), 090 (estado AUTOMÁTICO pelo Quiz + override manual — seção 46; corrige o modelo da 089), 091 (pendências gerais do Atlas na Central de Revisões — seção 47), 091b (ajuste visual após validação real no navegador — seção 48), 091c (fusão clínica controlada de 4 grupos de duplicatas aprovados; mapa `lesionMerges` sincronizado — seção 49), **091d (editar motivo de revisão ativa com histórico, ⚠ clicável, importador externo com nome PT/enTerm/descrição/tags e "✨ Revisar com IA" criando revisão real — seção 50)**, **091e (importações do Radiopaedia reutilizam a aba já aberta do Atlas — seção 51)**, **091f (título do Radiopaedia sem branding + alias Paraovarian cyst; "✓ Marcar como resolvida" — seção 52)**, **091g (reuso da aba do Atlas via canal: ponte do userscript + BroadcastChannel; alvo nomeado vira fallback — seção 53)**, userscript 1.4.1/1.4.2 (www + regressão de boot — seção 54), **093 (conteúdo didático por lesão: casos manuais, sinais radiológicos, classificações e esquemas — seção 55)**, **090b (status AUTO baseado exclusivamente em tentativas reais do Quiz — seção 56)**, **093b (vínculos de imagens da galeria com casos clínicos, sinais e classificações — `imageRefs`; seção 57)**, **093c (restaura upload somente no Salvar para imagens didáticas — seção 58)**.
-- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087); `img.clinicalContext` é pré-diagnóstico, digitado pelo usuário, visível no Quiz antes e depois da resposta — a descrição (`label`) continua só depois (088); REVIEW (Não revisado/Revisando/Dominado) é AUTOMÁTICO pelo histórico do Quiz (`REVIEW_PROGRESS`, regra determinística `replayAutoReview`) salvo override MANUAL explícito (`REVIEW_OVERRIDE`), que o Quiz nunca sobrescreve; boot/render/pull não mudam nada sem dado novo; conflitos por recência, nunca Math.max (089/090); pendência GERAL (`scope:'global'`, `lesionId:null`) é só um pedido: nunca aplica nada em DATA (`global_review_has_no_direct_target`), nunca gera ⚠ em lesão, conclusão é humana (091)**. **091c:** id presente em `LESION_MERGES` nunca volta (nem pelo SEED, nem por PC desatualizado, nem por backup antigo); o mapa só cresce; a única exceção de ownership de imagem é o fold desse mapa (imagens marcadas com `mergedFromLesionId`). **091d:** o motivo (`requestText`) de revisão ativa é editável com `requestHistory` (união no merge) e carimbo próprio `requestTextUpdatedAt` (editar texto nunca mexe em `updatedAt`/status/🔔); não há IA integrada — "✨ Revisar com IA" só cria revisão na Central (ponte manual). **091f:** fusão clínica (091c) NÃO conclui revisão — ela só é redirecionada ao keeper; concluir é sempre ação humana ("✓ Marcar como resolvida" → `accepted`, sem tocar DATA). **093:** `clinicalCases`/`radiologicSigns`/`classificationSchemes` — itens com `id` estável, `order`, `createdAt`/`updatedAt` e exclusão por tombstone `deletedAt` (nunca apagar do array); merge por item; sinais/classificações NUNCA renderizados no Quiz antes da resposta; imagens didáticas antigas (formato 093) ficam dentro do item até o Salvar do editor as migrar. **090b:** estado AUTO = derivado SÓ de tentativas reais (`REVIEW_PROGRESS[id].a`, criadas só por `recordReviewAttempt`); sem tentativa real = Não revisado; `REVIEW` é cache derivado (recalculado no boot/pull/escrita), nunca fonte de verdade para o AUTO. **093b:** `entry.images` é a fonte ÚNICA do asset; casos/sinais/classificações guardam só `imageRefs` (`imageId` = `stableImageKeyV208`, a mesma chave dos tombstones), com merge POR vínculo e desvincular = tombstone `deletedAt` do vínculo; vincular nunca muda `updatedAt` do item nem `_userUpdatedAt` da lesão, nunca envia/copia asset e nunca acontece sem clique; imagem principal excluída = vínculo inerte (nunca ressuscita a imagem). **093c:** NENHUMA imagem vai ao Cloudinary antes do Salvar do formulário — nem as de sinal/classificação (arquivo/Ctrl+V = `buildPendingImage` em `pendingImgs`, vínculo com chave temporária `pending:…` trocada pela chave real só após o upload; `pending:` nunca é persistido).
+- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), 088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44), 089 (estado de estudo estável — seção 45), 090 (estado AUTOMÁTICO pelo Quiz + override manual — seção 46; corrige o modelo da 089), 091 (pendências gerais do Atlas na Central de Revisões — seção 47), 091b (ajuste visual após validação real no navegador — seção 48), 091c (fusão clínica controlada de 4 grupos de duplicatas aprovados; mapa `lesionMerges` sincronizado — seção 49), **091d (editar motivo de revisão ativa com histórico, ⚠ clicável, importador externo com nome PT/enTerm/descrição/tags e "✨ Revisar com IA" criando revisão real — seção 50)**, **091e (importações do Radiopaedia reutilizam a aba já aberta do Atlas — seção 51)**, **091f (título do Radiopaedia sem branding + alias Paraovarian cyst; "✓ Marcar como resolvida" — seção 52)**, **091g (reuso da aba do Atlas via canal: ponte do userscript + BroadcastChannel; alvo nomeado vira fallback — seção 53)**, userscript 1.4.1/1.4.2 (www + regressão de boot — seção 54), **093 (conteúdo didático por lesão: casos manuais, sinais radiológicos, classificações e esquemas — seção 55)**, **090b (status AUTO baseado exclusivamente em tentativas reais do Quiz — seção 56)**, **093b (vínculos de imagens da galeria com casos clínicos, sinais e classificações — `imageRefs`; seção 57)**, **093c (restaura upload somente no Salvar para imagens didáticas — seção 58)**, **092 (merge de metadados da mesma imagem por campo entre PCs — seção 59)**.
+- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087); `img.clinicalContext` é pré-diagnóstico, digitado pelo usuário, visível no Quiz antes e depois da resposta — a descrição (`label`) continua só depois (088); REVIEW (Não revisado/Revisando/Dominado) é AUTOMÁTICO pelo histórico do Quiz (`REVIEW_PROGRESS`, regra determinística `replayAutoReview`) salvo override MANUAL explícito (`REVIEW_OVERRIDE`), que o Quiz nunca sobrescreve; boot/render/pull não mudam nada sem dado novo; conflitos por recência, nunca Math.max (089/090); pendência GERAL (`scope:'global'`, `lesionId:null`) é só um pedido: nunca aplica nada em DATA (`global_review_has_no_direct_target`), nunca gera ⚠ em lesão, conclusão é humana (091)**. **091c:** id presente em `LESION_MERGES` nunca volta (nem pelo SEED, nem por PC desatualizado, nem por backup antigo); o mapa só cresce; a única exceção de ownership de imagem é o fold desse mapa (imagens marcadas com `mergedFromLesionId`). **091d:** o motivo (`requestText`) de revisão ativa é editável com `requestHistory` (união no merge) e carimbo próprio `requestTextUpdatedAt` (editar texto nunca mexe em `updatedAt`/status/🔔); não há IA integrada — "✨ Revisar com IA" só cria revisão na Central (ponte manual). **091f:** fusão clínica (091c) NÃO conclui revisão — ela só é redirecionada ao keeper; concluir é sempre ação humana ("✓ Marcar como resolvida" → `accepted`, sem tocar DATA). **093:** `clinicalCases`/`radiologicSigns`/`classificationSchemes` — itens com `id` estável, `order`, `createdAt`/`updatedAt` e exclusão por tombstone `deletedAt` (nunca apagar do array); merge por item; sinais/classificações NUNCA renderizados no Quiz antes da resposta; imagens didáticas antigas (formato 093) ficam dentro do item até o Salvar do editor as migrar. **090b:** estado AUTO = derivado SÓ de tentativas reais (`REVIEW_PROGRESS[id].a`, criadas só por `recordReviewAttempt`); sem tentativa real = Não revisado; `REVIEW` é cache derivado (recalculado no boot/pull/escrita), nunca fonte de verdade para o AUTO. **093b:** `entry.images` é a fonte ÚNICA do asset; casos/sinais/classificações guardam só `imageRefs` (`imageId` = `stableImageKeyV208`, a mesma chave dos tombstones), com merge POR vínculo e desvincular = tombstone `deletedAt` do vínculo; vincular nunca muda `updatedAt` do item nem `_userUpdatedAt` da lesão, nunca envia/copia asset e nunca acontece sem clique; imagem principal excluída = vínculo inerte (nunca ressuscita a imagem). **093c:** NENHUMA imagem vai ao Cloudinary antes do Salvar do formulário — nem as de sinal/classificação (arquivo/Ctrl+V = `buildPendingImage` em `pendingImgs`, vínculo com chave temporária `pending:…` trocada pela chave real só após o upload; `pending:` nunca é persistido). **092:** a MESMA imagem (imageIdentityKeys) é sempre UM objeto; seus metadados (`label`, `sourcePage`, `sourceSite`, `license`, `artist`, `attribution` em `metaUpdatedAt`; subcampos de `clinicalContext` em `clinicalContextUpdatedAt`) fazem merge POR CAMPO pelo carimbo; limpar grava carimbo; vazio legado nunca apaga preenchido; só Salvar/Concluído carimbam, e só os campos alterados em relação ao que foi aberto (rebase no estado atual); tombstone da imagem vence qualquer metadado.
 - **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 091b. Não restaurar sem decisão explícita do usuário.
 - **Passo manual pós-deploy (085):** ordens personalizadas feitas ANTES da 085 não têm carimbo. No PC que tem a ordem CORRETA, fazer uma reordenação qualquer (ex.: descer uma seção e subir de volta; idem um sítio em cada seção personalizada) — isso carimba e publica. Depois abrir o outro PC: ordem default/automática cede para a da nuvem sozinha. (Revisões pré-084: mesma lógica, ver seção 40.)
 - **Passo manual pendente (091c):** a fusão NÃO foi executada no ambiente remoto (sem acesso aos dados reais). No navegador com os dados reais: 💾 exportar backup JSON → Ferramentas avançadas → "🧬 fusões clínicas aprovadas" → conferir o relatório (ids reais, keeper, motivo) → "Fundir". Depois abrir o outro PC e conferir que ele converge sozinho.
 - **Passo manual (091e/091f/091g):** atualizar o userscript no Tampermonkey para a **v1.4.2** (`tools/radiopaedia-to-atlas.user.js`) e ACEITAR as novas permissões (`@match` do Atlas e de www.radiopaedia.org + `GM_setValue`/`GM_addValueChangeListener`/`GM_removeValueChangeListener`) — sem isso o reuso da aba não funciona (cai no fallback que abre aba). Título sem branding (091f) também é limpo pelo Atlas ao receber. Conferir no DevTools do Radiopaedia a linha `[Atlas userscript 1.4.2] ativo`.
-- **Próximo passo exato:** executar no navegador a fusão da 091c (passo manual acima); conferir os vínculos 093b no navegador real (🔗 na galeria do detalhe/formulário; `auditDidacticImagesNow()` no console mostra se há imagens no formato 093 a migrar); depois Proteção 092 (sync de metadados de imagens entre PCs — legendas/overrides dos vínculos 093b já têm carimbo próprio).
+- **Próximo passo exato:** executar no navegador a fusão da 091c (passo manual acima); conferir os vínculos 093b/093c no navegador real (`auditDidacticImagesNow()` no console); validar a 092 com os dois PCs reais (editar legenda num e contexto clínico no outro, sincronizar e conferir os dois). Observação da auditoria 092 (não alterada): o Salvar do formulário substitui `entry.images` pela galeria da tela — imagem que CHEGOU de outro PC enquanto o formulário estava aberto (com imagens alteradas) não está na galeria da tela e é tratada como removida; avaliar numa proteção própria.
 
 ## BACKLOG
 
@@ -2868,4 +2868,116 @@ formulário, em modo não diferido, continua como antes.)
   imagem existente/URL do mesmo asset sem novo upload, nenhum
   `pending:`/`blob:` persistido; sem erros de página.
 - Suíte (remoto): 1437 · 1402 · 30 · 5 (base 1429 · 1394 · 30 · 5; mesmas
+  falhas).
+
+## 59. Proteção 092 — merge de metadata de imagem por campo (2026-09-26)
+
+### Causa raiz (auditada)
+`unionEntryImages` deduplica pela identidade estável e, quando o MESMO
+asset existe dos dois lados, mantinha o objeto INTEIRO do lado-base e
+descartava o outro. No pull e no reconcile-before-push o lado-base é o PC
+LOCAL (`mergeEntryNonDestructive(local, remote)` →
+`unionEntryImages(local.images, remote.images)`). Consequência: a legenda
+editada no PC A era desfeita quando o PC B (desatualizado) salvava QUALQUER
+coisa na lesão — o reconcile do B mantinha o label antigo e o publicava
+(o último a enviar vencia a imagem inteira). O mesmo valia para o contexto
+clínico (088), que era substituído como objeto inteiro. Além disso, o
+Salvar do formulário regravava os metadados da tela aberta, revertendo
+metadado que tivesse chegado de outro PC enquanto a tela estava aberta.
+
+### Schema real auditado
+- Imagem principal (`entry.images[]`): `data`, `thumb`, `source`,
+  `publicId`, `assetId`, `width`, `height`, `format`, `bytes`,
+  `cloudinaryContext`, `lesionId`, `lesionName`, `assignedAt`,
+  `mergedFromLesionId` (091c), `label` (editável), `clinicalContext`
+  `{presentation, patientAge, patientSex, notes}` (088, editável),
+  metadados do Commons `sourcePage`, `sourceSite`, `license`, `artist`,
+  `attribution` (gravados na importação), `panels` (quadro).
+- NÃO existem `caption`/`credit` na imagem principal: esses nomes só existem
+  no vínculo 093b (`captionOverride`/`creditOverride`) e nas imagens
+  didáticas antigas da 093. Nada foi inventado.
+- `sourcePage` já existe (Commons), mas sem editor na árvore. O editor por
+  imagem está só no stash@{0} (lido somente, sem aplicar); se for aprovado
+  no futuro, ele já nasce protegido pelo carimbo `metaUpdatedAt.sourcePage`.
+- Quadro: editar um quadro gera OUTRO asset (novo upload), então os
+  `panels` nunca divergem para o mesmo asset e não há merge por painel. A
+  ordem das imagens não tem editor (só incluir/remover) e continua vindo
+  do lado-base.
+
+### Timestamps por campo
+- `img.metaUpdatedAt = { label, sourcePage, sourceSite, license, artist,
+  attribution }` (ms; só os campos já carimbados).
+- `img.clinicalContextUpdatedAt = { presentation, patientAge, patientSex,
+  notes }` (por subcampo).
+- Quem carimba: Salvar do formulário e Concluído do modal de imagens do
+  Quiz (`applyImageMetadataEdits`, contra a foto `snapshotImageMetaByKey`
+  tirada ao abrir) e `updateLesionImageLabel`. Só os campos realmente
+  alterados em relação ao que foi aberto ganham carimbo. O resto adota o
+  valor e o carimbo ATUAIS da lesão (rebase), então a tela desatualizada
+  não reverte metadado novo. Imagem nova não recebe carimbo (criação).
+
+### Algoritmo (`mergeImageMetadata`, chamado por `unionEntryImages`)
+Para cada campo (e cada subcampo do contexto):
+1. Se algum lado tem carimbo, vence o maior. Com carimbo igual, vence o valor
+   canônico maior (determinístico).
+2. Sem carimbo dos dois lados (legado):
+   - valor igual → igual;
+   - vazio nunca vence preenchido;
+   - dois preenchidos diferentes → no sync (reconcile, modo simétrico) vence
+     a lesão com `_userUpdatedAt` mais novo e, em empate, a ordem lexical;
+     fora do sync (ferramenta manual de push) fica o lado-base, como antes.
+3. O carimbo resultante é o maior dos dois.
+
+Propriedades:
+- merge(A,B) == merge(B,A) nos metadados, idempotente, e 3 PCs convergem em
+  qualquer ordem.
+- Os campos não-meta seguem as regras de antes (asset e ownership do
+  lado-base; `assignedAt` = o mais antigo).
+- Continua UMA imagem: nunca clona.
+
+### Limpeza intencional
+Limpar um campo no Salvar grava o carimbo com valor vazio (label `''`,
+subcampo do contexto removido). O vazio carimbado vence o valor antigo do
+outro PC, então a limpeza não volta.
+
+### Tombstone
+`applyImageTombstonesToList` continua sendo aplicado DEPOIS da união e do merge
+de metadados. Imagem excluída não ressuscita, mesmo com metadado mais novo
+num PC desatualizado.
+
+### Compatibilidade legado
+Sem migração nem carimbo inventado. Dados antigos sem carimbo continuam
+válidos. Imagens idênticas saem idênticas (nenhum campo novo). Harness sem
+as funções novas: `unionEntryImages` testa `typeof mergeImageMetadata`.
+
+### Relação com imageRefs (093b)
+O vínculo continua apontando para a MESMA imagem mesclada.
+`captionOverride`/`creditOverride` vivem no vínculo e nunca entram nem
+alteram os metadados principais.
+
+### Arquivos / testes
+- `index.html`
+- `tests/image-metadata-sync.test.js` (novo, 13 testes cobrindo os 20
+  itens).
+- `multi-device-sync` (+1 cenário real A↔B, que falha sem o merge por
+  campo):
+  1. PC A edita o label; PC B, sem puxar, edita sourcePage + idade → a
+     nuvem e os dois PCs ficam com os dois.
+  2. PC A limpa a legenda; PC B edita o crédito (`attribution`) → legenda
+     vazia + crédito novo.
+  3. PC B desatualizado salva notas → nada é revertido.
+  4. Tombstone vence metadado mais novo.
+- Listas de funções dos harnesses (`multi-device-sync`, `device-bootstrap`).
+- Âncoras de `critical-flows` (+159/+159/+159/+164).
+- Smoke no Chromium com 2 perfis isolados sincronizando pelo
+  `reconcileStateWithRemote` real:
+  1. A edita a legenda pelo formulário, B edita idade e apresentação → os
+     dois convergem.
+  2. A limpa a legenda, B edita observações e depois as notas da lesão →
+     legenda vazia nos dois, contexto com as 3 edições, notas do B.
+  3. sourcePage, attribution e o painel do quadro foram preservados.
+  4. Nenhum erro de página.
+  5. sourcePage e attribution não têm editor na tela: foram verificados
+     como preservação.
+- Suíte (remoto): 1451 · 1416 · 30 · 5 (base 1437 · 1402 · 30 · 5; mesmas
   falhas).
