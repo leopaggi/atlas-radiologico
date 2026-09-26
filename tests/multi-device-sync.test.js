@@ -153,6 +153,8 @@ const reviewFns089 = ['normalizeReviewStamps', 'loadReviewStamps', 'saveReviewSt
   'ensureReviewProgressBase', 'recordReviewAttempt', 'gradeReviewAttempt', 'getReviewStateExplanation',
   'loadReviewProgressState', 'saveReviewProgressState', 'stampRestoredReviewOverrides', 'setReviewAuto', 'markLesionForReviewAgain']
   .map((n) => extractFunction(html, n).source).join('\n');
+// PROTEÇÃO 091c — mapa de fusão clínica (módulo real: normalize/merge/fold).
+const lesionMergesModule091c = html.slice(html.indexOf("const LESION_MERGES_KEY = 'atlas:lesionMerges';"), html.indexOf('/* Plano APROVADO pelo usuário (091c).'));
 // PROTEÇÃO 085 — ordem de seções/sítios com carimbo de reordenação manual.
 const orderFns085 = ['normalizeOrderStamps', 'loadOrderStamps', 'saveOrderStamps', 'markSectionOrderManual',
   'markSiteOrderManual', 'markRestoredOrderManual', 'dedupeOrderList', 'isAutoSectionOrder', 'isAutoSiteList',
@@ -443,6 +445,9 @@ function makeDevice(cloud, { seed = [] } = {}) {
     const REVIEW_PROGRESS_KEY = 'atlas:reviewProgress'; const REVIEW_OVERRIDE_KEY = 'atlas:reviewOverride'; const REVIEW_ATTEMPTS_MAX = 8;
     const REVIEW_LABELS = {0:'Não revisado',1:'Revisando',2:'Dominado'};
     ${reviewFns089}
+    ${lesionMergesModule091c}
+    function __getLesionMerges091c(){ return LESION_MERGES; }
+    function __setLesionMerges091c(v){ LESION_MERGES = v; }
     let lastWriteStaleImagesBlocked = 0;
     ${gateStaleImagesFn.source}
     ${writeShardedStateFn.source}
@@ -3906,6 +3911,104 @@ test('PROTEÇÃO 091 - pendência geral criada no PC A chega ao PC B (scope/cate
   await b.context.pushToFirebaseNow();
   await a.context.syncFromFirebase();
   assert.equal(a.context.LESION_REVISIONS[g.review.id].status, 'accepted');
+});
+
+// ===========================================================================
+// PROTEÇÃO 091c — mapa de fusão LESION_MERGES entre PCs (write/read/
+// reconcile/pull REAIS): PC antigo converge e o id fundido nunca ressuscita.
+// ===========================================================================
+function entries091c() {
+  return [
+    makeSeedEntry({ id: 'seed_1', name: 'Metástases hepáticas', images: [img({ assetId: 'K1', publicId: 'atlas-radiologico/k1', lesionId: 'seed_1', lesionName: 'Metástases hepáticas' })], tags: ['a'] }),
+    makeSeedEntry({ id: 'seed_2', name: 'Metástase hepática', images: [], tags: ['b'], links: [{ label: 'x', url: 'https://x/1' }] }),
+    makeSeedEntry({ id: 'seed_3', name: 'Outra lesão', images: [] })
+  ];
+}
+async function mergeOnA091c(a) {
+  const entries = { seed_2: { into: 'seed_1', at: 1700000000000, group: 'metastases-hepaticas', finalName: 'Metástases hepáticas' } };
+  a.context.__setLesionMerges091c(a.context.mergeLesionMergeMaps(a.context.__getLesionMerges091c(), entries));
+  a.context.foldLesionMergesIntoState(a.context.lesionMergeGlobalState(), entries, { explicit: true });
+  await a.context.saveData();
+  await a.context.pushToFirebaseNow();
+}
+const cloudIds091c = (cloud) => Array.from(cloud.peekChunkItems(0), (x) => x.id).sort();
+
+test('PROTEÇÃO 091c - PC A funde; nuvem recebe o mapa e perde o id fundido; PC B ANTIGO converge no pull (REVIEW/SRS/revisões redirecionados)', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, entries091c());
+  const a = makeDevice(cloud, { seed: entries091c() }); await a.boot();
+  const b = makeDevice(cloud, { seed: entries091c() }); await b.boot();
+  // PC B tem progresso/revisão no id que será fundido (dado local antigo)
+  b.context.REVIEW.seed_2 = 2; b.context.SRS.seed_2 = { ef: 2.5, updatedAt: 5 };
+  b.context.LESION_REVISIONS.R1 = { id: 'R1', lesionId: 'seed_2', status: 'pending', createdAt: 1, updatedAt: 1, history: [] };
+  await mergeOnA091c(a);
+  assert.deepEqual(cloudIds091c(cloud), ['seed_1', 'seed_3']);
+  assert.deepEqual(Object.keys(cloud.peekMeta().lesionMerges), ['seed_2']);
+  await b.context.syncFromFirebase();
+  const ids = Array.from(b.context.DATA, (e) => e.id).sort();
+  assert.deepEqual(ids, ['seed_1', 'seed_3'], 'PC antigo converge: id fundido some');
+  assert.deepEqual(Object.keys(b.context.__getLesionMerges091c()), ['seed_2']);
+  assert.equal(b.context.REVIEW.seed_2, undefined);
+  assert.equal(b.context.REVIEW.seed_1, 2, 'estado de estudo do id fundido vai para o keeper');
+  assert.equal(b.context.SRS.seed_2, undefined);
+  assert.ok(b.context.SRS.seed_1);
+  assert.equal(b.context.LESION_REVISIONS.R1.lesionId, 'seed_1', 'revisão redirecionada');
+  assert.ok(await b.context.storage.get('atlas:lesionMerges'), 'mapa persistido localmente');
+  // B publica (ação real): nuvem continua sem o id fundido e com o progresso
+  b.context.markSyncDirty();
+  await b.context.pushToFirebaseNow();
+  assert.deepEqual(cloudIds091c(cloud), ['seed_1', 'seed_3'], 'PC antigo nunca ressuscita o id fundido');
+  assert.equal(cloud.peekMeta().review.seed_2, undefined);
+});
+
+test('PROTEÇÃO 091c - escrita sem reconcile (forceThisDeviceToCloud) de um PC antigo: a transação aplica o mapa remoto e NÃO grava o id fundido', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, entries091c());
+  const a = makeDevice(cloud, { seed: entries091c() }); await a.boot();
+  const b = makeDevice(cloud, { seed: entries091c() }); await b.boot();
+  await mergeOnA091c(a);
+  await b.context.forceThisDeviceToCloud();
+  assert.deepEqual(cloudIds091c(cloud), ['seed_1', 'seed_3']);
+  assert.deepEqual(Object.keys(cloud.peekMeta().lesionMerges), ['seed_2'], 'mapa remoto nunca encolhe');
+  const keeper = Array.from(cloud.peekChunkItems(0)).find((x) => x.id === 'seed_1');
+  assert.deepEqual(Array.from(keeper.images, (i) => i.assetId), ['K1'], 'imagens do keeper intactas');
+});
+
+test('PROTEÇÃO 091c - PC antigo gravou REVIEW/revisão do id fundido na nuvem ANTES da fusão: a escrita do PC A não devolve essas chaves à nuvem', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, entries091c());
+  const a = makeDevice(cloud, { seed: entries091c() }); await a.boot();
+  const b = makeDevice(cloud, { seed: entries091c() }); await b.boot();
+  b.context.REVIEW.seed_2 = 2;
+  b.context.LESION_REVISIONS.R9 = { id: 'R9', lesionId: 'seed_2', status: 'pending', createdAt: 1, updatedAt: 1, history: [] };
+  b.context.markSyncDirty();
+  await b.context.pushToFirebaseNow();
+  assert.equal(cloud.peekMeta().review.seed_2, 2, 'pré-condição: nuvem tem a chave do id que será fundido');
+  // A funde SEM pull (escrita direta pela transação)
+  const entries = { seed_2: { into: 'seed_1', at: 1700000000000, group: 'metastases-hepaticas', finalName: 'Metástases hepáticas' } };
+  a.context.__setLesionMerges091c(entries);
+  a.context.foldLesionMergesIntoState(a.context.lesionMergeGlobalState(), entries, { explicit: true });
+  await a.context.forceThisDeviceToCloud();
+  const meta = cloud.peekMeta();
+  assert.equal(Object.prototype.hasOwnProperty.call(meta.review, 'seed_2'), false, 'sem chave órfã no REVIEW da nuvem');
+  assert.equal(meta.review.seed_1, 2, 'estado de estudo do PC antigo chega ao keeper');
+  assert.equal(meta.lesionRevisions.R9.lesionId, 'seed_1', 'revisão remota redirecionada');
+  assert.deepEqual(cloudIds091c(cloud), ['seed_1', 'seed_3']);
+});
+
+test('PROTEÇÃO 091c - F5 / reload no PC B mantém a convergência; boot sem mapa não altera nada', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, entries091c());
+  const plainDev = makeDevice(cloud, { seed: entries091c() }); await plainDev.boot();
+  assert.deepEqual(Array.from(plainDev.context.DATA, (e) => e.id).sort(), ['seed_1', 'seed_2', 'seed_3'], 'sem mapa: nada muda');
+  assert.equal(plainDev.context.syncDirty, false);
+  const a = makeDevice(cloud, { seed: entries091c() }); await a.boot();
+  await mergeOnA091c(a);
+  const b = makeDevice(cloud, { seed: entries091c() }); await b.boot();
+  assert.deepEqual(Array.from(b.context.DATA, (e) => e.id).sort(), ['seed_1', 'seed_3']);
+  const rev = cloud.peekRevision();
+  await b.context.syncFromFirebase();
+  assert.equal(cloud.peekRevision(), rev, 'pull idempotente não gasta escrita');
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');

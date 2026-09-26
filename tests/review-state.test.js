@@ -211,7 +211,7 @@ test('089: restauração/importação explícita carimba o estado restaurado (va
 test('089 PIPELINE: write (com merge na transação), read, reconcile, no-op, pull, persist e adoção de PC novo usam os carimbos', () => {
   const w = extractFunction(html, 'writeShardedState');
   assert.match(w, /reviewUpdatedAt: normalizeReviewStamps\(quarantineIndexedByLesionId\(REVIEW_STAMPS\)\)/);
-  assert.match(w, /const writeReview = mergeReviewByRecency\(metaPayloadBase\.review, remoteMeta\.review, metaPayloadBase\.reviewUpdatedAt, remoteMeta\.reviewUpdatedAt\);/);
+  assert.match(w, /const writeReview = mergeReviewByRecency\((?:metaPayloadBase|txBase)\.review, remoteMeta\.review, (?:metaPayloadBase|txBase)\.reviewUpdatedAt, remoteMeta\.reviewUpdatedAt\);/);
   assert.match(extractFunction(html, 'readShardedState'), /reviewUpdatedAt: normalizeReviewStamps\(meta\.reviewUpdatedAt\)/);
   const rec = extractFunction(html, 'reconcileStateWithRemote');
   assert.match(rec, /mergeReviewByRecency\(REVIEW, remote && remote\.review, REVIEW_STAMPS, remote && remote\.reviewUpdatedAt\)/);

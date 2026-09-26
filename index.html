@@ -1738,6 +1738,7 @@ body{
         <button class="foot-btn" id="btn-sync-from-cloud" title="Traz o estado da nuvem para este dispositivo (merge não destrutivo, com confirmação e snapshot antes).">⬇ atualizar deste backup/nuvem<br><span class="foot-btn-sub">traz o estado da nuvem para este dispositivo — ação explícita, com confirmação</span></button>
         <button class="foot-btn" id="btn-system-diagnostic" title="Gera um relatório de texto (armazenamento, duplicatas, imagens, sincronização) pra copiar e enviar se algo der errado">🩺 diagnóstico do sistema<br><span class="foot-btn-sub">gera um relatório para copiar e enviar — não altera nada</span></button>
         <button class="foot-btn" id="btn-audit-images" title="Verifica se cada imagem está anexada à lesão certa, usando a etiqueta guardada na própria imagem">🔍 auditar vínculo de imagens<br><span class="foot-btn-sub">confere se as imagens continuam associadas às lesões corretas — não altera nada</span></button>
+        <button class="foot-btn" id="btn-clinical-merges-091c" title="Fusão controlada dos 4 grupos de duplicatas clínicas APROVADOS pelo usuário. Mostra o relatório com os dados reais antes; exige backup recente e cria snapshot.">🧬 fusões clínicas aprovadas<br><span class="foot-btn-sub">relatório antes — só funde após backup + confirmação</span></button>
         <button class="foot-btn" id="btn-classification-audit" title="Compara a classificação de cada lesão com o SEED pela identidade (seção+sítio+nome) e aponta as inválidas; corrigir exige confirmação e cria snapshot">📋 auditar classificações<br><span class="foot-btn-sub">aponta classificações inválidas — não altera nada até você confirmar</span></button>
       </div>
     </div>
@@ -2183,6 +2184,7 @@ async function writeShardedState(ms=15000){
   // Zera IMEDIATAMENTE — nunca pode vazar pra uma escrita futura não
   // precedida por um reconcile fresco (ex.: syncThisDeviceToCloud/
   // forceThisDeviceToCloud, que não passam por reconcileBeforePush).
+  try{ foldLesionMergesIntoGlobals(); }catch(_e){} // PROTEÇÃO 091c — converge antes de filtrar
   const imageExclusionsById = pendingWriteImageExclusionsById;
   pendingWriteImageExclusionsById = null;
   const cleanData = stripUndefinedDeep(DATA.filter(e => e && !isQuarantinedSeedId(e.id)).map(e=>{
@@ -2219,6 +2221,7 @@ async function writeShardedState(ms=15000){
     // principal (mesma transação/revisão); unida ao remoto dentro da
     // transação abaixo, então nenhum caminho de escrita apaga revisão alheia.
     lesionRevisions: stripUndefinedDeep(LESION_REVISIONS || {}),
+    lesionMerges: normalizeLesionMerges(LESION_MERGES), // PROTEÇÃO 091c
     chunkCount: chunks.length,
     stateSchemaVersion: 4, // v4 = estado dividido em pedaços (chunks)
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -2245,7 +2248,7 @@ async function writeShardedState(ms=15000){
       // Não depende de nenhum reconcile anterior nem de variável global
       // transitória: vale para TODO caminho (push, debounce, editor,
       // manual, force, trailing push, retry de conflito).
-      const remoteMeta = metaSnap.exists ? (metaSnap.data()||{}) : {};
+      let remoteMeta = metaSnap.exists ? (metaSnap.data()||{}) : {}; // let: 091c aplica o mapa numa cópia
       const remoteChunkCount = Number(remoteMeta.chunkCount)||0;
       let remoteData = [];
       if(remoteChunkCount > 0){
@@ -2257,18 +2260,42 @@ async function writeShardedState(ms=15000){
       }else if(Array.isArray(remoteMeta.data)){
         remoteData = remoteMeta.data;
       }
+      // PROTEÇÃO 091c — mapa de fusão: união local ∪ remoto e aplicado ao
+      // payload E à base remota DENTRO da transação (PC desatualizado nunca
+      // grava id fundido; imagens movidas continuam passando pelo gate).
+      const writeMerges = mergeLesionMergeMaps(metaPayloadBase.lesionMerges, remoteMeta.lesionMerges);
+      let txData = cleanData, txBase = metaPayloadBase, txPending = pendingAddsSnapshot;
+      if(Object.keys(writeMerges).length){
+        const clone = v => JSON.parse(JSON.stringify(v || {}));
+        const st = { data: JSON.parse(JSON.stringify(cleanData)), review: clone(metaPayloadBase.review), reviewStamps: clone(metaPayloadBase.reviewUpdatedAt),
+          reviewProgress: clone(metaPayloadBase.reviewProgress), reviewOverride: clone(metaPayloadBase.reviewOverride), srs: clone(metaPayloadBase.srs),
+          lesionRevisions: clone(metaPayloadBase.lesionRevisions), pendingAdds: clone(pendingAddsSnapshot) };
+        if(foldLesionMergesIntoState(st, writeMerges).changed){
+          txData = st.data; txPending = st.pendingAdds;
+          txBase = { ...metaPayloadBase, review: st.review, reviewUpdatedAt: st.reviewStamps, reviewProgress: st.reviewProgress, reviewOverride: st.reviewOverride, srs: st.srs, lesionRevisions: st.lesionRevisions };
+        }
+        const rst = { data: JSON.parse(JSON.stringify(remoteData)) };
+        if(foldLesionMergesIntoState(rst, writeMerges).changed) remoteData = rst.data;
+        // meta remoto (cópia): chaves de id fundido escritas por PC antigo
+        // não voltam à nuvem pelo merge de REVIEW/progresso/override/revisões.
+        const rm = { data: [], review: clone(remoteMeta.review), reviewStamps: clone(remoteMeta.reviewUpdatedAt), reviewProgress: clone(remoteMeta.reviewProgress),
+          reviewOverride: clone(remoteMeta.reviewOverride), lesionRevisions: clone(remoteMeta.lesionRevisions) };
+        if(foldLesionMergesIntoState(rm, writeMerges).changed){
+          remoteMeta = { ...remoteMeta, review: rm.review, reviewUpdatedAt: rm.reviewStamps, reviewProgress: rm.reviewProgress, reviewOverride: rm.reviewOverride, lesionRevisions: rm.lesionRevisions };
+        }
+      }
       // Tombstones: união local ∪ remoto (o remoto nunca some do payload,
       // nem num envio sem reconcile) e aplicados às imagens que saem.
-      const writeTombstones = mergeImageTombstones(metaPayloadBase.tombstones, remoteMeta.tombstones);
+      const writeTombstones = mergeImageTombstones(txBase.tombstones, remoteMeta.tombstones);
       // ALTERAÇÃO 079d — nuvem nunca escrita (sem documento principal): não
       // há estado remoto a proteger contra stale; só tombstones se aplicam.
       const gated = metaSnap.exists
-        ? gateStaleLocalOnlyImagesForWrite(cleanData, remoteData, writeTombstones, pendingAddsSnapshot)
-        : gateStaleLocalOnlyImagesForWrite(cleanData, cleanData, writeTombstones, pendingAddsSnapshot);
+        ? gateStaleLocalOnlyImagesForWrite(txData, remoteData, writeTombstones, txPending)
+        : gateStaleLocalOnlyImagesForWrite(txData, txData, writeTombstones, txPending);
       const gatedChunks = splitIntoChunks(gated.data, DATA_CHUNK_SIZE);
       // PROTEÇÃO 084 — união local ∪ remoto por reviewId (nunca apaga uma
       // revisão que só existe na nuvem, nem em syncThisDeviceToCloud/force).
-      const writeLesionRevisions = stripUndefinedDeep(mergeLesionRevisions(metaPayloadBase.lesionRevisions, remoteMeta.lesionRevisions));
+      const writeLesionRevisions = stripUndefinedDeep(mergeLesionRevisions(txBase.lesionRevisions, remoteMeta.lesionRevisions));
       // PROTEÇÃO 085 — ordem: merge por carimbo também DENTRO da transação
       // (nenhum caminho de escrita grava default/ordem velha por cima de uma
       // ordem remota mais nova — nem syncThisDeviceToCloud/force).
@@ -2278,12 +2305,12 @@ async function writeShardedState(ms=15000){
       // PROTEÇÃO 089 — estado de estudo: mudança manual mais recente vence
       // também DENTRO da transação (force/syncThisDevice não desfazem uma
       // mudança manual mais nova de outro PC).
-      const writeReview = mergeReviewByRecency(metaPayloadBase.review, remoteMeta.review, metaPayloadBase.reviewUpdatedAt, remoteMeta.reviewUpdatedAt);
+      const writeReview = mergeReviewByRecency(txBase.review, remoteMeta.review, txBase.reviewUpdatedAt, remoteMeta.reviewUpdatedAt);
       // PROTEÇÃO 090 — histórico do Quiz (união) e override (mais recente)
       // também dentro da transação; o REVIEW gravado é o materializado.
-      const writeProgress = mergeReviewProgress(metaPayloadBase.reviewProgress, remoteMeta.reviewProgress);
-      const writeOverride = mergeReviewOverrides(metaPayloadBase.reviewOverride, remoteMeta.reviewOverride);
-      const metaPayload = {...metaPayloadBase, review: stripUndefinedDeep(materializeReviewState(writeReview.review, writeProgress, writeOverride)), reviewUpdatedAt: writeReview.stamps,
+      const writeProgress = mergeReviewProgress(txBase.reviewProgress, remoteMeta.reviewProgress);
+      const writeOverride = mergeReviewOverrides(txBase.reviewOverride, remoteMeta.reviewOverride);
+      const metaPayload = {...txBase, lesionMerges: writeMerges, review: stripUndefinedDeep(materializeReviewState(writeReview.review, writeProgress, writeOverride)), reviewUpdatedAt: writeReview.stamps,
         reviewProgress: writeProgress, reviewOverride: writeOverride, tombstones: stripUndefinedDeep(writeTombstones), lesionRevisions: writeLesionRevisions,
         sectionOrder: writeOrder.sectionOrder, siteOrder: writeOrder.siteOrder, orderUpdatedAt: writeOrder.stamps, chunkCount: gatedChunks.length};
       if(!checkChunkSize(metaPayload, 'documento principal (revisão/SRS/histórico)')){
@@ -2372,6 +2399,7 @@ async function readShardedState(ms=15000){
   return { data: combinedData, review: meta.review, srs: meta.srs, sessionLog: meta.sessionLog,
     reviewUpdatedAt: normalizeReviewStamps(meta.reviewUpdatedAt), // PROTEÇÃO 089 — ausente = sem carimbo
     reviewProgress: normalizeReviewProgress(meta.reviewProgress), reviewOverride: normalizeReviewOverrides(meta.reviewOverride), // PROTEÇÃO 090
+    lesionMerges: normalizeLesionMerges(meta.lesionMerges), // PROTEÇÃO 091c
     sectionOrder: meta.sectionOrder, siteOrder: meta.siteOrder,
     orderUpdatedAt: normalizeOrderStamps(meta.orderUpdatedAt), // PROTEÇÃO 085 — ausente = sem carimbo
     tombstones: (meta.tombstones && typeof meta.tombstones === 'object' && !Array.isArray(meta.tombstones)) ? meta.tombstones : {},
@@ -3423,6 +3451,8 @@ async function adoptRemoteStateForNewDevice(){
   REVIEW_PROGRESS = normalizeReviewProgress(remote.reviewProgress); // PROTEÇÃO 090
   REVIEW_OVERRIDE = normalizeReviewOverrides(remote.reviewOverride);
   REVIEW = materializeReviewState(REVIEW, REVIEW_PROGRESS, REVIEW_OVERRIDE);
+  LESION_MERGES = normalizeLesionMerges(remote.lesionMerges); // PROTEÇÃO 091c
+  foldLesionMergesIntoGlobals();
   SRS = (remote.srs && typeof remote.srs === 'object' && !Array.isArray(remote.srs)) ? remote.srs : {};
   SESSIONLOG = (remote.sessionLog && typeof remote.sessionLog === 'object' && !Array.isArray(remote.sessionLog)) ? remote.sessionLog : {};
   // PROTEÇÃO 085 — ordem remota adotada integralmente (só normalizada:
@@ -3440,6 +3470,7 @@ async function adoptRemoteStateForNewDevice(){
   await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
   await saveReviewStamps(); // PROTEÇÃO 089
   await saveReviewProgressState(); // PROTEÇÃO 090
+  await saveLesionMerges(); // PROTEÇÃO 091c
   await storage.set(SRS_KEY, JSON.stringify(SRS), false);
   await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
   await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
@@ -4250,6 +4281,21 @@ function countRemoteOnlyAdopted(localData, remoteData, mergedData){
 // estado remoto JÁ LIDO. Não faz push, não toca syncDirty, não persiste
 // (quem chama persiste). Devolve { preservedCloudOnly }.
 function reconcileStateWithRemote(remote){
+  // PROTEÇÃO 091c — mapa de fusão: união e aplicação (local E remoto) ANTES
+  // de qualquer filtro — PC desatualizado converge para o keeper; id fundido
+  // não ressuscita (isQuarantinedSeedId + activeCanonicalSeedV172).
+  LESION_MERGES = mergeLesionMergeMaps(LESION_MERGES, remote && remote.lesionMerges);
+  if(Object.keys(LESION_MERGES).length){
+    foldLesionMergesIntoGlobals();
+    if(remote){
+      const clone = v => JSON.parse(JSON.stringify(v || {}));
+      const rst = { data: JSON.parse(JSON.stringify(Array.isArray(remote.data) ? remote.data : [])), review: clone(remote.review), reviewStamps: clone(remote.reviewUpdatedAt),
+        reviewProgress: clone(remote.reviewProgress), reviewOverride: clone(remote.reviewOverride), srs: clone(remote.srs), lesionRevisions: clone(remote.lesionRevisions) };
+      if(foldLesionMergesIntoState(rst, LESION_MERGES).changed){
+        remote = { ...remote, data: rst.data, review: rst.review, reviewUpdatedAt: rst.reviewStamps, reviewProgress: rst.reviewProgress, reviewOverride: rst.reviewOverride, srs: rst.srs, lesionRevisions: rst.lesionRevisions };
+      }
+    }
+  }
   const remoteData = (Array.isArray(remote && remote.data) ? remote.data : [])
     .filter(e=>e && !isQuarantinedSeedId(e.id));
 
@@ -4347,6 +4393,7 @@ async function persistLocalStateNow(){
   try{ await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false); }catch(_e){}
   await saveReviewStamps(); // PROTEÇÃO 089
   await saveReviewProgressState(); // PROTEÇÃO 090
+  await saveLesionMerges(); // PROTEÇÃO 091c
   try{ await storage.set(SRS_KEY, JSON.stringify(SRS), false); }catch(_e){}
   try{ await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false); }catch(_e){}
   try{ await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false); }catch(_e){}
@@ -4406,6 +4453,7 @@ async function reconcileBeforePush(reason){
       review: quarantineIndexedByLesionId(REVIEW), srs: quarantineIndexedByLesionId(SRS),
       reviewUpdatedAt: normalizeReviewStamps(quarantineIndexedByLesionId(REVIEW_STAMPS)), // PROTEÇÃO 089
       reviewProgress: normalizeReviewProgress(quarantineIndexedByLesionId(REVIEW_PROGRESS)), reviewOverride: normalizeReviewOverrides(quarantineIndexedByLesionId(REVIEW_OVERRIDE)), // PROTEÇÃO 090
+      lesionMerges: normalizeLesionMerges(LESION_MERGES), // PROTEÇÃO 091c
       sessionLog: SESSIONLOG, sectionOrder, siteOrder, tombstones: IMAGE_TOMBSTONES,
       lesionRevisions: LESION_REVISIONS || {}, // PROTEÇÃO 084 — mudança só de revisão NÃO é no-op
       orderUpdatedAt: normalizeOrderStamps(ORDER_STAMPS) // PROTEÇÃO 085
@@ -4415,6 +4463,7 @@ async function reconcileBeforePush(reason){
       review: quarantineIndexedByLesionId(remote.review||{}), srs: quarantineIndexedByLesionId(remote.srs||{}),
       reviewUpdatedAt: normalizeReviewStamps(quarantineIndexedByLesionId(remote.reviewUpdatedAt||{})),
       reviewProgress: normalizeReviewProgress(quarantineIndexedByLesionId(remote.reviewProgress||{})), reviewOverride: normalizeReviewOverrides(quarantineIndexedByLesionId(remote.reviewOverride||{})),
+      lesionMerges: normalizeLesionMerges(remote.lesionMerges),
       sessionLog: remote.sessionLog||{}, sectionOrder: remote.sectionOrder||[], siteOrder: remote.siteOrder||{},
       tombstones: remote.tombstones||{},
       lesionRevisions: remote.lesionRevisions||{},
@@ -4473,6 +4522,7 @@ async function syncFromFirebase(){
       await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
       await saveReviewStamps(); // PROTEÇÃO 089
       await saveReviewProgressState(); // PROTEÇÃO 090
+      await saveLesionMerges(); // PROTEÇÃO 091c
       await storage.set(SRS_KEY, JSON.stringify(SRS), false);
       await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
       await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
@@ -8304,13 +8354,376 @@ const QUARANTINED_HIGH_IDS_20260924 = new Set([
   'seed_1273','seed_1274','seed_1275','seed_1276','seed_1277','seed_1278','seed_1279','seed_1280','seed_1281','seed_1282'
 ]);
 
+// PROTEÇÃO 091c — id fundido pelo mapa LESION_MERGES (ver módulo 091c).
+function isMergedAwayLesionId(id){
+  try{ return !!(LESION_MERGES && typeof LESION_MERGES==='object' && Object.prototype.hasOwnProperty.call(LESION_MERGES, id)); }
+  catch(_e){ return false; } // antes da inicialização do módulo (TDZ): nenhum id fundido
+}
 function isQuarantinedSeedId(id){
-  return SUPPRESSED_DUPLICATE_IDS_V172.has(id) || QUARANTINED_HIGH_IDS_20260924.has(id);
+  // PROTEÇÃO 091c: id fundido (mapa LESION_MERGES, sincronizado) também sai
+  // do catálogo ativo — nunca volta pelo SEED nem por PC desatualizado.
+  return SUPPRESSED_DUPLICATE_IDS_V172.has(id) || QUARANTINED_HIGH_IDS_20260924.has(id) || isMergedAwayLesionId(id);
 }
 
 function getActiveCanonicalSeed(){ return SEED.filter(e=>e && !isQuarantinedSeedId(e.id)); }
 // Nome antigo mantido como alias (chamado em mais 4 pontos do arquivo).
 function activeCanonicalSeedV172(){ return getActiveCanonicalSeed(); }
+
+/* ============================================================
+   PROTEÇÃO 091c — FUSÃO CLÍNICA CONTROLADA DE DUPLICATAS APROVADAS
+   ------------------------------------------------------------
+   Decisão clínica EXPLÍCITA do usuário (4 grupos). A fusão só é executada
+   por ação manual (Ferramentas avançadas → "🧬 Fusões clínicas aprovadas"),
+   com backup JSON recente obrigatório + safety snapshot.
+   - Membros de cada grupo são resolvidos pela IDENTIDADE (seção + sítio +
+     nome) nos dados REAIS — nunca por número fixo: os ids seed_N são
+     POSICIONAIS no boot (SEED.forEach) e os números da auditoria (campo id
+     literal do SEED) não correspondem aos ids de execução.
+   - Keeper: quem tem imagem permanece; >1 com imagem = grupo PAUSADO;
+     nenhum com imagem = casos clínicos > progresso de estudo > preferido.
+   - LESION_MERGES {idFundido: {into, at, group, finalName}} — IndexedDB
+     `atlas:lesionMerges`, Firestore `lesionMerges`, backup e snapshot.
+     União entre PCs; todo PC aplica o mapa (foldLesionMergesIntoState) ANTES
+     de qualquer filtro, então PC antigo converge e o id não ressuscita.
+   - EXCEÇÃO RESTRITA DE OWNERSHIP: só o fold do mapa move imagens do id
+     fundido para o keeper (lesionId/lesionName, marcadas com
+     mergedFromLesionId). Não é regra geral de sync.
+   ============================================================ */
+const LESION_MERGES_KEY = 'atlas:lesionMerges';
+let LESION_MERGES = {};
+function normalizeLesionMerges(v){
+  const out = {};
+  if(v && typeof v==='object' && !Array.isArray(v)){
+    for(const [id, m] of Object.entries(v)){
+      if(!id || !m || typeof m!=='object') continue;
+      const into = String(m.into||''); const at = Number(m.at)||0;
+      if(!into || into===id || at<=0) continue;
+      out[id] = { into, at };
+      if(m.group) out[id].group = String(m.group);
+      if(m.finalName) out[id].finalName = String(m.finalName);
+    }
+  }
+  return out;
+}
+// União determinística: conflito para o mesmo id = o registro mais antigo
+// (primeira fusão executada) vence; empate = menor `into`.
+function mergeLesionMergeMaps(a, b){
+  const A = normalizeLesionMerges(a), B = normalizeLesionMerges(b), out = { ...A };
+  for(const [id, m] of Object.entries(B)){
+    const cur = out[id];
+    if(!cur || m.at < cur.at || (m.at===cur.at && m.into < cur.into)) out[id] = m;
+  }
+  return out;
+}
+function resolveLesionMergeTarget(id, merges){
+  let cur = id, guard = 0;
+  while(merges && merges[cur] && guard < 32){ cur = merges[cur].into; guard++; }
+  return cur;
+}
+async function loadLesionMerges(){
+  try{ const r = await storage.get(LESION_MERGES_KEY, false); LESION_MERGES = normalizeLesionMerges(JSON.parse(r.value)); }
+  catch(e){ LESION_MERGES = {}; }
+}
+async function saveLesionMerges(){
+  try{ await storage.set(LESION_MERGES_KEY, JSON.stringify(normalizeLesionMerges(LESION_MERGES)), false); }
+  catch(e){ console.error('storage error', e); }
+}
+function lesionMergeLinkKey(l){ return String((l && l.url) || '').trim().replace(/\/+$/,''); }
+/* Pura (muta só o objeto `st` recebido): aplica o mapa. st = { data, review,
+   reviewStamps, reviewProgress, reviewOverride, srs, lesionRevisions,
+   pendingAdds }. explicit=true só no fluxo manual (carimba e registra
+   histórico); na convergência (outros PCs) não toca textos nem carimbos. */
+function foldLesionMergesIntoState(st, merges, opts){
+  const M = normalizeLesionMerges(merges);
+  const explicit = !!(opts && opts.explicit);
+  const now = Date.now();
+  const has = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
+  const report = { changed:false, folded:[], movedImages:0 };
+  const data = Array.isArray(st.data) ? st.data : [];
+  for(const drop of Object.keys(M)){
+    const keep = resolveLesionMergeTarget(drop, M);
+    if(!keep || keep===drop) continue;
+    let touched = false;
+    const di = data.findIndex(e=>e && e.id===drop);
+    if(di >= 0){
+      const d = data[di];
+      let k = data.find(e=>e && e.id===keep);
+      if(!k){ k = { ...JSON.parse(JSON.stringify(d)), id: keep, images: [] }; if(M[drop].finalName) k.name = M[drop].finalName; data.push(k); }
+      const keepName = k.name;
+      k.images = Array.isArray(k.images) ? k.images : [];
+      const seen = new Set();
+      k.images.forEach(im=>{ if(im) imageIdentityKeys(im).forEach(x=>seen.add(x)); });
+      for(const im of (Array.isArray(d.images) ? d.images : [])){
+        if(!im) continue;
+        const keys = imageIdentityKeys(im);
+        if(keys.length && keys.some(x=>seen.has(x))) continue;
+        keys.forEach(x=>seen.add(x));
+        k.images.push({ ...im, lesionId: keep, lesionName: keepName, mergedFromLesionId: drop }); // exceção restrita de ownership (091c)
+        report.movedImages++;
+      }
+      if(!k.img && d.img) k.img = d.img;
+      if(d.localImg) k.localImg = true;
+      const lk = new Set((Array.isArray(k.links) ? k.links : []).map(lesionMergeLinkKey));
+      k.links = Array.isArray(k.links) ? k.links : [];
+      for(const l of (Array.isArray(d.links) ? d.links : [])){ const key = lesionMergeLinkKey(l); if(key && !lk.has(key)){ lk.add(key); k.links.push(l); } }
+      k.tags = [...new Set([...(Array.isArray(k.tags) ? k.tags : []), ...(Array.isArray(d.tags) ? d.tags : [])])];
+      if(Array.isArray(d.clinicalCases) && d.clinicalCases.length){
+        const ck = c => (typeof clinicalCaseIdentityKey==='function' ? clinicalCaseIdentityKey(c) : '') || JSON.stringify(c);
+        const cs = new Set((Array.isArray(k.clinicalCases) ? k.clinicalCases : []).map(ck));
+        k.clinicalCases = Array.isArray(k.clinicalCases) ? k.clinicalCases : [];
+        d.clinicalCases.forEach(c=>{ const key = ck(c); if(!cs.has(key)){ cs.add(key); k.clinicalCases.push(c); } });
+      }
+      if(Array.isArray(d.altPlacements) && d.altPlacements.length){
+        const pk = p => String((p && p.s) || '') + '|||' + String((p && p.site) || '');
+        const ps = new Set([pk({ s:k.s, site:k.site }), ...(Array.isArray(k.altPlacements) ? k.altPlacements : []).map(pk)]);
+        k.altPlacements = Array.isArray(k.altPlacements) ? k.altPlacements : [];
+        d.altPlacements.forEach(p=>{ const key = pk(p); if(!ps.has(key)){ ps.add(key); k.altPlacements.push(p); } });
+      }
+      if(explicit) k._userUpdatedAt = now;
+      data.splice(data.indexOf(d), 1);
+      touched = true;
+    }
+    const rv = st.review || {}, rs = st.reviewStamps || {}, rp = st.reviewProgress || {}, ro = st.reviewOverride || {};
+    if(has(rv, drop) || has(rs, drop) || has(rp, drop) || has(ro, drop)){
+      const kv = Number(rv[keep])||0, dv = Number(rv[drop])||0, kt = Number(rs[keep])||0, dt = Number(rs[drop])||0;
+      if(has(rv, drop) && ((!(kv > 0 || kt > 0) && dv > 0) || dt > kt)){ rv[keep] = dv; if(dt) rs[keep] = dt; }
+      if(rp[drop]){ const m = mergeReviewProgress({ x: rp[keep] }, { x: rp[drop] }).x; if(m) rp[keep] = m; }
+      if(ro[drop]){ const m = mergeReviewOverrides({ x: ro[keep] }, { x: ro[drop] }).x; if(m) ro[keep] = m; }
+      if(rp[keep] || ro[keep]) rv[keep] = materializeReviewState({ [keep]: rv[keep] }, { [keep]: rp[keep] }, { [keep]: ro[keep] })[keep];
+      delete rv[drop]; delete rs[drop]; delete rp[drop]; delete ro[drop];
+      touched = true;
+    }
+    if(st.srs && has(st.srs, drop)){
+      const a = st.srs[keep], b = st.srs[drop];
+      if(!a || (Number(b && b.updatedAt)||0) > (Number(a && a.updatedAt)||0)) st.srs[keep] = b;
+      delete st.srs[drop];
+      touched = true;
+    }
+    for(const r of Object.values(st.lesionRevisions || {})){
+      if(!r || r.scope==='global' || r.lesionId!==drop) continue;
+      r.lesionId = keep;
+      if(explicit){
+        r.history = Array.isArray(r.history) ? r.history : [];
+        r.history.push({ timestamp: now, action: 'lesion_merged', details: { from: drop, into: keep } });
+        r.updatedAt = now;
+      }
+      touched = true;
+    }
+    if(st.pendingAdds && has(st.pendingAdds, drop)){
+      st.pendingAdds[keep] = { ...(st.pendingAdds[keep] || {}), ...st.pendingAdds[drop] };
+      delete st.pendingAdds[drop];
+      touched = true;
+    }
+    if(touched){ report.changed = true; report.folded.push({ from: drop, into: keep }); }
+  }
+  return report;
+}
+function lesionMergeGlobalState(){
+  return { data: DATA, review: REVIEW, reviewStamps: REVIEW_STAMPS, reviewProgress: REVIEW_PROGRESS,
+    reviewOverride: REVIEW_OVERRIDE, srs: SRS, lesionRevisions: LESION_REVISIONS, pendingAdds: PENDING_LOCAL_IMAGE_ADDS };
+}
+// Convergência (boot, pull, pre-push, escrita): aplica o mapa conhecido ao
+// estado local. Idempotente — sem ids fundidos presentes, não faz nada.
+function foldLesionMergesIntoGlobals(opts){
+  if(!LESION_MERGES || !Object.keys(LESION_MERGES).length) return { changed:false, folded:[], movedImages:0 };
+  return foldLesionMergesIntoState(lesionMergeGlobalState(), LESION_MERGES, opts);
+}
+
+/* Plano APROVADO pelo usuário (091c). notesSeed = notas do SEED de cada
+   membro: o texto final composto só substitui as notas se TODAS ainda forem
+   as do SEED (sem edição manual); senão, fallback conservador (notas do
+   keeper + parágrafos inéditos dos outros) e o relatório avisa. */
+const APPROVED_CLINICAL_MERGES_091C = [
+  { group:'metastases-hepaticas', finalName:'Metástases hepáticas', preferredKeeperName:'Metástases hepáticas',
+    members:[
+      { s:'Abdômen Superior', site:'Fígado', name:'Metástase hepática', notesSeed:"Múltiplas, realce periférico em 'alvo', hipovascular na maioria dos primários." },
+      { s:'Abdômen Superior', site:'Fígado', name:'Metástases hepáticas', notesSeed:'Padrão: padrão variável conforme tumor primário; multiplicidade e restrição são frequentes.\nDiferenciais-chave: Metástase hepática, Hemangioendotelioma epitelioide hepático e Carcinoma hepatocelular. Favorecem este diagnóstico, quando presentes no contexto adequado, restrição à difusão, múltipla e realce periférico. A distinção deve integrar origem anatômica, composição, padrão de sinal/densidade, realce e contexto clínico.' },
+      { s:'Abdômen Superior', site:'Fígado', name:'Metástases hepáticas hipervasculares', notesSeed:'Padrão: metástases com realce predominante na fase arterial, típicas de alguns tumores neuroendócrinos, melanoma, carcinoma renal e outros primários hipervasculares.\nDiferenciais-chave: Laceração hepática traumática, Hiperplasia nodular focal e Carcinoma hepatocelular. Favorecem este diagnóstico, quando presentes no contexto adequado, malignidade, hematogênico e realce arterial. A distinção deve integrar origem anatômica, composição, padrão de sinal/densidade, realce e contexto clínico.' }
+    ],
+    finalNotes:'Padrão: lesões geralmente múltiplas, com padrão variável conforme o tumor primário; a maioria é hipovascular, com realce periférico em "alvo"; multiplicidade e restrição à difusão são frequentes.\nPadrão hipervascular: realce predominante na fase arterial, típico de alguns tumores neuroendócrinos, melanoma, carcinoma renal e outros primários hipervasculares.\nDiferenciais-chave: Hemangioendotelioma epitelioide hepático e Carcinoma hepatocelular; no padrão hipervascular, também Hiperplasia nodular focal e Laceração hepática traumática. Favorecem este diagnóstico, quando presentes no contexto adequado, restrição à difusão, múltipla e realce periférico (ou realce arterial nos primários hipervasculares). A distinção deve integrar origem anatômica, composição, padrão de sinal/densidade, realce e contexto clínico.',
+    finalEnTerm:'liver metastases', dropClassifications:['LIRADS'] },
+  { group:'metastases-osseas-vertebrais', finalName:'Metástases ósseas vertebrais', preferredKeeperName:'Metástases ósseas vertebrais',
+    members:[
+      { s:'Coluna Vertebral', site:'Corpo vertebral', name:'Metástase óssea vertebral', notesSeed:'Padrão: lesão vertebral focal ou multifocal, lítica, esclerótica ou mista, com substituição da medula óssea e possível extensão epidural/paravertebral; o disco costuma ser preservado.\nDiferenciais-chave: espondilodiscite, mieloma e fratura osteoporótica. Favorecem metástase pedículo/arco posterior acometidos, massa de partes moles e múltiplas lesões; infecção tende a cruzar o disco e envolver platôs contíguos.' },
+      { s:'Coluna Vertebral', site:'Corpo vertebral', name:'Metástases ósseas vertebrais', notesSeed:'Padrão: substituição da medula óssea vertebral, lítica, esclerótica ou mista; avaliar extensão epidural e fratura patológica.\nDiferenciais-chave: Metástase óssea vertebral, Mieloma múltiplo (plasmocitoma) e Osteoma osteoide vertebral. Favorecem este diagnóstico, quando presentes no contexto adequado, realce heterogêneo, infiltrativa e multifocal. A distinção deve integrar origem anatômica, composição, padrão de sinal/densidade, realce e contexto clínico.' }
+    ],
+    finalNotes:'Padrão: lesão vertebral focal ou multifocal, lítica, esclerótica ou mista, com substituição da medula óssea e possível extensão epidural/paravertebral; o disco costuma ser preservado. Avaliar extensão epidural e fratura patológica.\nDiferenciais-chave: espondilodiscite, Mieloma múltiplo (plasmocitoma), fratura osteoporótica e Osteoma osteoide vertebral. Favorecem metástase pedículo/arco posterior acometidos, massa de partes moles e múltiplas lesões; infecção tende a cruzar o disco e envolver platôs contíguos.',
+    finalEnTerm:'vertebral bone metastases', dropClassifications:[] },
+  { group:'linfoma-mediastinal', finalName:'Linfoma mediastinal', preferredKeeperName:'Linfoma do mediastino',
+    members:[
+      { s:'Tórax', site:'Massa mediastinal', name:'Linfoma mediastinal', notesSeed:'Massa que engloba estruturas vasculares sem obstruí-las.' },
+      { s:'Tórax', site:'Massa mediastinal', name:'Linfoma do mediastino', notesSeed:'Padrão: massa/adenopatia mediastinal volumosa, frequentemente anterior; necrose é menos comum antes do tratamento.\nDiferenciais-chave: Adenopatia mediastinal por sarcoidose, Timoma e Timo normal proeminente (pseudotumor tímico). Favorecem este diagnóstico, quando presentes no contexto adequado, necrótico, sólido e adenopatia. A distinção deve integrar origem anatômica, composição, padrão de sinal/densidade, realce e contexto clínico.' }
+    ],
+    finalNotes:'Padrão: massa/adenopatia mediastinal volumosa, frequentemente anterior, que engloba estruturas vasculares sem obstruí-las; necrose é menos comum antes do tratamento.\nDiferenciais-chave: Adenopatia mediastinal por sarcoidose, Timoma e Timo normal proeminente (pseudotumor tímico). Favorecem este diagnóstico, quando presentes no contexto adequado, massa sólida que engloba vasos sem obstruí-los e adenopatia. A distinção deve integrar origem anatômica, composição, padrão de sinal/densidade, realce e contexto clínico.',
+    finalEnTerm:'mediastinal lymphoma', dropClassifications:[] },
+  { group:'osteomielite-mandibular', finalName:'Osteomielite mandibular', preferredKeeperName:'Osteomielite da mandíbula',
+    members:[
+      { s:'Cabeça e Pescoço', site:'Mandíbula e maxila', name:'Osteomielite mandibular', notesSeed:'Infecção óssea mandibular geralmente secundária a foco dentário; pode gerar sequestro ósseo e reação periosteal.' },
+      { s:'Cabeça e Pescoço', site:'Mandíbula e maxila', name:'Osteomielite da mandíbula', notesSeed:'Padrão: destruição óssea mandibular com reação periosteal e possível sequestro ósseo (fragmento desvitalizado); geralmente secundária a infecção odontogênica não tratada.\nDiferenciais-chave: Cisto radicular, Osteorradionecrose mandibular e Displasia fibrosa maxilomandibular. Favorecem este diagnóstico, quando presentes no contexto adequado, lítica e realce heterogêneo. A distinção deve integrar origem anatômica, composição, padrão de sinal/densidade, realce e contexto clínico.' }
+    ],
+    finalNotes:'Padrão: infecção óssea mandibular geralmente secundária a foco dentário/infecção odontogênica não tratada, com destruição óssea, reação periosteal e possível sequestro ósseo (fragmento desvitalizado).\nDiferenciais-chave: Cisto radicular, Osteorradionecrose mandibular e Displasia fibrosa maxilomandibular. Favorecem este diagnóstico, quando presentes no contexto adequado, lítica e realce heterogêneo. A distinção deve integrar origem anatômica, composição, padrão de sinal/densidade, realce e contexto clínico.',
+    finalEnTerm:'mandibular osteomyelitis', dropLinkTerms:['Osteomielite da mandíbula'], dropClassifications:[] }
+];
+function lesionHasImagesForMerge(e){
+  return !!e && ((Array.isArray(e.images) && e.images.length > 0) || !!e.img || !!e.localImg);
+}
+function lesionStudyDataForMerge(id, st){
+  const p = st.reviewProgress && st.reviewProgress[id];
+  return !!((Number(st.review && st.review[id])||0) > 0 || (st.srs && st.srs[id]) || (p && Array.isArray(p.a) && p.a.length) || (st.reviewOverride && st.reviewOverride[id]));
+}
+/* Pura: resolve cada grupo nos dados reais e decide o keeper pela regra
+   oficial. status: 'ready' | 'already_merged' | 'paused'. */
+function planApprovedClinicalMerges091c(st, plan, merges){
+  const data = Array.isArray(st.data) ? st.data : [];
+  const M = normalizeLesionMerges(merges);
+  const groups = [];
+  for(const g of (plan || APPROVED_CLINICAL_MERGES_091C)){
+    const members = g.members.map(m=>{
+      const key = exactLesionIdentityKey(m.s, m.site, m.name);
+      const found = data.filter(e=>e && exactLesionIdentityKey(e.s, e.site, e.name)===key);
+      return { spec: m, matches: found };
+    });
+    const out = { group: g.group, finalName: g.finalName, members: members.map(m=>({ name: m.spec.name, ids: m.matches.map(e=>e.id) })), status:'ready', reason:null, keeperId:null, keeperReason:null, dropIds:[] };
+    const alreadyMerged = Object.values(M).filter(x=>x.group===g.group);
+    const missing = members.filter(m=>m.matches.length===0);
+    const ambiguous = members.filter(m=>m.matches.length > 1);
+    if(ambiguous.length){ out.status = 'paused'; out.reason = 'identidade_ambigua'; groups.push(out); continue; }
+    if(missing.length){
+      if(alreadyMerged.length && members.filter(m=>m.matches.length===1).length <= 1){ out.status = 'already_merged'; out.keeperId = alreadyMerged[0].into; groups.push(out); continue; }
+      out.status = 'paused'; out.reason = 'membro_ausente'; groups.push(out); continue;
+    }
+    const entries = members.map(m=>m.matches[0]);
+    const withImages = entries.filter(lesionHasImagesForMerge);
+    let keeper = null;
+    if(withImages.length > 1){
+      out.status = 'paused'; out.reason = 'mais_de_um_com_imagem';
+      out.imageOwners = withImages.map(e=>({ id: e.id, name: e.name, images: (e.images||[]).map(im=>({ label: im.label||'', source: im.source||'', sourcePage: im.sourcePage||'', lesionId: im.lesionId||'', lesionName: im.lesionName||'', clinicalContext: !!im.clinicalContext, panels: Array.isArray(im.panels) ? im.panels.length : 0 })) }));
+      groups.push(out); continue;
+    }
+    if(withImages.length===1){ keeper = withImages[0]; out.keeperReason = 'única com imagem (regra 1)'; }
+    else {
+      const score = e => (Array.isArray(e.clinicalCases) ? e.clinicalCases.length : 0) * 1000 + (lesionStudyDataForMerge(e.id, st) ? 100 : 0);
+      const best = Math.max(...entries.map(score));
+      const tied = entries.filter(e=>score(e)===best);
+      keeper = tied.find(e=>e.name===g.preferredKeeperName) || tied.slice().sort((a,b)=>String(a.id).localeCompare(String(b.id)))[0];
+      out.keeperReason = best > 0 ? 'nenhum com imagem — casos clínicos/progresso (regra 3)' : 'nenhum com imagem — conteúdo equivalente; desempate pelo registro canônico aprovado (regra 3)';
+    }
+    out.keeperId = keeper.id;
+    out.dropIds = entries.filter(e=>e!==keeper).map(e=>e.id);
+    out.notesAllSeed = members.every(m=>String(m.matches[0].notes||'')===m.spec.notesSeed);
+    groups.push(out);
+  }
+  return groups;
+}
+// Conteúdo final (só no fluxo explícito), depois do fold.
+function applyApprovedMergeFinalContent091c(keeperEntry, planGroup, planRow, droppedNotes){
+  const k = keeperEntry;
+  k.name = planGroup.finalName;
+  if(planRow.notesAllSeed) k.notes = planGroup.finalNotes;
+  else {
+    const base = String(k.notes||'').trim();
+    const extra = droppedNotes.map(t=>String(t||'').trim()).filter(t=>t && !base.includes(t));
+    k.notes = [base, ...extra].filter(Boolean).join('\n');
+  }
+  const knownEn = new Set(planGroup.members.map(m=>m.name).concat([planGroup.finalEnTerm, k.enTerm]).filter(Boolean));
+  if(planGroup.finalEnTerm && (!k.enTerm || knownEn.has(k.enTerm))) k.enTerm = planGroup.finalEnTerm;
+  if(Array.isArray(planGroup.dropClassifications) && planGroup.dropClassifications.includes(k.classification)) k.classification = null;
+  const bad = new Set((planGroup.dropLinkTerms||[]).map(t=>lesionMergeLinkKey({ url: radiopaediaSearchUrl(t) })));
+  k.links = (Array.isArray(k.links) ? k.links : []).filter(l=>!bad.has(lesionMergeLinkKey(l)));
+  const good = { label:'Radiopaedia — buscar casos', url: radiopaediaSearchUrl(k.enTerm || planGroup.finalEnTerm) };
+  if(!k.links.some(l=>lesionMergeLinkKey(l)===lesionMergeLinkKey(good))) k.links.unshift(good);
+  k.images = (Array.isArray(k.images) ? k.images : []).map(im=>im && im.lesionId===k.id ? { ...im, lesionName: k.name } : im);
+}
+// Auditoria pós-fusão (pura): referências que ainda apontam para ids fundidos.
+function auditLesionMergeOrphans(st, merges){
+  const M = normalizeLesionMerges(merges);
+  const drops = new Set(Object.keys(M));
+  const ids = new Set((Array.isArray(st.data) ? st.data : []).filter(Boolean).map(e=>e.id));
+  const out = { mergedIdsStillInData:0, imageOwnerToMerged:0, reviewOrphans:0, srsOrphans:0, progressOrphans:0, overrideOrphans:0, revisionOrphans:0, keeperMissing:0, duplicateLinks:0 };
+  // Só as imagens GUARDADAS nos keepers: rótulos legados (lesionId de ids
+  // históricos) em outras lesões não pertencem à fusão e não são tocados
+  // (ownership protegido) — contá-los abortaria a fusão por falso positivo.
+  const keepers = new Set([...drops].map(d=>resolveLesionMergeTarget(d, M)));
+  for(const e of (st.data||[])){
+    if(!e) continue;
+    if(drops.has(e.id)) out.mergedIdsStillInData++;
+    if(keepers.has(e.id)) (e.images||[]).forEach(im=>{ if(im && drops.has(im.lesionId)) out.imageOwnerToMerged++; });
+    const lk = (e.links||[]).map(lesionMergeLinkKey).filter(Boolean);
+    if(new Set(lk).size !== lk.length) out.duplicateLinks++;
+  }
+  for(const d of drops){
+    if(st.review && Object.prototype.hasOwnProperty.call(st.review, d)) out.reviewOrphans++;
+    if(st.srs && Object.prototype.hasOwnProperty.call(st.srs, d)) out.srsOrphans++;
+    if(st.reviewProgress && st.reviewProgress[d]) out.progressOrphans++;
+    if(st.reviewOverride && st.reviewOverride[d]) out.overrideOrphans++;
+    if(!ids.has(resolveLesionMergeTarget(d, M))) out.keeperMissing++;
+  }
+  for(const r of Object.values(st.lesionRevisions||{})) if(r && r.scope!=='global' && drops.has(r.lesionId)) out.revisionOrphans++;
+  out.total = Object.values(out).reduce((a,b)=>a+(Number(b)||0), 0);
+  return out;
+}
+const CLINICAL_MERGE_BACKUP_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+const LAST_BACKUP_EXPORT_KEY = 'atlas:lastBackupExportAt';
+async function getLastBackupExportAt(){
+  try{ const r = await storage.get(LAST_BACKUP_EXPORT_KEY, false); return Number(r.value)||0; }catch(e){ return 0; }
+}
+async function markBackupExported(){
+  try{ await storage.set(LAST_BACKUP_EXPORT_KEY, String(Date.now()), false); }catch(e){}
+}
+/* Aplica UM grupo pronto ao estado `st` (pura sobre st; usada no ensaio em
+   cópia e depois na execução real). Devolve a linha do relatório. */
+function applyApprovedMergeGroup091c(st, row, at){
+  const g = APPROVED_CLINICAL_MERGES_091C.find(x=>x.group===row.group);
+  const data = st.data;
+  const before = data.find(e=>e && e.id===row.keeperId);
+  const prevImages = before && Array.isArray(before.images) ? before.images.slice() : [];
+  const droppedNotes = row.dropIds.map(id=>(data.find(e=>e && e.id===id)||{}).notes);
+  const expectedImages = new Set();
+  [row.keeperId, ...row.dropIds].forEach(id=>{ const e = data.find(x=>x && x.id===id); (e && e.images || []).forEach(im=>{ const k = imageIdentityKeys(im)[0]; if(k) expectedImages.add(k); }); });
+  const entries = {};
+  row.dropIds.forEach(id=>{ entries[id] = { into: row.keeperId, at, group: row.group, finalName: g.finalName }; });
+  const f = foldLesionMergesIntoState(st, entries, { explicit:true });
+  const keeper = data.find(e=>e && e.id===row.keeperId);
+  applyApprovedMergeFinalContent091c(keeper, g, row, droppedNotes);
+  keeper._userUpdatedAt = Date.now();
+  const audit = auditLesionMergeOrphans(st, entries);
+  const keeperImageKeys = new Set((keeper.images||[]).map(im=>imageIdentityKeys(im)[0]).filter(Boolean));
+  const lostImages = [...expectedImages].filter(k=>!keeperImageKeys.has(k)).length;
+  return { entries, keeper, prevImages, report: { group: row.group, keeperId: row.keeperId, keeperReason: row.keeperReason, dropIds: row.dropIds, finalName: keeper.name, movedImages: f.movedImages, notesMode: row.notesAllSeed ? 'texto_final_aprovado' : 'fallback_notas_editadas', audit, lostImages } };
+}
+/* Execução EXPLÍCITA (ação manual). Exige backup JSON recente e safety
+   snapshot. ENSAIO primeiro numa cópia: se qualquer grupo deixar órfão ou
+   perder imagem, NADA é alterado (nem mapa, nem dados, nem snapshot). */
+async function runApprovedClinicalMerges091c(opts){
+  const o = opts || {};
+  if(canonicalRestoreInProgress || deviceBootstrapPending || !appStateReady) return { ok:false, reason:'app_not_ready' };
+  if(fbSyncing) return { ok:false, reason:'sync_in_progress' };
+  const lastBackup = await getLastBackupExportAt();
+  if(!lastBackup || (Date.now() - lastBackup) > CLINICAL_MERGE_BACKUP_MAX_AGE_MS) return { ok:false, reason:'backup_required' };
+  foldLesionMergesIntoGlobals(); // idempotente: estado local já convergido
+  const plan = planApprovedClinicalMerges091c(lesionMergeGlobalState(), APPROVED_CLINICAL_MERGES_091C, LESION_MERGES);
+  const ready = plan.filter(g=>g.status==='ready');
+  if(!ready.length) return { ok:true, executed:[], plan, countBefore: DATA.length, countAfter: DATA.length, audit: auditLesionMergeOrphans(lesionMergeGlobalState(), LESION_MERGES) };
+  const at = Date.now();
+  const dry = JSON.parse(JSON.stringify(lesionMergeGlobalState()));
+  const rehearsal = ready.map(row=>applyApprovedMergeGroup091c(dry, row, at).report);
+  if(rehearsal.some(x=>x.audit.total || x.lostImages)) return { ok:false, reason:'rehearsal_failed', rehearsal, plan };
+  if(typeof o.confirmFn==='function' && !o.confirmFn(plan)) return { ok:false, reason:'cancelled', plan };
+  const snap = createSafetySnapshot('antes da fusão clínica controlada de duplicatas aprovadas');
+  if(!snap) return { ok:false, reason:'snapshot_failed', plan };
+  const countBefore = DATA.length;
+  const executed = [];
+  for(const row of ready){
+    const r = applyApprovedMergeGroup091c(lesionMergeGlobalState(), row, at);
+    LESION_MERGES = mergeLesionMergeMaps(LESION_MERGES, r.entries);
+    try{ markPendingLocalImageAdds(r.keeper.id, r.prevImages, r.keeper.images); }catch(_e){}
+    executed.push(r.report);
+  }
+  await saveReview(true); await saveSRS(true); await saveLesionRevisions(true); await saveLesionMerges(); await savePendingLocalImageAdds();
+  await saveData(); // ação real do usuário: dirty + publicação (com reconcile e mapa)
+  try{ renderAll(); }catch(_e){}
+  return { ok: executed.every(x=>!x.audit.total && !x.lostImages), executed, plan, countBefore, countAfter: DATA.length, audit: auditLesionMergeOrphans(lesionMergeGlobalState(), LESION_MERGES) };
+}
 
 /* ============================================================
    SNAPSHOTS LOCAIS LEVES (IndexedDB) — proteção antes de operações de RISCO
@@ -8335,7 +8748,8 @@ const SAFETY_SNAPSHOT_RISK_REASONS = [
   'antes de restaurar snapshot de segurança',
   'antes de operação em massa de ownership',
   'antes de corrigir classificações inválidas',
-  'antes de migrar sítio de lesão'
+  'antes de migrar sítio de lesão',
+  'antes da fusão clínica controlada de duplicatas aprovadas' // PROTEÇÃO 091c
 ];
 function isRiskSnapshotReason(reason){ return SAFETY_SNAPSHOT_RISK_REASONS.includes(reason); }
 
@@ -8356,6 +8770,7 @@ function buildSafetySnapshot(reason){
     review: JSON.parse(JSON.stringify(REVIEW||{})),
     reviewProgress: JSON.parse(JSON.stringify(REVIEW_PROGRESS||{})), // PROTEÇÃO 090
     reviewOverride: JSON.parse(JSON.stringify(REVIEW_OVERRIDE||{})),
+    lesionMerges: JSON.parse(JSON.stringify(LESION_MERGES||{})), // PROTEÇÃO 091c
     srs: JSON.parse(JSON.stringify(SRS||{})),
     sessionLog: JSON.parse(JSON.stringify(SESSIONLOG||{})),
     lesionRevisions: JSON.parse(JSON.stringify(LESION_REVISIONS||{})),
@@ -8437,6 +8852,10 @@ async function restoreSafetySnapshot(id){
   stampRestoredReview(); // PROTEÇÃO 089 — restauração manual vale sobre a nuvem (como antes)
   REVIEW_PROGRESS = normalizeReviewProgress(snapshot.reviewProgress); // PROTEÇÃO 090 (snapshot antigo sem o campo = {})
   REVIEW_OVERRIDE = normalizeReviewOverrides(snapshot.reviewOverride); stampRestoredReviewOverrides();
+  // PROTEÇÃO 091c — o mapa de fusão nunca encolhe (fusão sincronizada é
+  // definitiva); restaurar um snapshot anterior re-aplica a fusão.
+  LESION_MERGES = mergeLesionMergeMaps(LESION_MERGES, snapshot.lesionMerges);
+  foldLesionMergesIntoGlobals();
   SRS = JSON.parse(JSON.stringify(snapshot.srs||{}));
   SESSIONLOG = JSON.parse(JSON.stringify(snapshot.sessionLog||{}));
   LESION_REVISIONS = JSON.parse(JSON.stringify(snapshot.lesionRevisions||{}));
@@ -8449,6 +8868,7 @@ async function restoreSafetySnapshot(id){
   await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
   await saveReviewStamps(); // PROTEÇÃO 089
   await saveReviewProgressState(); // PROTEÇÃO 090
+  await saveLesionMerges(); // PROTEÇÃO 091c
   await storage.set(SRS_KEY, JSON.stringify(SRS), false);
   await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
   await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
@@ -8837,6 +9257,7 @@ async function deduplicateV171(){
   try{ await storage.set(REVIEW_KEY,JSON.stringify(REVIEW),false); }catch(_e){}
   await saveReviewStamps();
   await saveReviewProgressState(); // PROTEÇÃO 090
+  await saveLesionMerges(); // PROTEÇÃO 091c
   // ALTERAÇÃO 072: chamada tanto pelo boot (migração automática, nunca deve
   // publicar sozinha) quanto pela importação de backup (ação real do
   // usuário, que já chamou saveData() — REAL — antes desta função, deixando
@@ -11158,6 +11579,12 @@ async function loadData(){
   await loadPendingLocalImageAdds(); // ALTERAÇÃO 079d
   await loadLesionRevisions();
   await loadClassificationReviewDecisions();
+  // PROTEÇÃO 091c — mapa de fusão: carrega e converge o estado local (idempotente;
+  // só persiste se algo mudou — ex.: fusão recebida mas não aplicada localmente).
+  await loadLesionMerges();
+  if(foldLesionMergesIntoGlobals().changed){
+    await saveData(true); await saveReview(true); await saveSRS(true); await saveLesionRevisions(true); await savePendingLocalImageAdds();
+  }
 
   // v252 — BOOTSTRAP SEGURO EM DISPOSITIVO NOVO: só entra aqui quando o
   // catálogo local (STORAGE_KEY) não existia (ver o catch acima). REVIEW/
@@ -14149,6 +14576,66 @@ function openNewReviewRequestModal(onCreated){
   paintScope();
   ov.querySelector('#nrr-text').focus();
 }
+
+/* PROTEÇÃO 091c — relatório de pré-fusão com os DADOS REAIS + execução
+   explícita. Nada é alterado até o usuário confirmar (com backup recente). */
+function clinicalMergeMemberReport091c(id){
+  const e = (Array.isArray(DATA) ? DATA : []).find(x=>x && x.id===id) || {};
+  const imgs = Array.isArray(e.images) ? e.images : [];
+  const revs = Object.values(LESION_REVISIONS||{}).filter(r=>r && r.scope!=='global' && r.lesionId===id);
+  const p = REVIEW_PROGRESS[id];
+  return {
+    id, name: e.name||'', s: e.s||'', site: e.site||'', images: imgs.length + (e.img ? 1 : 0) + (e.localImg ? 1 : 0),
+    imageDetail: imgs.map(im=>({ label: im.label||'', source: im.source||'', sourcePage: im.sourcePage||'', panels: Array.isArray(im.panels) ? im.panels.length : 0, clinicalContext: !!im.clinicalContext, lesionId: im.lesionId||'', lesionName: im.lesionName||'' })),
+    links: (e.links||[]).length, clinicalCases: (e.clinicalCases||[]).length, tags: (e.tags||[]).join(', '), classification: e.classification||null, enTerm: e.enTerm||'',
+    notes: e.notes||'', review: REVIEW[id]||0, reviewStamp: REVIEW_STAMPS[id]||0, progress: p ? p.a.length : 0, override: REVIEW_OVERRIDE[id] ? (REVIEW_OVERRIDE[id].m===1 ? 'manual:'+REVIEW_OVERRIDE[id].s : 'auto') : '',
+    srs: SRS[id] ? ('intervalo '+SRS[id].interval+'d') : '', revisions: revs.length, userUpdatedAt: e._userUpdatedAt||0, altPlacements: (e.altPlacements||[]).length
+  };
+}
+function openClinicalMergesModal091c(){
+  foldLesionMergesIntoGlobals();
+  const plan = planApprovedClinicalMerges091c(lesionMergeGlobalState(), APPROVED_CLINICAL_MERGES_091C, LESION_MERGES);
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  const cleanup = ()=>{ ov.remove(); };
+  ov.onclick = e=>{ if(e.target===ov) cleanup(); };
+  const statusLabel = { ready:'pronto para fundir', already_merged:'já fundido', paused:'PAUSADO' };
+  const rows = plan.map(g=>{
+    const ids = g.members.flatMap(m=>m.ids);
+    const members = ids.map(id=>{
+      const r = clinicalMergeMemberReport091c(id);
+      const role = id===g.keeperId ? ' <b>(fica)</b>' : (g.dropIds.includes(id) ? ' (será fundido)' : '');
+      return `<li><code>${escAttr(id)}</code> ${escAttr(r.name)}${role} — imagens ${r.images}, casos ${r.clinicalCases}, links ${r.links}, estado ${r.review}${r.override?' ('+escAttr(r.override)+')':''}, tentativas ${r.progress}, SRS ${escAttr(r.srs||'—')}, revisões ${r.revisions}, classificação ${escAttr(r.classification||'—')}, editado ${r.userUpdatedAt?new Date(r.userUpdatedAt).toLocaleDateString('pt-BR'):'—'}</li>`;
+    }).join('');
+    const why = g.status==='paused' ? ` — ${escAttr(g.reason||'')}` : (g.keeperReason ? ` — keeper: ${escAttr(g.keeperReason)}` : '');
+    const notes = g.status==='ready' ? `<div class="modal-sub">${g.notesAllSeed ? 'notas: texto final aprovado' : 'notas foram editadas por você — serão combinadas sem apagar nada (revise depois)'}</div>` : '';
+    return `<div class="review-center-row"><div class="review-center-row-main"><div class="review-center-row-title">${escAttr(g.finalName)} — ${statusLabel[g.status]||g.status}${why}</div><ul style="margin:4px 0 0 16px;font-size:12px;">${members||'<li>(nenhum membro presente — já fundido)</li>'}</ul>${notes}</div></div>`;
+  }).join('');
+  const readyCount = plan.filter(g=>g.status==='ready').length;
+  ov.innerHTML = `
+    <div class="modal review-center-modal">
+      <h2>🧬 Fusões clínicas aprovadas</h2>
+      <div class="modal-sub">Relatório com os dados DESTE dispositivo. Nada foi alterado. A fusão exige um backup completo exportado há menos de 2 h (Salvar backup) e cria um snapshot antes.</div>
+      <div class="review-center-list">${rows}</div>
+      <div id="cm091c-result" class="modal-sub"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="cm091c-close">fechar</button>
+        <button class="btn btn-primary" id="cm091c-run" ${readyCount?'':'disabled'}>Fundir ${readyCount} grupo(s)</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#cm091c-close').onclick = cleanup;
+  ov.querySelector('#cm091c-run').onclick = async ()=>{
+    const res = await runApprovedClinicalMerges091c({ confirmFn: ()=>confirm('Fundir os grupos marcados como "pronto"? Um snapshot será criado antes. Os ids fundidos deixam de existir e todos os PCs vão convergir para o registro que fica.') });
+    const out = ov.querySelector('#cm091c-result');
+    const msgs = { backup_required:'Exporte um backup completo agora (💾 Salvar backup) e tente de novo — é obrigatório antes da fusão.', snapshot_failed:'Não foi possível criar o snapshot — nada foi alterado.', sync_in_progress:'Aguarde a sincronização terminar.', app_not_ready:'Aguarde o Atlas terminar de carregar.', cancelled:'Cancelado — nada foi alterado.' };
+    if(!res.ok && res.reason==='rehearsal_failed'){ out.textContent = 'O ensaio da fusão (numa cópia) encontrou referência órfã ou imagem perdida — NADA foi alterado. ' + res.rehearsal.map(x=>`${x.finalName}: órfãs ${x.audit.total}, imagens perdidas ${x.lostImages}`).join(' · '); return; }
+    if(!res.ok && msgs[res.reason]){ out.textContent = msgs[res.reason]; return; }
+    out.innerHTML = `Antes: ${res.countBefore} lesões · depois: ${res.countAfter}. ` + (res.executed||[]).map(x=>`${escAttr(x.finalName)}: fica ${escAttr(x.keeperId)}, fundidos ${escAttr(x.dropIds.join(', '))}, imagens movidas ${x.movedImages}${x.lostImages?' — ⚠ IMAGENS PERDIDAS: '+x.lostImages:''}${x.audit.total?' — ⚠ referências órfãs: '+x.audit.total:''}`).join(' · ') + ` · referências órfãs no total: ${res.audit ? res.audit.total : '?'}`;
+    ov.querySelector('#cm091c-run').disabled = true;
+    toast(res.ok ? 'Fusão clínica concluída.' : 'Fusão interrompida — veja o relatório; o snapshot permite restaurar.');
+  };
+}
 /* 💡 Soluções disponíveis prioriza VALIDAR CORREÇÕES (status
    "applied_pending_validation" — a correção já foi aplicada provisoriamente
    em DATA e aguarda a decisão humana: manter ou desfazer/rollback). A aba
@@ -14917,6 +15404,7 @@ function openImageAuditModal(){
 document.getElementById('btn-system-diagnostic').onclick = openSystemDiagnosticModal;
 document.getElementById('btn-audit-images').onclick = openImageAuditModal;
 document.getElementById('btn-classification-audit').onclick = openClassificationAuditModal;
+document.getElementById('btn-clinical-merges-091c').onclick = openClinicalMergesModal091c; // PROTEÇÃO 091c
 document.getElementById('btn-sync-to-cloud').onclick = openSyncDeviceToCloudModal;
 document.getElementById('btn-sync-from-cloud').onclick = openUpdateFromCloudModal;
 (function initAdvancedToolsToggle(){
@@ -15047,6 +15535,7 @@ document.getElementById('btn-export').onclick = async ()=>{
     review: REVIEW,
     reviewUpdatedAt: REVIEW_STAMPS, // PROTEÇÃO 089
     reviewProgress: REVIEW_PROGRESS, reviewOverride: REVIEW_OVERRIDE, // PROTEÇÃO 090
+    lesionMerges: LESION_MERGES, // PROTEÇÃO 091c
     srs: SRS,
     sessionLog: SESSIONLOG,
     sectionOrder: sectionOrder,
@@ -15065,6 +15554,7 @@ document.getElementById('btn-export').onclick = async ()=>{
   document.body.appendChild(a);
   a.click();
   a.remove();
+  markBackupExported(); // PROTEÇÃO 091c — fusão clínica exige backup recente
   setTimeout(()=>URL.revokeObjectURL(url), 500);
   toast('Backup completo salvo (sincronizado com a nuvem antes de gerar).');
 };
@@ -15131,6 +15621,8 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
     stampRestoredReview(); await saveReviewStamps(); // PROTEÇÃO 089 — import explícito vale sobre a nuvem (como antes)
     REVIEW_PROGRESS = normalizeReviewProgress(parsed.reviewProgress); REVIEW_OVERRIDE = normalizeReviewOverrides(parsed.reviewOverride); // PROTEÇÃO 090 (backup antigo = {})
     stampRestoredReviewOverrides(); await saveReviewProgressState();
+    LESION_MERGES = mergeLesionMergeMaps(LESION_MERGES, parsed.lesionMerges); await saveLesionMerges(); // PROTEÇÃO 091c (backup antigo = mapa atual)
+    foldLesionMergesIntoGlobals();
     SRS = quarantineIndexedByLesionId((parsed.srs && typeof parsed.srs==='object') ? parsed.srs : {});
     SESSIONLOG = (parsed.sessionLog && typeof parsed.sessionLog==='object') ? parsed.sessionLog : {};
     sectionOrder = Array.isArray(parsed.sectionOrder) && parsed.sectionOrder.length

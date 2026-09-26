@@ -681,7 +681,7 @@ test('backup/import restaura LESION_REVISIONS (estaticamente, no handler de impo
   const marker = "document.getElementById('import-file').addEventListener('change', async (ev)=>";
   const start = html.indexOf(marker);
   assert.notEqual(start, -1, 'handler de importação não encontrado');
-  const importBlock = html.slice(start, start + 4600); // 079: comentário de quarentena empurrou o marcador
+  const importBlock = html.slice(start, start + 5000); // 079: comentário de quarentena empurrou o marcador; 091c: união do mapa de fusão (+141)
   assert.match(
     importBlock,
     /LESION_REVISIONS\s*=\s*\(parsed\.lesionRevisions/,

@@ -137,7 +137,7 @@ test('084 MERGE: puro — não muta as entradas; idempotente (merge(m,m) === m)'
 test('084 PIPELINE: writeShardedState grava lesionRevisions no meta e une com o remoto DENTRO da transação', () => {
   const src = extractFunction(html, 'writeShardedState');
   assert.match(src, /lesionRevisions:\s*stripUndefinedDeep\(LESION_REVISIONS \|\| \{\}\)/);
-  assert.match(src, /mergeLesionRevisions\(metaPayloadBase\.lesionRevisions,\s*remoteMeta\.lesionRevisions\)/);
+  assert.match(src, /mergeLesionRevisions\((?:metaPayloadBase|txBase)\.lesionRevisions,\s*remoteMeta\.lesionRevisions\)/);
   assert.match(src, /lesionRevisions:\s*writeLesionRevisions/);
 });
 

@@ -530,10 +530,17 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // +13 nas tres primeiras ancoras / +15 no importHandler (Protecao 091b,
   // 2026-09-26): CSS de contraste/alinhamento antes da primeira ancora; +2
   // do markup do radio antes do importHandler.
-  assert.equal(recovery.line, 8474);
-  assert.equal(brokenArtifacts.line, 8464);
-  assert.equal(loadData.line, 11024);
-  assert.equal(importHandler.line, 15075);
+  // +420 nas duas primeiras ancoras / +421 em loadData / +490 no importHandler
+  // (Protecao 091c, 2026-09-26): mapa LESION_MERGES (normalize/merge/fold),
+  // plano dos 4 grupos aprovados, fluxo manual runApprovedClinicalMerges091c,
+  // isMergedAwayLesionId na quarentena e o mapa em write/read/reconcile/
+  // persist/pull/adocao/snapshot — antes da primeira ancora; +1 (fold no boot
+  // conta so a partir de loadData); +69 (modal de relatorio/execucao, botao e
+  // export/import do mapa) antes do importHandler.
+  assert.equal(recovery.line, 8894);
+  assert.equal(brokenArtifacts.line, 8884);
+  assert.equal(loadData.line, 11445);
+  assert.equal(importHandler.line, 15565);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -716,6 +723,7 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
     loadOrderStamps: async () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085
     loadReviewStamps: async () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089
     loadReviewProgressState: async () => {}, saveReviewProgressState: async () => {}, // PROTEÇÃO 090
+    loadLesionMerges: async () => {}, saveLesionMerges: async () => {}, foldLesionMergesIntoGlobals: () => ({ changed: false }), // PROTEÇÃO 091c
     appStateReady: false,
     SEED: seed,
     STORAGE_KEY: 'data',
@@ -947,6 +955,7 @@ async function runImportScenario(raw, { confirmResult = true } = {}) {
     saveSiteOrder: async () => writes.push('saveSiteOrder'),
     stampRestoredReview: () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089 (coberto em review-state.test.js)
     normalizeReviewProgress: () => ({}), normalizeReviewOverrides: () => ({}), stampRestoredReviewOverrides: () => {}, saveReviewProgressState: async () => {}, // PROTEÇÃO 090
+    LESION_MERGES: {}, mergeLesionMergeMaps: () => ({}), saveLesionMerges: async () => {}, foldLesionMergesIntoGlobals: () => ({ changed: false }), // PROTEÇÃO 091c
     markRestoredOrderManual: () => {}, // PROTEÇÃO 085 — carimbo da ordem importada (coberto em order-sync.test.js)
     scope: { section: 'Original', site: 'Original' },
     activeTags: new Set(['original']),

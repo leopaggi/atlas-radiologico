@@ -440,6 +440,7 @@ function loadRealMigrationRuntime(dataFixture) {
     DATA: JSON.parse(JSON.stringify(dataFixture)),
     REVIEW: {}, SRS: {}, SESSIONLOG: {}, LESION_REVISIONS: {},
     REVIEW_PROGRESS: {}, REVIEW_OVERRIDE: {}, // PROTEÇÃO 090 (snapshot captura)
+    LESION_MERGES: {}, // PROTEÇÃO 091c (snapshot captura)
     sectionOrder: [], siteOrder: {},
     storage: makeRealStorage(backing),
     __backing: backing,

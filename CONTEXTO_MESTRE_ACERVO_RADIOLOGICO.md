@@ -8,23 +8,25 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
-*Atualizado em 2026-09-26, junto dos commits "Protecao 091b: corrige UX da central e estado de estudo" (`44ec839`) e do registro deste checkpoint.*
+*Atualizado em 2026-09-26, junto do commit "Protecao 091c: consolida duplicatas clinicas aprovadas".*
 
 - **Branch local de trabalho:** `master` (publicação: `git push origin master:main`).
-- **origin/main antes da 091b:** `817429a` (Protecao 091). **Últimos commits:** Protecao 091b (`44ec839`, código/testes) + registro no Contexto Mestre (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
-- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 091b:** 1316 testes · 1308 pass · 3 fail conhecidos · 5 todo (era 1314/1306/3/5 após a 091; +2 testes estruturais da 091b). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
-  - Medido no ambiente remoto (sem os arquivos protegidos): 1306 · 1271 · 30 · 5 (base `817429a` no mesmo ambiente: 1304 · 1269 · 30 · 5; conjunto de falhas idêntico). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
+- **origin/main antes da 091c:** `18f0c23` (registro da 091b no Contexto Mestre). **Último commit:** Protecao 091c (código + testes + este checkpoint; hash exato em `git log -1`).
+- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 091c:** 1337 testes · 1329 pass · 3 fail conhecidos · 5 todo (era 1316/1308/3/5 após a 091b; +17 em `controlled-duplicate-merge` e +4 multi-PC em `multi-device-sync`). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
+  - Medido no ambiente remoto (sem os arquivos protegidos): 1327 · 1292 · 30 · 5 (base `18f0c23` no mesmo ambiente: 1306 · 1271 · 30 · 5; conjunto de falhas idêntico, arquivo a arquivo). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
 - **Validação real do usuário após a 091 (navegador):** `LESION_REVISIONS` sincronizou entre navegadores/PCs; as pendências apareceram no Edge; a lógica da 091 funciona; só foram encontrados problemas visuais (contraste/alinhamento) — corrigidos na 091b.
 - **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 091b (só CSS/markup). Nenhuma escrita deliberada nesta tarefa. A 091 não cria campo/documento novo (pendências gerais vivem em `lesionRevisions`, sincronizado desde a 084). A 090 adicionou `reviewProgress` (histórico compacto do Quiz, até 8 tentativas por lesão) e `reviewOverride` (override manual) no documento principal; a 089 adicionou `reviewUpdatedAt` (carimbos de mudança manual do estado de estudo) no documento principal, na próxima publicação real. A 088 adicionou só o campo opcional `clinicalContext` DENTRO do objeto da imagem (viaja nos chunks como qualquer metadado de imagem). A 087 reaproveitou `img.label`/`panels[].seq`; a 086 também não (alerta derivado de `lesionRevisions`). Desde a 085 o documento principal tem `orderUpdatedAt`.
-- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), 088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44), 089 (estado de estudo estável — seção 45), 090 (estado AUTOMÁTICO pelo Quiz + override manual — seção 46; corrige o modelo da 089), 091 (pendências gerais do Atlas na Central de Revisões — seção 47), **091b (ajuste visual após validação real no navegador — seção 48)**.
-- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087); `img.clinicalContext` é pré-diagnóstico, digitado pelo usuário, visível no Quiz antes e depois da resposta — a descrição (`label`) continua só depois (088); REVIEW (Não revisado/Revisando/Dominado) é AUTOMÁTICO pelo histórico do Quiz (`REVIEW_PROGRESS`, regra determinística `replayAutoReview`) salvo override MANUAL explícito (`REVIEW_OVERRIDE`), que o Quiz nunca sobrescreve; boot/render/pull não mudam nada sem dado novo; conflitos por recência, nunca Math.max (089/090); pendência GERAL (`scope:'global'`, `lesionId:null`) é só um pedido: nunca aplica nada em DATA (`global_review_has_no_direct_target`), nunca gera ⚠ em lesão, conclusão é humana (091)**.
+- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), 088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44), 089 (estado de estudo estável — seção 45), 090 (estado AUTOMÁTICO pelo Quiz + override manual — seção 46; corrige o modelo da 089), 091 (pendências gerais do Atlas na Central de Revisões — seção 47), 091b (ajuste visual após validação real no navegador — seção 48), **091c (fusão clínica controlada de 4 grupos de duplicatas aprovados; mapa `lesionMerges` sincronizado — seção 49)**.
+- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087); `img.clinicalContext` é pré-diagnóstico, digitado pelo usuário, visível no Quiz antes e depois da resposta — a descrição (`label`) continua só depois (088); REVIEW (Não revisado/Revisando/Dominado) é AUTOMÁTICO pelo histórico do Quiz (`REVIEW_PROGRESS`, regra determinística `replayAutoReview`) salvo override MANUAL explícito (`REVIEW_OVERRIDE`), que o Quiz nunca sobrescreve; boot/render/pull não mudam nada sem dado novo; conflitos por recência, nunca Math.max (089/090); pendência GERAL (`scope:'global'`, `lesionId:null`) é só um pedido: nunca aplica nada em DATA (`global_review_has_no_direct_target`), nunca gera ⚠ em lesão, conclusão é humana (091)**. **091c:** id presente em `LESION_MERGES` nunca volta (nem pelo SEED, nem por PC desatualizado, nem por backup antigo); o mapa só cresce; a única exceção de ownership de imagem é o fold desse mapa (imagens marcadas com `mergedFromLesionId`).
 - **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 091b. Não restaurar sem decisão explícita do usuário.
 - **Passo manual pós-deploy (085):** ordens personalizadas feitas ANTES da 085 não têm carimbo. No PC que tem a ordem CORRETA, fazer uma reordenação qualquer (ex.: descer uma seção e subir de volta; idem um sítio em cada seção personalizada) — isso carimba e publica. Depois abrir o outro PC: ordem default/automática cede para a da nuvem sozinha. (Revisões pré-084: mesma lógica, ver seção 40.)
-- **Próximo passo exato:** Proteção 092 (ver BACKLOG abaixo).
+- **Passo manual pendente (091c):** a fusão NÃO foi executada no ambiente remoto (sem acesso aos dados reais). No navegador com os dados reais: 💾 exportar backup JSON → Ferramentas avançadas → "🧬 fusões clínicas aprovadas" → conferir o relatório (ids reais, keeper, motivo) → "Fundir". Depois abrir o outro PC e conferir que ele converge sozinho.
+- **Próximo passo exato:** editar o motivo de uma revisão pendente clicando no ⚠ (com histórico das alterações) — pedido do usuário para depois da 091c; depois Proteção 092 (ver BACKLOG abaixo).
 
 ## BACKLOG
 
-- **PRÓXIMA PRIORIDADE: Proteção 092 — corrigir o merge de edição de metadados/contexto de imagens JÁ EXISTENTES entre PCs** (ver pendência abaixo).
+- **PEDIDO DO USUÁRIO (após a 091c):** editar o motivo de uma revisão pendente clicando no ⚠, mantendo histórico das alterações.
+- **Proteção 092 — corrigir o merge de edição de metadados/contexto de imagens JÁ EXISTENTES entre PCs** (ver pendência abaixo).
 - **093** — conteúdo complementar/classificações/estadiamento exibidos somente após responder no Quiz.
 - **Auditoria semântica de duplicatas:** está sendo feita separadamente, em modo READ-ONLY, fora do app. NÃO confundir com `LESION_REVISIONS` (a Central só guarda pedidos/pendências; nada nela executa auditoria ou fusão).
 - **Pendência de sync encontrada na 088 (pré-existente, recomendável tratar logo):** em `mergeEntryNonDestructive`, `unionEntryImages(local.images, remote.images)` mantém SEMPRE a versão local de uma imagem que existe nos dois lados. Uma EDIÇÃO posterior de metadados de uma imagem já existente (`label`, `clinicalContext`, `panels`…) chega à nuvem, mas um PC que já tinha a imagem mantém a cópia antiga no pull — e pode republicá-la no próximo envio dele. Imagens NOVAS (com label/contexto) propagam normalmente. `tests/image-description.test.js` proíbe hoje lógica específica de `label` nesse merge: a correção exige decisão explícita (ex.: metadados de imagem pelo `_userUpdatedAt` da lesão) e testes próprios.
@@ -2121,3 +2123,122 @@ reescrever histórico).
 ### Próximo passo (inalterado)
 Proteção 092 — sync de edição de metadados/contexto de imagens já existentes
 entre PCs.
+
+## 49. Proteção 091c — fusão clínica controlada de duplicatas aprovadas (2026-09-26)
+
+### Autorização do usuário
+Decisão clínica EXPLÍCITA do usuário (4 grupos, com os ids da auditoria):
+1. `seed_155` "Metástase hepática" + `seed_590` "Metástases hepáticas" +
+   `seed_722` "Metástases hepáticas hipervasculares" → **"Metástases hepáticas"**.
+2. `seed_45` "Metástase óssea vertebral" + `seed_581` "Metástases ósseas
+   vertebrais" → **"Metástases ósseas vertebrais"**.
+3. `seed_89` "Linfoma mediastinal" + `seed_625` "Linfoma do mediastino" →
+   **"Linfoma mediastinal"**.
+4. `seed_1049` "Osteomielite mandibular" + `seed_1158` "Osteomielite da
+   mandíbula" → **"Osteomielite mandibular"** (keeper 1158 recebe enTerm
+   `mandibular osteomyelitis` e o link em inglês).
+
+- **Metástases hepáticas hipervasculares não é mais uma lesão separada; o padrão hipervascular foi incorporado ao registro Metástases hepáticas.**
+- **Metástases de órgãos diferentes permanecem entradas separadas.**
+- LIRADS sai do registro final do grupo 1; diferenciais autorreferentes
+  (a lesão citando a própria duplicata) foram removidos do texto final.
+- O texto final de cada grupo foi composto SÓ com frases já existentes nos
+  membros (nada inventado) e só é aplicado se as notas ainda forem as do
+  SEED; se o usuário editou alguma nota, o fallback preserva a nota do keeper
+  + parágrafos inéditos dos outros (relatório avisa "fallback_notas_editadas").
+
+### Achado crítico: ids da auditoria ≠ ids de execução
+`SEED.forEach((e,i)=> e.id='seed_'+i)` renumera por POSIÇÃO no boot; o campo
+`id` literal do SEED (usado pela auditoria) não corresponde ao id real (ex.: o
+`seed_155` da auditoria é o `seed_150` em execução; o `seed_155` real é o
+IPMN). Por isso a fusão resolve cada membro pela IDENTIDADE
+`exactLesionIdentityKey(s, site, name)` nos dados reais — nunca pelo número.
+O relatório mostra os ids REAIS antes de executar. Grupo com identidade
+ambígua (2+ registros iguais) ou membro ausente fica PAUSADO.
+
+### Regra oficial do keeper (aprovada)
+1. Só um membro com imagem → ele permanece (**"quem tem imagem permanece"**).
+2. Mais de um com imagem → grupo PAUSADO; o relatório lista ids, imagens,
+   source, label, clinicalContext, panels e ownership; nada é decidido.
+3. Nenhum com imagem → casos clínicos > progresso de estudo (REVIEW/SRS/
+   Quiz/override) > registro canônico aprovado (`preferredKeeperName`:
+   "Metástases hepáticas", "Metástases ósseas vertebrais", "Linfoma do
+   mediastino", "Osteomielite da mandíbula") > menor id (desempate).
+- No SEED (sem imagens nesses 9 registros) o keeper previsto é o registro
+  preferido de cada grupo; o keeper REAL é decidido na hora pelos dados do
+  navegador do usuário (regra 1 prevalece se alguém tiver imagem).
+
+### Mapa de fusão `lesionMerges` (sincronizado; aprovado)
+- `LESION_MERGES = { idFundido: { into, at, group, finalName } }` — IndexedDB
+  `atlas:lesionMerges`, campo `lesionMerges` no meta do Firestore, backup
+  JSON e snapshot. União entre PCs (conflito: fusão mais antiga vence); o
+  mapa nunca encolhe (import de backup antigo e restauração de snapshot
+  fazem união).
+- `foldLesionMergesIntoState()` (pura) aplica o mapa: move imagens (dedup por
+  identidade), une links (URL), tags, clinicalCases, altPlacements; REVIEW
+  (estado do keeper, a menos que o fundido tenha carimbo manual mais novo ou o
+  keeper não tenha estado), REVIEW_STAMPS, REVIEW_PROGRESS (união),
+  REVIEW_OVERRIDE (mais recente), SRS (updatedAt mais novo),
+  LESION_REVISIONS por lesão (redirecionadas; no fluxo explícito com
+  histórico `lesion_merged`), marcadores 079d; remove o id fundido.
+- Aplicado ANTES de qualquer filtro: boot (`loadData`), pull/pre-push
+  (`reconcileStateWithRemote`, local e cópia do remoto), transação de
+  `writeShardedState` (payload, dados remotos e cópia do meta remoto — nem `forceThisDeviceToCloud`
+  de um PC antigo grava o id fundido), adoção de PC novo, import e restauração.
+- `isQuarantinedSeedId()` também devolve true para ids do mapa
+  (`isMergedAwayLesionId`) → o id não volta pelo SEED/catálogo ativo.
+- **Exceção RESTRITA de ownership:** só o fold do mapa muda `lesionId`/
+  `lesionName` de imagens (para o keeper, marcando `mergedFromLesionId`). Não é
+  regra geral de sync: `canChangeImageOwnership` continua exigindo ação manual.
+  Rótulos legados (`lesionId` histórico) em imagens de OUTRAS lesões não são
+  tocados nem contam como órfãos (no SEED, 63 de 68 imagens têm rótulo
+  histórico; um deles coincide com um id fundido).
+
+### Fluxo manual (nunca automático)
+Ferramentas avançadas → "🧬 fusões clínicas aprovadas": relatório com os dados
+reais → "Fundir N grupo(s)". `runApprovedClinicalMerges091c` exige: app
+pronto, sem sync em andamento, **backup JSON exportado há ≤ 2 h**
+(`atlas:lastBackupExportAt`, gravado pelo 💾), ENSAIO completo numa cópia (se
+algum grupo deixar órfão ou perder imagem, nada é alterado), confirmação e
+`createSafetySnapshot('antes da fusão clínica controlada de duplicatas
+aprovadas')` (motivo na allowlist; snapshot nulo aborta). Depois salva
+REVIEW/SRS/LESION_REVISIONS/mapa/marcadores e `saveData()` (dirty + push).
+Idempotente: segunda execução encontra os grupos como `already_merged`.
+Auditoria pós-fusão (`auditLesionMergeOrphans`) precisa dar 0.
+
+### Contagem
+Medida antes/depois pelo próprio fluxo: esperado **−5** (9 registros → 4). No
+SEED: 1213 → 1208. Nos dados reais o número exato depende do estado do
+usuário (o relatório mostra antes/depois).
+
+### Execução
+NÃO executada no ambiente remoto (sem acesso aos dados reais — regra do
+pedido). Pendente no navegador do usuário (ver checkpoint). Validação
+multi-PC: abrir o segundo PC após a fusão; ele deve convergir sem ação.
+
+### Arquivos alterados
+`index.html`; `tests/controlled-duplicate-merge.test.js` (novo, 17);
+`tests/multi-device-sync.test.js` (+4 multi-PC e módulo 091c no motor);
+harnesses atualizados com o mapa: `tests/device-bootstrap.test.js`,
+`tests/critical-flows.test.js` (âncoras +420/+420/+421/+490 e stubs),
+`tests/snapshots-ownership.test.js`, `tests/site-taxonomy.test.js`,
+`tests/lesion-review.test.js` (janela do bloco de import 4600→5000),
+`tests/review-state.test.js`, `tests/review-auto-mode.test.js`,
+`tests/lesion-revisions-sync.test.js` (regex aceita `txBase`, a base da
+transação após o fold); `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`.
+
+### Testes
+- `controlled-duplicate-merge` 17/17: grupo 1 vira um registro com nome
+  final, 722 some, conteúdo hipervascular presente, LIRADS fora, tags unidas,
+  links deduplicados, imagem/ownership/clinicalContext/panels/source
+  preservados, REVIEW/PROGRESS/OVERRIDE/STAMPS/SRS no keeper, revisões
+  redirecionadas, sem ressurreição, PC antigo converge, os 3 pares, nada mais
+  muda, −5, idempotente, regras 1/2/3, backup/snapshot/ensaio, notas editadas,
+  casos clínicos, rótulos legados.
+- `multi-device-sync` 174/175 (+4 da 091c, incl. PC antigo que gravou REVIEW/revisão do id fundido na nuvem antes da fusão; a 1 falha é a F2 pré-existente
+  que depende do arquivo canônico ausente no remoto).
+- Suíte (remoto): 1327 · 1292 · 30 · 5 (base 1306 · 1271 · 30 · 5; mesmas
+  falhas). Esperado no local: 1337 · 1329 · 3 · 5.
+- Chromium (rede bloqueada): script carrega sem erro, botão e modal
+  aparecem; o fluxo completo exige login Firebase (validação no navegador do
+  usuário).

@@ -97,6 +97,8 @@ const reviewFns089 = ['normalizeReviewStamps', 'saveReviewStamps', 'mergeReviewB
   'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'normalizeReviewOverrides', 'mergeReviewProgress',
   'mergeReviewOverrides', 'materializeReviewState', 'saveReviewProgressState']
   .map((n) => extractFunction(html, n).source).join('\n');
+// PROTEÇÃO 091c — mapa de fusão clínica (módulo real: normalize/merge/fold).
+const lesionMergesModule091c = html.slice(html.indexOf("const LESION_MERGES_KEY = 'atlas:lesionMerges';"), html.indexOf('/* Plano APROVADO pelo usuário (091c).'));
 // PROTEÇÃO 085 — ordem de seções/sítios com carimbo (funções reais).
 const orderFns085 = ['normalizeOrderStamps', 'saveOrderStamps', 'dedupeOrderList', 'isAutoSectionOrder',
   'isAutoSiteList', 'mergeOrderList', 'mergeOrderState']
@@ -222,6 +224,7 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
     "const DEFAULT_SECTION_ORDER = []; let ORDER_STAMPS = { section: 0, sites: {} };\n" + orderFns085 + '\n' +
     "const REVIEW_STAMPS_KEY = 'atlas:reviewUpdatedAt'; let REVIEW_STAMPS = {};\n" +
     "const REVIEW_PROGRESS_KEY = 'atlas:reviewProgress'; const REVIEW_OVERRIDE_KEY = 'atlas:reviewOverride'; const REVIEW_ATTEMPTS_MAX = 8; let REVIEW_PROGRESS = {}; let REVIEW_OVERRIDE = {};\n" + reviewFns089 + '\n' +
+    lesionMergesModule091c + '\n' +
     'function stripUndefinedDeep(v){try{return JSON.parse(JSON.stringify(v));}catch(_e){return v;}}\n' +
     'function splitIntoChunks(arr,size){const out=[];for(let i=0;i<arr.length;i+=size)out.push(arr.slice(i,i+size));return out;}\n' +
     'function checkChunkSize(){return true;}\n' +
@@ -423,6 +426,7 @@ test('loadData() real: dispositivo NOVO (storage.get lança) aciona o bootstrap 
       loadOrderStamps: async () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085 (fora do escopo destes testes)
       loadReviewStamps: async () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089 (idem)
       loadReviewProgressState: async () => {}, saveReviewProgressState: async () => {}, // PROTEÇÃO 090 (idem)
+      loadLesionMerges: async () => {}, saveLesionMerges: async () => {}, foldLesionMergesIntoGlobals: () => ({ changed: false }), // PROTEÇÃO 091c (idem)
       appStateReady: false, deviceBootstrapPending: false,
       SEED: seed,
       STORAGE_KEY: 'data', ORDER_KEY: 'order', SITEORDER_KEY: 'site-order', REVIEW_KEY: 'review',
@@ -522,6 +526,7 @@ test('loadData() real: reload DEPOIS do bootstrap não repete o fluxo (storage j
       loadOrderStamps: async () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085 (fora do escopo destes testes)
       loadReviewStamps: async () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089 (idem)
       loadReviewProgressState: async () => {}, saveReviewProgressState: async () => {}, // PROTEÇÃO 090 (idem)
+      loadLesionMerges: async () => {}, saveLesionMerges: async () => {}, foldLesionMergesIntoGlobals: () => ({ changed: false }), // PROTEÇÃO 091c (idem)
       appStateReady: false, deviceBootstrapPending: false,
       SEED: seed,
       STORAGE_KEY: 'data', ORDER_KEY: 'order', SITEORDER_KEY: 'site-order', REVIEW_KEY: 'review',
@@ -756,6 +761,8 @@ function makeAdoptContext({ localData, remoteMeta, remoteChunks } = {}) {
     function __getReviewProgress090(){ return { REVIEW_PROGRESS, REVIEW_OVERRIDE }; }
     ${reviewFns089}
     ${lesionRevisionsFns084}
+    ${lesionMergesModule091c}
+    function __getLesionMerges091c(){ return LESION_MERGES; }
     ${adoptRemoteFn.source}
   `;
   new vm.Script(engine).runInContext(ctx);

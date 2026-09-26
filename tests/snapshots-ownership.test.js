@@ -66,6 +66,7 @@ function makeSnapshotContext(backing) {
     storage: makeStorage(store), __backing: store,
     DATA: [], REVIEW: {}, SRS: {}, SESSIONLOG: {}, LESION_REVISIONS: {},
     REVIEW_PROGRESS: {}, REVIEW_OVERRIDE: {}, // PROTEÇÃO 090
+    LESION_MERGES: {}, mergeLesionMergeMaps: (a, b) => ({ ...(a || {}), ...(b || {}) }), foldLesionMergesIntoGlobals: () => ({ changed: false }), saveLesionMerges: async () => {}, // PROTEÇÃO 091c
     sectionOrder: [], siteOrder: {},
     STORAGE_KEY: 'data', REVIEW_KEY: 'review', SRS_KEY: 'srs', SESSIONLOG_KEY: 'slog',
     ORDER_KEY: 'order', SITEORDER_KEY: 'sorder', fbSyncing: false,
