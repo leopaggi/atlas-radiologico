@@ -323,6 +323,11 @@ body{
 .image-pick-row img{width:56px;height:56px;object-fit:cover;border-radius:6px;background:var(--ink);}
 .didactic-paste-zone{margin-top:6px;padding:10px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);font-size:12px;text-align:center;}
 .didactic-paste-zone:focus{outline:2px dashed var(--teal-dim);outline-offset:-2px;}
+.quiz-case-context{font-size:14px;line-height:1.4;color:var(--text);background:rgba(250,204,21,.08);border:1px solid rgba(202,138,4,.45);border-radius:10px;padding:6px 12px;margin-bottom:10px;max-width:100%;overflow-wrap:anywhere;text-align:left;white-space:pre-wrap;}
+.quiz-case-context-label{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);margin-bottom:2px;}
+.quiz-case-context-meta{font-weight:600;} .quiz-case-context-case{margin-top:4px;font-size:13px;}
+.clinical-case-presentation.is-clampable{cursor:pointer;} .clinical-case-presentation.is-clampable:focus-visible{outline:2px solid var(--teal-dim);outline-offset:2px;}
+.clinical-case-presentation.is-clamped{max-height:2.1em;line-height:1.4;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,#000 55%,transparent);mask-image:linear-gradient(180deg,#000 55%,transparent);}
 .didactic-edit-missing{width:72px;height:72px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:var(--ink);color:var(--amber);}
 .lesion-review-warning:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
 .inc-badge{
@@ -13440,6 +13445,7 @@ function openForm(id, opts){
     }
   }
   function renderImgGallery(){
+    didacticImageCtx.getImages(); // 093d — chave temporária p/ vincular imagem/quadro ainda não enviado
     imgGallery.innerHTML = '';
     pendingImgs.forEach((img, idx)=>{
       const item = document.createElement('div');
@@ -17236,7 +17242,9 @@ function renderQuizCardIntegrated(host){
     // cada render zera o estado de resposta.
     // PROTEÇÃO 088 — contexto clínico da imagem: pré-diagnóstico, visível
     // ANTES e depois da resposta (a descrição acima continua só depois).
-    media.innerHTML=`${quizImageClinicalContextHtml(cur.clinicalContext)}${quizImageDescHtml(cur.label, st.answered)}<div class="quiz-carousel${hasMultiple?' has-multi':''}">
+    // PROTEÇÃO 093d — contexto do CASO CLÍNICO vinculado a ESTA imagem
+    // (segue o carrossel); sem caso, o contexto manual da imagem (088).
+    media.innerHTML=`${quizClinicalContextBlockHtml(e, cur, st.answered)}${quizImageDescHtml(cur.label, st.answered)}<div class="quiz-carousel${hasMultiple?' has-multi':''}">
         ${hasMultiple?'<button type="button" class="quiz-carousel-arrow quiz-carousel-prev" aria-label="imagem anterior">‹</button>':''}
         <img src="${cur.data}">
         ${hasMultiple?'<button type="button" class="quiz-carousel-arrow quiz-carousel-next" aria-label="imagem seguinte">›</button>':''}
@@ -19701,7 +19709,7 @@ function clinicalCaseRowHtml(c, entry){
     + `<div style="color:var(--muted-2);font-size:12px;">${esc(c.source || '')}${c.origin === 'manual' ? `${c.source ? ' · ' : ''}caso manual` : ''}</div>`
     + (pac ? `<div style="font-size:12px;">${pac}</div>` : '')
     + (c.modality ? `<div style="font-size:12px;">Modalidade: ${esc(c.modality)}</div>` : '')
-    + (c.presentation ? `<div style="font-size:12px;margin-top:2px;">${esc(c.presentation)}</div>` : '')
+    + (c.presentation ? (typeof clinicalCasePresentationHtml === 'function' ? clinicalCasePresentationHtml(c.presentation) : `<div style="font-size:12px;margin-top:2px;">${esc(c.presentation)}</div>`) : '') // 093d: compacta
     + (c.notes ? `<div style="font-size:12px;margin-top:2px;color:var(--muted);">${esc(c.notes)}</div>` : '') // 093
     + (c.sourceUrl ? `<a class="detail-link" href="${esc(c.sourceUrl)}" target="_blank" rel="noopener">↗ Abrir caso</a>` : '')
     + (entry && typeof linkedImageViews === 'function' ? didacticViewsHtml(linkedImageViews(c, entry)) : '') // 093b: imagens vinculadas
@@ -19727,6 +19735,7 @@ function wireClinicalCasesToggle(ov, entry){
     toggle.textContent = (body.hidden ? '▸' : '▾') + ' Casos clínicos exemplo (' + list.length + ')';
     toggle.setAttribute('aria-expanded', body.hidden ? 'false' : 'true');
   };
+  if (typeof wireClinicalCasePresentations === 'function') wireClinicalCasePresentations(ov); // 093d
 }
 
 /* ============================================================
@@ -20315,6 +20324,116 @@ function didacticImageViews(item, entry){
   return linked.concat(legacy);
 }
 function didacticImageCount(item){ return activeImageRefs(item && item.imageRefs).length + sortDidacticItems(item && item.images).length; }
+/* ---------- PROTEÇÃO 093d — CONTEXTO CLÍNICO POR IMAGEM NO QUIZ
+   A história clínica do Quiz é da IMAGEM exibida (nunca "o 1º/último caso
+   da lesão"). Relação imagem ↔ caso = os vínculos 093b (clinicalCases[].
+   imageRefs, identidade estável da imagem — nunca posição no array).
+   Caso de contexto da imagem (getQuizClinicalCaseForImage):
+   - nenhum caso vinculado -> nenhum (o Quiz segue como antes, inclusive o
+     contexto manual da própria imagem da 088);
+   - escolha EXPLÍCITA mais recente ("Contexto do Quiz para esta imagem"):
+     gravada no PRÓPRIO vínculo (ref.quizPick 'on'|'off' + ref.quizPickAt)
+     -> sincroniza pelo merge por vínculo da 093b (carimbo do ref);
+     'off' = "Nenhum";
+   - sem escolha: 1 caso vinculado -> ele; 2+ -> NENHUM (ambíguo: melhor
+     sem contexto do que misturar pacientes).
+   Antes da resposta só vai o que estaria no pedido do exame: idade, sexo,
+   modalidade e apresentação (com nome da lesão/título do caso mascarados).
+   Título do caso, notas, sinais, classificações: só depois da resposta.
+   ---------- */
+function getClinicalCasesForImage(entry, image){
+  const out = [];
+  if (!image || typeof image !== 'object') return out;
+  for (const c of sortDidacticItems(entry && entry.clinicalCases)) {
+    const ref = activeImageRefs(c.imageRefs).find(r => resolveLesionImageRef([image], r.imageId));
+    if (ref) out.push({ case: c, ref });
+  }
+  return out;
+}
+function getQuizClinicalCaseForImage(entry, image){
+  const cands = getClinicalCasesForImage(entry, image);
+  if (!cands.length) return null;
+  let latest = null;
+  for (const x of cands) {
+    const at = Number(x.ref.quizPickAt) || 0;
+    if (!at || (x.ref.quizPick !== 'on' && x.ref.quizPick !== 'off')) continue;
+    const lt = latest ? Number(latest.ref.quizPickAt) : -1;
+    if (at > lt || (at === lt && didacticPickKey(x.case) > didacticPickKey(latest.case))) latest = x;
+  }
+  if (latest) return latest.ref.quizPick === 'on' ? latest.case : null;
+  return cands.length === 1 ? cands[0].case : null;
+}
+// Escolha explícita (por clique). pickKey = caso escolhido; null = "Nenhum".
+// Grava no vínculo da imagem (carimbo do ref -> merge por vínculo da 093b).
+function setQuizCasePickForImage(cases, imageId, pickKey, now){
+  const t = Number(now) || Date.now();
+  let list = Array.isArray(cases) ? cases : [];
+  let changed = false;
+  for (const c of sortDidacticItems(list)) {
+    const key = didacticPickKey(c);
+    if (!isImageLinked(c.imageRefs, imageId)) continue;
+    if (pickKey && key !== pickKey) continue;
+    const want = pickKey ? 'on' : 'off';
+    const r = updateDidacticItemImageRefs(list, key, refs => refs.map(ref => (ref && ref.imageId === imageId && !ref.deletedAt)
+      ? Object.assign({}, ref, { quizPick: want, quizPickAt: Math.max(t, (Number(ref.quizPickAt) || 0) + 1), updatedAt: Math.max(t, imageRefTime(ref) + 1) }) : ref), t);
+    list = r.list; if (r.changed) changed = true;
+  }
+  return { list, changed };
+}
+// Máscara de termos diagnósticos na apresentação ANTES da resposta.
+function redactDiagnosisTerms(text, terms){
+  let out = String(text || '');
+  const list = (Array.isArray(terms) ? terms : []).map(t => String(t || '').trim()).filter(t => t.length >= 4)
+    .sort((a, b) => b.length - a.length);
+  for (const t of list) {
+    const re = new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    out = out.replace(re, '[…]');
+  }
+  return out;
+}
+function quizCaseContextAge(v){
+  const a = String(v || '').trim();
+  return /^\d{1,3}$/.test(a) ? a + ' anos' : a;
+}
+// Bloco compacto "Contexto clínico" do caso da imagem. answered=false: só
+// dados do pedido do exame; answered=true: + título do caso e link.
+function quizCaseClinicalContextHtml(c, entry, answered){
+  if (!c || typeof c !== 'object') return '';
+  const pres = answered ? String(c.presentation || '').trim()
+    : redactDiagnosisTerms(c.presentation, [entry && entry.name, entry && entry.enTerm, c.title]).trim();
+  const meta = [quizCaseContextAge(c.patientAge), String(c.patientSex || '').trim(), String(c.modality || '').trim()].filter(Boolean);
+  if (!pres && !meta.length && !answered) return '';
+  return '<div class="quiz-case-context" data-case-id="' + escAttr(c.id || '') + '">'
+    + '<div class="quiz-case-context-label">Contexto clínico</div>'
+    + (meta.length ? '<div class="quiz-case-context-meta">' + meta.map(esc).join(' · ') + '</div>' : '')
+    + (pres ? '<div class="quiz-case-context-text">' + esc(pres) + '</div>' : '')
+    + (answered ? '<div class="quiz-case-context-case">Caso: <b>' + esc(c.title || c.source || 'caso clínico') + '</b>'
+      + (c.sourceUrl ? ' <a class="detail-link" href="' + escAttr(c.sourceUrl) + '" target="_blank" rel="noopener">↗ Abrir caso</a>' : '') + '</div>' : '')
+    + '</div>';
+}
+// Quiz (renderMedia): caso vinculado À IMAGEM é a fonte principal; sem caso,
+// o contexto manual da própria imagem (088) exatamente como antes.
+function quizClinicalContextBlockHtml(entry, image, answered){
+  const c = getQuizClinicalCaseForImage(entry, image);
+  if (c) { const h = quizCaseClinicalContextHtml(c, entry, answered); if (h) return h; }
+  return typeof quizImageClinicalContextHtml === 'function' ? quizImageClinicalContextHtml(image && image.clinicalContext) : '';
+}
+// Card do caso (detalhe): apresentação longa começa compacta (~1,5 linha).
+const CLINICAL_CASE_PRESENTATION_CLAMP = 140;
+function clinicalCasePresentationHtml(text){
+  const t = String(text || '');
+  if (!t.trim()) return '';
+  if (t.length <= CLINICAL_CASE_PRESENTATION_CLAMP && !/\n/.test(t)) return '<div class="clinical-case-presentation" style="font-size:12px;margin-top:2px;">' + esc(t) + '</div>';
+  return '<div class="clinical-case-presentation is-clampable is-clamped" role="button" tabindex="0" aria-expanded="false" title="clique para ver a história completa" style="font-size:12px;margin-top:2px;">' + esc(t) + '</div>';
+}
+function wireClinicalCasePresentations(root){
+  if (!root || typeof root.querySelectorAll !== 'function') return;
+  root.querySelectorAll('.clinical-case-presentation.is-clampable').forEach(el => {
+    const toggle = () => { const open = el.classList.toggle('is-clamped') === false; el.setAttribute('aria-expanded', open ? 'true' : 'false'); };
+    el.onclick = toggle;
+    el.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); } };
+  });
+}
 /* ---------- Edição (formulário da lesão): lista por área + editor por item.
    Tudo é DRAFT até o Salvar do formulário (mesmo padrão de links/
    altPlacements/clinicalCasesDraft). Upload de imagem = uploadToCloudinary
@@ -20627,7 +20746,7 @@ function openLesionImagePicker(images, refs, onDone){
 // applyImageLinkSelection / linkImageToLatestClinicalCase.
 function openImageLinkPicker(opts){
   const o = opts || {};
-  const imageId = didacticImageId(o.image);
+  const imageId = didacticImageRefId(o.image); // 093d: temporária do formulário (pending:…) também
   if (!imageId) { try { toast('Salve a lesão para enviar esta imagem antes de vincular.'); } catch (e) {} return null; }
   const lists = o.lists || {};
   const sel = { cases: new Set(), signs: new Set(), schemes: new Set() };
@@ -20642,11 +20761,33 @@ function openImageLinkPicker(opts){
     + (latest && !latestLinked ? '<button type="button" class="btn btn-ghost image-link-latest" data-act="latest">⚡ Vincular ao último caso clínico: <b class="image-link-latest-title"></b></button>' : '')
     + '<div class="image-link-tabs" role="tablist">' + ['cases', 'signs', 'schemes'].map(k => '<button type="button" role="tab" class="btn btn-ghost image-link-tab" data-tab="' + k + '">' + DIDACTIC_LINK_KINDS[k].label + ' (' + sortDidacticItems(lists[k]).length + ')</button>').join('') + '</div>'
     + '<div class="image-link-list"></div>'
+    + '<div class="image-link-quizctx" hidden><div class="didactic-meta" style="margin:6px 0 2px 0;"><b>Contexto do Quiz para esta imagem</b> (vários casos vinculados — escolha um):</div><div class="image-link-quizctx-opts"></div></div>'
     + '<div class="didactic-meta" style="margin-top:6px;">O vínculo não copia nem reenvia a imagem: ela continua na galeria da lesão. Desmarcar só desvincula.</div>'
     + '<div class="modal-actions"><button type="button" class="btn btn-ghost" data-act="cancel">Cancelar</button><button type="button" class="btn btn-primary" data-act="ok">Salvar vínculos</button></div></div>';
   document.body.appendChild(ov);
   ov.querySelector('.image-link-cap').textContent = o.image.label || '';
   if (ov.querySelector('.image-link-latest-title')) ov.querySelector('.image-link-latest-title').textContent = latest.title || latest.source || 'caso clínico';
+  // 093d — com 2+ casos marcados, escolha explícita do caso do Quiz (ou Nenhum).
+  const curQuizCase = getQuizClinicalCaseForImage({ clinicalCases: lists.cases }, o.image);
+  let quizChoice = curQuizCase ? didacticPickKey(curQuizCase) : '';
+  let quizChoiceTouched = false;
+  const renderQuizCtx = () => {
+    const box = ov.querySelector('.image-link-quizctx');
+    const chosen = sortDidacticItems(lists.cases).filter(c => sel.cases.has(didacticPickKey(c)));
+    box.hidden = chosen.length < 2;
+    if (box.hidden) return;
+    if (quizChoice && !chosen.some(c => didacticPickKey(c) === quizChoice)) quizChoice = '';
+    const optsBox = box.querySelector('.image-link-quizctx-opts');
+    optsBox.innerHTML = '';
+    chosen.map(c => [didacticPickKey(c), c.title || c.source || 'caso clínico']).concat([['', 'Nenhum']]).forEach(([key, label]) => {
+      const row = document.createElement('label'); row.className = 'image-pick-row';
+      row.innerHTML = '<input type="radio" name="image-link-quizctx"><span class="image-pick-label"></span>';
+      const r = row.querySelector('input'); r.checked = quizChoice === key;
+      r.onchange = () => { quizChoice = key; quizChoiceTouched = true; };
+      row.querySelector('.image-pick-label').textContent = label;
+      optsBox.appendChild(row);
+    });
+  };
   const renderList = () => {
     ov.querySelectorAll('.image-link-tab').forEach(b => { const on = b.getAttribute('data-tab') === tab; b.classList.toggle('active', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
     const box = ov.querySelector('.image-link-list');
@@ -20659,13 +20800,13 @@ function openImageLinkPicker(opts){
       row.innerHTML = '<input type="checkbox"><span class="image-pick-label"></span>';
       const cb = row.querySelector('input');
       cb.checked = sel[tab].has(key);
-      cb.onchange = () => { if (cb.checked) sel[tab].add(key); else sel[tab].delete(key); };
+      cb.onchange = () => { if (cb.checked) sel[tab].add(key); else sel[tab].delete(key); renderQuizCtx(); };
       row.querySelector('.image-pick-label').textContent = it.title || it.source || DIDACTIC_LINK_KINDS[tab].label;
       box.appendChild(row);
     });
   };
   ov.querySelectorAll('.image-link-tab').forEach(b => { b.onclick = () => { tab = b.getAttribute('data-tab'); renderList(); }; });
-  renderList();
+  renderList(); renderQuizCtx();
   const close = () => ov.remove();
   ov.onclick = (ev) => { if (ev.target === ov) close(); };
   ov.querySelector('[data-act="cancel"]').onclick = close;
@@ -20676,7 +20817,14 @@ function openImageLinkPicker(opts){
     if (r.changed) o.onApply({ cases: r.list, signs: lists.signs, schemes: lists.schemes, changed: { cases: true, signs: false, schemes: false } });
   };
   ov.querySelector('[data-act="ok"]').onclick = () => {
-    const res = applyImageLinkSelection(lists, imageId, sel, Date.now());
+    const now = Date.now();
+    const res = applyImageLinkSelection(lists, imageId, sel, now);
+    if (quizChoiceTouched && !ov.querySelector('.image-link-quizctx').hidden) {
+      // caso legado recém-vinculado ganhou id: acha pela legacyKey também
+      const target = quizChoice ? sortDidacticItems(res.cases).find(c => didacticPickKey(c) === quizChoice || ('legacy:' + (c.legacyKey || '')) === quizChoice) : null;
+      const pk = setQuizCasePickForImage(res.cases, imageId, target ? didacticPickKey(target) : null, now);
+      if (pk.changed) { res.cases = pk.list; res.changed.cases = true; }
+    }
     close();
     if (res.changed.cases || res.changed.signs || res.changed.schemes) o.onApply(res);
   };
@@ -20684,7 +20832,7 @@ function openImageLinkPicker(opts){
 }
 // Botão discreto da galeria: "🔗 Vincular a…" ou "🔗 n" (título lista onde).
 function imageLinkButtonHtml(lists, img, attrs){
-  const id = didacticImageId(img);
+  const id = didacticImageRefId(img); // 093d: também a temporária do formulário (vínculo pré-Salvar)
   if (!id) return '';
   const where = imageLinkSummary(lists, id);
   const title = where.length ? 'Vinculada a: ' + where.map(w => DIDACTIC_LINK_KINDS[w.kind].label + ' — ' + w.title).join('; ') : 'Vincular a caso clínico / sinal radiológico / classificação';

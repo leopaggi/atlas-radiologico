@@ -569,14 +569,18 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // a chamada simetrica no pull — antes da primeira ancora; +5 entre loadData
   // e o importHandler: baseline/rebase no Salvar do formulario e no Concluido
   // do Quiz e carimbo em updateLesionImageLabel.
-  assert.equal(recovery.line, 9266);
-  assert.equal(brokenArtifacts.line, 9256);
-  assert.equal(loadData.line, 11817);
+  // +5 nas tres primeiras ancoras / +6 no importHandler (Protecao 093d,
+  // 2026-09-26): CSS do bloco "Contexto clinico" do Quiz e do card de caso
+  // compacto — antes da primeira ancora; +1 entre loadData e o importHandler
+  // (chave temporaria das imagens da galeria do formulario p/ vinculo pre-Salvar).
+  assert.equal(recovery.line, 9271);
+  assert.equal(brokenArtifacts.line, 9261);
+  assert.equal(loadData.line, 11822);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
   // importHandler; as tres primeiras ancoras nao mudam.
-  assert.equal(importHandler.line, 16200);
+  assert.equal(importHandler.line, 16206);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

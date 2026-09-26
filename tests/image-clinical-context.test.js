@@ -115,7 +115,11 @@ test('088 QUIZ: contexto de uma imagem não contamina a outra (carrossel usa cur
   assert.match(quizMedia(a, false), /Caso clínico/);
   assert.equal(quizMedia(b, false), '', 'imagem sem contexto: nenhum bloco');
   const render = extractFunction(html, 'renderQuizCardIntegrated');
-  assert.match(render, /media\.innerHTML=`\$\{quizImageClinicalContextHtml\(cur\.clinicalContext\)\}\$\{quizImageDescHtml\(cur\.label, st\.answered\)\}/);
+  // 093d: o bloco agora passa por quizClinicalContextBlockHtml (caso clínico
+  // vinculado À IMAGEM tem prioridade); sem caso, cai exatamente em
+  // quizImageClinicalContextHtml(cur.clinicalContext) — mesma imagem ativa.
+  assert.match(render, /media\.innerHTML=`\$\{quizClinicalContextBlockHtml\(e, cur, st\.answered\)\}\$\{quizImageDescHtml\(cur\.label, st\.answered\)\}/);
+  assert.match(extractFunction(html, 'quizClinicalContextBlockHtml'), /return typeof quizImageClinicalContextHtml === 'function' \? quizImageClinicalContextHtml\(image && image\.clinicalContext\) : '';/);
   assert.match(render, /openImageLightbox\(cur\.data, st\.answered \? cur\.label : ''\)/, 'gate do lightbox intacto');
 });
 
