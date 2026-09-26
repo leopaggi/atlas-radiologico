@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.4.0
+// @version      1.4.1
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e entrega o caso à aba do Atlas já aberta (ou abre o Atlas com o payload no fragmento da URL). Não captura imagens, não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
+// @match        https://www.radiopaedia.org/cases/*
 // @match        https://leopaggi.github.io/atlas-radiologico/*
 // @grant        GM_setValue
 // @grant        GM_addValueChangeListener
