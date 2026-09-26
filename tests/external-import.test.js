@@ -392,7 +392,8 @@ test('14. fragmento é removido após consumo', () => {
     + '\n' + extractFunction(html, 'externalCaseSlugTitle')
     + '\n' + extractFunction(html, 'normalizeRadiopaediaCaseTitle') // 091f
     + '\n' + extractFunction(html, 'reconcileExternalImportTitle')
-    + '\n' + extractFunction(html, 'maybeHandleExternalImport');
+    + '\n' + extractFunction(html, 'maybeHandleExternalImport')
+    + '\n' + extractFunction(html, 'processExternalImportPayload'); // 091g: pipeline único do payload
   const replaced = [];
   let modalOpened = 0;
   const ctx = vm.createContext({
@@ -422,7 +423,8 @@ test('15. F5 não reimporta o mesmo payload', async () => {
     + '\n' + extractFunction(html, 'parseExternalImportHash')
     + '\n' + extractFunction(html, 'validateExternalImportPayload')
     + '\n' + extractFunction(html, 'clearExternalImportHash')
-    + '\n' + extractFunction(html, 'maybeHandleExternalImport');
+    + '\n' + extractFunction(html, 'maybeHandleExternalImport')
+    + '\n' + extractFunction(html, 'processExternalImportPayload'); // 091g: pipeline único do payload
   let modalOpened = 0;
   const ctx = vm.createContext({
     atob, TextDecoder, TextEncoder, URL,
@@ -1195,7 +1197,9 @@ test('083 Atlas: sem slug utilizável não inventa nome — mantém o que veio (
 });
 
 test('083 Atlas: maybeHandleExternalImport passa o payload validado por reconcileExternalImportTitle antes do modal', () => {
-  const src = extractFunction(html, 'maybeHandleExternalImport');
+  // 091g: a validação + modal vivem no pipeline único (boot, hashchange e canal).
+  assert.match(extractFunction(html, 'maybeHandleExternalImport'), /return processExternalImportPayload\(parsed\.payload\);/);
+  const src = extractFunction(html, 'processExternalImportPayload');
   assert.match(src, /openExternalImportModal\(reconcileExternalImportTitle\(checked\.value\)\)/);
 });
 

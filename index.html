@@ -18363,7 +18363,12 @@ async function maybeHandleExternalImport(){
     console.warn('Importação externa ignorada:', parsed && parsed.error);
     return { status: 'rejeitado' };
   }
-  const checked = validateExternalImportPayload(parsed.payload);
+  return processExternalImportPayload(parsed.payload);
+}
+// PROTEÇÃO 091g — pipeline ÚNICO do payload (boot, hashchange e
+// BroadcastChannel): valida, corrige título (083/091f) e abre o modal.
+function processExternalImportPayload(payload){
+  const checked = validateExternalImportPayload(payload);
   if (!checked.ok) {
     console.warn('Importação externa inválida:', checked.errors.join(' | '));
     try { toast('Caso externo inválido — importação cancelada.'); } catch (e) {}
@@ -18386,16 +18391,23 @@ function ensureAtlasWindowName(){
   }catch(_e){ return false; }
 }
 ensureAtlasWindowName();
+// Porta comum da aba JÁ aberta (hashchange e BroadcastChannel): nunca
+// derruba um formulário em edição; substitui o modal de importação anterior.
+function externalImportFormBlocked(){
+  if (typeof document !== 'undefined' && document.querySelector('.lesion-form-overlay')) {
+    try { toast('Caso não importado: salve ou feche o formulário aberto e clique de novo em "Enviar ao Atlas".'); } catch (e) {}
+    return true;
+  }
+  try { document.querySelectorAll('.external-import-overlay, .external-ai-overlay').forEach(o => o.remove()); } catch (e) {}
+  return false;
+}
 async function handleExternalImportHashChange(){
   if (typeof location === 'undefined' || String(location.hash || '').indexOf(EXTERNAL_IMPORT_PREFIX) !== 0) return null;
   if (!appStateReady) return { status: 'aguardando_boot' }; // o gancho do boot (abaixo) processa o hash atual
-  if (typeof document !== 'undefined' && document.querySelector('.lesion-form-overlay')) {
-    // Nunca derruba um formulário em edição (dados não salvos).
+  if (externalImportFormBlocked()) {
     clearExternalImportHash();
-    try { toast('Caso não importado: salve ou feche o formulário aberto e clique de novo em "Enviar ao Atlas".'); } catch (e) {}
     return { status: 'adiado_formulario_aberto' };
   }
-  try { document.querySelectorAll('.external-import-overlay, .external-ai-overlay').forEach(o => o.remove()); } catch (e) {}
   return maybeHandleExternalImport();
 }
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
@@ -18404,12 +18416,86 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
   });
 }
 
+/* PROTEÇÃO 091g — canal de importação da aba JÁ ABERTA (mecanismo
+   primário). O alvo nomeado da 091e sozinho falhou no navegador real (uma
+   aba do Atlas aberta pelo usuário não é visível ao Radiopaedia). Mas
+   BroadcastChannel só liga abas da MESMA origem: quem fala com esta aba é a
+   ponte do userscript rodando AQUI (mesma origem), que recebe o caso da aba
+   do Radiopaedia pelo armazenamento do Tampermonkey. Protocolo:
+   {type:'ping', requestId} -> {type:'pong', requestId, tabId, ready};
+   {type:'external-import', requestId, tabId, payload} -> só a aba com esse
+   tabId importa (requestId repetido é ignorado) -> mesmo pipeline do boot
+   (processExternalImportPayload) + {type:'import-ack', requestId, status}. */
+const ATLAS_IMPORT_CHANNEL = 'atlas-radiologico-import';
+const ATLAS_TAB_ID = 'atlas_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+let pendingBroadcastImport = null;       // chegou antes do boot: processado no gancho do loadData
+const handledBroadcastImports = new Set(); // requestId já tratado (nunca importa 2x)
+let atlasTabTitleBeforeSignal = null;
+// O navegador não deixa focar uma aba em segundo plano sem gesto do usuário:
+// tenta focar (inofensivo) e marca o título até a aba ser vista.
+function signalAtlasTabAttention(){
+  try { if (typeof window !== 'undefined' && typeof window.focus === 'function') window.focus(); } catch (e) {}
+  try {
+    if (typeof document === 'undefined' || !document.hidden) return false;
+    if (atlasTabTitleBeforeSignal === null) atlasTabTitleBeforeSignal = document.title;
+    document.title = '📥 Novo caso — ' + atlasTabTitleBeforeSignal;
+    return true;
+  } catch (e) { return false; }
+}
+function clearAtlasTabAttention(){
+  try {
+    if (atlasTabTitleBeforeSignal !== null && typeof document !== 'undefined' && !document.hidden) { document.title = atlasTabTitleBeforeSignal; atlasTabTitleBeforeSignal = null; }
+  } catch (e) {}
+}
+function deliverExternalImportPayload(payload){
+  if (!appStateReady) { pendingBroadcastImport = payload; return { status: 'aguardando_boot' }; }
+  if (externalImportFormBlocked()) return { status: 'adiado_formulario_aberto' };
+  signalAtlasTabAttention();
+  return processExternalImportPayload(payload);
+}
+function handleAtlasImportChannelMessage(data, reply){
+  if (!data || typeof data !== 'object') return null;
+  const send = (m) => { try { if (typeof reply === 'function') reply(m); } catch (e) {} };
+  if (data.type === 'ping') {
+    send({ type: 'pong', requestId: data.requestId || null, tabId: ATLAS_TAB_ID, ready: !!appStateReady });
+    return { status: 'pong' };
+  }
+  if (data.type === 'external-import') {
+    if (data.tabId && data.tabId !== ATLAS_TAB_ID) return { status: 'outra_aba' }; // endereçado a outra aba do Atlas
+    const id = String(data.requestId || '');
+    if (id && handledBroadcastImports.has(id)) return { status: 'duplicado' };
+    if (id) handledBroadcastImports.add(id);
+    let res;
+    try { res = deliverExternalImportPayload(data.payload); }
+    catch (e) { console.warn('Falha na importação externa (canal).', e); res = { status: 'erro' }; }
+    send({ type: 'import-ack', requestId: id || null, tabId: ATLAS_TAB_ID, status: res && res.status });
+    return res;
+  }
+  return null;
+}
+function startAtlasImportChannel(){
+  if (typeof BroadcastChannel !== 'function') return null; // sem suporte: fica o fallback (091e)
+  try {
+    const bc = new BroadcastChannel(ATLAS_IMPORT_CHANNEL);
+    bc.onmessage = (ev) => handleAtlasImportChannelMessage(ev && ev.data, (m) => bc.postMessage(m));
+    return bc;
+  } catch (e) { return null; }
+}
+const ATLAS_IMPORT_BC = startAtlasImportChannel();
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+  document.addEventListener('visibilitychange', clearAtlasTabAttention);
+}
+
 // Gancho pós-boot SEM editar loadData(): preserva todas as âncoras de linha
 // dos testes existentes. O try/catch interno garante boot intacto.
 const _loadDataSemImport = loadData;
 loadData = async function(){
   const result = await _loadDataSemImport.apply(this, arguments);
   try { await maybeHandleExternalImport(); } catch (e) { console.warn('Falha na importação externa (boot preservado).', e); }
+  if (pendingBroadcastImport) { // PROTEÇÃO 091g — caso recebido pelo canal durante o boot
+    const queued = pendingBroadcastImport; pendingBroadcastImport = null;
+    try { deliverExternalImportPayload(queued); } catch (e) { console.warn('Falha na importação externa (canal, pós-boot).', e); }
+  }
   return result;
 };
 

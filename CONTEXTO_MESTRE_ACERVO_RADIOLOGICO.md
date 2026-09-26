@@ -8,20 +8,20 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
-*Atualizado em 2026-09-26, junto do commit "Protecao 091f: corrige titulos externos e conclusao manual de revisoes".*
+*Atualizado em 2026-09-26, junto do commit "Protecao 091g: reutiliza aba do Atlas via BroadcastChannel".*
 
 - **Branch local de trabalho:** `master` (publicação: `git push origin master:main`).
-- **origin/main antes da 091f:** `42ac857` (Protecao 091e). **Último commit:** Protecao 091f (código + testes + este checkpoint; hash exato em `git log -1`).
-- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 091f:** 1380 testes · 1372 pass · 3 fail conhecidos · 5 todo (era 1372/1364/3/5 após a 091e; +8 `title-branding-manual-resolve`). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
-  - Medido no ambiente remoto (sem os arquivos protegidos): 1370 · 1335 · 30 · 5 (base `42ac857` no mesmo ambiente: 1362 · 1327 · 30 · 5; conjunto de falhas idêntico, arquivo a arquivo). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
+- **origin/main antes da 091g:** `984ce42` (Protecao 091f). **Último commit:** Protecao 091g (código + testes + este checkpoint; hash exato em `git log -1`).
+- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 091g:** 1391 testes · 1383 pass · 3 fail conhecidos · 5 todo (era 1380/1372/3/5 após a 091f; +11 `atlas-broadcast-import`). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
+  - Medido no ambiente remoto (sem os arquivos protegidos): 1381 · 1346 · 30 · 5 (base `984ce42` no mesmo ambiente: 1370 · 1335 · 30 · 5; conjunto de falhas idêntico, arquivo a arquivo). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
 - **Validação real do usuário após a 091 (navegador):** `LESION_REVISIONS` sincronizou entre navegadores/PCs; as pendências apareceram no Edge; a lógica da 091 funciona; só foram encontrados problemas visuais (contraste/alinhamento) — corrigidos na 091b.
 - **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 091b (só CSS/markup). Nenhuma escrita deliberada nesta tarefa. A 091 não cria campo/documento novo (pendências gerais vivem em `lesionRevisions`, sincronizado desde a 084). A 090 adicionou `reviewProgress` (histórico compacto do Quiz, até 8 tentativas por lesão) e `reviewOverride` (override manual) no documento principal; a 089 adicionou `reviewUpdatedAt` (carimbos de mudança manual do estado de estudo) no documento principal, na próxima publicação real. A 088 adicionou só o campo opcional `clinicalContext` DENTRO do objeto da imagem (viaja nos chunks como qualquer metadado de imagem). A 087 reaproveitou `img.label`/`panels[].seq`; a 086 também não (alerta derivado de `lesionRevisions`). Desde a 085 o documento principal tem `orderUpdatedAt`.
-- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), 088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44), 089 (estado de estudo estável — seção 45), 090 (estado AUTOMÁTICO pelo Quiz + override manual — seção 46; corrige o modelo da 089), 091 (pendências gerais do Atlas na Central de Revisões — seção 47), 091b (ajuste visual após validação real no navegador — seção 48), 091c (fusão clínica controlada de 4 grupos de duplicatas aprovados; mapa `lesionMerges` sincronizado — seção 49), **091d (editar motivo de revisão ativa com histórico, ⚠ clicável, importador externo com nome PT/enTerm/descrição/tags e "✨ Revisar com IA" criando revisão real — seção 50)**, **091e (importações do Radiopaedia reutilizam a aba já aberta do Atlas — seção 51)**, **091f (título do Radiopaedia sem branding + alias Paraovarian cyst; "✓ Marcar como resolvida" — seção 52)**.
+- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), 088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44), 089 (estado de estudo estável — seção 45), 090 (estado AUTOMÁTICO pelo Quiz + override manual — seção 46; corrige o modelo da 089), 091 (pendências gerais do Atlas na Central de Revisões — seção 47), 091b (ajuste visual após validação real no navegador — seção 48), 091c (fusão clínica controlada de 4 grupos de duplicatas aprovados; mapa `lesionMerges` sincronizado — seção 49), **091d (editar motivo de revisão ativa com histórico, ⚠ clicável, importador externo com nome PT/enTerm/descrição/tags e "✨ Revisar com IA" criando revisão real — seção 50)**, **091e (importações do Radiopaedia reutilizam a aba já aberta do Atlas — seção 51)**, **091f (título do Radiopaedia sem branding + alias Paraovarian cyst; "✓ Marcar como resolvida" — seção 52)**, **091g (reuso da aba do Atlas via canal: ponte do userscript + BroadcastChannel; alvo nomeado vira fallback — seção 53)**.
 - **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087); `img.clinicalContext` é pré-diagnóstico, digitado pelo usuário, visível no Quiz antes e depois da resposta — a descrição (`label`) continua só depois (088); REVIEW (Não revisado/Revisando/Dominado) é AUTOMÁTICO pelo histórico do Quiz (`REVIEW_PROGRESS`, regra determinística `replayAutoReview`) salvo override MANUAL explícito (`REVIEW_OVERRIDE`), que o Quiz nunca sobrescreve; boot/render/pull não mudam nada sem dado novo; conflitos por recência, nunca Math.max (089/090); pendência GERAL (`scope:'global'`, `lesionId:null`) é só um pedido: nunca aplica nada em DATA (`global_review_has_no_direct_target`), nunca gera ⚠ em lesão, conclusão é humana (091)**. **091c:** id presente em `LESION_MERGES` nunca volta (nem pelo SEED, nem por PC desatualizado, nem por backup antigo); o mapa só cresce; a única exceção de ownership de imagem é o fold desse mapa (imagens marcadas com `mergedFromLesionId`). **091d:** o motivo (`requestText`) de revisão ativa é editável com `requestHistory` (união no merge) e carimbo próprio `requestTextUpdatedAt` (editar texto nunca mexe em `updatedAt`/status/🔔); não há IA integrada — "✨ Revisar com IA" só cria revisão na Central (ponte manual). **091f:** fusão clínica (091c) NÃO conclui revisão — ela só é redirecionada ao keeper; concluir é sempre ação humana ("✓ Marcar como resolvida" → `accepted`, sem tocar DATA).
 - **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 091b. Não restaurar sem decisão explícita do usuário.
 - **Passo manual pós-deploy (085):** ordens personalizadas feitas ANTES da 085 não têm carimbo. No PC que tem a ordem CORRETA, fazer uma reordenação qualquer (ex.: descer uma seção e subir de volta; idem um sítio em cada seção personalizada) — isso carimba e publica. Depois abrir o outro PC: ordem default/automática cede para a da nuvem sozinha. (Revisões pré-084: mesma lógica, ver seção 40.)
 - **Passo manual pendente (091c):** a fusão NÃO foi executada no ambiente remoto (sem acesso aos dados reais). No navegador com os dados reais: 💾 exportar backup JSON → Ferramentas avançadas → "🧬 fusões clínicas aprovadas" → conferir o relatório (ids reais, keeper, motivo) → "Fundir". Depois abrir o outro PC e conferir que ele converge sozinho.
-- **Passo manual (091e/091f):** atualizar o userscript no Tampermonkey para a **v1.3.0** (`tools/radiopaedia-to-atlas.user.js`): reutiliza a aba do Atlas (091e) e nunca envia o branding do Radiopaedia no título (091f; o Atlas também limpa ao receber, então versões antigas não quebram a importação).
+- **Passo manual (091e/091f/091g):** atualizar o userscript no Tampermonkey para a **v1.4.0** (`tools/radiopaedia-to-atlas.user.js`) e ACEITAR as novas permissões (`@match` do Atlas + `GM_setValue`/`GM_addValueChangeListener`/`GM_removeValueChangeListener`) — sem isso o reuso da aba não funciona (cai no fallback que abre aba). Título sem branding (091f) também é limpo pelo Atlas ao receber.
 - **Próximo passo exato:** executar no navegador a fusão da 091c (passo manual acima), depois Proteção 092 (ver BACKLOG abaixo). Pendente de análise separada (NÃO alterado na 091d): semântica de "AUTO Dominado sem histórico".
 
 ## BACKLOG
@@ -2447,3 +2447,70 @@ Pequena correção de UX pós-091d: **"Importações do Radiopaedia reutilizam a
   Suíte (remoto): 1370 · 1335 · 30 · 5 (base 1362 · 1327 · 30 · 5; mesmas
   falhas). Chromium: ⚠ → ✓ Marcar como resolvida → diálogo com o texto
   exato → accepted, DATA idêntico, ⚠ some ao vivo.
+
+## 53. Proteção 091g — reuso da aba do Atlas via canal (BroadcastChannel + ponte do userscript) (2026-09-26)
+
+### Por que a 091e não bastou
+- O alvo nomeado (`window.open(url, 'atlas-radiologico')`) **falhou no
+  navegador real do usuário**: uma aba do Atlas aberta pelo próprio usuário
+  pertence a outro grupo de navegação e o Radiopaedia não a enxerga pelo
+  nome — nasce outra aba.
+- `BroadcastChannel` sozinho também NÃO resolve: ele só liga abas da MESMA
+  origem (conferido no Chromium: mensagem de outra origem nunca chega).
+  Um canal aberto em radiopaedia.org nunca fala com leopaggi.github.io.
+
+### Mecanismo final (primário)
+- **Atlas (`index.html`)**: escuta `BroadcastChannel('atlas-radiologico-import')`
+  (`startAtlasImportChannel`, `handleAtlasImportChannelMessage`):
+  `{type:'ping', requestId}` → `{type:'pong', requestId, tabId, ready}`;
+  `{type:'external-import', requestId, tabId, payload}` → só a aba com esse
+  `tabId` importa, `requestId` repetido é ignorado → `deliverExternalImportPayload`
+  → **mesmo pipeline** do boot/hashchange (`processExternalImportPayload`:
+  valida, corrige título 083/091f, abre o modal) → `import-ack`.
+  Porta comum `externalImportFormBlocked()` (hashchange e canal): formulário
+  de lesão aberto nunca é fechado (aviso, não importa); modal de importação
+  anterior é substituído. Caso recebido durante o boot entra na fila e é
+  processado pelo gancho do `loadData`.
+- **Userscript v1.4.0**: roda também na página do Atlas (`@match`) APENAS
+  como ponte (sem botão). As duas instâncias conversam pelo armazenamento do
+  Tampermonkey (`GM_setValue` + `GM_addValueChangeListener`, compartilhado
+  entre abas); na aba do Atlas a ponte repassa pelo BroadcastChannel da
+  própria origem. Radiopaedia: ping → a ponte pergunta à página → pong real
+  da página → envia o caso SÓ para a aba que respondeu primeiro (nenhum
+  `window.open`) + aviso "✓ Caso enviado para a aba do Atlas já aberta".
+  Com duas abas do Atlas abertas, importa em uma só.
+
+### Fallback
+Sem pong em ~700 ms (Atlas fechado, página antiga em cache, gerenciador sem
+`GM_addValueChangeListener`, sem BroadcastChannel, erro): abre como antes —
+`window.open(url, 'atlas-radiologico')` com `#external-import=` (091e: alvo
+nomeado, `window.name`, hashchange, `focus()`). Nunca os dois.
+
+### Foco
+O navegador NÃO deixa uma aba focar outra em segundo plano sem gesto do
+usuário. A aba do Atlas tenta `window.focus()` (inofensivo) e, se estiver em
+segundo plano, marca o título ("📥 Novo caso — …") até ser vista; o
+Radiopaedia mostra o aviso para alternar. Prioridade: **não criar aba nova**
+(nunca abre aba só para obter foco).
+
+### Preservado
+091e (alvo nomeado/`window.name`/hashchange/proteção de formulário) como
+fallback; 091f (título sem branding, "Paraovarian cyst" → "Cisto
+paraovariano", enTerm); descrição/tags; Revisar com IA; payload idêntico.
+
+### Arquivos / testes
+- `index.html`, `tools/radiopaedia-to-atlas.user.js` (v1.4.0),
+  `tests/atlas-broadcast-import.test.js` (novo, 11),
+  `tests/atlas-tab-reuse.test.js`, `tests/external-import.test.js`,
+  `tests/title-branding-manual-resolve.test.js` (harnesses: pipeline único e
+  versão ≥ 1.3.0), `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`.
+- `atlas-broadcast-import` 11/11; `atlas-tab-reuse` 7/7; `external-import`
+  79/79; `external-import-enhancements` 14/14; `title-branding-manual-resolve`
+  8/8; `critical-flows` 23/23 (âncoras inalteradas). Suíte (remoto): 1381 ·
+  1346 · 30 · 5 (base 1370 · 1335 · 30 · 5; mesmas falhas).
+- Chromium real, duas origens, userscript real nas duas páginas (Tampermonkey
+  emulado entre abas): Atlas aberto primeiro pelo usuário + 3 envios →
+  **2 abas no total** (Radiopaedia + Atlas), cada envio abriu o modal na aba
+  existente ("Cisto paraovariano"); Atlas fechado → 1º envio abriu exatamente
+  1 aba (`window.name = atlas-radiologico`). Validação final depende do
+  Tampermonkey real do usuário.

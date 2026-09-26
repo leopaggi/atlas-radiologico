@@ -123,7 +123,7 @@ test('091f 9: reuso da aba (091e) preservado — alvo nomeado, focus e hashchang
   assert.doesNotMatch(userscript, /window\.open\([^)]*(_blank|noopener)/);
   assert.match(html, /const ATLAS_WINDOW_NAME = 'atlas-radiologico';/);
   assert.match(html, /window\.addEventListener\('hashchange'/);
-  assert.match(userscript, /@version\s+1\.3\.0/);
+  assert.match(userscript, /@version\s+1\.(?:[3-9]|\d{2,})\.\d+/, 'versão >= 1.3.0 (091f); 091g sobe para 1.4.0');
 });
 
 // ------------------------------------------------- B: conclusão manual

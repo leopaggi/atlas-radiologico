@@ -39,6 +39,9 @@ function loadUserscript(windowOpen) {
   });
   const src = [/var ATLAS_URL = '[^']*';/.exec(userscript)[0], /var ATLAS_WINDOW_NAME = '[^']*';/.exec(userscript)[0],
     extractFunction(userscript, 'encodePayload'), extractFunction(userscript, 'openAtlasWindow'), extractFunction(userscript, 'sendToAtlas'),
+    // 091g: sendToAtlas passa pela ponte; sem GM_* (este vm) cai direto no alvo nomeado.
+    ...['BRIDGE_PING_KEY', 'BRIDGE_PONG_KEY', 'BRIDGE_IMPORT_KEY', 'ATLAS_IMPORT_CHANNEL', 'BRIDGE_TIMEOUT_MS'].map((k) => new RegExp('var ' + k + ' = [^;]+;').exec(userscript)[0]),
+    extractFunction(userscript, 'newRequestId'), extractFunction(userscript, 'defaultBridgeEnv'), extractFunction(userscript, 'sendToAtlasViaBridge'), extractFunction(userscript, 'showSentNotice'),
     'function collectCase(){ return ' + JSON.stringify(PAYLOAD) + '; }',
     'this.__us = { sendToAtlas, encodePayload, ATLAS_WINDOW_NAME };'].join('\n');
   vm.runInContext(src, ctx);
@@ -110,7 +113,7 @@ function loadAtlasHashHandler(opts) {
     clearExternalImportHash: () => { log.cleared += 1; loc.hash = ''; },
     maybeHandleExternalImport: async () => { log.modal += 1; loc.hash = ''; return { status: 'modal' }; }
   });
-  vm.runInContext("const EXTERNAL_IMPORT_PREFIX = '#external-import=';\n" + extractFunction(html, 'handleExternalImportHashChange') + '\nthis.__h = handleExternalImportHashChange;', ctx);
+  vm.runInContext("const EXTERNAL_IMPORT_PREFIX = '#external-import=';\n" + extractFunction(html, 'externalImportFormBlocked') /* 091g */ + '\n' + extractFunction(html, 'handleExternalImportHashChange') + '\nthis.__h = handleExternalImportHashChange;', ctx);
   return { h: ctx.__h, log, loc };
 }
 
@@ -142,5 +145,6 @@ test('091e: boot continua processando #external-import (gancho do loadData intac
   assert.match(html, /loadData = async function\(\)\{\s*const result = await _loadDataSemImport\.apply\(this, arguments\);\s*try \{ await maybeHandleExternalImport\(\); \}/);
   const m = extractFunction(html, 'maybeHandleExternalImport');
   assert.match(m, /clearExternalImportHash\(\);/);
-  assert.match(m, /openExternalImportModal\(reconcileExternalImportTitle\(checked\.value\)\)/);
+  assert.match(m, /return processExternalImportPayload\(parsed\.payload\);/); // 091g: pipeline único
+  assert.match(extractFunction(html, 'processExternalImportPayload'), /openExternalImportModal\(reconcileExternalImportTitle\(checked\.value\)\)/);
 });

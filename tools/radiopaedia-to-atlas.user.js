@@ -1,11 +1,14 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.3.0
-// @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e abre o Atlas com o payload no fragmento da URL. Não captura imagens, não traduz, não inventa campos.
+// @version      1.4.0
+// @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e entrega o caso à aba do Atlas já aberta (ou abre o Atlas com o payload no fragmento da URL). Não captura imagens, não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
-// @grant        none
+// @match        https://leopaggi.github.io/atlas-radiologico/*
+// @grant        GM_setValue
+// @grant        GM_addValueChangeListener
+// @grant        GM_removeValueChangeListener
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -221,7 +224,121 @@
       return;
     }
     var base = ATLAS_URL.replace(/\/+$/, '') + '/';
-    openAtlasWindow(base + '#external-import=' + encodePayload(payload));
+    var url = base + '#external-import=' + encodePayload(payload);
+    // 091g: primeiro tenta a aba do Atlas JÁ ABERTA (ponte); sem resposta,
+    // abre como antes (alvo nomeado da 091e).
+    sendToAtlasViaBridge(payload, url, defaultBridgeEnv());
+  }
+
+  /* 091g — PONTE para a aba do Atlas já aberta. BroadcastChannel só liga
+     abas da MESMA origem, então a aba do Radiopaedia não fala direto com o
+     Atlas: este mesmo userscript também roda na página do Atlas (@match) e
+     as duas instâncias conversam pelo armazenamento do Tampermonkey
+     (GM_setValue + GM_addValueChangeListener, compartilhado entre abas). Na
+     aba do Atlas a ponte repassa pelo BroadcastChannel da própria origem
+     ('atlas-radiologico-import'), que o index.html escuta.
+     Radiopaedia: ping -> (ponte pergunta à página) -> pong -> envia o caso
+     SÓ para a aba que respondeu primeiro. Sem pong a tempo (Atlas fechado,
+     página antiga, navegador/gerenciador sem suporte): abre como antes. */
+  var BRIDGE_PING_KEY = 'atlasBridge.ping';
+  var BRIDGE_PONG_KEY = 'atlasBridge.pong';
+  var BRIDGE_IMPORT_KEY = 'atlasBridge.import';
+  var ATLAS_IMPORT_CHANNEL = 'atlas-radiologico-import';
+  var BRIDGE_TIMEOUT_MS = 700;
+
+  function newRequestId() {
+    return 'req_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+  }
+
+  function defaultBridgeEnv() {
+    var hasGM = typeof GM_setValue === 'function' && typeof GM_addValueChangeListener === 'function';
+    return {
+      available: hasGM,
+      setValue: hasGM ? function (k, v) { GM_setValue(k, v); } : null,
+      addListener: hasGM ? function (k, fn) { return GM_addValueChangeListener(k, fn); } : null,
+      removeListener: function (id) { try { if (typeof GM_removeValueChangeListener === 'function') GM_removeValueChangeListener(id); } catch (_) {} },
+      setTimeout: function (fn, ms) { return setTimeout(fn, ms); },
+      openWindow: openAtlasWindow,
+      notify: showSentNotice,
+      timeoutMs: BRIDGE_TIMEOUT_MS,
+      BroadcastChannel: typeof BroadcastChannel === 'function' ? BroadcastChannel : null
+    };
+  }
+
+  // Aba do Radiopaedia: pergunta se há uma aba do Atlas; com pong, entrega o
+  // caso a ELA (nenhum window.open); sem pong, fallback. Nunca os dois.
+  function sendToAtlasViaBridge(payload, url, env) {
+    if (!env || !env.available) { env && env.openWindow ? env.openWindow(url) : openAtlasWindow(url); return 'fallback'; }
+    var requestId = newRequestId();
+    var settled = false;
+    var listenerId = null;
+    function finish() {
+      settled = true;
+      if (listenerId !== null) env.removeListener(listenerId);
+    }
+    try {
+      listenerId = env.addListener(BRIDGE_PONG_KEY, function (name, oldV, v) {
+        if (settled || !v || v.requestId !== requestId) return;
+        finish();
+        env.setValue(BRIDGE_IMPORT_KEY, { requestId: requestId, tabId: v.tabId, payload: payload, at: Date.now() });
+        env.notify('✓ Caso enviado para a aba do Atlas já aberta — alterne para ela.');
+      });
+      env.setValue(BRIDGE_PING_KEY, { requestId: requestId, at: Date.now() });
+    } catch (e) {
+      finish();
+      env.openWindow(url);
+      return 'fallback';
+    }
+    env.setTimeout(function () {
+      if (settled) return;
+      finish();
+      env.openWindow(url);
+    }, env.timeoutMs);
+    return 'pending';
+  }
+
+  // Aba do Atlas: responde ao ping só se uma PÁGINA do Atlas confirmar
+  // (pong real do index.html) e repassa o caso pelo canal com o tabId
+  // escolhido — só a página com esse tabId importa (as outras ignoram).
+  function startAtlasBridge(env) {
+    if (!env || !env.available || !env.BroadcastChannel) return null; // sem suporte: Radiopaedia cai no fallback
+    var bc;
+    try { bc = new env.BroadcastChannel(ATLAS_IMPORT_CHANNEL); } catch (e) { return null; }
+    var waiting = {};
+    bc.onmessage = function (ev) {
+      var d = ev && ev.data;
+      if (!d || d.type !== 'pong' || !waiting[d.requestId]) return;
+      var cb = waiting[d.requestId];
+      delete waiting[d.requestId];
+      cb(d);
+    };
+    env.addListener(BRIDGE_PING_KEY, function (name, oldV, v, remote) {
+      if (remote === false || !v || !v.requestId) return;
+      waiting[v.requestId] = function (pong) {
+        env.setValue(BRIDGE_PONG_KEY, { requestId: v.requestId, tabId: pong.tabId, ready: !!pong.ready, at: Date.now() });
+      };
+      bc.postMessage({ type: 'ping', requestId: v.requestId });
+    });
+    env.addListener(BRIDGE_IMPORT_KEY, function (name, oldV, v, remote) {
+      if (remote === false || !v || !v.tabId) return;
+      bc.postMessage({ type: 'external-import', requestId: v.requestId, tabId: v.tabId, payload: v.payload });
+    });
+    return bc;
+  }
+
+  function showSentNotice(text) {
+    try {
+      var n = document.createElement('div');
+      n.textContent = text;
+      n.style.cssText = 'position:fixed;right:16px;bottom:64px;z-index:999999;padding:8px 12px;border-radius:8px;'
+        + 'background:#0e7490;color:#fff;font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,.18);';
+      (document.body || document.documentElement).appendChild(n);
+      setTimeout(function () { try { n.remove(); } catch (_) {} }, 4000);
+    } catch (_) {}
+  }
+
+  function isAtlasPage() {
+    try { return String(window.location.href).indexOf(ATLAS_URL) === 0; } catch (e) { return false; }
   }
 
   // 091e: alvo NOMEADO (mesmo nome que o Atlas define em window.name) —
@@ -250,6 +367,12 @@
       + 'box-shadow:0 2px 10px rgba(0,0,0,.18);';
     btn.addEventListener('click', sendToAtlas);
     (document.body || document.documentElement).appendChild(btn);
+  }
+
+  // 091g: na página do Atlas este script é SÓ a ponte (sem botão).
+  if (isAtlasPage()) {
+    startAtlasBridge(defaultBridgeEnv());
+    return;
   }
 
   if (document.readyState === 'loading') {
