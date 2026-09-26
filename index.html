@@ -311,7 +311,20 @@ body{
 .card-review-option.active{border-color:currentColor;font-weight:700;}
 /* PROTEÇÃO 090 — indicador AUTO/MANUAL e explicação do estado */
 .review-mode-tag{display:inline-block;margin-left:4px;padding:0 4px;border:1px solid currentColor;border-radius:3px;font-size:9px;letter-spacing:.04em;opacity:.8;vertical-align:middle;}
-.review-mode-info{flex-basis:100%;font-size:11px;color:var(--muted-2);margin-top:4px;}
+.review-mode-info{flex-basis:100%;font-size:11.5px;line-height:1.4;color:var(--muted);margin-top:6px;}
+/* PROTEÇÃO 091b — contraste dos controles da 090 no detalhe (antes herdavam
+   a cor padrão do navegador — quase ilegíveis no tema escuro) */
+.review-mode-info .review-mode-tag{color:var(--text);opacity:.85;margin-left:0;margin-right:4px;}
+.review-set-btn.review-secondary-btn{color:var(--text);background:var(--panel-2);border:1px solid var(--line);font-weight:500;}
+.review-set-btn.review-secondary-btn:hover{filter:none;border-color:var(--teal);color:var(--teal);background:var(--panel);}
+.review-set-btn.review-secondary-btn.active{border-color:var(--teal);color:var(--teal);background:var(--teal-dim);}
+.review-set-btn.review-secondary-btn:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+/* PROTEÇÃO 091b — Tipo do modal "+ Nova pendência": cada opção é UMA linha
+   clicável (radio ao lado do texto, dentro do mesmo label) */
+.nrr-scope-options{display:flex;flex-direction:column;gap:8px;}
+.field .nrr-scope-option{display:flex;align-items:center;gap:8px;margin:0;font-size:13px;color:var(--text);cursor:pointer;letter-spacing:normal;}
+.field .nrr-scope-option input[type="radio"]{width:auto;flex:none;margin:0;padding:0;accent-color:var(--teal);cursor:pointer;}
+.field .nrr-scope-option:hover span{color:var(--teal);}
 #empty-state{color:var(--muted-2);text-align:center;padding:60px 20px;font-size:13.5px;}
 
 /* ---------- Modal ---------- */
@@ -11987,13 +12000,13 @@ function openDetail(id, opts){
     // PROTEÇÃO 090 — AUTO/MANUAL, explicação e "Marcar para revisar novamente".
     const manual = isReviewManual(e.id);
     const autoBtn = document.createElement('button');
-    autoBtn.className = 'review-set-btn' + (!manual ? ' active' : '');
+    autoBtn.className = 'review-set-btn review-secondary-btn' + (!manual ? ' active' : ''); // 091b: contraste
     autoBtn.textContent = '⚙ Automático pelo Quiz';
     autoBtn.title = 'Estado calculado pelo desempenho no Quiz';
     autoBtn.onclick = ()=>{ if(isReviewManual(e.id)) setReviewAuto(e.id); renderReviewButtons(); renderReviewBar(); renderResults(); };
     row.appendChild(autoBtn);
     const againBtn = document.createElement('button');
-    againBtn.className = 'review-set-btn review-again-btn';
+    againBtn.className = 'review-set-btn review-secondary-btn review-again-btn'; // 091b: contraste
     againBtn.textContent = '↺ Marcar para revisar novamente';
     againBtn.title = 'Fica em Revisando (manual) sem apagar o histórico do Quiz nem o SRS';
     againBtn.onclick = ()=>{ markLesionForReviewAgain(e.id); renderReviewButtons(); renderReviewBar(); renderResults(); };
@@ -14077,9 +14090,11 @@ function openNewReviewRequestModal(onCreated){
     <div class="modal review-cancel-modal">
       <h2>+ Nova pendência</h2>
       <div class="modal-sub">um pedido para depois — nada é alterado agora</div>
-      <div class="field"><label>Tipo</label>
-        <label style="display:block;"><input type="radio" name="nrr-scope" value="global" checked> Atlas / solicitação geral</label>
-        <label style="display:block;"><input type="radio" name="nrr-scope" value="lesion"> Lesão específica</label>
+      <div class="field"><label id="nrr-scope-title">Tipo</label>
+        <div class="nrr-scope-options" role="radiogroup" aria-labelledby="nrr-scope-title">
+          <label class="nrr-scope-option"><input type="radio" name="nrr-scope" value="global" checked><span>Atlas / solicitação geral</span></label>
+          <label class="nrr-scope-option"><input type="radio" name="nrr-scope" value="lesion"><span>Lesão específica</span></label>
+        </div>
       </div>
       <div id="nrr-lesion-box" hidden>
         <div class="field"><label>Lesão</label><input id="nrr-lesion-search" type="text" placeholder="digite parte do nome (mín. 2 letras)"></div>

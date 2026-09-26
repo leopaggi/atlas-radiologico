@@ -262,3 +262,18 @@ test('090 PIPELINE: write (merge na transação + REVIEW materializado), read, r
   assert.match(html, /reviewProgress: REVIEW_PROGRESS, reviewOverride: REVIEW_OVERRIDE, \/\/ PROTEÇÃO 090/, 'backup exporta');
   assert.match(extractFunction(html, 'restoreSafetySnapshot'), /REVIEW_OVERRIDE = normalizeReviewOverrides\(snapshot\.reviewOverride\); stampRestoredReviewOverrides\(\);/);
 });
+
+test('091b UX: botões "Automático pelo Quiz" e "Marcar para revisar novamente" com classe de contraste e mesmos handlers', () => {
+  const detail = extractFunction(html, 'openDetail');
+  assert.match(detail, /autoBtn\.className = 'review-set-btn review-secondary-btn' \+ \(!manual \? ' active' : ''\);/);
+  assert.match(detail, /againBtn\.className = 'review-set-btn review-secondary-btn review-again-btn';/);
+  assert.match(detail, /autoBtn\.onclick = \(\)=>\{ if\(isReviewManual\(e\.id\)\) setReviewAuto\(e\.id\); renderReviewButtons\(\);/);
+  assert.match(detail, /againBtn\.onclick = \(\)=>\{ markLesionForReviewAgain\(e\.id\); renderReviewButtons\(\);/);
+  const btnCss = /\.review-set-btn\.review-secondary-btn\{([^}]*)\}/.exec(html);
+  assert.ok(btnCss);
+  assert.match(btnCss[1], /color:var\(--text\)/);
+  assert.match(btnCss[1], /background:var\(--panel-2\)/);
+  assert.match(/\.review-set-btn\.review-secondary-btn:hover\{([^}]*)\}/.exec(html)[1], /border-color:var\(--teal\)/);
+  assert.match(/\.review-mode-info\{([^}]*)\}/.exec(html)[1], /color:var\(--muted\)/, 'explicação legível (antes --muted-2)');
+  assert.match(/\.review-mode-info \.review-mode-tag\{([^}]*)\}/.exec(html)[1], /color:var\(--text\)/);
+});

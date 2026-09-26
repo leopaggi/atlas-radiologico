@@ -216,7 +216,7 @@ test('091-6/7: Central — meta global (🌐, categoria, sem "ver lesão"), bot�
   assert.match(pending, /id="pending-reviews-new">\+ Nova pendência</);
   assert.match(pending, /\$\{meta\.found\?'<button type="button" class="btn btn-ghost review-open-lesion">ver lesão<\/button>':''\}/, '"ver lesão" só com lesão encontrada');
   const modal = extractFn('openNewReviewRequestModal');
-  assert.match(modal, /value="global" checked> Atlas \/ solicitação geral/);
+  assert.match(modal, /value="global" checked><span>Atlas \/ solicitação geral<\/span>/); // 091b: texto dentro da mesma label
   assert.match(modal, /Lesão específica/);
   assert.match(modal, /searchLesionsForReviewRequest\(ev\.target\.value, 20\)/, 'busca, sem dropdown gigante');
   assert.match(modal, /createReviewRequest\(\{ scope, lesionId: selectedLesionId, requestText: text, category:/);
@@ -237,4 +237,20 @@ test('091-21/22: backup e snapshot preservam pendências globais (mesmo objeto L
   assert.deepEqual([r.scope, r.lesionId, r.category, r.requestText], ['global', null, 'classifications', 'Revisar estadiamentos oncológicos']);
   assert.match(html, /lesionRevisions:\s*LESION_REVISIONS,/, 'export de backup');
   assert.match(html, /lesionRevisions:\s*JSON\.parse\(JSON\.stringify\(LESION_REVISIONS\|\|\{\}\)\)/, 'snapshot');
+});
+
+test('091b UX: cada opção de Tipo é UMA label com o radio e o texto juntos; values, default e name preservados', () => {
+  const modal = extractFn('openNewReviewRequestModal');
+  const opts = [...modal.matchAll(/<label class="nrr-scope-option">(<input type="radio" name="nrr-scope" value="(global|lesion)"( checked)?>)<span>([^<]+)<\/span><\/label>/g)];
+  assert.equal(opts.length, 2, 'duas labels, cada uma com seu próprio radio + texto');
+  assert.deepEqual(opts.map((m) => [m[2], !!m[3], m[4]]), [['global', true, 'Atlas / solicitação geral'], ['lesion', false, 'Lesão específica']]);
+  assert.match(modal, /<div class="nrr-scope-options" role="radiogroup" aria-labelledby="nrr-scope-title">/);
+  assert.doesNotMatch(modal, /<label style="display:block;"><input type="radio"/, 'layout antigo (radio esticado) removido');
+  // handlers e ids usados pela lógica continuam os mesmos
+  for (const sel of ['input[name="nrr-scope"]:checked', 'input[name="nrr-scope"]', "'#nrr-text'", "'#nrr-category'", "'#nrr-create'", "'#nrr-lesion-search'"]) assert.ok(modal.includes(sel), sel);
+  const css = /\.field \.nrr-scope-option input\[type="radio"\]\{([^}]*)\}/.exec(html);
+  assert.ok(css, 'radio não herda width:100% de .field input');
+  assert.match(css[1], /width:auto/);
+  assert.match(/\.field \.nrr-scope-option\{([^}]*)\}/.exec(html)[1], /display:flex;align-items:center;gap:8px/);
+  assert.doesNotMatch(/\.nrr-scope-option[^{]*\{[^}]*\}/g.exec(html)[0], /position:absolute/);
 });

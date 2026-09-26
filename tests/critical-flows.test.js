@@ -527,10 +527,13 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // createReviewRequest/setGlobalReviewSolution/completeGlobalReview, guardas
   // e caminho da IA — antes da primeira ancora; +130 (modal "+ Nova
   // pendencia", meta global e acoes do 💡) antes do importHandler.
-  assert.equal(recovery.line, 8461);
-  assert.equal(brokenArtifacts.line, 8451);
-  assert.equal(loadData.line, 11011);
-  assert.equal(importHandler.line, 15060);
+  // +13 nas tres primeiras ancoras / +15 no importHandler (Protecao 091b,
+  // 2026-09-26): CSS de contraste/alinhamento antes da primeira ancora; +2
+  // do markup do radio antes do importHandler.
+  assert.equal(recovery.line, 8474);
+  assert.equal(brokenArtifacts.line, 8464);
+  assert.equal(loadData.line, 11024);
+  assert.equal(importHandler.line, 15075);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
