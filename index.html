@@ -18294,6 +18294,37 @@ async function maybeHandleExternalImport(){
   return { status: 'modal' };
 }
 
+/* PROTEÇÃO 091e — importações do Radiopaedia REUTILIZAM a aba já aberta do
+   Atlas. O userscript abre o Atlas com window.open(url, ATLAS_WINDOW_NAME)
+   (alvo nomeado, sem 'noopener'); esta aba se identifica com o mesmo nome.
+   Na aba reutilizada só o #fragmento muda (sem recarregar): o hashchange
+   processa o novo #external-import pelo MESMO caminho do boot. */
+const ATLAS_WINDOW_NAME = 'atlas-radiologico';
+function ensureAtlasWindowName(){
+  try{
+    if(typeof window !== 'undefined' && window.name !== ATLAS_WINDOW_NAME) window.name = ATLAS_WINDOW_NAME;
+    return true;
+  }catch(_e){ return false; }
+}
+ensureAtlasWindowName();
+async function handleExternalImportHashChange(){
+  if (typeof location === 'undefined' || String(location.hash || '').indexOf(EXTERNAL_IMPORT_PREFIX) !== 0) return null;
+  if (!appStateReady) return { status: 'aguardando_boot' }; // o gancho do boot (abaixo) processa o hash atual
+  if (typeof document !== 'undefined' && document.querySelector('.lesion-form-overlay')) {
+    // Nunca derruba um formulário em edição (dados não salvos).
+    clearExternalImportHash();
+    try { toast('Caso não importado: salve ou feche o formulário aberto e clique de novo em "Enviar ao Atlas".'); } catch (e) {}
+    return { status: 'adiado_formulario_aberto' };
+  }
+  try { document.querySelectorAll('.external-import-overlay, .external-ai-overlay').forEach(o => o.remove()); } catch (e) {}
+  return maybeHandleExternalImport();
+}
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('hashchange', () => {
+    handleExternalImportHashChange().catch(e => console.warn('Falha na importação externa (aba reutilizada).', e));
+  });
+}
+
 // Gancho pós-boot SEM editar loadData(): preserva todas as âncoras de linha
 // dos testes existentes. O try/catch interno garante boot intacto.
 const _loadDataSemImport = loadData;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.1.0
+// @version      1.2.0
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e abre o Atlas com o payload no fragmento da URL. Não captura imagens, não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -201,7 +201,20 @@
       return;
     }
     var base = ATLAS_URL.replace(/\/+$/, '') + '/';
-    window.open(base + '#external-import=' + encodePayload(payload), '_blank', 'noopener');
+    openAtlasWindow(base + '#external-import=' + encodePayload(payload));
+  }
+
+  // 091e: alvo NOMEADO (mesmo nome que o Atlas define em window.name) —
+  // reutiliza a aba do Atlas já aberta por este fluxo em vez de abrir uma
+  // nova a cada envio. Sem 'noopener': com ele o navegador não devolve a
+  // janela (não dá para focar) nem a reencontra pelo nome no envio seguinte.
+  var ATLAS_WINDOW_NAME = 'atlas-radiologico';
+  function openAtlasWindow(url) {
+    var atlasWindow = window.open(url, ATLAS_WINDOW_NAME);
+    if (atlasWindow) {
+      try { atlasWindow.focus(); } catch (_) {}
+    }
+    return atlasWindow;
   }
 
   function mountButton() {
