@@ -497,10 +497,14 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // carimbo na restauracao de snapshot — antes da primeira ancora; +98 so no
   // importHandler: funcoes de carimbo/merge de ordem junto de saveOrder/
   // saveSiteOrder, load dos carimbos em loadData e o carimbo no proprio import.
-  assert.equal(recovery.line, 7911);
-  assert.equal(brokenArtifacts.line, 7901);
-  assert.equal(loadData.line, 10458);
-  assert.equal(importHandler.line, 14220);
+  // +36 nas quatro ancoras (Protecao 086, 2026-09-26): CSS
+  // .lesion-review-warning + hasActiveLesionReview/lesionReviewWarningHtml/
+  // refreshLesionReviewWarnings no modulo da Central — tudo antes da primeira
+  // ancora, deslocamento uniforme.
+  assert.equal(recovery.line, 7947);
+  assert.equal(brokenArtifacts.line, 7937);
+  assert.equal(loadData.line, 10494);
+  assert.equal(importHandler.line, 14256);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

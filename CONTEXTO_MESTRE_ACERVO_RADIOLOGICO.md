@@ -8,29 +8,28 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
-*Atualizado em 2026-09-25, junto do commit "Protecao 085: preserva ordem entre dispositivos".*
+*Atualizado em 2026-09-26, junto do commit "Protecao 086: sinaliza lesoes com revisao ativa".*
 
 - **Branch local de trabalho:** `master` (publicação: `git push origin master:main`).
-- **origin/main antes da 085:** `f6ee3aa` (Protecao 084). **Último commit:** Protecao 085 (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
-- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 085:** 1217 testes · 1209 pass · 3 fail conhecidos · 5 todo (era 1192/1184/3/5 após a 084; +25 testes novos da 085). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
-  - Medido no ambiente remoto (sem os arquivos protegidos): 1207 · 1172 · 30 · 5 (base `f6ee3aa` no mesmo ambiente: 1182 · 1147 · 30 · 5; conjunto de falhas idêntico). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
-- **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 085. Nenhuma escrita deliberada nesta tarefa. A partir da 085 o documento principal ganha o campo `orderUpdatedAt` (carimbos de reordenação manual) na próxima publicação real.
-- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), **085 (ordem de seções/sítios entre dispositivos — seção 41)**.
-- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085)**.
-- **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 085. Não restaurar sem decisão explícita do usuário.
+- **origin/main antes da 086:** `8183089` (Protecao 085). **Último commit:** Protecao 086 (este checkpoint entra no mesmo commit; o hash exato está em `git log -1`).
+- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 086:** 1234 testes · 1226 pass · 3 fail conhecidos · 5 todo (era 1217/1209/3/5 após a 085; +17 testes novos da 086). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
+  - Medido no ambiente remoto (sem os arquivos protegidos): 1224 · 1189 · 30 · 5 (base `8183089` no mesmo ambiente: 1207 · 1172 · 30 · 5; conjunto de falhas idêntico). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
+- **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 086. Nenhuma escrita deliberada nesta tarefa. A 086 não adiciona nenhum campo remoto (alerta 100% derivado de `lesionRevisions`). Desde a 085 o documento principal tem `orderUpdatedAt`.
+- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), **086 (⚠ junto ao nome da lesão com revisão ativa — seção 42)**.
+- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086)**.
+- **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 086. Não restaurar sem decisão explícita do usuário.
 - **Passo manual pós-deploy (085):** ordens personalizadas feitas ANTES da 085 não têm carimbo. No PC que tem a ordem CORRETA, fazer uma reordenação qualquer (ex.: descer uma seção e subir de volta; idem um sítio em cada seção personalizada) — isso carimba e publica. Depois abrir o outro PC: ordem default/automática cede para a da nuvem sozinha. (Revisões pré-084: mesma lógica, ver seção 40.)
-- **Próximo passo exato:** Proteção 086 (ver BACKLOG abaixo).
+- **Próximo passo exato:** Proteção 087 (ver BACKLOG abaixo).
 
 ## BACKLOG
 
-- **PRÓXIMA PRIORIDADE: Proteção 086 — alerta visual junto ao nome da lesão quando houver revisão ativa.**
+- **PRÓXIMA PRIORIDADE: Proteção 087 — campo livre/editável para sequência de RM, mantendo as opções atuais.**
 - Pendências funcionais posteriores:
-  - sequência RM com entrada livre;
   - contexto clínico/dados do paciente por imagem;
-  - descrição só depois da resposta no Quiz;
+  - descrição após resposta no Quiz;
   - conteúdo complementar/classificações pós-resposta;
   - fonte individual por imagem;
-  - auditar o stash antes de reimplementar funcionalidades antigas.
+  - auditar o stash antigo antes de reimplementar funcionalidades já existentes.
 - Herdado da 083: `extractModality()` do userscript ainda varre a página inteira (restringir à área do caso com base no DOM real); userscript no Tampermonkey precisa ser atualizado para a v1.1.0.
 
 ## PROTOCOLO OBRIGATÓRIO DE CONTINUIDADE
@@ -1597,3 +1596,72 @@ importHandler; stubs), `tests/snapshots-ownership.test.js` (stubs),
   dispositivos com carimbo mantêm a própria ordem depois dele.
 - Sem teste de DOM real (arrastar na sidebar): a reordenação foi testada
   pelas funções reais chamadas pelos handlers.
+
+## 42. Proteção 086 — ⚠ junto ao nome da lesão com revisão ativa (2026-09-26)
+
+### Objetivo
+Mostrar, diretamente junto ao nome da lesão (não só no 🔔 geral do topo), um
+alerta visual quando a lesão tem revisão ativa na Central de Revisões.
+
+### Definição de "revisão ativa"
+- Auditoria dos status reais de `LESION_REVISIONS` (atribuições
+  `review.status = …`): `pending`, `rejected`, `proposed`,
+  `applied_pending_validation`, `accepted`, `cancelled`,
+  `manual_action_required`. Nenhum outro existe.
+- **Ativa** = `pending`, `rejected` (voltou para a fila), `proposed`,
+  `applied_pending_validation`, `manual_action_required` — exatamente o que
+  alimenta o 🔔 (`getPendingReviews`) e o 💡 (`getReadySolutions`); há teste
+  garantindo a equivalência. **Não alertam:** `accepted`, `cancelled` e
+  qualquer status desconhecido.
+- Função central única: `hasActiveLesionReview(lesionId)` (lista
+  `ACTIVE_LESION_REVIEW_STATUSES`), no módulo da Central. Sem estado paralelo
+  e sem campo remoto: 100% derivada de `LESION_REVISIONS`.
+
+### Onde aparece
+- Card da lista principal (`renderResults` — o mesmo renderer serve à busca,
+  filtros e escopo da sidebar) e título do detalhe da lesão (`openDetail`).
+  Quiz/dashboard de estudo e modais auxiliares ficaram fora desta etapa.
+- Marcação: `lesionReviewWarningHtml(id)` → `<span class="lesion-review-warning"
+  role="img" title/aria-label="Esta lesão possui revisão ativa">⚠︎</span>`
+  (U+26A0 + VS15, forma de texto; sem imagem externa). CSS
+  `.lesion-review-warning`: pílula amarela (#facc15) com símbolo escuro e
+  borda âmbar — legível no tema claro e escuro; `vertical-align:middle`,
+  `flex:none`, `white-space:nowrap`, `cursor:help`, margem pequena.
+
+### Tempo real
+- Cada elemento que mostra o nome carrega `data-review-warning-host="<id>"`.
+  `refreshLesionReviewWarnings()` põe/retira o ícone NO LUGAR (nunca duplica,
+  remove duplicata) e é chamada no fim de `updateReviewCenterBadges()` — que
+  TODA mutação da Central já chamava (criar, propor, recusar, autorizar,
+  aprovar, desfazer, cancelar, ação manual, reabrir, sugestão de posição,
+  lote da IA), além de `renderAll()`, restaurar snapshot e importar backup.
+  Nada é reconstruído (não fecha modal, não perde scroll).
+
+### Integração com a 084
+- O pull (`syncFromFirebase`) e a adoção de device novo já chamavam
+  `updateReviewCenterBadges()` → a ⚠ aparece no PC B assim que a revisão do
+  PC A chega, sem F5. Nenhum campo novo no Firestore.
+
+### Arquivos alterados
+`index.html` (CSS + 3 funções/2 constantes no módulo da Central + host/ícone
+no card e no detalhe + 1 chamada em `updateReviewCenterBadges`),
+`tests/lesion-review-warning.test.js` (novo, 16),
+`tests/multi-device-sync.test.js` (+1 ponta a ponta; funções no harness),
+`tests/images-today-modal.test.js` (2 stubs mecânicos no harness de
+`openDetail`), `tests/critical-flows.test.js` (âncoras +36, uniforme),
+`CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`.
+
+### Testes
+- Focados: `lesion-review-warning` 16/16 (sem revisão; cada status ativo;
+  finais/desconhecidos; mistura ativa/concluída; equivalência com 🔔/💡;
+  tooltip/aria; ciclo real criar→propor→aplicar→aprovar some→rollback volta→
+  cancelar some; refresh repetido não duplica; estado vindo do pull; render
+  do card e do detalhe; CSS; nenhum campo remoto/estado paralelo);
+  `multi-device-sync` 160/161 (novo: revisão do PC A → ⚠ no PC B após o pull;
+  F2 = arquivo protegido ausente); `lesion-review` 138/138;
+  `lesion-revisions-sync` 15/15; `critical-flows` 23/23; `modal-cleanup`
+  14/14; `images-today-modal` 31/31.
+- Suíte (remoto): 1224 · 1189 · 30 · 5 (base 1207 · 1172 · 30 · 5; mesmas
+  falhas). Esperado no local: 1234 · 1226 · 3 · 5.
+- Sem teste em navegador real (DOM simulado nos testes); conferir
+  visualmente o ícone no card e no detalhe após o deploy.

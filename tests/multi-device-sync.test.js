@@ -151,7 +151,9 @@ const orderFns085 = ['normalizeOrderStamps', 'loadOrderStamps', 'saveOrderStamps
 // PROTEÇÃO 084 — Central de Revisões sincronizada (merge + save reais).
 const lesionRevisionsFns084 = ['mergeLesionRevisions', 'saveLesionRevisions', 'updateReviewCenterBadges',
   'getPendingReviews', 'getProposedSolutions', 'getAppliedSolutionsAwaitingValidation', 'getManualActionSolutions',
-  'getReadySolutions', 'countPendingLesionReviews', 'countReadyLesionSolutions']
+  'getReadySolutions', 'countPendingLesionReviews', 'countReadyLesionSolutions',
+  // PROTEÇÃO 086 — ⚠ junto ao nome da lesão (chamado por updateReviewCenterBadges)
+  'hasActiveLesionReview', 'lesionReviewWarningHtml', 'refreshLesionReviewWarnings']
   .map((n) => extractFunction(html, n).source).join('\n');
 
 // Nuvem falsa COMPARTILHADA entre "dispositivos" — simula um único projeto
@@ -415,6 +417,8 @@ function makeDevice(cloud, { seed = [] } = {}) {
     ${pendingAddsFns079d}
     ${addImageToLesionDataFn.source}
     const LESION_REVISIONS_KEY = 'atlas:lesionRevisions';
+    const ACTIVE_LESION_REVIEW_STATUSES = ['pending', 'rejected', 'proposed', 'applied_pending_validation', 'manual_action_required'];
+    const LESION_REVIEW_WARNING_TEXT = 'Esta lesão possui revisão ativa';
     ${lesionRevisionsFns084}
     const ORDER_STAMPS_KEY = 'atlas:orderUpdatedAt';
     ${orderFns085}
@@ -3362,6 +3366,27 @@ test('PROTEÇÃO 084 - badges 🔔/💡 do PC B atualizam no pull, sem F5', asyn
   assert.equal(els['pending-reviews-badge'].textContent, '1', '🔔 mostra a revisão pendente vinda do PC A');
   assert.equal(els['ready-solutions-badge'].textContent, '1', '💡 mostra a proposta vinda do PC A');
   assert.equal(els['pending-reviews-btn'].classList.empty, false);
+});
+
+test('PROTEÇÃO 086 - revisão criada no PC A: ⚠ junto ao nome da lesão aparece no PC B após o pull, sem F5 e sem campo remoto novo', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = await device084(cloud);
+  await userRevisionAction084(a, (L) => { L.R1 = rev084('R1', { status: 'manual_action_required' }); });
+  const meta = cloud.peekMeta();
+  assert.deepEqual(Object.keys(meta).filter((k) => /warning|activeReview/i.test(k)), [], 'alerta é derivado, nunca gravado');
+  const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  const hostChildren = [];
+  const host = {
+    getAttribute: () => 'seed_1',
+    querySelectorAll: () => hostChildren.slice(),
+    insertAdjacentHTML: (_pos, markup) => { const c = { markup, remove() { hostChildren.splice(hostChildren.indexOf(c), 1); } }; hostChildren.push(c); }
+  };
+  b.context.document = { getElementById: () => null, querySelectorAll: () => [host] };
+  await b.boot();
+  assert.equal(hostChildren.length, 1, '⚠ inserido pelo refresh do pull');
+  assert.match(hostChildren[0].markup, /title="Esta lesão possui revisão ativa"/);
+  assert.equal(b.context.syncDirty, false);
 });
 
 test('PROTEÇÃO 084 - concorrência: R1 em A e R2 em B -> nuvem e os dois dispositivos terminam com a UNIÃO', async () => {

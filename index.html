@@ -287,6 +287,8 @@ body{
 .card-title{font-weight:600;font-size:14.5px;color:var(--text);margin-bottom:2px;}
 .card-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;}
 .card-title-row .card-title{margin-bottom:0;}
+/* PROTEÇÃO 086 — alerta de revisão ativa junto ao nome da lesão */
+.lesion-review-warning{display:inline-flex;align-items:center;justify-content:center;margin-left:6px;padding:0 4px;min-width:1.25em;height:1.25em;border-radius:4px;background:#facc15;color:#1c1917;border:1px solid #a16207;font-size:.78em;font-weight:700;line-height:1;vertical-align:middle;white-space:nowrap;flex:none;cursor:help;}
 .inc-badge{
   font-size:10px;font-weight:600;padding:2px 8px;border-radius:9px;border:1px solid;
   white-space:nowrap;flex-shrink:0;
@@ -5286,6 +5288,39 @@ function getReadySolutions(){
   return [...getProposedSolutions(), ...getAppliedSolutionsAwaitingValidation(), ...getManualActionSolutions()]
     .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
 }
+/* PROTEÇÃO 086 — "revisão ativa" = exatamente o que ainda aparece no 🔔
+   (getPendingReviews: pending/rejected) ou no 💡 (getReadySolutions:
+   proposed/applied_pending_validation/manual_action_required). Finais
+   (accepted/cancelled) e qualquer status desconhecido não alertam. Derivado
+   100% de LESION_REVISIONS — nenhum estado paralelo, nenhum campo remoto. */
+const ACTIVE_LESION_REVIEW_STATUSES = ['pending', 'rejected', 'proposed', 'applied_pending_validation', 'manual_action_required'];
+const LESION_REVIEW_WARNING_TEXT = 'Esta lesão possui revisão ativa';
+function hasActiveLesionReview(lesionId){
+  if(!lesionId) return false;
+  return Object.values(LESION_REVISIONS || {}).some(r=>r && r.lesionId===lesionId && ACTIVE_LESION_REVIEW_STATUSES.includes(r.status));
+}
+function lesionReviewWarningHtml(lesionId){
+  return hasActiveLesionReview(lesionId)
+    ? `<span class="lesion-review-warning" role="img" title="${LESION_REVIEW_WARNING_TEXT}" aria-label="${LESION_REVIEW_WARNING_TEXT}">\u26A0\uFE0E</span>`
+    : '';
+}
+/* Atualização AO VIVO, sem reconstruir nada: todo elemento que exibe o nome
+   da lesão carrega data-review-warning-host="<lesionId>"; aqui o ícone é
+   posto/retirado conforme hasActiveLesionReview (nunca duplica). Chamada por
+   updateReviewCenterBadges(), que toda ação da Central e o pull (084) já
+   chamam. */
+function refreshLesionReviewWarnings(root){
+  const scope = root || (typeof document!=='undefined' ? document : null);
+  if(!scope || typeof scope.querySelectorAll!=='function') return;
+  scope.querySelectorAll('[data-review-warning-host]').forEach(host=>{
+    const id = host.getAttribute('data-review-warning-host');
+    const icons = Array.from(host.querySelectorAll('.lesion-review-warning'));
+    if(hasActiveLesionReview(id)){
+      icons.slice(1).forEach(el=>el.remove());
+      if(!icons.length) host.insertAdjacentHTML('beforeend', lesionReviewWarningHtml(id));
+    } else icons.forEach(el=>el.remove());
+  });
+}
 function getReviewHistory(reviewId){
   const r = LESION_REVISIONS[reviewId];
   return r ? (r.history||[]).slice().sort((a,b)=>(a.timestamp||0)-(b.timestamp||0)) : [];
@@ -6034,6 +6069,7 @@ function updateReviewCenterBadges(){
     solutionsBadge.textContent = n>0 ? String(n) : '';
     solutionsBtn.classList.toggle('is-empty', n===0);
   }
+  refreshLesionReviewWarnings(); // PROTEÇÃO 086 — ⚠ junto ao nome da lesão
 }
 
 /* termos de busca em inglês para as lesões da base padrão — o Radiopaedia é um site em inglês,
@@ -11246,7 +11282,7 @@ function renderResults(){
     body.className = 'card-body';
     const inc = e.inc||2;
     const rv = getReview(e.id);
-    body.innerHTML = `<div class="card-title-row"><span class="card-title">${e.name}</span><span class="inc-badge" style="background:${incColor(inc)}22;color:${incColor(inc)};border-color:${incColor(inc)}55;">${incLabel(inc)}</span></div><div class="card-site">${e.s} · ${e.site}</div>`;
+    body.innerHTML = `<div class="card-title-row"><span class="card-title" data-review-warning-host="${escAttr(e.id)}">${e.name}${lesionReviewWarningHtml(e.id)}</span><span class="inc-badge" style="background:${incColor(inc)}22;color:${incColor(inc)};border-color:${incColor(inc)}55;">${incLabel(inc)}</span></div><div class="card-site">${e.s} · ${e.site}</div>`;
     if(Array.isArray(e.altPlacements) && e.altPlacements.length){
       const altRow = document.createElement('div');
       altRow.className = 'card-altrow';
@@ -11352,7 +11388,7 @@ function openDetail(id, opts){
   ov.innerHTML = `
     <div class="modal">
       ${hasEntryImgs(e)?`<div class="detail-img-gallery" id="detail-img-gallery"></div>`:''}
-      <div class="detail-title-row"><h2>${e.name}</h2><span class="inc-badge" style="background:${incColor(e.inc||2)}22;color:${incColor(e.inc||2)};border-color:${incColor(e.inc||2)}55;">${incLabel(e.inc||2)}</span></div>
+      <div class="detail-title-row"><h2 data-review-warning-host="${escAttr(e.id)}">${e.name}${lesionReviewWarningHtml(e.id)}</h2><span class="inc-badge" style="background:${incColor(e.inc||2)}22;color:${incColor(e.inc||2)};border-color:${incColor(e.inc||2)}55;">${incLabel(e.inc||2)}</span></div>
       <div class="detail-meta">${e.s} · ${e.site}</div>
       ${Array.isArray(e.altPlacements) && e.altPlacements.length ? `<div class="detail-altplacements">↔ Encontrada também em: ${e.altPlacements.map(p=>`<b>${p.s} › ${p.site}</b>`).join(', ')}</div>` : ''}
       <div class="detail-tags">${e.tags.map(t=>`<span class="mini-tag match">${t}</span>`).join('')}</div>
