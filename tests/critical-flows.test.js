@@ -516,10 +516,16 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // seletor explicito, merge por recencia em write/read/reconcile/persist/
   // pull/adocao — antes da primeira ancora; +1 (load dos carimbos) antes de
   // loadData; +16 (seletor do card, export/import) antes do importHandler.
-  assert.equal(recovery.line, 8048);
-  assert.equal(brokenArtifacts.line, 8038);
-  assert.equal(loadData.line, 10596);
-  assert.equal(importHandler.line, 14486);
+  // +253 nas duas primeiras ancoras / +255 em loadData / +284 no importHandler
+  // (Protecao 090, 2026-09-26): REVIEW_PROGRESS/REVIEW_OVERRIDE + regra
+  // automatica (replay/promocao/rebaixamento), merge/materializacao, override
+  // manual e "revisar novamente", CSS AUTO/MANUAL e snapshot — antes da
+  // primeira ancora; +2 (load) antes de loadData; +29 (card/detalhe, export/
+  // import) antes do importHandler.
+  assert.equal(recovery.line, 8301);
+  assert.equal(brokenArtifacts.line, 8291);
+  assert.equal(loadData.line, 10851);
+  assert.equal(importHandler.line, 14770);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -701,6 +707,7 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
     siteOrder: {},
     loadOrderStamps: async () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085
     loadReviewStamps: async () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089
+    loadReviewProgressState: async () => {}, saveReviewProgressState: async () => {}, // PROTEÇÃO 090
     appStateReady: false,
     SEED: seed,
     STORAGE_KEY: 'data',
@@ -931,6 +938,7 @@ async function runImportScenario(raw, { confirmResult = true } = {}) {
     saveOrder: async () => writes.push('saveOrder'),
     saveSiteOrder: async () => writes.push('saveSiteOrder'),
     stampRestoredReview: () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089 (coberto em review-state.test.js)
+    normalizeReviewProgress: () => ({}), normalizeReviewOverrides: () => ({}), stampRestoredReviewOverrides: () => {}, saveReviewProgressState: async () => {}, // PROTEÇÃO 090
     markRestoredOrderManual: () => {}, // PROTEÇÃO 085 — carimbo da ordem importada (coberto em order-sync.test.js)
     scope: { section: 'Original', site: 'Original' },
     activeTags: new Set(['original']),

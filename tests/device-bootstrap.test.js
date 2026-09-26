@@ -91,7 +91,11 @@ const adoptRemoteFn = extractFunction(html, 'adoptRemoteStateForNewDevice');
 const readShardedStateFn = extractFunction(html, 'readShardedState');
 const normalizeTombstoneMapFn = extractFunction(html, 'normalizeTombstoneMap');
 // PROTEÇÃO 089 — estado manual de estudo com carimbo (funções reais).
-const reviewFns089 = ['normalizeReviewStamps', 'saveReviewStamps', 'mergeReviewByRecency']
+const reviewFns089 = ['normalizeReviewStamps', 'saveReviewStamps', 'mergeReviewByRecency',
+  // PROTEÇÃO 090 — histórico do Quiz + override (funções reais)
+  'reviewPromotionReached', 'reviewDemotionTriggered', 'replayAutoReview', 'normalizeReviewAttempts', 'foldReviewProgress',
+  'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'normalizeReviewOverrides', 'mergeReviewProgress',
+  'mergeReviewOverrides', 'materializeReviewState', 'saveReviewProgressState']
   .map((n) => extractFunction(html, n).source).join('\n');
 // PROTEÇÃO 085 — ordem de seções/sítios com carimbo (funções reais).
 const orderFns085 = ['normalizeOrderStamps', 'saveOrderStamps', 'dedupeOrderList', 'isAutoSectionOrder',
@@ -216,7 +220,8 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
   vm.runInContext(
     lesionRevisionsFns084 + '\n' +
     "const DEFAULT_SECTION_ORDER = []; let ORDER_STAMPS = { section: 0, sites: {} };\n" + orderFns085 + '\n' +
-    "const REVIEW_STAMPS_KEY = 'atlas:reviewUpdatedAt'; let REVIEW_STAMPS = {};\n" + reviewFns089 + '\n' +
+    "const REVIEW_STAMPS_KEY = 'atlas:reviewUpdatedAt'; let REVIEW_STAMPS = {};\n" +
+    "const REVIEW_PROGRESS_KEY = 'atlas:reviewProgress'; const REVIEW_OVERRIDE_KEY = 'atlas:reviewOverride'; const REVIEW_ATTEMPTS_MAX = 8; let REVIEW_PROGRESS = {}; let REVIEW_OVERRIDE = {};\n" + reviewFns089 + '\n' +
     'function stripUndefinedDeep(v){try{return JSON.parse(JSON.stringify(v));}catch(_e){return v;}}\n' +
     'function splitIntoChunks(arr,size){const out=[];for(let i=0;i<arr.length;i+=size)out.push(arr.slice(i,i+size));return out;}\n' +
     'function checkChunkSize(){return true;}\n' +
@@ -417,6 +422,7 @@ test('loadData() real: dispositivo NOVO (storage.get lança) aciona o bootstrap 
       DATA: [], REVIEW: {}, SRS: {}, SESSIONLOG: {}, sectionOrder: [], siteOrder: {},
       loadOrderStamps: async () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085 (fora do escopo destes testes)
       loadReviewStamps: async () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089 (idem)
+      loadReviewProgressState: async () => {}, saveReviewProgressState: async () => {}, // PROTEÇÃO 090 (idem)
       appStateReady: false, deviceBootstrapPending: false,
       SEED: seed,
       STORAGE_KEY: 'data', ORDER_KEY: 'order', SITEORDER_KEY: 'site-order', REVIEW_KEY: 'review',
@@ -515,6 +521,7 @@ test('loadData() real: reload DEPOIS do bootstrap não repete o fluxo (storage j
       DATA: [], REVIEW: {}, SRS: {}, SESSIONLOG: {}, sectionOrder: [], siteOrder: {},
       loadOrderStamps: async () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085 (fora do escopo destes testes)
       loadReviewStamps: async () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089 (idem)
+      loadReviewProgressState: async () => {}, saveReviewProgressState: async () => {}, // PROTEÇÃO 090 (idem)
       appStateReady: false, deviceBootstrapPending: false,
       SEED: seed,
       STORAGE_KEY: 'data', ORDER_KEY: 'order', SITEORDER_KEY: 'site-order', REVIEW_KEY: 'review',
@@ -744,6 +751,9 @@ function makeAdoptContext({ localData, remoteMeta, remoteChunks } = {}) {
     const REVIEW_STAMPS_KEY = 'atlas:reviewUpdatedAt';
     let REVIEW_STAMPS = {};
     function __getReviewStamps089(){ return REVIEW_STAMPS; }
+    const REVIEW_PROGRESS_KEY = 'atlas:reviewProgress'; const REVIEW_OVERRIDE_KEY = 'atlas:reviewOverride'; const REVIEW_ATTEMPTS_MAX = 8;
+    let REVIEW_PROGRESS = {}; let REVIEW_OVERRIDE = {};
+    function __getReviewProgress090(){ return { REVIEW_PROGRESS, REVIEW_OVERRIDE }; }
     ${reviewFns089}
     ${lesionRevisionsFns084}
     ${adoptRemoteFn.source}

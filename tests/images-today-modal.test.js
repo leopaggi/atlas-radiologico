@@ -415,6 +415,7 @@ function loadDetail() {
     openImagesTodayModal: () => { calls.openImagesTodayModal++; },
     esc: (v) => v,
     escAttr: (v) => v, lesionReviewWarningHtml: () => '', // PROTEÇÃO 086 (coberto em lesion-review-warning.test.js)
+    isReviewManual: () => false, getReviewStateExplanation: () => '', setReviewAuto: () => {}, markLesionForReviewAgain: () => {}, // PROTEÇÃO 090
     console: { warn: () => {}, log: () => {}, error: () => {} }
   });
   vm.runInContext(src + '\nthis.__d = { openDetail };', ctx);

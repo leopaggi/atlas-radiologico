@@ -44,12 +44,20 @@ function makeCtx() {
     // quarentena 075 simulada: seed_1282 nunca entra
     quarantineIndexedByLesionId: (o) => { const out = {}; for (const [k, v] of Object.entries(o || {})) if (k !== 'seed_1282') out[k] = v; return out; }
   });
+  // PROTEÇÃO 090: setReview virou override manual — o harness inclui as
+  // funções reais de histórico/override usadas por ela.
   vm.runInContext("const REVIEW_KEY = 'atlas:review'; const REVIEW_STAMPS_KEY = 'atlas:reviewUpdatedAt';\n" +
-    'let REVIEW = {}; let REVIEW_STAMPS = {}; let SRS = {};\n' +
+    "const REVIEW_PROGRESS_KEY = 'atlas:reviewProgress'; const REVIEW_OVERRIDE_KEY = 'atlas:reviewOverride'; const REVIEW_ATTEMPTS_MAX = 8;\n" +
+    "const REVIEW_LABELS = {0:'Não revisado',1:'Revisando',2:'Dominado'};\n" +
+    'let REVIEW = {}; let REVIEW_STAMPS = {}; let SRS = {}; let REVIEW_PROGRESS = {}; let REVIEW_OVERRIDE = {};\n' +
     'function __get(){ return { REVIEW, REVIEW_STAMPS, SRS }; }\n' +
-    'function __set(r, s){ REVIEW = r; REVIEW_STAMPS = s || {}; }\n' +
+    'function __set(r, s){ REVIEW = r; REVIEW_STAMPS = s || {}; REVIEW_PROGRESS = {}; REVIEW_OVERRIDE = {}; }\n' +
     ['getReview', 'setReview', 'cycleReview', 'saveReview', 'normalizeReviewStamps', 'loadReviewStamps', 'saveReviewStamps',
-      'stampRestoredReview', 'mergeReviewByRecency', 'consolidateReviewOnMerge', 'srsGradeLevel', 'srsGrade']
+      'stampRestoredReview', 'mergeReviewByRecency', 'consolidateReviewOnMerge', 'srsGradeLevel', 'srsGrade',
+      'reviewPromotionReached', 'reviewDemotionTriggered', 'replayAutoReview', 'normalizeReviewAttempts', 'foldReviewProgress',
+      'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'normalizeReviewOverrides', 'mergeReviewProgress',
+      'mergeReviewOverrides', 'isReviewManual', 'computeAutomaticReviewState', 'effectiveReviewState', 'ensureReviewProgressBase',
+      'saveReviewProgressState']
       .map((n) => extractFunction(html, n)).join('\n'), c);
   return c;
 }
@@ -75,7 +83,7 @@ test('089-2..5: usuário escolhe Revisando/Dominado e pode voltar (inclusive par
   assert.equal(c.calls.push, 4);
 });
 
-test('089-6/7: responder o Quiz (srsGradeLevel/srsGrade, todos os graus) NÃO altera REVIEW nem carimbo — só o SRS', () => {
+test('089-6/7 (ajustado na 090): o SRS (srsGradeLevel/srsGrade, todos os graus) NÃO altera REVIEW nem carimbo — o estado AUTO vem só do histórico de tentativas (review-auto-mode.test.js)', () => {
   const c = makeCtx();
   c.__set({ seed_1: 2, seed_2: 0 }, { seed_1: 111 });
   for (const g of ['easy', 'medium', 'hard', 'again']) { c.srsGradeLevel('seed_1', g); c.srsGradeLevel('seed_2', g); }
@@ -99,7 +107,9 @@ test('089-8/9: boot e render não escrevem REVIEW; setReview só dentro de handl
   }
   // Inventário completo das chamadas reais de setReview (sem definição/comentários).
   const callers = html.split('\n').filter((l) => /[^.\w]setReview\(/.test(l) && !/^\s*\/\//.test(l) && !/function setReview\(/.test(l)).map((l) => l.trim());
-  assert.equal(callers.length, 3, callers.join('\n'));
+  // PROTEÇÃO 090: + markLesionForReviewAgain ("Marcar para revisar novamente").
+  assert.equal(callers.length, 4, callers.join('\n'));
+  assert.ok(callers.some((l) => l.startsWith('function markLesionForReviewAgain(')));
   assert.ok(callers.some((l) => l.startsWith('function cycleReview(')), 'cycleReview (não usado pelo card)');
   assert.ok(callers.some((l) => /^b\.onclick = \(e2\)=>/.test(l)), 'seletor do card');
   assert.match(html, /b\.onclick = \(\)=>\{ setReview\(e\.id, st\); renderReviewButtons\(\);/, 'botões explícitos do detalhe');
@@ -107,10 +117,12 @@ test('089-8/9: boot e render não escrevem REVIEW; setReview só dentro de handl
 
 test('089 UI: card abre escolha EXPLÍCITA (○ ◐ ●) em vez de ciclo cego; tooltip "Estado manual de estudo"', () => {
   const src = extractFunction(html, 'renderResults');
-  assert.match(src, /reviewBtn\.title = 'Estado manual de estudo — clique para escolher';/);
+  // PROTEÇÃO 090: tooltip AUTO/MANUAL + explicação; opção "Automático pelo Quiz" no seletor.
+  assert.match(src, /reviewBtn\.title = \(rvManual \? 'Estado definido manualmente' : 'Estado calculado pelo desempenho no Quiz'\)/);
+  assert.match(src, /autoOpt\.textContent = '⚙ Automático pelo Quiz';/);
   assert.match(src, /picker\.className = 'card-review-picker';/);
   assert.match(src, /\[0,1,2\]\.forEach\(st=>\{/);
-  assert.match(src, /if\(st!==getReview\(e\.id\)\) setReview\(e\.id, st\);/);
+  assert.match(src, /if\(!\(isReviewManual\(e\.id\) && st===getReview\(e\.id\)\)\) setReview\(e\.id, st\);/);
   assert.doesNotMatch(src, /cycleReview\(/, 'o card não cicla mais às cegas');
   assert.match(html, /\.card-review-picker\{/);
 });

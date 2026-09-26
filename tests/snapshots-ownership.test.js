@@ -65,6 +65,7 @@ function makeSnapshotContext(backing) {
     console, Date, Math, JSON, Object, Array, String, Number,
     storage: makeStorage(store), __backing: store,
     DATA: [], REVIEW: {}, SRS: {}, SESSIONLOG: {}, LESION_REVISIONS: {},
+    REVIEW_PROGRESS: {}, REVIEW_OVERRIDE: {}, // PROTEÇÃO 090
     sectionOrder: [], siteOrder: {},
     STORAGE_KEY: 'data', REVIEW_KEY: 'review', SRS_KEY: 'srs', SESSIONLOG_KEY: 'slog',
     ORDER_KEY: 'order', SITEORDER_KEY: 'sorder', fbSyncing: false,
@@ -72,6 +73,8 @@ function makeSnapshotContext(backing) {
     saveLesionRevisions: async () => {},
     markRestoredOrderManual: () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085
     stampRestoredReview: () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089
+    normalizeReviewProgress: (v) => (v && typeof v === 'object') ? v : {}, normalizeReviewOverrides: (v) => (v && typeof v === 'object') ? v : {},
+    stampRestoredReviewOverrides: () => {}, saveReviewProgressState: async () => {}, // PROTEÇÃO 090 (coberto em review-auto-mode.test.js)
     renderAll: () => {}
   };
   vm.createContext(ctx);

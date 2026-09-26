@@ -145,7 +145,13 @@ const pendingAddsFns079d = ['normalizePendingLocalImageAdds', 'hasPendingLocalIm
 const addImageToLesionDataFn = extractFunction(html, 'addImageToLesionData');
 // PROTEÇÃO 089 — estado manual de estudo com carimbo (funções reais).
 const reviewFns089 = ['normalizeReviewStamps', 'loadReviewStamps', 'saveReviewStamps', 'stampRestoredReview',
-  'mergeReviewByRecency', 'consolidateReviewOnMerge', 'getReview', 'setReview']
+  'mergeReviewByRecency', 'consolidateReviewOnMerge', 'getReview', 'setReview',
+  // PROTEÇÃO 090 — estado AUTO pelo Quiz + override manual (funções reais)
+  'reviewPromotionReached', 'reviewDemotionTriggered', 'replayAutoReview', 'normalizeReviewAttempts', 'foldReviewProgress',
+  'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'normalizeReviewOverrides', 'mergeReviewProgress',
+  'mergeReviewOverrides', 'materializeReviewState', 'isReviewManual', 'computeAutomaticReviewState', 'effectiveReviewState',
+  'ensureReviewProgressBase', 'recordReviewAttempt', 'gradeReviewAttempt', 'getReviewStateExplanation',
+  'loadReviewProgressState', 'saveReviewProgressState', 'stampRestoredReviewOverrides', 'setReviewAuto', 'markLesionForReviewAgain']
   .map((n) => extractFunction(html, n).source).join('\n');
 // PROTEÇÃO 085 — ordem de seções/sítios com carimbo de reordenação manual.
 const orderFns085 = ['normalizeOrderStamps', 'loadOrderStamps', 'saveOrderStamps', 'markSectionOrderManual',
@@ -353,6 +359,7 @@ function makeDevice(cloud, { seed = [] } = {}) {
     LESION_REVISIONS: {},
     ORDER_STAMPS: { section: 0, sites: {} }, // PROTEÇÃO 085
     REVIEW_STAMPS: {}, // PROTEÇÃO 089
+    REVIEW_PROGRESS: {}, REVIEW_OVERRIDE: {}, // PROTEÇÃO 090
     syncAuditCounters: () => ({}),
     readCloudAuditFromServer: async () => null,
     syncCountersMatch: () => false,
@@ -428,6 +435,8 @@ function makeDevice(cloud, { seed = [] } = {}) {
     const ORDER_STAMPS_KEY = 'atlas:orderUpdatedAt';
     ${orderFns085}
     const REVIEW_STAMPS_KEY = 'atlas:reviewUpdatedAt';
+    const REVIEW_PROGRESS_KEY = 'atlas:reviewProgress'; const REVIEW_OVERRIDE_KEY = 'atlas:reviewOverride'; const REVIEW_ATTEMPTS_MAX = 8;
+    const REVIEW_LABELS = {0:'Não revisado',1:'Revisando',2:'Dominado'};
     ${reviewFns089}
     let lastWriteStaleImagesBlocked = 0;
     ${gateStaleImagesFn.source}
@@ -3781,6 +3790,86 @@ test('PROTEÇÃO 089 - PC NOVO recebe o estado remoto com os carimbos (e F5 mant
   const b2 = makeOrderDevice085(cloud, { backing: b.store });
   await b2.boot();
   assert.equal(b2.context.getReview('seed_1'), 1);
+  assert.equal(b2.context.syncDirty, false);
+});
+
+// ===========================================================================
+// PROTEÇÃO 090 — estado AUTO pelo Quiz + override manual entre PCs.
+// ===========================================================================
+async function quiz090(device, seq) {
+  for (const ch of seq) device.context.recordReviewAttempt('seed_1', ch === 'C');
+  await device.context.pushToFirebaseNow();
+}
+async function twoPcs090() {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  const a = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await a.boot(); a.context.appStateReady = true;
+  const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await b.boot(); b.context.appStateReady = true;
+  return { cloud, a, b };
+}
+const tick090 = () => new Promise((r) => setTimeout(r, 3));
+
+test('PROTEÇÃO 090 - estado AUTO do Quiz no PC A chega ao PC B (histórico + estado), sem dirty no pull', async () => {
+  const { cloud, a, b } = await twoPcs090();
+  await quiz090(a, 'CCCC');
+  assert.equal(a.context.getReview('seed_1'), 2);
+  assert.equal(cloud.peekMeta().review.seed_1, 2);
+  await b.context.syncFromFirebase();
+  assert.equal(b.context.getReview('seed_1'), 2);
+  assert.equal(b.context.isReviewManual('seed_1'), false);
+  assert.equal(b.context.REVIEW_PROGRESS.seed_1.a.length, 4);
+  assert.equal(b.context.syncDirty, false);
+  // B continua respondendo: histórico dos dois PCs é unido (sem duplicar)
+  await tick090();
+  await quiz090(b, 'FF');
+  await a.context.syncFromFirebase();
+  assert.equal(a.context.REVIEW_PROGRESS.seed_1.a.length, 6);
+  assert.equal(a.context.getReview('seed_1'), 1, '2 falhas nas últimas 3 -> Revisando nos dois PCs');
+});
+
+test('PROTEÇÃO 090 - MANUAL sincroniza; manual mais recente vence; volta ao AUTO mais recente vence override antigo', async () => {
+  const { cloud, a, b } = await twoPcs090();
+  await quiz090(a, 'CCCC');
+  a.context.setReview('seed_1', 0);
+  await a.context.pushToFirebaseNow();
+  await b.context.syncFromFirebase();
+  assert.equal(b.context.getReview('seed_1'), 0);
+  assert.equal(b.context.isReviewManual('seed_1'), true, 'modo manual chega ao outro PC');
+  await tick090();
+  b.context.setReview('seed_1', 1); // manual mais recente em B
+  await b.context.pushToFirebaseNow();
+  await a.context.syncFromFirebase();
+  assert.equal(a.context.getReview('seed_1'), 1);
+  await tick090();
+  a.context.setReviewAuto('seed_1'); // volta explícita ao automático
+  assert.equal(a.context.getReview('seed_1'), 2, 'recalcula na hora: 4/4');
+  await a.context.pushToFirebaseNow();
+  await b.context.syncFromFirebase();
+  assert.equal(b.context.isReviewManual('seed_1'), false, 'remoção do override sincroniza');
+  assert.equal(b.context.getReview('seed_1'), 2);
+  assert.equal(cloud.peekMeta().review.seed_1, 2);
+  // Quiz em B com modo AUTO continua atualizando
+  await tick090();
+  await quiz090(b, 'FF');
+  assert.equal(b.context.getReview('seed_1'), 1);
+});
+
+test('PROTEÇÃO 090 - F5 preserva modo e histórico; PC novo recebe o modo correto', async () => {
+  const { cloud, a } = await twoPcs090();
+  await quiz090(a, 'CCCC');
+  a.context.markLesionForReviewAgain('seed_1');
+  await a.context.pushToFirebaseNow();
+  const b = makeOrderDevice085(cloud, { fresh: true });
+  await b.boot();
+  assert.equal(b.context.getReview('seed_1'), 1);
+  assert.equal(b.context.isReviewManual('seed_1'), true);
+  assert.equal(b.context.REVIEW_PROGRESS.seed_1.a.length, 4, 'revisar novamente não apagou o histórico');
+  const b2 = makeOrderDevice085(cloud, { backing: b.store });
+  await b2.boot();
+  assert.equal(b2.context.getReview('seed_1'), 1);
+  assert.equal(b2.context.isReviewManual('seed_1'), true);
   assert.equal(b2.context.syncDirty, false);
 });
 

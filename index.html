@@ -309,6 +309,9 @@ body{
 .card-review-picker{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;}
 .card-review-option{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:2px 8px;font-size:11px;cursor:pointer;font-family:inherit;}
 .card-review-option.active{border-color:currentColor;font-weight:700;}
+/* PROTEÇÃO 090 — indicador AUTO/MANUAL e explicação do estado */
+.review-mode-tag{display:inline-block;margin-left:4px;padding:0 4px;border:1px solid currentColor;border-radius:3px;font-size:9px;letter-spacing:.04em;opacity:.8;vertical-align:middle;}
+.review-mode-info{flex-basis:100%;font-size:11px;color:var(--muted-2);margin-top:4px;}
 #empty-state{color:var(--muted-2);text-align:center;padding:60px 20px;font-size:13.5px;}
 
 /* ---------- Modal ---------- */
@@ -2188,6 +2191,8 @@ async function writeShardedState(ms=15000){
   const metaPayloadBase = {
     review: stripUndefinedDeep(quarantineIndexedByLesionId(REVIEW)),
     reviewUpdatedAt: normalizeReviewStamps(quarantineIndexedByLesionId(REVIEW_STAMPS)), // PROTEÇÃO 089
+    reviewProgress: normalizeReviewProgress(quarantineIndexedByLesionId(REVIEW_PROGRESS)), // PROTEÇÃO 090
+    reviewOverride: normalizeReviewOverrides(quarantineIndexedByLesionId(REVIEW_OVERRIDE)), // PROTEÇÃO 090
     srs: stripUndefinedDeep(quarantineIndexedByLesionId(SRS)),
     sessionLog: stripUndefinedDeep(SESSIONLOG),
     sectionOrder: stripUndefinedDeep(sectionOrder),
@@ -2261,7 +2266,12 @@ async function writeShardedState(ms=15000){
       // também DENTRO da transação (force/syncThisDevice não desfazem uma
       // mudança manual mais nova de outro PC).
       const writeReview = mergeReviewByRecency(metaPayloadBase.review, remoteMeta.review, metaPayloadBase.reviewUpdatedAt, remoteMeta.reviewUpdatedAt);
-      const metaPayload = {...metaPayloadBase, review: stripUndefinedDeep(writeReview.review), reviewUpdatedAt: writeReview.stamps, tombstones: stripUndefinedDeep(writeTombstones), lesionRevisions: writeLesionRevisions,
+      // PROTEÇÃO 090 — histórico do Quiz (união) e override (mais recente)
+      // também dentro da transação; o REVIEW gravado é o materializado.
+      const writeProgress = mergeReviewProgress(metaPayloadBase.reviewProgress, remoteMeta.reviewProgress);
+      const writeOverride = mergeReviewOverrides(metaPayloadBase.reviewOverride, remoteMeta.reviewOverride);
+      const metaPayload = {...metaPayloadBase, review: stripUndefinedDeep(materializeReviewState(writeReview.review, writeProgress, writeOverride)), reviewUpdatedAt: writeReview.stamps,
+        reviewProgress: writeProgress, reviewOverride: writeOverride, tombstones: stripUndefinedDeep(writeTombstones), lesionRevisions: writeLesionRevisions,
         sectionOrder: writeOrder.sectionOrder, siteOrder: writeOrder.siteOrder, orderUpdatedAt: writeOrder.stamps, chunkCount: gatedChunks.length};
       if(!checkChunkSize(metaPayload, 'documento principal (revisão/SRS/histórico)')){
         const err = new Error('documento principal grande demais');
@@ -2348,6 +2358,7 @@ async function readShardedState(ms=15000){
 
   return { data: combinedData, review: meta.review, srs: meta.srs, sessionLog: meta.sessionLog,
     reviewUpdatedAt: normalizeReviewStamps(meta.reviewUpdatedAt), // PROTEÇÃO 089 — ausente = sem carimbo
+    reviewProgress: normalizeReviewProgress(meta.reviewProgress), reviewOverride: normalizeReviewOverrides(meta.reviewOverride), // PROTEÇÃO 090
     sectionOrder: meta.sectionOrder, siteOrder: meta.siteOrder,
     orderUpdatedAt: normalizeOrderStamps(meta.orderUpdatedAt), // PROTEÇÃO 085 — ausente = sem carimbo
     tombstones: (meta.tombstones && typeof meta.tombstones === 'object' && !Array.isArray(meta.tombstones)) ? meta.tombstones : {},
@@ -3396,6 +3407,9 @@ async function adoptRemoteStateForNewDevice(){
   DATA = (Array.isArray(remote.data) ? remote.data : []).filter(e => e && !isQuarantinedSeedId(e.id));
   REVIEW = (remote.review && typeof remote.review === 'object' && !Array.isArray(remote.review)) ? remote.review : {};
   REVIEW_STAMPS = normalizeReviewStamps(remote.reviewUpdatedAt); // PROTEÇÃO 089
+  REVIEW_PROGRESS = normalizeReviewProgress(remote.reviewProgress); // PROTEÇÃO 090
+  REVIEW_OVERRIDE = normalizeReviewOverrides(remote.reviewOverride);
+  REVIEW = materializeReviewState(REVIEW, REVIEW_PROGRESS, REVIEW_OVERRIDE);
   SRS = (remote.srs && typeof remote.srs === 'object' && !Array.isArray(remote.srs)) ? remote.srs : {};
   SESSIONLOG = (remote.sessionLog && typeof remote.sessionLog === 'object' && !Array.isArray(remote.sessionLog)) ? remote.sessionLog : {};
   // PROTEÇÃO 085 — ordem remota adotada integralmente (só normalizada:
@@ -3412,6 +3426,7 @@ async function adoptRemoteStateForNewDevice(){
   await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
   await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
   await saveReviewStamps(); // PROTEÇÃO 089
+  await saveReviewProgressState(); // PROTEÇÃO 090
   await storage.set(SRS_KEY, JSON.stringify(SRS), false);
   await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
   await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
@@ -4136,6 +4151,9 @@ async function mergeThisDeviceImagesToCloud(opts){
     // SRS/REVIEW/SESSIONLOG/ordens: remoto é a base; local só soma o que for mais novo.
     DATA = merged.filter(Boolean);
     { const rm = mergeReviewByRecency(REVIEW, remote && remote.review, REVIEW_STAMPS, remote && remote.reviewUpdatedAt); REVIEW = rm.review; REVIEW_STAMPS = rm.stamps; await saveReviewStamps(); } // PROTEÇÃO 089
+    REVIEW_PROGRESS = mergeReviewProgress(REVIEW_PROGRESS, remote && remote.reviewProgress); // PROTEÇÃO 090
+    REVIEW_OVERRIDE = mergeReviewOverrides(REVIEW_OVERRIDE, remote && remote.reviewOverride);
+    REVIEW = materializeReviewState(REVIEW, REVIEW_PROGRESS, REVIEW_OVERRIDE); await saveReviewProgressState();
     SRS = mergeSRSPreservingNewest(SRS, remote && remote.srs);
     SESSIONLOG = mergeSessionLogPreservingProgress(SESSIONLOG, remote && remote.sessionLog);
     // PROTEÇÃO 085 — mesmo merge de ordem do reconcile (carimbo de reordenação manual).
@@ -4288,6 +4306,10 @@ function reconcileStateWithRemote(remote){
 
   for(const e of reconciled){ if(!e||!Array.isArray(e.links)) continue; const seen=new Set(); e.links=e.links.filter(l=>{ const k=String(l&&l.url||'').trim().replace(/\/+$/,''); if(!k) return true; if(seen.has(k)) return false; seen.add(k); return true; }); }
   for(const e of reconciled){ if(!e||!Array.isArray(e.links)) continue; const seen=new Set(); e.links=e.links.filter(l=>{ const k=String(l&&l.url||'').trim().replace(/\/+$/,''); if(!k) return true; if(seen.has(k)) return false; seen.add(k); return true; }); } DATA = reconciled.filter(Boolean);   { const rm = mergeReviewByRecency(REVIEW, remote && remote.review, REVIEW_STAMPS, remote && remote.reviewUpdatedAt); REVIEW = rm.review; REVIEW_STAMPS = rm.stamps; } // PROTEÇÃO 089
+  // PROTEÇÃO 090 — histórico do Quiz + override manual; REVIEW visível materializado.
+  REVIEW_PROGRESS = mergeReviewProgress(REVIEW_PROGRESS, remote && remote.reviewProgress);
+  REVIEW_OVERRIDE = mergeReviewOverrides(REVIEW_OVERRIDE, remote && remote.reviewOverride);
+  REVIEW = materializeReviewState(REVIEW, REVIEW_PROGRESS, REVIEW_OVERRIDE);
   SRS = mergeSRSPreservingNewest(SRS, remote && remote.srs);
   SESSIONLOG = mergeSessionLogPreservingProgress(SESSIONLOG, remote && remote.sessionLog);
   // PROTEÇÃO 084 — revisões/soluções: merge por reviewId (nunca overwrite cego).
@@ -4311,6 +4333,7 @@ async function persistLocalStateNow(){
   try{ await storage.set(STORAGE_KEY, JSON.stringify(DATA), false); }catch(_e){}
   try{ await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false); }catch(_e){}
   await saveReviewStamps(); // PROTEÇÃO 089
+  await saveReviewProgressState(); // PROTEÇÃO 090
   try{ await storage.set(SRS_KEY, JSON.stringify(SRS), false); }catch(_e){}
   try{ await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false); }catch(_e){}
   try{ await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false); }catch(_e){}
@@ -4369,6 +4392,7 @@ async function reconcileBeforePush(reason){
       ).data,
       review: quarantineIndexedByLesionId(REVIEW), srs: quarantineIndexedByLesionId(SRS),
       reviewUpdatedAt: normalizeReviewStamps(quarantineIndexedByLesionId(REVIEW_STAMPS)), // PROTEÇÃO 089
+      reviewProgress: normalizeReviewProgress(quarantineIndexedByLesionId(REVIEW_PROGRESS)), reviewOverride: normalizeReviewOverrides(quarantineIndexedByLesionId(REVIEW_OVERRIDE)), // PROTEÇÃO 090
       sessionLog: SESSIONLOG, sectionOrder, siteOrder, tombstones: IMAGE_TOMBSTONES,
       lesionRevisions: LESION_REVISIONS || {}, // PROTEÇÃO 084 — mudança só de revisão NÃO é no-op
       orderUpdatedAt: normalizeOrderStamps(ORDER_STAMPS) // PROTEÇÃO 085
@@ -4377,6 +4401,7 @@ async function reconcileBeforePush(reason){
       data: (Array.isArray(remote.data)?remote.data:[]).filter(e=>e && !isQuarantinedSeedId(e.id)),
       review: quarantineIndexedByLesionId(remote.review||{}), srs: quarantineIndexedByLesionId(remote.srs||{}),
       reviewUpdatedAt: normalizeReviewStamps(quarantineIndexedByLesionId(remote.reviewUpdatedAt||{})),
+      reviewProgress: normalizeReviewProgress(quarantineIndexedByLesionId(remote.reviewProgress||{})), reviewOverride: normalizeReviewOverrides(quarantineIndexedByLesionId(remote.reviewOverride||{})),
       sessionLog: remote.sessionLog||{}, sectionOrder: remote.sectionOrder||[], siteOrder: remote.siteOrder||{},
       tombstones: remote.tombstones||{},
       lesionRevisions: remote.lesionRevisions||{},
@@ -4434,6 +4459,7 @@ async function syncFromFirebase(){
       await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
       await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
       await saveReviewStamps(); // PROTEÇÃO 089
+      await saveReviewProgressState(); // PROTEÇÃO 090
       await storage.set(SRS_KEY, JSON.stringify(SRS), false);
       await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
       await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
@@ -4931,6 +4957,23 @@ let REVIEW = {};
    antigos sem carimbo nos dois lados caem na regra legada (maior estágio). */
 const REVIEW_STAMPS_KEY = 'atlas:reviewUpdatedAt';
 let REVIEW_STAMPS = {};
+/* PROTEÇÃO 090 — correção conceitual da 089: o estado de estudo é
+   AUTOMÁTICO pelo Quiz por padrão, com override MANUAL opcional.
+   - REVIEW_PROGRESS[id] = { b, f, a:[[t, ok, graded], …] } — últimas
+     REVIEW_ATTEMPTS_MAX tentativas do Quiz (t = ms da resposta; ok = acerto
+     objetivo e grau ≠ "Não sei"; graded = grau já aplicado); b = estado-base
+     (estado anterior à 1ª tentativa registrada, ou o estado acumulado das
+     tentativas que saíram da janela); f = t da última tentativa dobrada em b.
+   - REVIEW_OVERRIDE[id] = { m:1, s, at } escolha manual; { m:0, at } volta
+     explícita ao automático (vence override manual mais antigo).
+   - REVIEW[id] continua o valor VISÍVEL (todo leitor antigo segue igual):
+     manual → s; automático com histórico → replayAutoReview; sem nada →
+     valor anterior preservado. Nada muda em boot/render/pull sem dado novo. */
+const REVIEW_PROGRESS_KEY = 'atlas:reviewProgress';
+const REVIEW_OVERRIDE_KEY = 'atlas:reviewOverride';
+const REVIEW_ATTEMPTS_MAX = 8;
+let REVIEW_PROGRESS = {};
+let REVIEW_OVERRIDE = {};
 
 /* ============================================================
    REPETIÇÃO ESPAÇADA (para o Modo Quiz) — estilo Leitner simples
@@ -5028,7 +5071,25 @@ function logSessionResult(right, wrong){
   saveSessionLog();
 }
 function getReview(id){ return REVIEW[id] || 0; }
-function setReview(id, status){ REVIEW[id] = status; REVIEW_STAMPS[id] = Date.now(); saveReview(); } // PROTEÇÃO 089: única porta manual
+// PROTEÇÃO 089/090 — escolha MANUAL (override): o Quiz não a sobrescreve.
+function setReview(id, status){
+  ensureReviewProgressBase(id);
+  const at = Date.now();
+  REVIEW_OVERRIDE[id] = { m:1, s:status, at };
+  REVIEW[id] = status; REVIEW_STAMPS[id] = at;
+  saveReview();
+}
+// PROTEÇÃO 090 — volta ao "Automático pelo Quiz" e recalcula na hora.
+function setReviewAuto(id){
+  ensureReviewProgressBase(id);
+  const at = Date.now();
+  REVIEW_OVERRIDE[id] = { m:0, at };
+  REVIEW[id] = effectiveReviewState(id); REVIEW_STAMPS[id] = at;
+  saveReview();
+}
+// PROTEÇÃO 090 — "Marcar para revisar novamente": manual Revisando; histórico
+// do Quiz e SRS intactos.
+function markLesionForReviewAgain(id){ setReview(id, 1); }
 function cycleReview(id){ setReview(id, (getReview(id)+1)%3); }
 function normalizeReviewStamps(v){
   const out = {};
@@ -5074,6 +5135,176 @@ function mergeReviewByRecency(localReview, remoteReview, localStamps, remoteStam
   }
   return { review, stamps };
 }
+/* ---------- PROTEÇÃO 090 — regra automática (pura) ----------
+   DOMINADO: ≥4 tentativas, ≥80% de acerto nas últimas 5 e as 2 últimas
+   corretas. Dominado só volta a REVISANDO com ≥2 falhas nas últimas 3 (um
+   erro isolado não derruba). Qualquer tentativa tira de NÃO REVISADO. */
+function reviewPromotionReached(att){
+  if(att.length < 4) return false;
+  const last5 = att.slice(-5), last2 = att.slice(-2);
+  return last5.filter(x=>x[1]===1).length / last5.length >= 0.8 && last2.every(x=>x[1]===1);
+}
+function reviewDemotionTriggered(att){
+  return att.slice(-3).filter(x=>x[1]!==1).length >= 2;
+}
+function replayAutoReview(base, attempts){
+  let st = [0,1,2].includes(Number(base)) ? Number(base) : 0;
+  const list = Array.isArray(attempts) ? attempts : [];
+  for(let i=0;i<list.length;i++){
+    const pre = list.slice(0, i+1);
+    if(st===2){ if(reviewDemotionTriggered(pre)) st = 1; }
+    else st = reviewPromotionReached(pre) ? 2 : 1;
+  }
+  return st;
+}
+function normalizeReviewAttempts(list){
+  const byT = new Map();
+  for(const x of (Array.isArray(list) ? list : [])){
+    if(!Array.isArray(x)) continue;
+    const t = Number(x[0])||0; if(t <= 0) continue;
+    const a = [t, x[1]===1 ? 1 : 0, x[2]===1 ? 1 : 0];
+    const cur = byT.get(t);
+    // mesma tentativa vista em dois PCs: a versão com grau aplicado vence;
+    // empate = a mais conservadora (falha).
+    if(!cur || (a[2] > cur[2]) || (a[2]===cur[2] && a[1] < cur[1])) byT.set(t, a);
+  }
+  return [...byT.values()].sort((p,q)=>p[0]-q[0]);
+}
+function foldReviewProgress(entry){
+  let { b, f, a } = entry;
+  if(a.length > REVIEW_ATTEMPTS_MAX){
+    const dropped = a.slice(0, a.length - REVIEW_ATTEMPTS_MAX);
+    b = replayAutoReview(b, dropped); f = dropped[dropped.length-1][0];
+    a = a.slice(a.length - REVIEW_ATTEMPTS_MAX);
+  }
+  return { b, f, a };
+}
+function normalizeReviewProgressEntry(v){
+  if(!v || typeof v!=='object' || Array.isArray(v)) return null;
+  const b = [0,1,2].includes(Number(v.b)) ? Number(v.b) : 0;
+  const f = Number(v.f) > 0 ? Number(v.f) : 0;
+  return foldReviewProgress({ b, f, a: normalizeReviewAttempts(v.a).filter(x=>x[0] > f) });
+}
+function normalizeReviewProgress(v){
+  const out = {};
+  if(v && typeof v==='object' && !Array.isArray(v)){
+    for(const [id, e] of Object.entries(v)){ const n = normalizeReviewProgressEntry(e); if(n) out[id] = n; }
+  }
+  return out;
+}
+function normalizeReviewOverrides(v){
+  const out = {};
+  if(v && typeof v==='object' && !Array.isArray(v)){
+    for(const [id, o] of Object.entries(v)){
+      if(!o || typeof o!=='object') continue;
+      const at = Number(o.at)||0; if(at <= 0) continue;
+      if(o.m===1 && [0,1,2].includes(Number(o.s))) out[id] = { m:1, s:Number(o.s), at };
+      else if(o.m===0) out[id] = { m:0, at };
+    }
+  }
+  return out;
+}
+// Merge por lesão: tentativas unidas por t (sem duplicar); a base vem do lado
+// que dobrou mais (f maior; empate = maior b). Determinístico e convergente.
+function mergeReviewProgress(localP, remoteP){
+  const L = normalizeReviewProgress(localP), R = normalizeReviewProgress(remoteP), out = {};
+  for(const id of new Set([...Object.keys(L), ...Object.keys(R)])){
+    const l = L[id], r = R[id];
+    if(!l || !r){ out[id] = l || r; continue; }
+    const baseSide = (r.f > l.f || (r.f===l.f && r.b > l.b)) ? r : l;
+    const f = baseSide.f;
+    out[id] = foldReviewProgress({ b: baseSide.b, f, a: normalizeReviewAttempts([...l.a, ...r.a]).filter(x=>x[0] > f) });
+  }
+  return out;
+}
+// Override: o mais recente vence (manual OU volta ao automático); empate =
+// manual, depois maior estágio. Nunca Math.max cego.
+function mergeReviewOverrides(localO, remoteO){
+  const L = normalizeReviewOverrides(localO), R = normalizeReviewOverrides(remoteO), out = {};
+  for(const id of new Set([...Object.keys(L), ...Object.keys(R)])){
+    const l = L[id], r = R[id];
+    if(!l || !r){ out[id] = l || r; continue; }
+    if(r.at !== l.at) out[id] = r.at > l.at ? r : l;
+    else if(r.m !== l.m) out[id] = r.m===1 ? r : l;
+    else out[id] = (Number(r.s)||0) > (Number(l.s)||0) ? r : l;
+  }
+  return out;
+}
+// Pura: valor visível de cada lesão com histórico ou override.
+function materializeReviewState(review, progress, overrides){
+  const out = { ...((review && typeof review==='object') ? review : {}) };
+  const P = normalizeReviewProgress(progress), O = normalizeReviewOverrides(overrides);
+  for(const id of new Set([...Object.keys(P), ...Object.keys(O)])){
+    const o = O[id];
+    if(o && o.m===1) out[id] = o.s;
+    else if(P[id]) out[id] = replayAutoReview(P[id].b, P[id].a);
+  }
+  return out;
+}
+function isReviewManual(id){ const o = REVIEW_OVERRIDE[id]; return !!(o && o.m===1); }
+function computeAutomaticReviewState(id){
+  const p = REVIEW_PROGRESS[id];
+  return p ? replayAutoReview(p.b, p.a) : null; // null = sem histórico: estado anterior preservado
+}
+function effectiveReviewState(id){
+  if(isReviewManual(id)) return REVIEW_OVERRIDE[id].s;
+  const auto = computeAutomaticReviewState(id);
+  return auto===null ? (Number(REVIEW[id])||0) : auto;
+}
+// Base = estado visível atual (antes de qualquer escolha manual nova).
+function ensureReviewProgressBase(id){
+  if(REVIEW_PROGRESS[id]) return;
+  REVIEW_PROGRESS[id] = { b: isReviewManual(id) ? 0 : (Number(REVIEW[id])||0), f: 0, a: [] };
+}
+// Quiz: registra a tentativa ao RESPONDER (acerto objetivo). Devolve o t.
+function recordReviewAttempt(id, correct){
+  ensureReviewProgressBase(id);
+  const p = REVIEW_PROGRESS[id];
+  const lastT = p.a.length ? p.a[p.a.length-1][0] : p.f;
+  const t = Math.max(Date.now(), lastT + 1);
+  REVIEW_PROGRESS[id] = foldReviewProgress({ b: p.b, f: p.f, a: [...p.a, [t, correct ? 1 : 0, 0]] });
+  if(!isReviewManual(id)) REVIEW[id] = effectiveReviewState(id);
+  saveReview();
+  return t;
+}
+// Quiz: grau aplicado depois; "Não sei" (again) conta como falha.
+function gradeReviewAttempt(id, t, grade){
+  const p = REVIEW_PROGRESS[id];
+  if(!p || !t) return;
+  const i = p.a.findIndex(x=>x[0]===t);
+  if(i < 0) return;
+  const a = p.a.slice();
+  a[i] = [t, (a[i][1]===1 && grade!=='again') ? 1 : 0, 1];
+  REVIEW_PROGRESS[id] = { b: p.b, f: p.f, a };
+  if(!isReviewManual(id)) REVIEW[id] = effectiveReviewState(id);
+  saveReview();
+}
+function getReviewStateExplanation(id){
+  const o = REVIEW_OVERRIDE[id];
+  if(o && o.m===1) return 'Estado definido manualmente (' + REVIEW_LABELS[o.s] + ') — o Quiz não o altera';
+  const p = REVIEW_PROGRESS[id];
+  if(!p || !p.a.length){
+    const cur = Number(REVIEW[id])||0;
+    return cur ? 'Estado calculado pelo Quiz — sem tentativas registradas desde a Proteção 090 (estado anterior preservado)' : 'Estado calculado pelo Quiz — nenhuma tentativa ainda';
+  }
+  const last5 = p.a.slice(-5), hits = last5.filter(x=>x[1]===1).length, last2 = p.a.slice(-2);
+  const tail = last2.length===2 && last2.every(x=>x[1]===1) ? '2 últimas corretas'
+    : (p.a[p.a.length-1][1]===1 ? 'última correta' : 'última com falha');
+  return 'Estado calculado pelo Quiz — ' + hits + '/' + last5.length + ' acertos recentes · ' + tail + ' · ' + p.a.length + ' tentativa(s) na janela';
+}
+async function loadReviewProgressState(){
+  try{ const r = await storage.get(REVIEW_PROGRESS_KEY, false); REVIEW_PROGRESS = normalizeReviewProgress(JSON.parse(r.value)); }catch(e){ REVIEW_PROGRESS = {}; }
+  try{ const r = await storage.get(REVIEW_OVERRIDE_KEY, false); REVIEW_OVERRIDE = normalizeReviewOverrides(JSON.parse(r.value)); }catch(e){ REVIEW_OVERRIDE = {}; }
+}
+async function saveReviewProgressState(){
+  try{ await storage.set(REVIEW_PROGRESS_KEY, JSON.stringify(normalizeReviewProgress(REVIEW_PROGRESS)), false); }catch(e){ console.error('storage error', e); }
+  try{ await storage.set(REVIEW_OVERRIDE_KEY, JSON.stringify(normalizeReviewOverrides(REVIEW_OVERRIDE)), false); }catch(e){ console.error('storage error', e); }
+}
+// Restauração manual (backup/snapshot): overrides restaurados valem agora.
+function stampRestoredReviewOverrides(){
+  const now = Date.now();
+  for(const id of Object.keys(REVIEW_OVERRIDE)) REVIEW_OVERRIDE[id] = { ...REVIEW_OVERRIDE[id], at: now };
+}
 // Consolidação de duplicata (mesma lesão, ids diferentes): PRESERVA o estado
 // sem promover — o do keeper fica; o da duplicata só entra se o keeper não
 // tem estado, ou se a mudança manual da duplicata é mais recente.
@@ -5082,12 +5313,28 @@ function consolidateReviewOnMerge(keepId, dropId){
   const kv = Number(REVIEW[keepId])||0, dv = Number(REVIEW[dropId])||0;
   const kt = Number(REVIEW_STAMPS[keepId])||0, dt = Number(REVIEW_STAMPS[dropId])||0;
   const keeperHasState = kv > 0 || kt > 0;
+  let changed = false;
   if((!keeperHasState && dv > 0) || dt > kt){
     REVIEW[keepId] = dv;
     if(dt) REVIEW_STAMPS[keepId] = dt; else delete REVIEW_STAMPS[keepId];
-    return true;
+    changed = true;
   }
-  return false;
+  // PROTEÇÃO 090 — histórico do Quiz e override da duplicata passam ao keeper
+  // (tentativas unidas; override mais recente vence) e a duplicata os perde.
+  if(REVIEW_PROGRESS[dropId] || REVIEW_OVERRIDE[dropId]){
+    if(REVIEW_PROGRESS[dropId]){
+      REVIEW_PROGRESS[keepId] = mergeReviewProgress({ x: REVIEW_PROGRESS[keepId] }, { x: REVIEW_PROGRESS[dropId] }).x;
+      delete REVIEW_PROGRESS[dropId];
+    }
+    if(REVIEW_OVERRIDE[dropId]){
+      const m = mergeReviewOverrides({ x: REVIEW_OVERRIDE[keepId] }, { x: REVIEW_OVERRIDE[dropId] }).x;
+      if(m) REVIEW_OVERRIDE[keepId] = m;
+      delete REVIEW_OVERRIDE[dropId];
+    }
+    REVIEW[keepId] = effectiveReviewState(keepId);
+    changed = true;
+  }
+  return changed;
 }
 // ALTERAÇÃO 072: mesmo raciocínio de saveSRS() acima — internal=true (só a
 // migração dupResult dentro de loadData()) persiste local sem marcar dirty
@@ -5096,6 +5343,7 @@ async function saveReview(internal){
   try{ await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false); }
   catch(e){ console.error('storage error', e); }
   await saveReviewStamps(); // PROTEÇÃO 089
+  await saveReviewProgressState(); // PROTEÇÃO 090
   if(internal) return;
   await markSyncDirty();
   pushToFirebase();
@@ -7933,6 +8181,8 @@ function buildSafetySnapshot(reason){
     imageCount,
     data,
     review: JSON.parse(JSON.stringify(REVIEW||{})),
+    reviewProgress: JSON.parse(JSON.stringify(REVIEW_PROGRESS||{})), // PROTEÇÃO 090
+    reviewOverride: JSON.parse(JSON.stringify(REVIEW_OVERRIDE||{})),
     srs: JSON.parse(JSON.stringify(SRS||{})),
     sessionLog: JSON.parse(JSON.stringify(SESSIONLOG||{})),
     lesionRevisions: JSON.parse(JSON.stringify(LESION_REVISIONS||{})),
@@ -8012,6 +8262,8 @@ async function restoreSafetySnapshot(id){
   DATA = JSON.parse(JSON.stringify(snapshot.data));
   REVIEW = JSON.parse(JSON.stringify(snapshot.review||{}));
   stampRestoredReview(); // PROTEÇÃO 089 — restauração manual vale sobre a nuvem (como antes)
+  REVIEW_PROGRESS = normalizeReviewProgress(snapshot.reviewProgress); // PROTEÇÃO 090 (snapshot antigo sem o campo = {})
+  REVIEW_OVERRIDE = normalizeReviewOverrides(snapshot.reviewOverride); stampRestoredReviewOverrides();
   SRS = JSON.parse(JSON.stringify(snapshot.srs||{}));
   SESSIONLOG = JSON.parse(JSON.stringify(snapshot.sessionLog||{}));
   LESION_REVISIONS = JSON.parse(JSON.stringify(snapshot.lesionRevisions||{}));
@@ -8023,6 +8275,7 @@ async function restoreSafetySnapshot(id){
   await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
   await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
   await saveReviewStamps(); // PROTEÇÃO 089
+  await saveReviewProgressState(); // PROTEÇÃO 090
   await storage.set(SRS_KEY, JSON.stringify(SRS), false);
   await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
   await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
@@ -8406,10 +8659,11 @@ async function deduplicateV171(){
   }
   if(!merged) return 0;
   DATA=DATA.filter(e=>!remove.has(e.id));
-  remove.forEach(id=>{ if(REVIEW) delete REVIEW[id]; delete REVIEW_STAMPS[id]; if(SRS) delete SRS[id]; });
+  remove.forEach(id=>{ if(REVIEW) delete REVIEW[id]; delete REVIEW_STAMPS[id]; delete REVIEW_PROGRESS[id]; delete REVIEW_OVERRIDE[id]; if(SRS) delete SRS[id]; });
   try{ await storage.set(STORAGE_KEY,JSON.stringify(DATA),false); }catch(_e){}
   try{ await storage.set(REVIEW_KEY,JSON.stringify(REVIEW),false); }catch(_e){}
   await saveReviewStamps();
+  await saveReviewProgressState(); // PROTEÇÃO 090
   // ALTERAÇÃO 072: chamada tanto pelo boot (migração automática, nunca deve
   // publicar sozinha) quanto pela importação de backup (ação real do
   // usuário, que já chamou saveData() — REAL — antes desta função, deixando
@@ -9851,6 +10105,7 @@ async function applyReconcileV2(options){
   DATA = preview.state.data;
   REVIEW = preview.state.review;
   REVIEW_STAMPS = {}; await saveReviewStamps(); // PROTEÇÃO 089 — ids remapeados: carimbos antigos não valem mais
+  REVIEW_PROGRESS = {}; REVIEW_OVERRIDE = {}; await saveReviewProgressState(); // PROTEÇÃO 090 — idem (REVIEW aplicado vira a base)
   SRS = preview.state.srs;
   await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
   await storage.set(REVIEW_KEY, JSON.stringify(REVIEW), false);
@@ -10710,6 +10965,7 @@ async function loadData(){
     REVIEW = quarantineIndexedByLesionId(JSON.parse(r3.value));
   }catch(e){ REVIEW = {}; }
   await loadReviewStamps(); // PROTEÇÃO 089
+  await loadReviewProgressState(); // PROTEÇÃO 090
   // ALTERAÇÃO 072 (2026-09-23) — carrega o marcador PERSISTENTE de dirty
   // (sobrevive a reload/offline — ver declaração de syncDirty perto de
   // syncPushPending). Se a chave nunca existiu (dispositivo novo, ou
@@ -11396,8 +11652,10 @@ function renderResults(){
     reviewBtn.className = 'card-review-btn';
     reviewBtn.style.color = REVIEW_COLORS[rv];
     reviewBtn.style.borderColor = REVIEW_COLORS[rv]+'66';
-    reviewBtn.innerHTML = `${REVIEW_ICONS[rv]} ${REVIEW_LABELS[rv]}`;
-    reviewBtn.title = 'Estado manual de estudo — clique para escolher';
+    // PROTEÇÃO 090 — AUTO (pelo Quiz) ou MANUAL (override), com explicação.
+    const rvManual = isReviewManual(e.id);
+    reviewBtn.innerHTML = `${REVIEW_ICONS[rv]} ${REVIEW_LABELS[rv]} <span class="review-mode-tag">${rvManual ? 'MANUAL' : 'AUTO'}</span>`;
+    reviewBtn.title = (rvManual ? 'Estado definido manualmente' : 'Estado calculado pelo desempenho no Quiz') + ' — ' + getReviewStateExplanation(e.id) + ' (clique para escolher)';
     // PROTEÇÃO 089 — escolha EXPLÍCITA (nada de ciclo cego: um clique
     // acidental não muda mais o estado).
     reviewBtn.onclick = (ev)=>{
@@ -11406,14 +11664,21 @@ function renderResults(){
       if(open){ open.remove(); return; }
       const picker = document.createElement('div');
       picker.className = 'card-review-picker';
-      picker.title = 'Estado manual de estudo';
+      picker.title = 'Estado de estudo';
+      const autoOpt = document.createElement('button');
+      autoOpt.type = 'button';
+      autoOpt.className = 'card-review-option' + (!rvManual ? ' active' : '');
+      autoOpt.textContent = '⚙ Automático pelo Quiz';
+      autoOpt.title = 'Estado calculado pelo desempenho no Quiz';
+      autoOpt.onclick = (e2)=>{ e2.stopPropagation(); if(isReviewManual(e.id)) setReviewAuto(e.id); renderReviewBar(); renderResults(); };
+      picker.appendChild(autoOpt);
       [0,1,2].forEach(st=>{
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'card-review-option' + (st===rv ? ' active' : '');
+        b.className = 'card-review-option' + (rvManual && st===rv ? ' active' : '');
         b.style.color = REVIEW_COLORS[st];
         b.textContent = `${REVIEW_ICONS[st]} ${REVIEW_LABELS[st]}`;
-        b.onclick = (e2)=>{ e2.stopPropagation(); if(st!==getReview(e.id)) setReview(e.id, st); renderReviewBar(); renderResults(); };
+        b.onclick = (e2)=>{ e2.stopPropagation(); if(!(isReviewManual(e.id) && st===getReview(e.id))) setReview(e.id, st); renderReviewBar(); renderResults(); };
         picker.appendChild(b);
       });
       reviewBtn.insertAdjacentElement('afterend', picker);
@@ -11559,6 +11824,24 @@ function openDetail(id, opts){
       b.onclick = ()=>{ setReview(e.id, st); renderReviewButtons(); renderReviewBar(); renderResults(); };
       row.appendChild(b);
     });
+    // PROTEÇÃO 090 — AUTO/MANUAL, explicação e "Marcar para revisar novamente".
+    const manual = isReviewManual(e.id);
+    const autoBtn = document.createElement('button');
+    autoBtn.className = 'review-set-btn' + (!manual ? ' active' : '');
+    autoBtn.textContent = '⚙ Automático pelo Quiz';
+    autoBtn.title = 'Estado calculado pelo desempenho no Quiz';
+    autoBtn.onclick = ()=>{ if(isReviewManual(e.id)) setReviewAuto(e.id); renderReviewButtons(); renderReviewBar(); renderResults(); };
+    row.appendChild(autoBtn);
+    const againBtn = document.createElement('button');
+    againBtn.className = 'review-set-btn review-again-btn';
+    againBtn.textContent = '↺ Marcar para revisar novamente';
+    againBtn.title = 'Fica em Revisando (manual) sem apagar o histórico do Quiz nem o SRS';
+    againBtn.onclick = ()=>{ markLesionForReviewAgain(e.id); renderReviewButtons(); renderReviewBar(); renderResults(); };
+    row.appendChild(againBtn);
+    const info = document.createElement('div');
+    info.className = 'review-mode-info';
+    info.innerHTML = `<span class="review-mode-tag">${manual ? 'MANUAL' : 'AUTO'}</span> ${esc(getReviewStateExplanation(e.id))}`;
+    row.appendChild(info);
   }
   renderReviewButtons();
   wireClinicalCasesToggle(ov, e);
@@ -14458,6 +14741,7 @@ document.getElementById('btn-export').onclick = async ()=>{
     data: DATA,
     review: REVIEW,
     reviewUpdatedAt: REVIEW_STAMPS, // PROTEÇÃO 089
+    reviewProgress: REVIEW_PROGRESS, reviewOverride: REVIEW_OVERRIDE, // PROTEÇÃO 090
     srs: SRS,
     sessionLog: SESSIONLOG,
     sectionOrder: sectionOrder,
@@ -14540,6 +14824,8 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
     // high ids residuais).
     REVIEW = quarantineIndexedByLesionId((parsed.review && typeof parsed.review==='object') ? parsed.review : {});
     stampRestoredReview(); await saveReviewStamps(); // PROTEÇÃO 089 — import explícito vale sobre a nuvem (como antes)
+    REVIEW_PROGRESS = normalizeReviewProgress(parsed.reviewProgress); REVIEW_OVERRIDE = normalizeReviewOverrides(parsed.reviewOverride); // PROTEÇÃO 090 (backup antigo = {})
+    stampRestoredReviewOverrides(); await saveReviewProgressState();
     SRS = quarantineIndexedByLesionId((parsed.srs && typeof parsed.srs==='object') ? parsed.srs : {});
     SESSIONLOG = (parsed.sessionLog && typeof parsed.sessionLog==='object') ? parsed.sessionLog : {};
     sectionOrder = Array.isArray(parsed.sectionOrder) && parsed.sectionOrder.length
@@ -15577,7 +15863,9 @@ function renderQuizCardIntegrated(host){
   function applyGrade(g){
     if(st.grade) return; // já classificada — nunca duplica SRS/estatística/SESSIONLOG
     st.grade=g;
-    srsGradeLevel(e.id,g);quizStats[g]++;recordQuizAnswerToday(st.objectiveCorrect,g);refreshStudyDashboardLive();
+    srsGradeLevel(e.id,g);quizStats[g]++;recordQuizAnswerToday(st.objectiveCorrect,g);
+    if(st.reviewAttemptAt) gradeReviewAttempt(e.id, st.reviewAttemptAt, g); // PROTEÇÃO 090 — "Não sei" conta como falha
+    refreshStudyDashboardLive();
     enableNextBtn(); // a classificação é independente da navegação; Próxima segue habilitada
     renderAnsweredFeedback(); // NÃO avança sozinho: o usuário decide com "Próxima →"
   }
@@ -15627,6 +15915,9 @@ function renderQuizCardIntegrated(host){
       if(st.answered)return;
       st.answered=true; st.selectedAnswerId=btn.dataset.id; st.objectiveCorrect=(btn.dataset.id===e.id);
       host.dataset.answered='1';
+      // PROTEÇÃO 090 — tentativa registrada no histórico do Quiz (estado AUTO);
+      // override manual nunca é sobrescrito.
+      st.reviewAttemptAt = recordReviewAttempt(e.id, st.objectiveCorrect);
       // Acerto objetivo é contado UMA vez, ao responder (o grau de confiança é
       // contado à parte, ao classificar).
       if(st.objectiveCorrect)quizStats.right++;else{quizStats.wrong++;if(!quizSessionWrongIds.includes(e.id))quizSessionWrongIds.push(e.id);}
