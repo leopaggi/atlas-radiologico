@@ -12951,9 +12951,27 @@ function openForm(id, opts){
   // PROTEÇÃO 093b — galeria desta lesão para os vínculos: imagem nova de um
   // sinal/classificação entra em pendingImgs (fonte única = entry.images;
   // lesionId/assignedAt/079d aplicados pelo Salvar, como qualquer imagem).
+  // 093c — arquivo/Ctrl+V do editor do item = MESMO buildPendingImage do
+  // formulário (blob + File, upload só no Salvar via uploadPendingImage);
+  // _pendingKey é a chave TEMPORÁRIA do vínculo até o upload.
+  const newPendingKey = ()=> 'pending:'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);
   const didacticImageCtx = {
-    getImages: ()=> pendingImgs,
+    getImages: ()=>{ pendingImgs.forEach(x=>{ if(x && x.source==='pending' && !x._pendingKey) x._pendingKey = newPendingKey(); }); return pendingImgs; },
     addImage: (im)=>{ const n = { ...im, label: im.label||'', source: im.source||'url' }; pendingImgs.push(n); imgsChanged = true; renderImgGallery(); return n; },
+    addPendingFile: (file)=>{
+      if(!file || !file.type || !file.type.startsWith('image/')) return null;
+      const temp = buildPendingImage(file, trackObjectUrl);
+      temp._pendingKey = newPendingKey();
+      pendingImgs.push(temp); imgsChanged = true; renderImgGallery();
+      return temp;
+    },
+    removeImage: (im)=>{
+      const i = pendingImgs.indexOf(im);
+      if(i < 0) return;
+      pendingImgs.splice(i, 1);
+      if(im.source==='pending') revokeObjectUrl(im._objectUrl);
+      renderImgGallery();
+    },
     isTombstoned: (imageId)=>{
       if(!existing || !imageId) return false;
       const g = IMAGE_TOMBSTONES[imageId];
@@ -13578,6 +13596,7 @@ function openForm(id, opts){
       }
     }
     const entryId = formEntryId;
+    const pendingImageRefMap = {}; // 093c — pending:… -> stableImageKeyV208 (só após upload OK)
     let localImgFlag = existing ? !!existing.localImg : false;
     let remoteImgs = existing && Array.isArray(existing.images) ? existing.images : [];
     if(imgsChanged){
@@ -13592,6 +13611,8 @@ function openForm(id, opts){
           if(!hasCloudinaryConfig()){ toast('Cloudinary indisponível: não foi possível enviar as imagens novas. Nada foi salvo.'); formSaving=false; return; }
           try{
             normalized.push(await uploadPendingImage(x, {id:entryId,name}));
+            // 093c — chave temporária do vínculo -> chave estável do asset enviado
+            if(x._pendingKey) pendingImageRefMap[x._pendingKey] = stableImageKeyV208(normalized[normalized.length-1]);
           }catch(err){
             console.error('Cloudinary upload (salvar)',err);
             toast('Falha ao enviar uma imagem nova ao Cloudinary. Nada foi salvo — tente novamente.');
@@ -13645,6 +13666,12 @@ function openForm(id, opts){
       }
       await deleteLocalImg(entryId); localImgFlag=false;
     }
+    // 093c — todos os uploads deram certo (senão já retornou acima sem gravar
+    // nada): vínculos temporários viram a chave real; os de imagem que não
+    // foi enviada são descartados. Nenhum `pending:` chega ao DATA/nuvem.
+    clinicalCasesDraft = remapPendingImageRefs(clinicalCasesDraft, pendingImageRefMap);
+    radiologicSignsDraft = remapPendingImageRefs(radiologicSignsDraft, pendingImageRefMap);
+    classificationSchemesDraft = remapPendingImageRefs(classificationSchemesDraft, pendingImageRefMap);
     if(existing){
       existing.name=name; existing.s=sec; existing.site=site; existing.tags=tags; existing.img=img; existing.notes=notes; existing.links=links; existing.enTerm=enTerm; existing.inc=inc; existing.localImg=localImgFlag; existing.images=remoteImgs; existing.classification=classification; existing._userUpdatedAt=Date.now();
       if(altPlacementsDraft.length) existing.altPlacements = JSON.parse(JSON.stringify(altPlacementsDraft)); else delete existing.altPlacements;
@@ -19832,6 +19859,33 @@ function didacticImageId(img){
   return typeof stableImageKeyV208 === 'function' ? stableImageKeyV208(img) : '';
 }
 function isLinkableLesionImage(img){ return !!didacticImageId(img); }
+/* 093c — imagem NOVA ainda não enviada (source:'pending', mesmo
+   buildPendingImage/blob do formulário principal) pode ser vinculada DENTRO
+   do formulário por uma chave temporária `pending:…` (img._pendingKey). No
+   Salvar do formulário, depois do upload, remapPendingImageRefs troca a chave
+   temporária pela chave estável do asset enviado; vínculo pendente que não
+   virou upload (imagem removida/cancelada) é descartado — `pending:` nunca é
+   persistido. */
+function isPendingImageRefId(id){ return /^pending:/.test(String(id || '')); }
+function didacticImageRefId(img){
+  const id = didacticImageId(img);
+  if (id) return id;
+  return (img && img.source === 'pending' && isPendingImageRefId(img._pendingKey)) ? String(img._pendingKey) : '';
+}
+function remapPendingImageRefs(list, map){
+  return (Array.isArray(list) ? list : []).map(it => {
+    if (!it || !Array.isArray(it.imageRefs) || !it.imageRefs.some(r => r && isPendingImageRefId(r.imageId))) return it;
+    const refs = [];
+    for (const r of it.imageRefs) {
+      if (!r || !isPendingImageRefId(r.imageId)) { refs.push(r); continue; }
+      const real = map && map[r.imageId];
+      if (!real || r.deletedAt) continue; // não enviada (removida/cancelada): nunca persiste
+      if (it.imageRefs.some(x => x && x.imageId === real) || refs.some(x => x && x.imageId === real)) continue;
+      refs.push(Object.assign({}, r, { imageId: real }));
+    }
+    return Object.assign({}, it, { imageRefs: refs });
+  });
+}
 // Todas as formas estáveis da MESMA imagem (um PC pode ter só a URL e o
 // outro já o assetId): o vínculo resolve por qualquer uma delas.
 function didacticImageAltIds(img){
@@ -19848,6 +19902,7 @@ function didacticImageAltIds(img){
 function resolveLesionImageRef(images, imageId){
   if (!imageId) return null;
   const list = Array.isArray(images) ? images : [];
+  if (isPendingImageRefId(imageId)) { for (const im of list) if (didacticImageRefId(im) === imageId) return im; return null; } // 093c
   for (const im of list) if (didacticImageId(im) === imageId) return im;
   for (const im of list) if (didacticImageId(im) && didacticImageAltIds(im).includes(imageId)) return im;
   return null;
@@ -20246,11 +20301,15 @@ function openDidacticItemEditor(kind, item, getLesionMeta, onSave, imageCtx){
   };
   // Imagem nova do item: entra na GALERIA da lesão (dedup por asset/URL) e
   // é vinculada. Nunca guarda o asset no item.
+  // 093c: o que ESTE editor acrescentou à galeria é desfeito se o item for
+  // cancelado (nada fica pendurado no formulário).
+  const addedHere = [];
   const addAndLink = (imgObj) => {
     if (!ctx) { err('Abra pelo Editar da lesão para adicionar imagens.'); return false; }
     if (activeImageRefs(refs).length >= DIDACTIC_LIMITS.images) { err('Limite de ' + DIDACTIC_LIMITS.images + ' imagens por item.'); return false; }
-    const target = findSameLesionImage(lesionImages(), imgObj) || ctx.addImage(imgObj);
-    const id = didacticImageId(target);
+    let target = findSameLesionImage(lesionImages(), imgObj);
+    if (!target) { target = ctx.addImage(imgObj); if (target) addedHere.push(target); }
+    const id = didacticImageRefId(target);
     if (!id) { err('Não foi possível vincular esta imagem.'); return false; }
     refs = linkImageRef(refs, id); renderImgs(); return true;
   };
@@ -20280,30 +20339,35 @@ function openDidacticItemEditor(kind, item, getLesionMeta, onSave, imageCtx){
     return false;
   };
   if ($('de-img-url-add')) $('de-img-url-add').onclick = () => { if (addUrl($('de-img-url').value)) $('de-img-url').value = ''; };
-  const uploadFiles = async (files) => {
+  // 093c — REGRA HISTÓRICA: arquivo/Ctrl+V NÃO vai ao Cloudinary aqui. Vira
+  // imagem TEMPORÁRIA do formulário (buildPendingImage: blob para o preview +
+  // File em memória, em pendingImgs) e só sobe no Salvar do formulário,
+  // pelo mesmo pipeline de qualquer imagem nova da lesão.
+  const addPendingFiles = (files) => {
     for (const f of files) {
-      if (!ctx) { err('Abra pelo Editar da lesão para adicionar imagens.'); break; }
+      if (!ctx || typeof ctx.addPendingFile !== 'function') { err('Abra pelo Editar da lesão para adicionar imagens.'); break; }
       if (activeImageRefs(refs).length >= DIDACTIC_LIMITS.images) { err('Limite de ' + DIDACTIC_LIMITS.images + ' imagens por item.'); break; }
-      err('Enviando imagem…');
-      try {
-        const up = await uploadToCloudinary(f, typeof getLesionMeta === 'function' ? getLesionMeta() : {});
-        up.label = up.label || '';
-        if (addAndLink(up)) err('');
-      } catch (e) { err('Falha no upload: ' + String(e && e.message || e) + ' — você pode colar a URL da imagem.'); }
+      const temp = ctx.addPendingFile(f);
+      if (!temp) continue;
+      addedHere.push(temp);
+      refs = linkImageRef(refs, didacticImageRefId(temp));
+      err('');
     }
+    renderImgs();
   };
-  if ($('de-img-file')) $('de-img-file').onchange = async (ev) => {
+  if ($('de-img-file')) $('de-img-file').onchange = (ev) => {
     const files = Array.from(ev.target.files || []);
     ev.target.value = '';
-    await uploadFiles(files);
+    addPendingFiles(files);
   };
-  // Ctrl+V (sinal/classificação): imagem colada -> mesmo upload; URL colada
-  // fora de campo de texto -> imagem por URL. Texto em campo = colar normal.
+  // Ctrl+V (sinal/classificação): imagem colada -> temporária (upload só no
+  // Salvar); URL colada fora de campo de texto -> imagem por URL. Texto em
+  // campo = colar normal.
   if (kind !== 'cases') ov.addEventListener('paste', (ev) => {
     const items = (ev.clipboardData && ev.clipboardData.items) || [];
     const files = [];
     for (const x of items) if (x && x.type && x.type.startsWith('image/')) { const f = x.getAsFile(); if (f) files.push(f); }
-    if (files.length) { ev.preventDefault(); uploadFiles(files); return; }
+    if (files.length) { ev.preventDefault(); addPendingFiles(files); return; }
     if (typeof pasteTargetIsText === 'function' && pasteTargetIsText(ev.target)) return;
     const txt = ev.clipboardData ? String(ev.clipboardData.getData('text') || '').trim() : '';
     if (/^https?:\/\//i.test(txt)) { ev.preventDefault(); addUrl(txt); }
@@ -20312,7 +20376,7 @@ function openDidacticItemEditor(kind, item, getLesionMeta, onSave, imageCtx){
     if (!ctx) return;
     openLesionImagePicker(lesionImages(), refs, (chosen) => {
       for (const im of lesionImages()) {
-        const id = didacticImageId(im);
+        const id = didacticImageRefId(im); // 093c: temporárias também
         if (!id) continue;
         const want = chosen.has(id), has = isImageLinked(refs, id);
         if (want && !has) refs = linkImageRef(refs, id);
@@ -20322,7 +20386,9 @@ function openDidacticItemEditor(kind, item, getLesionMeta, onSave, imageCtx){
       renderImgs();
     });
   };
-  const close = () => ov.remove();
+  // Cancelar/fechar o item: desfaz o que ESTE editor pôs na galeria (as
+  // temporárias têm a blob URL revogada) — nenhum upload aconteceu.
+  const close = () => { if (ctx && typeof ctx.removeImage === 'function') addedHere.forEach(im => ctx.removeImage(im)); addedHere.length = 0; ov.remove(); };
   ov.onclick = (ev) => { if (ev.target === ov) close(); };
   $('de-cancel').onclick = close;
   $('de-save').onclick = () => {
@@ -20348,7 +20414,7 @@ function openDidacticItemEditor(kind, item, getLesionMeta, onSave, imageCtx){
     // campo opcional apagado pelo usuário: undefined (some ao gravar); o
     // resto do caso importado (addedAt, legacyKey…) é preservado pelo upsert.
     if (kind === 'cases') ['patientAge', 'patientSex', 'modality', 'notes', 'presentation'].forEach(k => { if (!(k in out)) out[k] = undefined; });
-    close();
+    ov.remove(); // salvou o item: as imagens novas ficam no formulário até o Salvar dele
     onSave(out);
   };
 }
@@ -20362,7 +20428,7 @@ function openLesionImagePicker(images, refs, onDone){
   const ov = document.createElement('div');
   ov.className = 'overlay didactic-editor-overlay image-link-overlay';
   const rows = list.map((im, i) => {
-    const id = didacticImageId(im);
+    const id = didacticImageRefId(im); // 093c: temporária do formulário também
     const thumb = im && (im.thumb || im.data) ? '<img src="' + escAttr(im.thumb || im.data) + '" alt="">' : '';
     return '<label class="image-pick-row' + (id ? '' : ' disabled') + '">'
       + '<input type="checkbox" data-i="' + i + '"' + (id ? '' : ' disabled') + (id && isImageLinked(refs, id) ? ' checked' : '') + '>'
@@ -20370,19 +20436,19 @@ function openLesionImagePicker(images, refs, onDone){
   }).join('');
   ov.innerHTML = '<div class="modal didactic-editor-modal"><h2>Selecionar imagens da lesão</h2>'
     + (list.length ? '<div class="image-pick-list">' + rows + '</div>' : '<div class="didactic-meta">Esta lesão ainda não tem imagens na galeria.</div>')
-    + '<div class="didactic-meta" style="margin-top:6px;">Imagens novas (⏳ não enviadas) só podem ser vinculadas depois de Salvar a lesão.</div>'
+    + '<div class="didactic-meta" style="margin-top:6px;">Imagens novas (⏳) só vão ao Cloudinary no Salvar da lesão.</div>'
     + '<div class="modal-actions"><button type="button" class="btn btn-ghost" data-act="cancel">Cancelar</button><button type="button" class="btn btn-primary" data-act="ok">Aplicar</button></div></div>';
   document.body.appendChild(ov);
   ov.querySelectorAll('.image-pick-row').forEach((row, i) => {
     const im = list[i];
-    row.querySelector('.image-pick-label').textContent = (im && im.label) || (didacticImageId(im) ? 'sem legenda' : '⏳ não enviada');
+    row.querySelector('.image-pick-label').textContent = (im && im.label) || (didacticImageId(im) ? 'sem legenda' : (didacticImageRefId(im) ? '⏳ nova (envia no Salvar)' : '⏳ não enviada'));
   });
   const close = () => ov.remove();
   ov.onclick = (ev) => { if (ev.target === ov) close(); };
   ov.querySelector('[data-act="cancel"]').onclick = close;
   ov.querySelector('[data-act="ok"]').onclick = () => {
     const chosen = new Set();
-    ov.querySelectorAll('input[type="checkbox"][data-i]').forEach(cb => { if (cb.checked) { const id = didacticImageId(list[Number(cb.getAttribute('data-i'))]); if (id) chosen.add(id); } });
+    ov.querySelectorAll('input[type="checkbox"][data-i]').forEach(cb => { if (cb.checked) { const id = didacticImageRefId(list[Number(cb.getAttribute('data-i'))]); if (id) chosen.add(id); } });
     close();
     onDone(chosen);
   };

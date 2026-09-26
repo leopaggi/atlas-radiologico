@@ -279,8 +279,10 @@ test('093 integração: detalhe na ordem exata; formulário com as 3 áreas; sav
   const merge = extractFunction(html, 'mergeEntryNonDestructive');
   assert.match(merge, /for\(const f of \['radiologicSigns', 'classificationSchemes'\]\)\{\s*const m = mergeDidacticItems\(local\[f\], remote\[f\]\);/);
   assert.match(extractFunction(html, 'foldLesionMergesIntoState'), /k\[f\] = mergeDidacticItems\(k\[f\], d\[f\]\)/, 'fusão clínica (091c) preserva o conteúdo didático');
-  // upload: o MESMO backend do Atlas; imagens didáticas nunca em entry.images
+  // upload: 093c restaurou a regra histórica — o editor do item NÃO envia ao
+  // Cloudinary (arquivo/Ctrl+V viram temporárias do formulário e sobem no
+  // Salvar dele, via uploadPendingImage); o item nunca guarda o asset.
   const editor = extractFunction(html, 'openDidacticItemEditor');
-  assert.match(editor, /await uploadToCloudinary\(f, /);
+  assert.doesNotMatch(editor, /uploadToCloudinary|uploadPendingImage/);
   assert.doesNotMatch(editor, /entry\.images|\.images\.push\(|lesionId/);
 });

@@ -166,9 +166,11 @@ test('093b 8-9: captionOverride e creditOverride valem só no item; legenda prin
 
 test('093b 10-11: imagem NOVA de sinal/classificação entra em entry.images (via galeria da lesão) e é vinculada', () => {
   // o editor NUNCA guarda o asset no item: usa a galeria (imageCtx.addImage)
-  assert.match(editorFn, /const target = findSameLesionImage\(lesionImages\(\), imgObj\) \|\| ctx\.addImage\(imgObj\);/);
+  assert.match(editorFn, /let target = findSameLesionImage\(lesionImages\(\), imgObj\);\s*if \(!target\) \{ target = ctx\.addImage\(imgObj\);/);
   assert.match(editorFn, /refs = linkImageRef\(refs, id\); renderImgs\(\); return true;/);
-  assert.match(editorFn, /const up = await uploadToCloudinary\(f, [\s\S]{0,100}?\);[\s\S]{0,80}if \(addAndLink\(up\)\)/, 'mesmo upload do Atlas');
+  // 093c: arquivo/Ctrl+V = temporária do formulário (upload só no Salvar; ver didactic-pending-images)
+  assert.match(editorFn, /const temp = ctx\.addPendingFile\(f\);/);
+  assert.doesNotMatch(editorFn, /uploadToCloudinary|uploadPendingImage/, 'nenhum upload no editor do item');
   assert.doesNotMatch(editorFn, /imgs\.push\(|images\.push\(/, 'nenhum armazenamento paralelo dentro do item');
   // no formulário, addImage = pendingImgs (entry.images no Salvar, com lesionId/assignedAt/079d do fluxo normal)
   assert.match(formFn, /addImage: \(im\)=>\{ const n = \{ \.\.\.im, label: im\.label\|\|'', source: im\.source\|\|'url' \}; pendingImgs\.push\(n\); imgsChanged = true; renderImgGallery\(\); return n; \}/);
@@ -179,9 +181,9 @@ test('093b 10-11: imagem NOVA de sinal/classificação entra em entry.images (vi
   assert.match(editorFn, /Imagens vinculadas \(<span id="de-linked-count">/);
 });
 
-test('093b 12-13: Ctrl+V em sinal e em classificação usa o mesmo upload + vínculo', () => {
+test('093b 12-13: Ctrl+V em sinal e em classificação usa o mesmo fluxo de imagem temporária + vínculo', () => {
   assert.match(editorFn, /if \(kind !== 'cases'\) ov\.addEventListener\('paste', \(ev\) => \{/);
-  assert.match(editorFn, /x\.type\.startsWith\('image\/'\)\) \{ const f = x\.getAsFile\(\); if \(f\) files\.push\(f\); \}\s*if \(files\.length\) \{ ev\.preventDefault\(\); uploadFiles\(files\); return; \}/);
+  assert.match(editorFn, /x\.type\.startsWith\('image\/'\)\) \{ const f = x\.getAsFile\(\); if \(f\) files\.push\(f\); \}\s*if \(files\.length\) \{ ev\.preventDefault\(\); addPendingFiles\(files\); return; \}/);
   assert.match(editorFn, /if \(typeof pasteTargetIsText === 'function' && pasteTargetIsText\(ev\.target\)\) return;/, 'texto colado em campo continua colagem normal');
   assert.match(editorFn, /📋 Cole com Ctrl\+V aqui/);
 });

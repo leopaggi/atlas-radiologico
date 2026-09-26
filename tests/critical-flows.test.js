@@ -566,7 +566,11 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   assert.equal(recovery.line, 9107);
   assert.equal(brokenArtifacts.line, 9097);
   assert.equal(loadData.line, 11658);
-  assert.equal(importHandler.line, 16009);
+  // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
+  // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
+  // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
+  // importHandler; as tres primeiras ancoras nao mudam.
+  assert.equal(importHandler.line, 16036);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
