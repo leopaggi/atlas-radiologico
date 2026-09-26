@@ -5062,8 +5062,14 @@ let REVIEW_STAMPS = {};
    - REVIEW_OVERRIDE[id] = { m:1, s, at } escolha manual; { m:0, at } volta
      explícita ao automático (vence override manual mais antigo).
    - REVIEW[id] continua o valor VISÍVEL (todo leitor antigo segue igual):
-     manual → s; automático com histórico → replayAutoReview; sem nada →
-     valor anterior preservado. Nada muda em boot/render/pull sem dado novo. */
+     manual → s; automático → derivado SÓ das tentativas reais do Quiz.
+   PROTEÇÃO 090b — status AUTO baseado exclusivamente em tentativas reais:
+   tentativa real = item de REVIEW_PROGRESS[id].a, criado SÓ por
+   recordReviewAttempt (resposta no Quiz). `b` só vale como histórico real
+   quando f > 0 (tentativas reais que saíram da janela); com f = 0 ele era o
+   REVIEW legado copiado como base e NÃO conta. AUTO sem tentativa real =
+   Não revisado (REVIEW/estado pré-090, SRS, abrir/editar/importar/sync
+   nunca contam). REVIEW é recalculado (derivado) no boot, pull e escrita. */
 const REVIEW_PROGRESS_KEY = 'atlas:reviewProgress';
 const REVIEW_OVERRIDE_KEY = 'atlas:reviewOverride';
 const REVIEW_ATTEMPTS_MAX = 8;
@@ -5265,11 +5271,20 @@ function normalizeReviewAttempts(list){
   }
   return [...byT.values()].sort((p,q)=>p[0]-q[0]);
 }
+// 090b — base REAL: só existe quando tentativas reais já foram dobradas em
+// `b` (f > 0). Com f = 0, `b` é legado/sintético e o ponto de partida é 0.
+function autoReviewBase(p){ return (p && Number(p.f) > 0 && [0,1,2].includes(Number(p.b))) ? Number(p.b) : 0; }
+function hasRealReviewAttempts(p){ return !!p && ((Number(p.f) > 0) || (Array.isArray(p.a) && p.a.length > 0)); }
+// Estado AUTO derivado SÓ das tentativas reais (sem tentativa = Não revisado).
+function autoReviewStateFromProgress(p){
+  if(!hasRealReviewAttempts(p)) return 0;
+  return replayAutoReview(autoReviewBase(p), p.a);
+}
 function foldReviewProgress(entry){
   let { b, f, a } = entry;
   if(a.length > REVIEW_ATTEMPTS_MAX){
     const dropped = a.slice(0, a.length - REVIEW_ATTEMPTS_MAX);
-    b = replayAutoReview(b, dropped); f = dropped[dropped.length-1][0];
+    b = replayAutoReview(autoReviewBase({ b, f }), dropped); f = dropped[dropped.length-1][0]; // 090b: legado não é ponto de partida
     a = a.slice(a.length - REVIEW_ATTEMPTS_MAX);
   }
   return { b, f, a };
@@ -5329,27 +5344,62 @@ function mergeReviewOverrides(localO, remoteO){
 function materializeReviewState(review, progress, overrides){
   const out = { ...((review && typeof review==='object') ? review : {}) };
   const P = normalizeReviewProgress(progress), O = normalizeReviewOverrides(overrides);
-  for(const id of new Set([...Object.keys(P), ...Object.keys(O)])){
+  // 090b: TODO id conhecido é recalculado — manual = escolha; AUTO = só
+  // tentativas reais (sem tentativa real = 0, mesmo com REVIEW legado).
+  for(const id of new Set([...Object.keys(out), ...Object.keys(P), ...Object.keys(O)])){
     const o = O[id];
     if(o && o.m===1) out[id] = o.s;
-    else if(P[id]) out[id] = replayAutoReview(P[id].b, P[id].a);
+    else out[id] = autoReviewStateFromProgress(P[id]);
   }
   return out;
 }
 function isReviewManual(id){ const o = REVIEW_OVERRIDE[id]; return !!(o && o.m===1); }
+/* 090b — AUDITORIA (somente leitura; não altera nada). Pura: compara o
+   REVIEW bruto (como estava salvo) com o estado derivado das tentativas
+   reais. No console: await auditReviewAutoStatusNow() — lê o REVIEW salvo no
+   IndexedDB e imprime o relatório (a correção em si é o recálculo derivado). */
+function auditReviewAutoStatus(rawReview, progress, overrides){
+  const R = (rawReview && typeof rawReview==='object') ? rawReview : {};
+  const P = normalizeReviewProgress(progress), O = normalizeReviewOverrides(overrides);
+  const out = { total:0, manual:0, auto:0, autoWithoutRealAttempts:0, autoRevisandoWithoutAttempts:0, autoDominadoWithoutAttempts:0,
+    corrected:0, final:{ 0:0, 1:0, 2:0 } };
+  for(const id of new Set([...Object.keys(R), ...Object.keys(P), ...Object.keys(O)])){
+    out.total++;
+    const o = O[id];
+    const finalState = (o && o.m===1) ? o.s : autoReviewStateFromProgress(P[id]);
+    if(o && o.m===1) out.manual++;
+    else {
+      out.auto++;
+      if(!hasRealReviewAttempts(P[id])){
+        out.autoWithoutRealAttempts++;
+        const raw = Number(R[id])||0;
+        if(raw===1) out.autoRevisandoWithoutAttempts++;
+        if(raw===2) out.autoDominadoWithoutAttempts++;
+      }
+      if((Number(R[id])||0) !== finalState) out.corrected++;
+    }
+    out.final[finalState] = (out.final[finalState]||0) + 1;
+  }
+  return out;
+}
+async function auditReviewAutoStatusNow(){
+  let raw = {};
+  try{ raw = JSON.parse((await storage.get(REVIEW_KEY, false)).value) || {}; }catch(e){ raw = REVIEW; }
+  const r = auditReviewAutoStatus(raw, REVIEW_PROGRESS, REVIEW_OVERRIDE);
+  try{ console.table(r); }catch(e){ console.log(r); }
+  return r;
+}
 function computeAutomaticReviewState(id){
-  const p = REVIEW_PROGRESS[id];
-  return p ? replayAutoReview(p.b, p.a) : null; // null = sem histórico: estado anterior preservado
+  return autoReviewStateFromProgress(REVIEW_PROGRESS[id]); // 090b: sem tentativa real = 0 (nunca o REVIEW legado)
 }
 function effectiveReviewState(id){
   if(isReviewManual(id)) return REVIEW_OVERRIDE[id].s;
-  const auto = computeAutomaticReviewState(id);
-  return auto===null ? (Number(REVIEW[id])||0) : auto;
+  return computeAutomaticReviewState(id);
 }
 // Base = estado visível atual (antes de qualquer escolha manual nova).
 function ensureReviewProgressBase(id){
   if(REVIEW_PROGRESS[id]) return;
-  REVIEW_PROGRESS[id] = { b: isReviewManual(id) ? 0 : (Number(REVIEW[id])||0), f: 0, a: [] };
+  REVIEW_PROGRESS[id] = { b: 0, f: 0, a: [] }; // 090b: nunca copia o REVIEW legado como base
 }
 // Quiz: registra a tentativa ao RESPONDER (acerto objetivo). Devolve o t.
 function recordReviewAttempt(id, correct){
@@ -5379,8 +5429,7 @@ function getReviewStateExplanation(id){
   if(o && o.m===1) return 'Estado definido manualmente (' + REVIEW_LABELS[o.s] + ') — o Quiz não o altera';
   const p = REVIEW_PROGRESS[id];
   if(!p || !p.a.length){
-    const cur = Number(REVIEW[id])||0;
-    return cur ? 'Estado calculado pelo Quiz — sem tentativas registradas desde a Proteção 090 (estado anterior preservado)' : 'Estado calculado pelo Quiz — nenhuma tentativa ainda';
+    return hasRealReviewAttempts(p) ? 'Estado calculado pelo Quiz — histórico anterior à janela atual' : 'Estado calculado pelo Quiz — nenhuma tentativa ainda (Não revisado)';
   }
   const last5 = p.a.slice(-5), hits = last5.filter(x=>x[1]===1).length, last2 = p.a.slice(-2);
   const tail = last2.length===2 && last2.every(x=>x[1]===1) ? '2 últimas corretas'
@@ -11712,6 +11761,7 @@ async function loadData(){
   }catch(e){ REVIEW = {}; }
   await loadReviewStamps(); // PROTEÇÃO 089
   await loadReviewProgressState(); // PROTEÇÃO 090
+  REVIEW = materializeReviewState(REVIEW, REVIEW_PROGRESS, REVIEW_OVERRIDE); // 090b: AUTO só por tentativas reais
   // ALTERAÇÃO 072 (2026-09-23) — carrega o marcador PERSISTENTE de dirty
   // (sobrevive a reload/offline — ver declaração de syncDirty perto de
   // syncPushPending). Se a chave nunca existiu (dispositivo novo, ou

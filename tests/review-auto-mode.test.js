@@ -28,7 +28,7 @@ function extractFunction(source, name) {
 const plain = (v) => JSON.parse(JSON.stringify(v));
 const FNS = ['getReview', 'setReview', 'setReviewAuto', 'markLesionForReviewAgain', 'saveReview', 'normalizeReviewStamps',
   'saveReviewStamps', 'reviewPromotionReached', 'reviewDemotionTriggered', 'replayAutoReview', 'normalizeReviewAttempts',
-  'foldReviewProgress', 'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'normalizeReviewOverrides',
+  'foldReviewProgress', 'autoReviewBase', 'hasRealReviewAttempts', 'autoReviewStateFromProgress', 'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'normalizeReviewOverrides',
   'mergeReviewProgress', 'mergeReviewOverrides', 'materializeReviewState', 'isReviewManual', 'computeAutomaticReviewState',
   'effectiveReviewState', 'ensureReviewProgressBase', 'recordReviewAttempt', 'gradeReviewAttempt', 'getReviewStateExplanation',
   'loadReviewProgressState', 'saveReviewProgressState', 'stampRestoredReviewOverrides', 'srsGradeLevel'];
@@ -67,12 +67,12 @@ function answer(c, id, seq) {
   return c.getReview(id);
 }
 
-test('090-1: sem tentativas -> Não revisado; estado anterior (legado) é preservado sem histórico', () => {
+test('090-1 (090b): sem tentativas reais -> Não revisado; REVIEW legado NÃO conta no AUTO', () => {
   const c = makeCtx();
   assert.equal(c.effectiveReviewState('x'), 0);
   c.__set({ legado: 2 });
-  assert.equal(c.effectiveReviewState('legado'), 2, 'nada muda em boot/render sem tentativa nova');
-  assert.equal(c.computeAutomaticReviewState('legado'), null);
+  assert.equal(c.effectiveReviewState('legado'), 0, '090b: legado sem tentativa real = Não revisado');
+  assert.equal(c.computeAutomaticReviewState('legado'), 0);
 });
 
 test('090-2/3: primeira tentativa (certa ou errada) -> Revisando; várias sem critério -> Revisando', () => {
@@ -145,13 +145,13 @@ test('090-14: voltar para Automático recalcula imediatamente com os dados atuai
   assert.equal(st(c).REVIEW_OVERRIDE.a.m, 0, 'volta ao auto é registrada (vence override antigo no sync)');
 });
 
-test('090-14b: voltar ao Automático sem tentativas devolve o estado anterior à escolha manual (base)', () => {
+test('090-14b (090b): voltar ao Automático sem tentativas reais -> Não revisado (a base legada não volta)', () => {
   const c = makeCtx();
   c.__set({ legado: 2 });
-  c.setReview('legado', 0);
-  assert.equal(c.getReview('legado'), 0);
-  c.setReviewAuto('legado');
+  c.setReview('legado', 2);
   assert.equal(c.getReview('legado'), 2);
+  c.setReviewAuto('legado');
+  assert.equal(c.getReview('legado'), 0);
 });
 
 test('090-15: "Marcar para revisar novamente" = manual Revisando, sem apagar histórico nem SRS', () => {
@@ -220,17 +220,17 @@ test('090 MERGE: tentativas unidas por t sem duplicar (versão graduada vence); 
   assert.deepEqual(plain(c.mergeReviewProgress(p, p)), p, 'idempotente');
   const r = plain(c.materializeReviewState({ a: 1, b: 2, legado: 2 }, p, o));
   // a: auto (3 tentativas, sem critério) = Revisando; b: manual Não revisado;
-  // legado sem histórico/override = preservado; z: base 2 sem tentativas = 2.
-  assert.deepEqual(r, { a: 1, b: 0, legado: 2, z: 2 });
+  // 090b: legado sem tentativa real = 0; z: base 2 SEM tentativa real (f=0) = 0.
+  assert.deepEqual(r, { a: 1, b: 0, legado: 0, z: 0 });
 });
 
-test('090 MIGRAÇÃO da 089: carimbos da 089 NÃO viram override manual; tudo volta ao AUTO preservando os valores', () => {
+test('090 MIGRAÇÃO da 089 (090b): carimbos da 089 NÃO viram override manual; no AUTO, sem tentativa real = Não revisado', () => {
   const c = makeCtx();
   c.__set({ a: 2, b: 1 });
   vm.runInContext('REVIEW_STAMPS = { a: 123, b: 456 };', c);
   assert.equal(c.isReviewManual('a'), false);
-  assert.equal(c.effectiveReviewState('a'), 2);
-  assert.equal(c.effectiveReviewState('b'), 1);
+  assert.equal(c.effectiveReviewState('a'), 0);
+  assert.equal(c.effectiveReviewState('b'), 0);
   assert.doesNotMatch(extractFunction(html, 'loadData'), /REVIEW_OVERRIDE\s*=/, 'nenhuma conversão automática em boot');
 });
 

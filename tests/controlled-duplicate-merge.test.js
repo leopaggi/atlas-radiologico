@@ -44,7 +44,7 @@ function seedRuntime() {
 }
 
 const deps = ['normalizeExternalTitle', 'exactLesionIdentityKey', 'clinicalCaseIdentityKey', 'imageIdentityKeys', 'radiopaediaSearchUrl',
-  'reviewPromotionReached', 'reviewDemotionTriggered', 'replayAutoReview', 'normalizeReviewAttempts', 'foldReviewProgress',
+  'reviewPromotionReached', 'reviewDemotionTriggered', 'replayAutoReview', 'normalizeReviewAttempts', 'foldReviewProgress', 'autoReviewBase', 'hasRealReviewAttempts', 'autoReviewStateFromProgress',
   'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'normalizeReviewOverrides', 'mergeReviewProgress',
   'mergeReviewOverrides', 'materializeReviewState'].map((n) => extractFunction(html, n)).join('\n');
 const quarantine091c = sliceBetween('// PROTEÇÃO 091c — id fundido pelo mapa LESION_MERGES', '/* ============================================================\n   PROTEÇÃO 091c — FUSÃO CLÍNICA');

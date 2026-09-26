@@ -553,10 +553,15 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // fusao 091c preservando sinais/classificacoes — antes da primeira ancora;
   // +10 entre loadData e o importHandler: blocos no detalhe, secao do
   // formulario (drafts + save) e o bloco pos-resposta do Quiz.
-  assert.equal(recovery.line, 9046);
-  assert.equal(brokenArtifacts.line, 9036);
-  assert.equal(loadData.line, 11597);
-  assert.equal(importHandler.line, 15895);
+  // +49 nas tres primeiras ancoras / +50 no importHandler (Protecao 090b,
+  // 2026-09-26): estado AUTO so por tentativas reais do Quiz (autoReviewBase/
+  // hasRealReviewAttempts/autoReviewStateFromProgress, materializacao de todo
+  // id) + auditoria somente leitura — antes da primeira ancora; +1 (REVIEW
+  // derivado no boot) dentro de loadData.
+  assert.equal(recovery.line, 9095);
+  assert.equal(brokenArtifacts.line, 9085);
+  assert.equal(loadData.line, 11646);
+  assert.equal(importHandler.line, 15945);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -738,7 +743,7 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
     siteOrder: {},
     loadOrderStamps: async () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085
     loadReviewStamps: async () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089
-    loadReviewProgressState: async () => {}, saveReviewProgressState: async () => {}, // PROTEÇÃO 090
+    loadReviewProgressState: async () => {}, saveReviewProgressState: async () => {}, materializeReviewState: (r) => r, REVIEW_PROGRESS: {}, REVIEW_OVERRIDE: {}, /* 090b (coberto em review-auto-status) */ // PROTEÇÃO 090
     loadLesionMerges: async () => {}, saveLesionMerges: async () => {}, foldLesionMergesIntoGlobals: () => ({ changed: false }), // PROTEÇÃO 091c
     appStateReady: false,
     SEED: seed,

@@ -149,7 +149,7 @@ const addImageToLesionDataFn = extractFunction(html, 'addImageToLesionData');
 const reviewFns089 = ['normalizeReviewStamps', 'loadReviewStamps', 'saveReviewStamps', 'stampRestoredReview',
   'mergeReviewByRecency', 'consolidateReviewOnMerge', 'getReview', 'setReview',
   // PROTEÇÃO 090 — estado AUTO pelo Quiz + override manual (funções reais)
-  'reviewPromotionReached', 'reviewDemotionTriggered', 'replayAutoReview', 'normalizeReviewAttempts', 'foldReviewProgress',
+  'reviewPromotionReached', 'reviewDemotionTriggered', 'replayAutoReview', 'normalizeReviewAttempts', 'foldReviewProgress', 'autoReviewBase', 'hasRealReviewAttempts', 'autoReviewStateFromProgress',
   'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'normalizeReviewOverrides', 'mergeReviewProgress',
   'mergeReviewOverrides', 'materializeReviewState', 'isReviewManual', 'computeAutomaticReviewState', 'effectiveReviewState',
   'ensureReviewProgressBase', 'recordReviewAttempt', 'gradeReviewAttempt', 'getReviewStateExplanation',
@@ -2650,6 +2650,7 @@ test('PROTEÇÃO 079 - Parte A, Teste 1: REVIEW com seed_1282 nunca chega ao pay
   const device = makeDevice(cloud, { seed: [makeSeedEntry({ id: 'seed_1', name: 'Lesão válida' })] });
   device.context.isQuarantinedSeedId = (id) => id === 'seed_1282';
   device.context.REVIEW = { seed_1: 2, seed_1282: 5 };
+  device.context.REVIEW_OVERRIDE = { seed_1: { m: 1, s: 2, at: 1000 } }; // 090b: estado válido = manual
   device.context.lastKnownCloudRevision = 0;
   const ok = await device.context.writeShardedState(5000);
   assert.equal(ok, true);
@@ -2697,14 +2698,15 @@ test('PROTEÇÃO 079 - Parte A, Teste 4: REVIEW/SRS remotos contaminados não re
   device.context.SRS = { seed_1: { interval: 2, due: 1, streak: 1 } };
   const remote = {
     data: [makeSeedEntry({ id: 'seed_1', name: 'Lesão válida' })],
-    review: { seed_1: 3, seed_1282: 9 },
+    review: { seed_1: 2, seed_1282: 9 },
+    reviewOverride: { seed_1: { m: 1, s: 2, at: 5000 } }, // 090b: estado válido = manual remoto
     srs: { seed_1: { interval: 4, due: 2, streak: 2 }, seed_1282: { interval: 9, due: 9, streak: 9 } },
     sessionLog: {}, sectionOrder: [], siteOrder: {}, tombstones: {}
   };
   device.context.reconcileStateWithRemote(remote);
   assert.equal(Object.prototype.hasOwnProperty.call(device.context.REVIEW, 'seed_1282'), false, 'REVIEW global não pode ter reincorporado seed_1282');
   assert.equal(Object.prototype.hasOwnProperty.call(device.context.SRS, 'seed_1282'), false, 'SRS global não pode ter reincorporado seed_1282');
-  assert.equal(device.context.REVIEW.seed_1, 3, 'merge legítimo (max-wins de progresso) continua funcionando pro resto');
+  assert.equal(device.context.REVIEW.seed_1, 2, 'merge legítimo (estado manual remoto) continua funcionando pro resto');
 });
 
 test('PROTEÇÃO 079 - Parte A, Teste 5a: REVIEW contaminado no IndexedDB não sobrevive ao boot (loadData real)', async () => {
@@ -2715,6 +2717,7 @@ test('PROTEÇÃO 079 - Parte A, Teste 5a: REVIEW contaminado no IndexedDB não s
   // incidente anterior (achado real da REV26: DATA limpa, REVIEW nunca
   // filtrada no load).
   await device.context.storage.set('review', JSON.stringify({ seed_1: 2, seed_1282: 7 }), false);
+  await device.context.storage.set('atlas:reviewOverride', JSON.stringify({ seed_1: { m: 1, s: 2, at: 1000 } }), false); // 090b
   await device.boot();
   assert.equal(Object.prototype.hasOwnProperty.call(device.context.REVIEW, 'seed_1282'), false, 'boot não pode manter seed_1282 em REVIEW vindo do IndexedDB');
   assert.equal(device.context.REVIEW.seed_1, 2, 'entrada válida sobrevive normalmente');
@@ -3770,36 +3773,35 @@ test('PROTEÇÃO 089 - PC A marca Dominado; PC B (depois) rebaixa para Revisando
   assert.equal(cloud.peekMeta().review.seed_1, 1, 'merge por recência dentro da transação');
 });
 
-test('PROTEÇÃO 089 - boot/F5 e sync no-op não mudam REVIEW nem gastam escrita; estado legado sem carimbo continua válido', async () => {
+test('PROTEÇÃO 089/090b - legado sem tentativa real = Não revisado (derivado): boot/F5 não publicam; 1ª escrita real converge a nuvem; depois no-op', async () => {
   const cloud = makeFakeCloud();
   await seedCleanCloud079c(cloud, [makeSeedEntry(), makeSeedEntry({ id: 'seed_2', name: 'Lesão 2' })]);
   const meta = cloud.peekMeta();
-  await cloud.FB_META_REF().set({ ...meta, review: { seed_1: 2, seed_2: 1 } }); // legado, sem reviewUpdatedAt
+  await cloud.FB_META_REF().set({ ...meta, review: { seed_1: 2, seed_2: 1 } }); // legado, sem reviewUpdatedAt nem tentativas
   const d = makeDevice(cloud, { seed: [makeSeedEntry(), makeSeedEntry({ id: 'seed_2', name: 'Lesão 2' })] });
   await d.boot();
   const rev0 = cloud.peekRevision();
-  assert.deepEqual(JSON.parse(JSON.stringify(d.context.REVIEW)), { seed_1: 2, seed_2: 1 });
+  assert.deepEqual(JSON.parse(JSON.stringify(d.context.REVIEW)), { seed_1: 0, seed_2: 0 }, '090b: AUTO sem tentativa real = Não revisado');
   await d.boot(); // F5
-  assert.deepEqual(JSON.parse(JSON.stringify(d.context.REVIEW)), { seed_1: 2, seed_2: 1 });
-  assert.equal(cloud.peekRevision(), rev0, 'boot/F5 não publicam');
-  // a nuvem de teste foi semeada sem campos que o app grava (localImg/img):
-  // uma primeira escrita real converge; a partir daí, nada muda = no-op.
+  assert.deepEqual(JSON.parse(JSON.stringify(d.context.REVIEW)), { seed_1: 0, seed_2: 0 });
+  assert.equal(cloud.peekRevision(), rev0, 'boot/F5 não publicam (correção é derivada)');
+  assert.equal(d.context.syncDirty, false);
+  // a próxima escrita real grava o estado derivado: a nuvem converge
   await d.markDirty();
   await d.context.pushToFirebaseNow();
   const rev1 = cloud.peekRevision();
-  assert.deepEqual(JSON.parse(JSON.stringify(cloud.peekMeta().review)), { seed_1: 2, seed_2: 1 }, 'escrita não altera REVIEW');
+  assert.deepEqual(JSON.parse(JSON.stringify(cloud.peekMeta().review)), { seed_1: 0, seed_2: 0 }, 'nuvem converge para o estado derivado');
   await d.markDirty();
   await d.context.pushToFirebaseNow();
   assert.equal(cloud.peekRevision(), rev1, 'no-op: nada publicado');
   assert.equal(d.context.syncDirty, false);
-  assert.deepEqual(JSON.parse(JSON.stringify(cloud.peekMeta().review)), { seed_1: 2, seed_2: 1 });
 });
 
 test('PROTEÇÃO 089 - PC NOVO recebe o estado remoto com os carimbos (e F5 mantém)', async () => {
   const cloud = makeFakeCloud();
   await seedCleanCloud079c(cloud, [makeSeedEntry()]);
   const meta = cloud.peekMeta();
-  await cloud.FB_META_REF().set({ ...meta, review: { seed_1: 1 }, reviewUpdatedAt: { seed_1: 12345 } });
+  await cloud.FB_META_REF().set({ ...meta, review: { seed_1: 1 }, reviewUpdatedAt: { seed_1: 12345 }, reviewOverride: { seed_1: { m: 1, s: 1, at: 12345 } } }); // 090b: estado válido = manual
   const b = makeOrderDevice085(cloud, { fresh: true });
   await b.boot();
   assert.equal(b.context.getReview('seed_1'), 1);
@@ -3947,6 +3949,7 @@ test('PROTEÇÃO 091c - PC A funde; nuvem recebe o mapa e perde o id fundido; PC
   const b = makeDevice(cloud, { seed: entries091c() }); await b.boot();
   // PC B tem progresso/revisão no id que será fundido (dado local antigo)
   b.context.REVIEW.seed_2 = 2; b.context.SRS.seed_2 = { ef: 2.5, updatedAt: 5 };
+  b.context.REVIEW_OVERRIDE.seed_2 = { m: 1, s: 2, at: 5 }; // 090b: estado válido = manual
   b.context.LESION_REVISIONS.R1 = { id: 'R1', lesionId: 'seed_2', status: 'pending', createdAt: 1, updatedAt: 1, history: [] };
   await mergeOnA091c(a);
   assert.deepEqual(cloudIds091c(cloud), ['seed_1', 'seed_3']);
@@ -3987,6 +3990,7 @@ test('PROTEÇÃO 091c - PC antigo gravou REVIEW/revisão do id fundido na nuvem 
   const a = makeDevice(cloud, { seed: entries091c() }); await a.boot();
   const b = makeDevice(cloud, { seed: entries091c() }); await b.boot();
   b.context.REVIEW.seed_2 = 2;
+  b.context.REVIEW_OVERRIDE.seed_2 = { m: 1, s: 2, at: 5 }; // 090b: estado válido = manual
   b.context.LESION_REVISIONS.R9 = { id: 'R9', lesionId: 'seed_2', status: 'pending', createdAt: 1, updatedAt: 1, history: [] };
   b.context.markSyncDirty();
   await b.context.pushToFirebaseNow();

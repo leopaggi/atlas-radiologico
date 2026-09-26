@@ -8,21 +8,21 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
-*Atualizado em 2026-09-26, junto do commit "Protecao 093: conteudo didatico por lesao".*
+*Atualizado em 2026-09-26, junto do commit "Protecao 090b: corrige status automatico sem tentativas reais".*
 
 - **Branch local de trabalho:** `master` (publicação: `git push origin master:main`).
-- **origin/main antes da 093:** `61fc2c1` (fix de boot do userscript 1.4.2). **Último commit:** Protecao 093 (código + testes + este checkpoint; hash exato em `git log -1`).
-- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 093:** 1413 testes · 1405 pass · 3 fail conhecidos · 5 todo (+11 `lesion-didactic-content`, +1 multi-PC; +3 `userscript-match-hosts` e +7 `userscript-boot-regression` desde a 091g). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
-  - Medido no ambiente remoto (sem os arquivos protegidos): 1403 · 1368 · 30 · 5 (base `61fc2c1` no mesmo ambiente: 1391 · 1356 · 30 · 5; conjunto de falhas idêntico, arquivo a arquivo). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
+- **origin/main antes da 090b:** `097cae1` (Protecao 093). **Último commit:** Protecao 090b (código + testes + este checkpoint; hash exato em `git log -1`).
+- **Baseline de testes (ambiente local do usuário, com os arquivos protegidos presentes) — esperado após a 090b:** 1420 testes · 1412 pass · 3 fail conhecidos · 5 todo (+7 `review-auto-status`). Os 3 fail conhecidos: `duplicate-detection` (1, `DUPLICATE_PAIRS_V171` histórico) e `images-history` (2, dependem da data do sistema).
+  - Medido no ambiente remoto (sem os arquivos protegidos): 1410 · 1375 · 30 · 5 (base `097cae1` no mesmo ambiente: 1403 · 1368 · 30 · 5; conjunto de falhas idêntico, arquivo a arquivo). As +27 falhas do remoto são só falta de `snapshot-catalogo-completo-readonly.json`/`ATLAS_CANONICO_LIMPO_1216_116_FINAL.json` (24 `legacy-id-migration`, 1 `device-bootstrap`, 1 F2 do `multi-device-sync`) e `ownership-fix-20260921` abortando por CRLF. Nenhuma é regressão.
 - **Validação real do usuário após a 091 (navegador):** `LESION_REVISIONS` sincronizou entre navegadores/PCs; as pendências apareceram no Edge; a lógica da 091 funciona; só foram encontrados problemas visuais (contraste/alinhamento) — corrigidos na 091b.
 - **Firestore (informado pelo usuário; não verificável sem credenciais):** última cloud revision observada: 64. Rules intocadas pela 091b (só CSS/markup). Nenhuma escrita deliberada nesta tarefa. A 091 não cria campo/documento novo (pendências gerais vivem em `lesionRevisions`, sincronizado desde a 084). A 090 adicionou `reviewProgress` (histórico compacto do Quiz, até 8 tentativas por lesão) e `reviewOverride` (override manual) no documento principal; a 089 adicionou `reviewUpdatedAt` (carimbos de mudança manual do estado de estudo) no documento principal, na próxima publicação real. A 088 adicionou só o campo opcional `clinicalContext` DENTRO do objeto da imagem (viaja nos chunks como qualquer metadado de imagem). A 087 reaproveitou `img.label`/`panels[].seq`; a 086 também não (alerta derivado de `lesionRevisions`). Desde a 085 o documento principal tem `orderUpdatedAt`.
-- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), 088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44), 089 (estado de estudo estável — seção 45), 090 (estado AUTOMÁTICO pelo Quiz + override manual — seção 46; corrige o modelo da 089), 091 (pendências gerais do Atlas na Central de Revisões — seção 47), 091b (ajuste visual após validação real no navegador — seção 48), 091c (fusão clínica controlada de 4 grupos de duplicatas aprovados; mapa `lesionMerges` sincronizado — seção 49), **091d (editar motivo de revisão ativa com histórico, ⚠ clicável, importador externo com nome PT/enTerm/descrição/tags e "✨ Revisar com IA" criando revisão real — seção 50)**, **091e (importações do Radiopaedia reutilizam a aba já aberta do Atlas — seção 51)**, **091f (título do Radiopaedia sem branding + alias Paraovarian cyst; "✓ Marcar como resolvida" — seção 52)**, **091g (reuso da aba do Atlas via canal: ponte do userscript + BroadcastChannel; alvo nomeado vira fallback — seção 53)**, userscript 1.4.1/1.4.2 (www + regressão de boot — seção 54), **093 (conteúdo didático por lesão: casos manuais, sinais radiológicos, classificações e esquemas — seção 55)**.
-- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087); `img.clinicalContext` é pré-diagnóstico, digitado pelo usuário, visível no Quiz antes e depois da resposta — a descrição (`label`) continua só depois (088); REVIEW (Não revisado/Revisando/Dominado) é AUTOMÁTICO pelo histórico do Quiz (`REVIEW_PROGRESS`, regra determinística `replayAutoReview`) salvo override MANUAL explícito (`REVIEW_OVERRIDE`), que o Quiz nunca sobrescreve; boot/render/pull não mudam nada sem dado novo; conflitos por recência, nunca Math.max (089/090); pendência GERAL (`scope:'global'`, `lesionId:null`) é só um pedido: nunca aplica nada em DATA (`global_review_has_no_direct_target`), nunca gera ⚠ em lesão, conclusão é humana (091)**. **091c:** id presente em `LESION_MERGES` nunca volta (nem pelo SEED, nem por PC desatualizado, nem por backup antigo); o mapa só cresce; a única exceção de ownership de imagem é o fold desse mapa (imagens marcadas com `mergedFromLesionId`). **091d:** o motivo (`requestText`) de revisão ativa é editável com `requestHistory` (união no merge) e carimbo próprio `requestTextUpdatedAt` (editar texto nunca mexe em `updatedAt`/status/🔔); não há IA integrada — "✨ Revisar com IA" só cria revisão na Central (ponte manual). **091f:** fusão clínica (091c) NÃO conclui revisão — ela só é redirecionada ao keeper; concluir é sempre ação humana ("✓ Marcar como resolvida" → `accepted`, sem tocar DATA). **093:** `clinicalCases`/`radiologicSigns`/`classificationSchemes` — itens com `id` estável, `order`, `createdAt`/`updatedAt` e exclusão por tombstone `deletedAt` (nunca apagar do array); merge por item; sinais/classificações NUNCA renderizados no Quiz antes da resposta; imagens didáticas fora de `entry.images`.
+- **Proteções recentes concluídas:** 075 (quarentena `seed_1213..1282`), 076, 077/077b, 078, 079/079b/079c/079d (imagens stale; marcador `atlas:pendingLocalImageAdds`), 080/081/082 (links duplicados), 083 (título/tags do importador Radiopaedia), 084 (Central de Revisões sincronizada), 085 (ordem de seções/sítios entre dispositivos — seção 41), 086 (⚠ junto ao nome da lesão com revisão ativa — seção 42), 087 (sequência livre de RM — seção 43), 088 (contexto clínico por imagem, visível no Quiz antes da resposta — seção 44), 089 (estado de estudo estável — seção 45), 090 (estado AUTOMÁTICO pelo Quiz + override manual — seção 46; corrige o modelo da 089), 091 (pendências gerais do Atlas na Central de Revisões — seção 47), 091b (ajuste visual após validação real no navegador — seção 48), 091c (fusão clínica controlada de 4 grupos de duplicatas aprovados; mapa `lesionMerges` sincronizado — seção 49), **091d (editar motivo de revisão ativa com histórico, ⚠ clicável, importador externo com nome PT/enTerm/descrição/tags e "✨ Revisar com IA" criando revisão real — seção 50)**, **091e (importações do Radiopaedia reutilizam a aba já aberta do Atlas — seção 51)**, **091f (título do Radiopaedia sem branding + alias Paraovarian cyst; "✓ Marcar como resolvida" — seção 52)**, **091g (reuso da aba do Atlas via canal: ponte do userscript + BroadcastChannel; alvo nomeado vira fallback — seção 53)**, userscript 1.4.1/1.4.2 (www + regressão de boot — seção 54), **093 (conteúdo didático por lesão: casos manuais, sinais radiológicos, classificações e esquemas — seção 55)**, **090b (status AUTO baseado exclusivamente em tentativas reais do Quiz — seção 56)**.
+- **Invariantes importantes:** toda escrita normal passa por `writeShardedState()` (transação + `revision`); imagem só-local só sobe com marcador 079d; tombstone vence; ownership de imagem só muda manualmente; ids `seed_N` são posicionais; não "consertar" `DUPLICATE_PAIRS_V171`; links sem duplicata por URL semântica; título de caso externo nunca pode ser nome de autor (083); `lesionRevisions` com merge por reviewId (084); **ordem de seções/sítios com merge por carimbo de reordenação manual (`atlas:orderUpdatedAt` / `orderUpdatedAt`) em pull, pre-push e dentro da transação; normalização do render e default de boot são internos (nunca dirty/push) (085); "revisão ativa" só existe como derivação de `LESION_REVISIONS` via `hasActiveLesionReview()` — mesma regra dos badges 🔔/💡 (086); sequência de imagem é texto livre salvo exatamente (só trim externo), nunca convertido para opção pré-definida (087); `img.clinicalContext` é pré-diagnóstico, digitado pelo usuário, visível no Quiz antes e depois da resposta — a descrição (`label`) continua só depois (088); REVIEW (Não revisado/Revisando/Dominado) é AUTOMÁTICO pelo histórico do Quiz (`REVIEW_PROGRESS`, regra determinística `replayAutoReview`) salvo override MANUAL explícito (`REVIEW_OVERRIDE`), que o Quiz nunca sobrescreve; boot/render/pull não mudam nada sem dado novo; conflitos por recência, nunca Math.max (089/090); pendência GERAL (`scope:'global'`, `lesionId:null`) é só um pedido: nunca aplica nada em DATA (`global_review_has_no_direct_target`), nunca gera ⚠ em lesão, conclusão é humana (091)**. **091c:** id presente em `LESION_MERGES` nunca volta (nem pelo SEED, nem por PC desatualizado, nem por backup antigo); o mapa só cresce; a única exceção de ownership de imagem é o fold desse mapa (imagens marcadas com `mergedFromLesionId`). **091d:** o motivo (`requestText`) de revisão ativa é editável com `requestHistory` (união no merge) e carimbo próprio `requestTextUpdatedAt` (editar texto nunca mexe em `updatedAt`/status/🔔); não há IA integrada — "✨ Revisar com IA" só cria revisão na Central (ponte manual). **091f:** fusão clínica (091c) NÃO conclui revisão — ela só é redirecionada ao keeper; concluir é sempre ação humana ("✓ Marcar como resolvida" → `accepted`, sem tocar DATA). **093:** `clinicalCases`/`radiologicSigns`/`classificationSchemes` — itens com `id` estável, `order`, `createdAt`/`updatedAt` e exclusão por tombstone `deletedAt` (nunca apagar do array); merge por item; sinais/classificações NUNCA renderizados no Quiz antes da resposta; imagens didáticas fora de `entry.images`. **090b:** estado AUTO = derivado SÓ de tentativas reais (`REVIEW_PROGRESS[id].a`, criadas só por `recordReviewAttempt`); sem tentativa real = Não revisado; `REVIEW` é cache derivado (recalculado no boot/pull/escrita), nunca fonte de verdade para o AUTO.
 - **Trabalho pendente FORA do main:** "fonte por imagem (`sourcePage`)" e "adicionar caso clínico manual no detalhe" continuam preservados no `stash@{0}` da sessão remota ("pendente: sourcePage por imagem + caso clinico manual") e num patch de backup. Intocados pela 091b. Não restaurar sem decisão explícita do usuário.
 - **Passo manual pós-deploy (085):** ordens personalizadas feitas ANTES da 085 não têm carimbo. No PC que tem a ordem CORRETA, fazer uma reordenação qualquer (ex.: descer uma seção e subir de volta; idem um sítio em cada seção personalizada) — isso carimba e publica. Depois abrir o outro PC: ordem default/automática cede para a da nuvem sozinha. (Revisões pré-084: mesma lógica, ver seção 40.)
 - **Passo manual pendente (091c):** a fusão NÃO foi executada no ambiente remoto (sem acesso aos dados reais). No navegador com os dados reais: 💾 exportar backup JSON → Ferramentas avançadas → "🧬 fusões clínicas aprovadas" → conferir o relatório (ids reais, keeper, motivo) → "Fundir". Depois abrir o outro PC e conferir que ele converge sozinho.
 - **Passo manual (091e/091f/091g):** atualizar o userscript no Tampermonkey para a **v1.4.2** (`tools/radiopaedia-to-atlas.user.js`) e ACEITAR as novas permissões (`@match` do Atlas e de www.radiopaedia.org + `GM_setValue`/`GM_addValueChangeListener`/`GM_removeValueChangeListener`) — sem isso o reuso da aba não funciona (cai no fallback que abre aba). Título sem branding (091f) também é limpo pelo Atlas ao receber. Conferir no DevTools do Radiopaedia a linha `[Atlas userscript 1.4.2] ativo`.
-- **Próximo passo exato:** executar no navegador a fusão da 091c (passo manual acima), depois Proteção 092 (sync de metadados de imagens entre PCs — incluir as imagens didáticas da 093, que já têm id/carimbos por imagem). Pendente de análise separada: "AUTO Dominado sem histórico".
+- **Próximo passo exato:** executar no navegador a fusão da 091c (passo manual acima), depois Proteção 092 (sync de metadados de imagens entre PCs — incluir as imagens didáticas da 093, que já têm id/carimbos por imagem). ("AUTO sem histórico" resolvido na 090b.)
 
 ## BACKLOG
 
@@ -2635,3 +2635,78 @@ exibidas no detalhe e no Quiz (pós-resposta):
 - Risco residual: conteúdo muito longo aumenta o documento/chunk da lesão
   no Firestore (limites por campo aplicados; `checkChunkSize` existente
   continua barrando envio grande demais).
+
+## 56. Proteção 090b — status AUTO baseado exclusivamente em tentativas reais do Quiz (2026-09-26)
+
+### Bug real
+No navegador do usuário, várias lesões nunca abertas/estudadas/respondidas
+apareciam como **Revisando AUTO**.
+
+### Causa raiz (confirmada no código da 090)
+1. `effectiveReviewState`/`computeAutomaticReviewState`: sem `REVIEW_PROGRESS`
+   → devolviam `null` → "estado anterior preservado" = o valor bruto de
+   `REVIEW[id]` (legado/pré-090). E `materializeReviewState` só recalculava
+   ids com progresso/override: os demais mantinham o `REVIEW` legado.
+2. `ensureReviewProgressBase` copiava o `REVIEW` legado para o estado-base
+   `b` (com `f = 0`) ao usar setReview/setReviewAuto/Quiz — e
+   `replayAutoReview(b, [])` devolvia `b`: base legada virava estado AUTO
+   sem nenhuma tentativa (e servia de ponto de partida da promoção:
+   legado Dominado + 1 acerto = Dominado).
+3. Decisão documentada na migração da 090 ("nenhum estado vira manual;
+   valores atuais preservados como base").
+Os valores legados vêm do `REVIEW` antigo: pré-089 o Quiz/SRS mexia no
+`REVIEW` sozinho; o merge legado sem carimbo usa o maior estágio entre PCs;
+e o `REVIEW` era indexado por ids `seed_N` posicionais (renumerados por
+versões antigas).
+
+### Regra corrigida
+- **Tentativa real** = item de `REVIEW_PROGRESS[id].a`, criado SÓ por
+  `recordReviewAttempt` (clique de resposta no Quiz). Nunca: migração,
+  seed, base/`REVIEW` legado, abrir/visualizar/editar lesão, importação,
+  sync, timestamp legado, SRS isolado.
+- `b` só conta quando `f > 0` (tentativas reais que saíram da janela de 8);
+  com `f = 0` é legado/sintético e o ponto de partida é 0
+  (`autoReviewBase`, `hasRealReviewAttempts`,
+  `autoReviewStateFromProgress`).
+- AUTO: 0 tentativas reais = **Não revisado**; ≥1 = **Revisando**;
+  Dominado/rebaixamento com os critérios da 090 intactos (≥4 tentativas,
+  ≥80% nas últimas até 5, 2 últimas corretas; sai só com ≥2 falhas nas
+  últimas 3).
+- `REVIEW_OVERRIDE` preservado: MANUAL continua prevalecendo;
+  "Automático pelo Quiz" remove o override e recalcula só com tentativas
+  reais; "Marcar para revisar novamente" = MANUAL Revisando sem apagar
+  histórico.
+- `ensureReviewProgressBase` nunca mais copia o legado; a dobra da janela
+  parte da base real.
+
+### Convergência (sem migração destrutiva)
+`REVIEW` é tratado como cache derivado: `materializeReviewState` recalcula
+TODO id (manual = escolha; AUTO = só tentativas reais) no boot (novo, em
+`loadData`, sem marcar dirty nem publicar), no pull/reconcile e na escrita
+(transação). Contadores Todas/Não revisado/Revisando/Dominado (getReview)
+refletem já no primeiro render. A nuvem é corrigida na próxima escrita real
+de qualquer PC; todos os PCs derivam o mesmo resultado. Nada é apagado de
+`REVIEW_PROGRESS`/`REVIEW_OVERRIDE` (bases legadas com f=0 ficam no dado,
+só não contam).
+- Efeito colateral assumido (regra pedida): estados marcados manualmente
+  na 089 SEM override (a 090 os tinha deixado como AUTO) também voltam a
+  Não revisado — para manter, marcar de novo (vira MANUAL).
+
+### Auditoria (somente leitura)
+Console: `await auditReviewAutoStatusNow()` — lê o `REVIEW` salvo e imprime
+total, manual, AUTO, AUTO sem tentativas reais, AUTO Revisando/Dominado sem
+tentativas, quantos o recálculo corrige e a distribuição final. Não grava.
+
+### Arquivos / testes
+- `index.html`; `tests/review-auto-status.test.js` (novo, 7 — cobre os 16
+  itens + regressão de REVIEW_PROGRESS real); ajustados à regra nova:
+  `review-auto-mode` (4 asserções que fixavam o comportamento corrigido),
+  `multi-device-sync` (fixtures de quarentena/089/091c passam a usar estado
+  MANUAL legítimo; teste 089 reescrito para provar a convergência),
+  `device-bootstrap`/`critical-flows` (stubs + âncoras +49/+49/+49/+50) e
+  listas de funções dos harnesses (`controlled-duplicate-merge`,
+  `review-state`).
+- Fixture do bug: 9 lesões → 5 corrigidas (3 AUTO Revisando e 1 AUTO
+  Dominado sem tentativa → Não revisado; distribuição final 5/2/2).
+- Suíte (remoto): 1410 · 1375 · 30 · 5 (base 1403 · 1368 · 30 · 5; mesmas
+  falhas).

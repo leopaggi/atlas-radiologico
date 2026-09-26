@@ -54,7 +54,7 @@ function makeCtx() {
     'function __set(r, s){ REVIEW = r; REVIEW_STAMPS = s || {}; REVIEW_PROGRESS = {}; REVIEW_OVERRIDE = {}; }\n' +
     ['getReview', 'setReview', 'cycleReview', 'saveReview', 'normalizeReviewStamps', 'loadReviewStamps', 'saveReviewStamps',
       'stampRestoredReview', 'mergeReviewByRecency', 'consolidateReviewOnMerge', 'srsGradeLevel', 'srsGrade',
-      'reviewPromotionReached', 'reviewDemotionTriggered', 'replayAutoReview', 'normalizeReviewAttempts', 'foldReviewProgress',
+      'reviewPromotionReached', 'reviewDemotionTriggered', 'replayAutoReview', 'normalizeReviewAttempts', 'foldReviewProgress', 'autoReviewBase', 'hasRealReviewAttempts', 'autoReviewStateFromProgress',
       'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'normalizeReviewOverrides', 'mergeReviewProgress',
       'mergeReviewOverrides', 'isReviewManual', 'computeAutomaticReviewState', 'effectiveReviewState', 'ensureReviewProgressBase',
       'saveReviewProgressState']

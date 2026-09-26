@@ -95,7 +95,7 @@ const normalizeTombstoneMapFn = extractFunction(html, 'normalizeTombstoneMap');
 // PROTEÇÃO 089 — estado manual de estudo com carimbo (funções reais).
 const reviewFns089 = ['normalizeReviewStamps', 'saveReviewStamps', 'mergeReviewByRecency',
   // PROTEÇÃO 090 — histórico do Quiz + override (funções reais)
-  'reviewPromotionReached', 'reviewDemotionTriggered', 'replayAutoReview', 'normalizeReviewAttempts', 'foldReviewProgress',
+  'reviewPromotionReached', 'reviewDemotionTriggered', 'replayAutoReview', 'normalizeReviewAttempts', 'foldReviewProgress', 'autoReviewBase', 'hasRealReviewAttempts', 'autoReviewStateFromProgress',
   'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'normalizeReviewOverrides', 'mergeReviewProgress',
   'mergeReviewOverrides', 'materializeReviewState', 'saveReviewProgressState']
   .map((n) => extractFunction(html, n).source).join('\n');
@@ -427,7 +427,7 @@ test('loadData() real: dispositivo NOVO (storage.get lança) aciona o bootstrap 
       DATA: [], REVIEW: {}, SRS: {}, SESSIONLOG: {}, sectionOrder: [], siteOrder: {},
       loadOrderStamps: async () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085 (fora do escopo destes testes)
       loadReviewStamps: async () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089 (idem)
-      loadReviewProgressState: async () => {}, saveReviewProgressState: async () => {}, // PROTEÇÃO 090 (idem)
+      loadReviewProgressState: async () => {}, saveReviewProgressState: async () => {}, materializeReviewState: (r) => r, REVIEW_PROGRESS: {}, REVIEW_OVERRIDE: {}, /* 090b (coberto em review-auto-status) */ // PROTEÇÃO 090 (idem)
       loadLesionMerges: async () => {}, saveLesionMerges: async () => {}, foldLesionMergesIntoGlobals: () => ({ changed: false }), // PROTEÇÃO 091c (idem)
       appStateReady: false, deviceBootstrapPending: false,
       SEED: seed,
@@ -527,7 +527,7 @@ test('loadData() real: reload DEPOIS do bootstrap não repete o fluxo (storage j
       DATA: [], REVIEW: {}, SRS: {}, SESSIONLOG: {}, sectionOrder: [], siteOrder: {},
       loadOrderStamps: async () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085 (fora do escopo destes testes)
       loadReviewStamps: async () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089 (idem)
-      loadReviewProgressState: async () => {}, saveReviewProgressState: async () => {}, // PROTEÇÃO 090 (idem)
+      loadReviewProgressState: async () => {}, saveReviewProgressState: async () => {}, materializeReviewState: (r) => r, REVIEW_PROGRESS: {}, REVIEW_OVERRIDE: {}, /* 090b (coberto em review-auto-status) */ // PROTEÇÃO 090 (idem)
       loadLesionMerges: async () => {}, saveLesionMerges: async () => {}, foldLesionMergesIntoGlobals: () => ({ changed: false }), // PROTEÇÃO 091c (idem)
       appStateReady: false, deviceBootstrapPending: false,
       SEED: seed,
