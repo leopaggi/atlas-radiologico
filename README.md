@@ -1,5 +1,18 @@
 # Atlas Radiológico
 
+### Ponte estrutural — Fase 3: execução unitária controlada (2026-09-27, commit `15619f8`)
+
+Na aba **💡 Soluções disponíveis → 🛠 Ações manuais**, um plano estrutural
+aprovado (🟢) pode ser executado **uma revisão por vez, com confirmação
+explícita**: o Atlas mostra o ensaio (dry-run) do que será aplicado, verifica
+se o plano continua atual e só então executa — registrando um `executionId` e
+guardando o estado anterior para reversão. Depois de executado (✅), o botão
+**↩️ Reverter execução** restaura lesões, imagens, casos, sinais,
+classificações e links, preservando o histórico. Planos importados (🟡),
+rejeitados (🔴), desatualizados (⚠️) ou sem resolução segura nunca executam;
+não há execução em lote, auto-execução nem exclusão no Cloudinary. Teste:
+`node tests/structural-plan-execute.test.js` (12/12).
+
 ### Ponte estrutural — Fase 2: importação e prévia de plano, sem execução (2026-09-27)
 
 Na aba **💡 Soluções disponíveis → 🛠 Ações manuais**, o botão

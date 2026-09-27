@@ -1,5 +1,26 @@
 # Diario de desenvolvimento
 
+## Ponte estrutural — Fase 3: executor unitário controlado (27/09/2026, commit 15619f8)
+
+O plano estrutural aprovado ganhou os botões de executar e reverter. Na
+prévia do plano, "▶ Executar esta ação" aparece só para plano aprovado e
+atual; um modal final mostra o ensaio (dry-run) do que será aplicado e pede
+confirmação explícita. A execução é sempre de UMA revisão por vez, com
+verificação de desatualização, cópia de segurança do estado anterior e número
+de execução (executionId); a revisão só é dada como resolvida quando tudo dá
+certo. Se algo falhar, nada muda e tudo volta ao estado anterior. Depois de
+executado, "↩️ Reverter execução" desfaz a operação e reabre a revisão,
+mantendo o histórico. Planos importados, rejeitados, desatualizados ou sem
+resolução segura nunca executam; não existe execução em lote, execução
+automática nem exclusão de imagens na nuvem.
+
+Arquivos desta entrega: `index.html`, `tests/structural-plan-execute.test.js`
+(novo, 12/12), ajustes nos testes `structural-plan-import` e `critical-flows`
+(âncora de linha +5), `AI.md`, `README.md`,
+`CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` e este diário. Nenhuma lesão foi
+alterada pelos testes (tudo em memória); nenhuma execução real foi feita
+nesta entrega além de ensaios.
+
 ## Ponte estrutural — Fase 2: importação e prévia de plano, sem execução (27/09/2026)
 
 A aba Ações manuais ganhou o botão “Importar plano estrutural da IA”. Ao
@@ -9,8 +30,8 @@ localização existentes, keeper diferente do removido, sem conflito anatômico
 forte, sem campos desconhecidos, sem código dinâmico) e mostra a prévia do
 que cada resolução faria — MANTER/REMOVER, dados incorporados, avisos de
 plano desatualizado. Importar grava só o plano na revisão (com snapshot das
-lesões); aceitar ou rejeitar o plano não executa nada. A execução real fica
-para a Fase 3, ainda não autorizada.
+lesões); aceitar ou rejeitar o plano não executa nada. A execução real veio
+depois, na Fase 3 acima (commit 15619f8).
 
 Arquivos desta entrega: `index.html`, `tests/structural-plan-import.test.js`,
 `AI.md`, `README.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` e este diário.

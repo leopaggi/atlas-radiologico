@@ -1,5 +1,32 @@
 # AI.md — instruções para assistentes de IA (Claude, DeepSeek, ChatGPT, etc.)
 
+## Ponte estrutural — Fase 3: executor unitário controlado (2026-09-27, commit `15619f8`)
+
+`dryRunStructuralPlan` (puro) descreve o que seria aplicado sem tocar nada;
+`executeStructuralPlan(reviewId)` só roda plano com `structuralPlan.status ===
+'accepted'`, nesta ordem: stale check (`isStructuralPlanStale`), dry-run,
+snapshot (`structuralSnapshotLesions`/`structuralSnapshotMaps` guardado em
+`r.structuralExecution.beforeSnapshot`), apply atômico (falha restaura o
+snapshot e registra `structural_plan_failed`, sem marcar `executed` nem
+resolver a revisão), pós-condições (keeper existe, remove sumiu, imagens
+preservadas), tombstone de auditoria + `LESION_MERGES`, `structuralPlanStatus =
+'executed'` com `executionId`, persistência total (`saveData` +
+`structuralPersistAll`) e só então `resolveReviewManually`.
+`rollbackStructuralExecution` restaura o snapshot guardado (lesões, imagens,
+ownership, altPlacements, casos, sinais, classificações, links, mapas e
+redirecionamentos), preserva o histórico e reabre a revisão
+(`manual_action_required`). Trava `STRUCTURAL_EXEC_IN_FLIGHT` impede duplo
+clique/execução concorrente da mesma revisão. UI: modal final de confirmação
+com o dry-run + botão "▶ Confirmar execução"; na prévia, "▶ Executar esta
+ação" só em accepted fresco com dry-run válido e "↩️ Reverter execução" só em
+executed; no card, `structuralPlanCardBadgeHtml`/`structuralPlanCardButtonsHtml`
+(🟡 imported / 🟢 accepted / ✅ executed / 🔴 rejected / ⚠️ stale /
+⚠️ unresolved, botão executar só em accepted fresco). Garantias: nenhuma
+execução em lote, nenhum auto-execute, nenhum Cloudinary delete, `unresolved`/
+`no_action` nunca executam (`nothing_to_execute`), stale nunca executa,
+seed_156 nunca keeper de ovário (conflito anatômico bloqueia na validação e no
+dry-run). Teste: `node tests/structural-plan-execute.test.js` (12/12).
+
 ## Ponte estrutural — Fase 2: importação e prévia de plano, sem execução (2026-09-27)
 
 `validateStructuralResolutionBatch` (puro) valida o envelope
@@ -16,7 +43,7 @@ ovário), sem campos desconhecidos, sem `eval`. `importStructuralResolutionBatch
 plano = "aprovado para futura execução", nunca executa. UI: botão
 "📥 Importar plano estrutural da IA" na aba manual + modal de prévia por
 resolução + badge no card. Teste: `node tests/structural-plan-import.test.js`
-(27/27). **Fase 3 (execução real) NÃO existe ainda.**
+(27/27). **Execução real: ver Fase 3 acima (commit `15619f8`).**
 
 ## Ponte estrutural — Fase 1: exportação somente leitura (2026-09-26)
 

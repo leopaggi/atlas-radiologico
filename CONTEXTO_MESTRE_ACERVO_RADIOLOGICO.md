@@ -8,6 +8,22 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**Ponte estrutural — Fase 3: executor unitário controlado (2026-09-27, commit
+`15619f8`):** plano `accepted` executa UMA revisão por vez com confirmação
+explícita — stale check + dry-run obrigatório + snapshot guardado na execução
+(`executionId`) + apply atômico com restauração em falha + tombstone e
+persistência total; revisão só resolve após sucesso. Rollback manual restaura
+o snapshot (lesões, imagens, ownership, altPlacements, casos, sinais,
+classificações, links) preservando o histórico. Trava de concorrência,
+nenhum lote, nenhum auto-execute, nenhum Cloudinary delete; `unresolved` e
+stale nunca executam; seed_156 nunca keeper de ovário. UI: "▶ Executar esta
+ação" na prévia e "▶ Executar" no card (só accepted fresco), "↩️ Reverter
+execução" em executed; badges 🟡/🟢/✅/🔴/⚠️ por estado. Teste novo
+`tests/structural-plan-execute.test.js` (12/12); regressão verde
+(import 27/27, Central 138/138, sync Central 15/15, casos 47/47, fusão
+controlada 27/27 via shim CRLF, fluxos críticos 23/23, multi-PC 181/181,
+importação 79/79; duplicatas 6 PASS/1 FAIL histórico).
+
 **Ponte estrutural — Fase 2: importação e prévia de plano, sem execução (2026-09-27):**
 botão "📥 Importar plano estrutural da IA" na aba 🛠 Ações manuais; envelope
 `atlas_structural_resolution_batch` v1 validado com schema fechado
@@ -18,7 +34,7 @@ veto de conflito anatômico forte, snapshot por valor + stale via
 `canonicalJsonString`; aceite/rejeição só marcam o plano
 (`imported`/`accepted`/`rejected`) sem tocar DATA/imagens/ownership/
 altPlacements/tombstones. Teste novo `tests/structural-plan-import.test.js`
-(27/27). Fase 3 (execução) NÃO implementada.
+(27/27). Execução real: ver Fase 3 acima (commit `15619f8`).
 
 **Ponte estrutural — Fase 1: exportação somente leitura (2026-09-26):** a aba
 💡 Ações manuais tem cópia individual e em lote no envelope JSON
