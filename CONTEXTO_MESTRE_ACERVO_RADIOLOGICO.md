@@ -8,6 +8,18 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**Ponte estrutural — Fase 2: importação e prévia de plano, sem execução (2026-09-27):**
+botão "📥 Importar plano estrutural da IA" na aba 🛠 Ações manuais; envelope
+`atlas_structural_resolution_batch` v1 validado com schema fechado
+(`merge_duplicates`, `remove_additional_section_placement`,
+`transfer_images`, `add_clinical_cases`, `unresolved`, `no_action`);
+pertinência via source/candidatos da Ponte 1 (+`humanOverride` explícito),
+veto de conflito anatômico forte, snapshot por valor + stale via
+`canonicalJsonString`; aceite/rejeição só marcam o plano
+(`imported`/`accepted`/`rejected`) sem tocar DATA/imagens/ownership/
+altPlacements/tombstones. Teste novo `tests/structural-plan-import.test.js`
+(27/27). Fase 3 (execução) NÃO implementada.
+
 **Ponte estrutural — Fase 1: exportação somente leitura (2026-09-26):** a aba
 💡 Ações manuais tem cópia individual e em lote no envelope JSON
 `atlas_manual_action_batch` v1 (`buildManualActionAiBatch`). Source é DATA

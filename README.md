@@ -1,5 +1,15 @@
 # Atlas Radiológico
 
+### Ponte estrutural — Fase 2: importação e prévia de plano, sem execução (2026-09-27)
+
+Na aba **💡 Soluções disponíveis → 🛠 Ações manuais**, o botão
+**📥 Importar plano estrutural da IA** aceita um JSON
+`atlas_structural_resolution_batch` e mostra a prévia humana por resolução
+(o que seria mantido/removido/incorporado) **sem executar nada**. O plano
+pode ser aceito ("aprovado para futura execução") ou rejeitado; aceitar um
+plano desatualizado é bloqueado (detecção de stale via snapshot). Teste:
+`node tests/structural-plan-import.test.js`.
+
 ### Ponte estrutural — Fase 1: exportação somente leitura
 
 Na aba **💡 Soluções disponíveis → 🛠 Ações manuais**, é possível copiar um

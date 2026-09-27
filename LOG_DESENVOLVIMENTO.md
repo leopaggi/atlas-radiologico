@@ -1,5 +1,22 @@
 # Diario de desenvolvimento
 
+## Ponte estrutural — Fase 2: importação e prévia de plano, sem execução (27/09/2026)
+
+A aba Ações manuais ganhou o botão “Importar plano estrutural da IA”. Ao
+colar o JSON de resposta (`atlas_structural_resolution_batch`), o Atlas
+valida tudo com schema fechado (tipos permitidos, review/lesão/imagem/
+localização existentes, keeper diferente do removido, sem conflito anatômico
+forte, sem campos desconhecidos, sem código dinâmico) e mostra a prévia do
+que cada resolução faria — MANTER/REMOVER, dados incorporados, avisos de
+plano desatualizado. Importar grava só o plano na revisão (com snapshot das
+lesões); aceitar ou rejeitar o plano não executa nada. A execução real fica
+para a Fase 3, ainda não autorizada.
+
+Arquivos desta entrega: `index.html`, `tests/structural-plan-import.test.js`,
+`AI.md`, `README.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` e este diário.
+Nenhum merge foi executado, nenhuma lesão foi excluída e nenhum asset foi
+movido.
+
 ## Ponte estrutural — Fase 1: exportação somente leitura (26/09/2026)
 
 Na aba Ações manuais da Central, foram adicionados os botões “Copiar pacote

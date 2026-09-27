@@ -1,5 +1,23 @@
 # AI.md — instruções para assistentes de IA (Claude, DeepSeek, ChatGPT, etc.)
 
+## Ponte estrutural — Fase 2: importação e prévia de plano, sem execução (2026-09-27)
+
+`validateStructuralResolutionBatch` (puro) valida o envelope
+`atlas_structural_resolution_batch` v1 com schema fechado por tipo
+(`merge_duplicates`, `remove_additional_section_placement`,
+`transfer_images`, `add_clinical_cases`, `unresolved`, `no_action`):
+review/lesão/imagem/placement precisam existir, keeper≠remove, sem conflito
+anatômico forte (`hasStrongAnatomicConflict` — seed_156 nunca keeper de
+ovário), sem campos desconhecidos, sem `eval`. `importStructuralResolutionBatch`
+é tudo-ou-nada e grava SÓ `r.structuralPlan` + histórico (via
+`saveLesionRevisions`); `accept`/`rejectStructuralPlan` só marcam o plano
+(`imported`/`accepted`/`rejected`) com detecção de stale via
+`canonicalJsonString` contra o snapshot (`isStructuralPlanStale`) — aceitar
+plano = "aprovado para futura execução", nunca executa. UI: botão
+"📥 Importar plano estrutural da IA" na aba manual + modal de prévia por
+resolução + badge no card. Teste: `node tests/structural-plan-import.test.js`
+(27/27). **Fase 3 (execução real) NÃO existe ainda.**
+
 ## Ponte estrutural — Fase 1: exportação somente leitura (2026-09-26)
 
 Na aba 💡 Ações manuais, `buildManualActionAiBatch` gera JSON de ações

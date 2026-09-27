@@ -15711,6 +15711,11 @@ function openReadySolutionsModal(){
     copyAll.textContent = '📋 Copiar todas para IA';
     copyAll.onclick = ()=>copyManualActionAiBatch(getManualActionSolutions().map(r=>r.id));
     manualList.appendChild(copyAll);
+    const importBtn = document.createElement('button');
+    importBtn.type = 'button'; importBtn.className = 'btn btn-ghost review-manual-import-plan';
+    importBtn.textContent = '📥 Importar plano estrutural da IA';
+    importBtn.onclick = ()=>openStructuralPlanImportModal(()=>renderBothLists());
+    manualList.appendChild(importBtn);
     reviews.forEach(r=>{
       const meta = reviewCenterLesionMeta(r.lesionId, r);
       const reason = r.manualActionReason || (r.solution && r.solution.reason) || '';
@@ -15724,6 +15729,7 @@ function openReadySolutionsModal(){
           <div class="review-center-row-meta">${meta.sub?meta.sub+' · ':''}exige ação manual${reason?' · '+String(reason).replace(/</g,'&lt;'):''}</div>
           <div class="review-center-row-request"><b>Pedido:</b> ${(r.requestText||'').replace(/</g,'&lt;')}</div>
           ${r.solution && r.solution.text ? `<div class="review-center-row-solution"><b>Resumo da IA:</b> ${String(r.solution.text).replace(/</g,'&lt;')}</div>` : ''}
+          ${r.structuralPlan ? `<div class="review-center-row-meta">📥 plano estrutural: <b>${escAttr(r.structuralPlan.status)}</b> (${escAttr(r.structuralPlan.type||'?')}) — aguardando execução (Fase 3)</div>` : ''}
           ${sug.applicable ? `<div class="review-placement-suggestion"><div><b>Sugestão da IA:</b> ${escAttr(meta.lesion?meta.lesion.s:'')}</div><div>→ também em <b>${escAttr(sug.label)}</b></div></div>` : ''}
         </div>
         <div class="review-center-row-actions">
@@ -21725,6 +21731,409 @@ async function copyManualActionAiBatch(reviewIds){
       toast('Pacote copiado para a área de transferência.');
     }catch(_e){ openManualActionCopyFallback(json); }
   }catch(e){ toast('Não foi possível preparar o pacote: '+e.message); }
+}
+
+/* PONTE ESTRUTURAL — FASE 2: importação e PRÉVIA de plano da IA, SEM
+   execução. Parser + validação de schema fechado + snapshot para comparar
+   stale + aceite/rejeição HUMANA do plano. Nenhuma função aqui toca DATA,
+   imagens, ownership, altPlacements, tombstones, Cloudinary ou sync além do
+   saveLesionRevisions() (mesmo contrato das demais ações da Central, que só
+   persiste a fila). A execução real fica para a Fase 3. */
+const STRUCTURAL_PLAN_TYPES = ['merge_duplicates','remove_additional_section_placement','transfer_images','add_clinical_cases','unresolved','no_action'];
+const STRUCTURAL_PLAN_ENVELOPE_KEYS = ['type','version','generatedAt','resolutions'];
+function structuralPlanError(reviewId, reason, detail){
+  return { reviewId: reviewId||null, valid:false, reason, detail: detail||null };
+}
+function structuralPlanString(v, allowEmpty){
+  if(typeof v!=='string') return null;
+  const t=v.trim();
+  if(!t && !allowEmpty) return null;
+  return v;
+}
+function structuralPlanStringArray(v){
+  if(!Array.isArray(v)) return null;
+  for(const x of v){ if(typeof x!=='string') return null; }
+  return v.slice();
+}
+function structuralPlanLesion(id){
+  if(typeof id!=='string' || !id) return null;
+  return (Array.isArray(DATA)?DATA:[]).find(e=>e && e.id===id) || null;
+}
+function structuralPlanResolveImage(lesion, imageId){
+  if(!lesion || typeof imageId!=='string' || !imageId) return null;
+  const imgs = Array.isArray(lesion.images) ? lesion.images : [];
+  for(const im of imgs){
+    if(!im || typeof im!=='object') continue;
+    if(im.assetId===imageId || im.publicId===imageId || im.data===imageId) return im;
+    try{
+      if(typeof stableImageKeyV208==='function' && stableImageKeyV208(im)===imageId) return im;
+      if(typeof imageIdentityKeys==='function' && imageIdentityKeys(im).indexOf(imageId)>=0) return im;
+    }catch(_e){}
+  }
+  return null;
+}
+function structuralPlanKnownIds(review, source){
+  // IDs que a Ponte 1 apresentou como source/candidato: pertinência conhecida.
+  // Nunca afirma duplicidade — só permite referenciar sem override.
+  const known = new Set();
+  if(source && source.id) known.add(source.id);
+  try{
+    if(typeof findStructuralReviewCandidates==='function' && review && source)
+      findStructuralReviewCandidates(review, source).forEach(c=>{ if(c && c.id) known.add(c.id); });
+  }catch(_e){}
+  return known;
+}
+function validateStructuralResolution(raw){
+  if(!raw || typeof raw!=='object' || Array.isArray(raw))
+    return structuralPlanError(raw && raw.reviewId, 'resolution_not_object');
+  const r = raw;
+  if(typeof r.reviewId!=='string' || !r.reviewId)
+    return structuralPlanError(null, 'reviewId_missing');
+  const review = LESION_REVISIONS[r.reviewId] || null;
+  if(!review) return structuralPlanError(r.reviewId, 'review_not_found');
+  if(review.status!=='manual_action_required')
+    return structuralPlanError(r.reviewId, 'review_not_manual');
+  if(typeof r.resolutionType!=='string' || STRUCTURAL_PLAN_TYPES.indexOf(r.resolutionType)<0)
+    return structuralPlanError(r.reviewId, 'unknown_resolutionType');
+  const type = r.resolutionType;
+  const allowedKeys = {
+    merge_duplicates:['reviewId','resolutionType','keeperId','removeId','merge','reasoning','humanOverride'],
+    remove_additional_section_placement:['reviewId','resolutionType','lesionId','placement','reasoning','humanOverride'],
+    transfer_images:['reviewId','resolutionType','fromLesionId','toLesionId','imageIds','reasoning','humanOverride'],
+    add_clinical_cases:['reviewId','resolutionType','lesionId','clinicalCases','reasoning','humanOverride'],
+    unresolved:['reviewId','resolutionType','reason','reasoning'],
+    no_action:['reviewId','resolutionType','reasoning']
+  }[type];
+  for(const k of Object.keys(r)){
+    if(allowedKeys.indexOf(k)<0) return structuralPlanError(r.reviewId, 'unknown_field', k);
+    if(k==='__proto__'||k==='constructor'||k==='prototype') return structuralPlanError(r.reviewId, 'forbidden_field', k);
+  }
+  if(r.humanOverride!==undefined && typeof r.humanOverride!=='boolean')
+    return structuralPlanError(r.reviewId, 'humanOverride_not_boolean');
+  const reasoning = structuralPlanString(r.reasoning, false);
+  if(reasoning===null) return structuralPlanError(r.reviewId, 'reasoning_missing');
+  const fail = (reason, detail)=>structuralPlanError(r.reviewId, reason, detail);
+  if(type==='merge_duplicates'){
+    const keeper = structuralPlanLesion(r.keeperId), remove = structuralPlanLesion(r.removeId);
+    if(!keeper) return fail('keeper_not_found', r.keeperId);
+    if(!remove) return fail('remove_not_found', r.removeId);
+    if(keeper.id===remove.id) return fail('keeper_equals_remove');
+    // seed_156 NUNCA pode ser keeper de lesão ovariana: conflito anatômico
+    // forte rejeita mesmo com override (override só dispensa pertinência).
+    try{
+      if(typeof hasStrongAnatomicConflict==='function' && hasStrongAnatomicConflict(keeper, remove))
+        return fail('anatomic_conflict', keeper.id+' x '+remove.id);
+    }catch(_e){}
+    if(!r.humanOverride){
+      const source = structuralPlanLesion(review.lesionId);
+      const known = structuralPlanKnownIds(review, source);
+      if(!known.has(keeper.id) || !known.has(remove.id))
+        return fail('ids_not_in_export', keeper.id+' / '+remove.id);
+    }
+    const m = r.merge;
+    if(!m || typeof m!=='object' || Array.isArray(m)) return fail('merge_missing');
+    const mergeKeys = ['name','notes','classification','tags','enTerm','preserveAliases','transferImages','transferClinicalCases','transferRadiologicSigns','transferClassificationSchemes','transferLinks','transferAltPlacements'];
+    for(const k of Object.keys(m)){
+      if(mergeKeys.indexOf(k)<0) return fail('merge_unknown_field', k);
+      if(k==='__proto__'||k==='constructor'||k==='prototype') return fail('merge_forbidden_field', k);
+    }
+    for(const k of ['name','notes','enTerm']) if(m[k]!==undefined && typeof m[k]!=='string') return fail('merge_bad_type', k);
+    if(m.classification!==undefined && !(typeof m.classification==='string' || m.classification===null)) return fail('merge_bad_type', 'classification');
+    if(m.tags!==undefined && structuralPlanStringArray(m.tags)===null) return fail('merge_bad_type', 'tags');
+    if(m.preserveAliases!==undefined && structuralPlanStringArray(m.preserveAliases)===null) return fail('merge_bad_type', 'preserveAliases');
+    for(const k of ['transferImages','transferClinicalCases','transferRadiologicSigns','transferClassificationSchemes','transferLinks','transferAltPlacements'])
+      if(m[k]!==undefined && typeof m[k]!=='boolean') return fail('merge_bad_type', k);
+    return { reviewId:r.reviewId, valid:true, type, keeperId:keeper.id, removeId:remove.id,
+      keeperName:keeper.name, removeName:remove.name, merge:m, reasoning, humanOverride:!!r.humanOverride };
+  }
+  if(type==='remove_additional_section_placement'){
+    const lesion = structuralPlanLesion(r.lesionId);
+    if(!lesion) return fail('lesion_not_found', r.lesionId);
+    const p = r.placement;
+    if(!p || typeof p!=='object' || Array.isArray(p)) return fail('placement_missing');
+    for(const k of Object.keys(p)) if(['section','site'].indexOf(k)<0) return fail('placement_unknown_field', k);
+    if(typeof p.section!=='string' || !p.section.trim() || typeof p.site!=='string' || !p.site.trim())
+      return fail('placement_incomplete');
+    const found = (Array.isArray(lesion.altPlacements)?lesion.altPlacements:[]).some(x=>x && x.s===p.section.trim() && x.site===p.site.trim());
+    if(!found) return fail('placement_not_found', p.section+' > '+p.site);
+    return { reviewId:r.reviewId, valid:true, type, lesionId:lesion.id, lesionName:lesion.name,
+      placement:{section:p.section.trim(), site:p.site.trim()}, reasoning, humanOverride:!!r.humanOverride };
+  }
+  if(type==='transfer_images'){
+    const from = structuralPlanLesion(r.fromLesionId), to = structuralPlanLesion(r.toLesionId);
+    if(!from) return fail('from_not_found', r.fromLesionId);
+    if(!to) return fail('to_not_found', r.toLesionId);
+    if(from.id===to.id) return fail('from_equals_to');
+    if(!Array.isArray(r.imageIds) || !r.imageIds.length) return fail('imageIds_missing');
+    for(const id of r.imageIds){
+      if(typeof id!=='string' || !id) return fail('imageId_invalid', String(id));
+      if(!structuralPlanResolveImage(from, id)) return fail('image_not_found', id);
+    }
+    return { reviewId:r.reviewId, valid:true, type, fromLesionId:from.id, fromLesionName:from.name,
+      toLesionId:to.id, toLesionName:to.name, imageIds:r.imageIds.slice(), reasoning, humanOverride:!!r.humanOverride };
+  }
+  if(type==='add_clinical_cases'){
+    const lesion = structuralPlanLesion(r.lesionId);
+    if(!lesion) return fail('lesion_not_found', r.lesionId);
+    if(!Array.isArray(r.clinicalCases) || !r.clinicalCases.length) return fail('clinicalCases_missing');
+    const cases = [];
+    for(const c of r.clinicalCases){
+      if(!c || typeof c!=='object' || Array.isArray(c)) return fail('clinicalCase_invalid');
+      for(const k of Object.keys(c))
+        if(['title','source','sourceUrl','patientAge','patientSex','modality','presentation','notes'].indexOf(k)<0)
+          return fail('clinicalCase_unknown_field', k);
+      if(typeof c.title!=='string' || !c.title.trim()) return fail('clinicalCase_title_missing');
+      cases.push(Object.assign({}, c));
+    }
+    return { reviewId:r.reviewId, valid:true, type, lesionId:lesion.id, lesionName:lesion.name, clinicalCases:cases, reasoning, humanOverride:!!r.humanOverride };
+  }
+  if(type==='unresolved'){
+    if(structuralPlanString(r.reason, false)===null) return fail('reason_missing');
+    return { reviewId:r.reviewId, valid:true, type, reason:r.reason.trim(), reasoning };
+  }
+  // no_action
+  return { reviewId:r.reviewId, valid:true, type, reasoning };
+}
+function buildStructuralPlanSnapshot(resolution){
+  // Cópias por valor das lesões envolvidas, para detectar stale plan e
+  // permitir diff/rollback na Fase 3. Nunca grava nas lesões.
+  const ids = [];
+  if(resolution.keeperId) ids.push(resolution.keeperId, resolution.removeId);
+  if(resolution.lesionId) ids.push(resolution.lesionId);
+  if(resolution.fromLesionId) ids.push(resolution.fromLesionId, resolution.toLesionId);
+  const lesions = {};
+  ids.forEach(id=>{
+    if(typeof id!=='string' || !id || lesions[id]) return;
+    const e = structuralPlanLesion(id);
+    if(e){ try{ lesions[id] = JSON.parse(JSON.stringify(e)); }catch(_e){} }
+  });
+  return { createdAt:new Date().toISOString(), lesions };
+}
+function isStructuralPlanStale(review){
+  // Compara snapshot do plano com o DATA atual (serialização canônica).
+  // Lesão sumida do catálogo também é stale. Puro (só leitura).
+  const plan = review && review.structuralPlan;
+  if(!plan || !plan.snapshot || !plan.snapshot.lesions) return { stale:true, reason:'no_snapshot', changedIds:[] };
+  const changed = [];
+  for(const id of Object.keys(plan.snapshot.lesions)){
+    const now = structuralPlanLesion(id);
+    if(!now){ changed.push(id); continue; }
+    try{
+      const a = typeof canonicalJsonString==='function' ? canonicalJsonString(now) : JSON.stringify(now);
+      const b = typeof canonicalJsonString==='function' ? canonicalJsonString(plan.snapshot.lesions[id]) : JSON.stringify(plan.snapshot.lesions[id]);
+      if(a!==b) changed.push(id);
+    }catch(_e){ changed.push(id); }
+  }
+  return changed.length ? { stale:true, reason:'lesions_changed', changedIds:changed } : { stale:false, reason:null, changedIds:[] };
+}
+function validateStructuralResolutionBatch(obj){
+  // Validação 100% read-only: nunca escreve em DATA, revisões ou storage.
+  if(!obj || typeof obj!=='object' || Array.isArray(obj))
+    return { ok:false, reason:'envelope_invalid', resolutions:[] };
+  if(obj.type!=='atlas_structural_resolution_batch')
+    return { ok:false, reason:'envelope_type', resolutions:[] };
+  if(obj.version!==1) return { ok:false, reason:'envelope_version', resolutions:[] };
+  if(!Array.isArray(obj.resolutions) || !obj.resolutions.length)
+    return { ok:false, reason:'resolutions_missing', resolutions:[] };
+  const seen = new Set(), out = [];
+  for(const raw of obj.resolutions){
+    if(raw && typeof raw==='object' && typeof raw.reviewId==='string' && raw.reviewId){
+      if(seen.has(raw.reviewId)) return { ok:false, reason:'duplicate_reviewId', resolutions:[], reviewId:raw.reviewId };
+      seen.add(raw.reviewId);
+    }
+    out.push(validateStructuralResolution(raw));
+  }
+  if(out.some(x=>!x.valid)){
+    const first = out.find(x=>!x.valid);
+    return { ok:false, reason:first.reason, reviewId:first.reviewId, detail:first.detail||null, resolutions:out };
+  }
+  return { ok:true, reason:null, resolutions:out };
+}
+async function importStructuralResolutionBatch(obj){
+  // Tudo-ou-nada: qualquer item inválido rejeita o lote inteiro sem tocar nada.
+  // Sucesso grava SÓ r.structuralPlan + histórico (via saveLesionRevisions, o
+  // mesmo contrato das demais ações da Central). Aceite/rejeição do plano é
+  // decisão humana posterior, item a item. Nenhuma execução estrutural aqui.
+  let parsed = obj;
+  if(typeof parsed==='string'){
+    try{ parsed = JSON.parse(parsed); }
+    catch(e){ return { ok:false, reason:'json_invalid', detail:String((e&&e.message)||e) }; }
+  }
+  const checked = validateStructuralResolutionBatch(parsed);
+  if(!checked.ok) return checked;
+  const importedAt = new Date().toISOString();
+  for(const v of checked.resolutions){
+    const r = LESION_REVISIONS[v.reviewId];
+    r.structuralPlan = {
+      status:'imported', importedAt,
+      type:v.type, resolution:v, snapshot:buildStructuralPlanSnapshot(v)
+    };
+    pushLesionReviewHistory(r, 'structural_plan_imported', { type:v.type, importedAt });
+  }
+  await saveLesionRevisions();
+  return { ok:true, reason:null, imported:checked.resolutions.map(v=>v.reviewId), resolutions:checked.resolutions };
+}
+async function acceptStructuralPlan(reviewId){
+  // Aceitar = "plano aprovado para futura execução" (Fase 3). NÃO executa nada:
+  // não toca DATA, imagens, ownership, altPlacements ou tombstones.
+  const r = LESION_REVISIONS[reviewId] || null;
+  if(!r || !r.structuralPlan || r.structuralPlan.status!=='imported')
+    return { ok:false, reason:'no_imported_plan' };
+  const stale = isStructuralPlanStale(r);
+  if(stale.stale) return { ok:false, reason:'stale_plan', detail:stale };
+  r.structuralPlan.status = 'accepted';
+  r.structuralPlan.decidedAt = new Date().toISOString();
+  pushLesionReviewHistory(r, 'structural_plan_accepted', { type:r.structuralPlan.type });
+  await saveLesionRevisions();
+  return { ok:true, reason:null };
+}
+async function rejectStructuralPlan(reviewId){
+  // Rejeitar descarta o plano (mantém histórico). Não executa nada.
+  const r = LESION_REVISIONS[reviewId] || null;
+  if(!r || !r.structuralPlan || (r.structuralPlan.status!=='imported' && r.structuralPlan.status!=='accepted'))
+    return { ok:false, reason:'no_imported_plan' };
+  const was = r.structuralPlan.status;
+  r.structuralPlan.status = 'rejected';
+  r.structuralPlan.decidedAt = new Date().toISOString();
+  pushLesionReviewHistory(r, 'structural_plan_rejected', { was });
+  await saveLesionRevisions();
+  return { ok:true, reason:null };
+}
+function structuralPlanPreviewHtml(v){
+  // Prévia 100% a partir do plano VALIDADO + snapshot (nunca do DATA mutável
+  // posterior): o que o usuário vê é exatamente o que foi validado.
+  const esc = s=>String(s==null?'':s).replace(/</g,'&lt;');
+  const head = (title,sub)=>'<div class="review-center-row-main"><div class="review-center-row-title">'+esc(title)+'</div>'+(sub?'<div class="review-center-row-meta">'+esc(sub)+'</div>':'');
+  if(v.type==='merge_duplicates'){
+    const m = v.merge || {};
+    const rows = [];
+    if(m.name) rows.push(['nome final', m.name]);
+    if(m.notes) rows.push(['notas', m.notes]);
+    if(m.classification!==undefined) rows.push(['classificação', m.classification]);
+    if(Array.isArray(m.tags)) rows.push(['tags', m.tags.join(', ')]);
+    if(m.enTerm) rows.push(['enTerm', m.enTerm]);
+    if(Array.isArray(m.preserveAliases)) rows.push(['aliases', m.preserveAliases.join(', ')]);
+    ['transferImages','transferClinicalCases','transferRadiologicSigns','transferClassificationSchemes','transferLinks','transferAltPlacements']
+      .forEach(k=>{ if(m[k]) rows.push([k.replace(/^transfer/,'transferir '), 'sim']); });
+    return head('Fusão: '+v.removeName+' → '+v.keeperName, v.reviewId) +
+      '<div><b>MANTER:</b> '+esc(v.keeperId)+' — '+esc(v.keeperName)+'</div>' +
+      '<div><b>REMOVER:</b> '+esc(v.removeId)+' — '+esc(v.removeName)+'</div>' +
+      (rows.length?'<div><b>DADOS QUE SERIAM INCORPORADOS:</b><ul>'+rows.map(x=>'<li>'+esc(x[0])+': '+esc(String(x[1])).slice(0,300)+'</li>').join('')+'</ul></div>':'<div>Sem dados extras declarados.</div>') +
+      (v.reasoning?'<div><b>Justificativa da IA:</b> '+esc(v.reasoning)+'</div>':'') + '</div>';
+  }
+  if(v.type==='remove_additional_section_placement'){
+    return head('Remover localização adicional', v.reviewId) +
+      '<div><b>REMOVER:</b> '+esc(v.placement.section)+' → '+esc(v.placement.site)+'</div>' +
+      '<div>Lesão: '+esc(v.lesionId)+' — '+esc(v.lesionName)+'</div>' +
+      (v.reasoning?'<div><b>Justificativa da IA:</b> '+esc(v.reasoning)+'</div>':'') + '</div>';
+  }
+  if(v.type==='transfer_images'){
+    return head('Transferir imagens (PLANO — não executado)', v.reviewId) +
+      '<div>De '+esc(v.fromLesionId)+' ('+esc(v.fromLesionName)+') para '+esc(v.toLesionId)+' ('+esc(v.toLesionName)+')</div>' +
+      '<div>Imagens: '+v.imageIds.map(esc).join(', ')+'</div>' +
+      (v.reasoning?'<div><b>Justificativa da IA:</b> '+esc(v.reasoning)+'</div>':'') + '</div>';
+  }
+  if(v.type==='add_clinical_cases'){
+    return head('Adicionar casos clínicos (PLANO — não executado)', v.reviewId) +
+      '<div>Lesão: '+esc(v.lesionId)+' — '+esc(v.lesionName)+'</div>' +
+      '<div>Casos: '+(v.clinicalCases||[]).map(c=>esc(c.title||c.sourceUrl||'?')).join('; ')+'</div>' +
+      (v.reasoning?'<div><b>Justificativa da IA:</b> '+esc(v.reasoning)+'</div>':'') + '</div>';
+  }
+  if(v.type==='unresolved'){
+    return head('⚠️ Sem resolução estrutural segura', v.reviewId) +
+      '<div><b>Motivo:</b> '+esc(v.reason)+'</div>' +
+      (v.reasoning?'<div><b>Justificativa da IA:</b> '+esc(v.reasoning)+'</div>':'') + '</div>';
+  }
+  return head('Sem ação estrutural', v.reviewId) +
+    (v.reasoning?'<div><b>Justificativa da IA:</b> '+esc(v.reasoning)+'</div>':'') + '</div>';
+}
+function openStructuralPlanImportModal(onDone){
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) close(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) close(); };
+  const close = ()=>{ document.removeEventListener('keydown', closeOnEsc); ov.remove(); if(typeof onDone==='function') onDone(); };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = '<div class="modal review-center-modal"><h2>📥 Importar plano estrutural da IA</h2>' +
+    '<div class="modal-sub">Cole o JSON <b>atlas_structural_resolution_batch</b>. Só validação e prévia — nada é executado.</div>' +
+    '<textarea id="structural-plan-input" style="width:100%;min-height:180px;max-height:40vh;" placeholder=\'{"type":"atlas_structural_resolution_batch","version":1,...}\'></textarea>' +
+    '<div class="modal-sub" id="structural-plan-error" style="color:var(--red);"></div>' +
+    '<div class="modal-actions"><button type="button" class="btn btn-ghost" id="structural-plan-cancel">fechar</button>' +
+    '<button type="button" class="btn btn-primary" id="structural-plan-validate">Validar e pré-visualizar</button></div></div>';
+  document.body.appendChild(ov);
+  ov.querySelector('#structural-plan-cancel').onclick = close;
+  ov.querySelector('#structural-plan-validate').onclick = async ()=>{
+    const errBox = ov.querySelector('#structural-plan-error');
+    const res = await importStructuralResolutionBatch(ov.querySelector('#structural-plan-input').value);
+    if(!res.ok){
+      errBox.textContent = 'Plano rejeitado (' + res.reason + ')' +
+        (res.reviewId ? ' em ' + res.reviewId : '') + (res.detail ? ': ' + res.detail : '') + '. Nada foi importado.';
+      return;
+    }
+    close();
+    openStructuralPlanPreviewModal(res.resolutions);
+    toast('Plano importado: prévia sem execução.');
+  };
+}
+function openStructuralPlanPreviewModal(validated){
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) close(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) close(); };
+  const close = ()=>{ document.removeEventListener('keydown', closeOnEsc); ov.remove(); if(typeof renderBothListsRef==='function') renderBothListsRef(); };
+  let renderBothListsRef = null;
+  try{ renderBothListsRef = null; }catch(_e){}
+  document.addEventListener('keydown', closeOnEsc);
+  const rows = validated.map(v=>{
+    const r = LESION_REVISIONS[v.reviewId];
+    const stale = r ? isStructuralPlanStale(r) : { stale:true, reason:'no_snapshot', changedIds:[] };
+    const st = r && r.structuralPlan ? r.structuralPlan.status : '?';
+    return '<div class="review-center-row" data-plan-review="'+String(v.reviewId).replace(/"/g,'&quot;')+'">' +
+      structuralPlanPreviewHtml(v) +
+      '<div class="review-center-row-meta">plano: <b>'+st+'</b>' +
+      (stale.stale ? ' · ⚠️ PLANO DESATUALIZADO ('+stale.reason+(stale.changedIds.length?': '+stale.changedIds.join(', '):'')+') — reimporte antes de aprovar' : '') + '</div>' +
+      '<div class="review-center-row-actions">' +
+      '<button type="button" class="btn btn-ghost" data-plan-act="accept"'+(stale.stale?' disabled':'')+'>✅ Aceitar plano</button>' +
+      '<button type="button" class="btn btn-ghost" data-plan-act="reject">❌ Rejeitar plano</button>' +
+      '</div></div>';
+  }).join('');
+  ov.innerHTML = '<div class="modal review-center-modal"><h2>PLANO ESTRUTURAL IMPORTADO</h2>' +
+    '<div class="modal-sub">Prévia humana — aceitar significa apenas "aprovado para futura execução". Nada foi executado.</div>' +
+    '<div class="review-center-list">'+rows+'</div>' +
+    '<div class="modal-actions"><button type="button" class="btn btn-ghost" id="structural-plan-preview-close">fechar</button></div></div>';
+  document.body.appendChild(ov);
+  ov.querySelector('#structural-plan-preview-close').onclick = close;
+  ov.querySelectorAll('[data-plan-act]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const row = btn.closest('[data-plan-review]');
+      const id = row ? row.getAttribute('data-plan-review') : null;
+      if(!id) return;
+      const act = btn.getAttribute('data-plan-act');
+      const res = act==='accept' ? await acceptStructuralPlan(id) : await rejectStructuralPlan(id);
+      toast(res.ok ? (act==='accept' ? 'Plano aceito para futura execução.' : 'Plano rejeitado.') : ('Não foi possível: '+(res.reason||'erro')));
+      close();
+      openStructuralPlanPreviewModalRefresh();
+    };
+  });
+  function openStructuralPlanPreviewModalRefresh(){
+    try{
+      const ids = validated.map(v=>v.reviewId);
+      const fresh = ids.map(id=>{
+        const r = LESION_REVISIONS[id];
+        if(!r || !r.structuralPlan) return null;
+        return { reviewId:id, valid:true, type:r.structuralPlan.type,
+          keeperId:r.structuralPlan.resolution.keeperId, removeId:r.structuralPlan.resolution.removeId,
+          keeperName:r.structuralPlan.resolution.keeperName, removeName:r.structuralPlan.resolution.removeName,
+          merge:r.structuralPlan.resolution.merge, lesionId:r.structuralPlan.resolution.lesionId,
+          lesionName:r.structuralPlan.resolution.lesionName, placement:r.structuralPlan.resolution.placement,
+          fromLesionId:r.structuralPlan.resolution.fromLesionId, fromLesionName:r.structuralPlan.resolution.fromLesionName,
+          toLesionId:r.structuralPlan.resolution.toLesionId, toLesionName:r.structuralPlan.resolution.toLesionName,
+          imageIds:r.structuralPlan.resolution.imageIds, clinicalCases:r.structuralPlan.resolution.clinicalCases,
+          reason:r.structuralPlan.resolution.reason, reasoning:r.structuralPlan.resolution.reasoning };
+      }).filter(Boolean);
+      if(fresh.length) openStructuralPlanPreviewModal(fresh);
+    }catch(_e){}
+  }
 }
 
 </script>
