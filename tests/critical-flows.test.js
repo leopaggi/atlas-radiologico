@@ -592,7 +592,11 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // (+1: structuralPlanCardBadgeHtml/ButtonsHtml) + wiring executar/reverter
   // (+4). O +6 restante (16441->16447) já existia no commit da Fase 2 sem o
   // bump correspondente; sem alteração nos fluxos de recovery/boot/import.
-  assert.equal(importHandler.line, 16452);
+  // Bugfix aceite (2026-09-27): +3 antes do importHandler — botão
+  // "Pré-visualizar plano" no card (+1) + wiring (+2); prévia relê estado
+  // vivo e re-renderiza ao fechar; aceite/rejeição/rollback carimbam
+  // updatedAt (merge 084 determinístico).
+  assert.equal(importHandler.line, 16455);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

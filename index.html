@@ -15736,6 +15736,7 @@ function openReadySolutionsModal(){
           <button type="button" class="btn btn-ghost review-manual-copy-one">📋 Copiar pacote para IA</button>
           ${sug.applicable?`<button type="button" class="btn btn-primary review-manual-apply-placement">✓ Aplicar localização sugerida</button>`:''}
           ${meta.found?`<button type="button" class="btn btn-ghost review-manual-open">${isImage?'🖼 Abrir lesão para ajustar imagens':'✏ Abrir lesão'}</button>`:''}
+          ${r.structuralPlan?`<button type="button" class="btn btn-ghost review-structural-preview">👁 Pré-visualizar plano</button>`:''}
           ${structuralPlanCardButtonsHtml(r)}
           <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}${reviewResolveButtonHtml(r)}
           ${isGlobalReview(r)?'<button type="button" class="btn btn-primary review-global-complete">✓ Concluir</button>':''}
@@ -15750,6 +15751,8 @@ function openReadySolutionsModal(){
       const openBtn = row.querySelector('.review-manual-open');
       if(openBtn) openBtn.onclick = ()=> openManualActionModal(r.id, { onReopened: renderBothLists });
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
+      const structPrevBtn = row.querySelector('.review-structural-preview');
+      if(structPrevBtn) structPrevBtn.onclick = ()=> openStructuralPlanPreviewModalForReview(r.id, renderBothLists);
       const structExecBtn = row.querySelector('.review-structural-execute');
       if(structExecBtn) structExecBtn.onclick = (e)=>{ e.currentTarget.disabled = true; openStructuralPlanExecuteConfirmModal(r.id, renderBothLists); e.currentTarget.disabled = false; };
       const structRbBtn = row.querySelector('.review-structural-rollback');
@@ -21988,6 +21991,10 @@ async function acceptStructuralPlan(reviewId){
   if(stale.stale) return { ok:false, reason:'stale_plan', detail:stale };
   r.structuralPlan.status = 'accepted';
   r.structuralPlan.decidedAt = new Date().toISOString();
+  // Carimbo de atividade: sem ele, o merge 084 (vencedor = updatedAt maior;
+  // empate decide pelo JSON canônico) pode ressuscitar uma cópia remota
+  // desatualizada e reverter silenciosamente o aceite num sync/reload.
+  r.updatedAt = Date.now();
   pushLesionReviewHistory(r, 'structural_plan_accepted', { type:r.structuralPlan.type });
   await saveLesionRevisions();
   return { ok:true, reason:null };
@@ -22000,6 +22007,7 @@ async function rejectStructuralPlan(reviewId){
   const was = r.structuralPlan.status;
   r.structuralPlan.status = 'rejected';
   r.structuralPlan.decidedAt = new Date().toISOString();
+  r.updatedAt = Date.now(); // mesmo motivo do aceite: decisão local vence no merge 084
   pushLesionReviewHistory(r, 'structural_plan_rejected', { was });
   await saveLesionRevisions();
   return { ok:true, reason:null };
@@ -22430,6 +22438,7 @@ async function rollbackStructuralExecution(reviewId){
     ex.status = 'rolledback'; ex.rolledbackAt = new Date().toISOString();
     if(r.structuralPlan) r.structuralPlan.status = 'rolledback';
     if(r.status==='accepted'){ r.status = 'manual_action_required'; delete r.completedAt; r.resolvedManually = false; }
+    r.updatedAt = Date.now(); // reabertura local vence cópia remota no merge 084
     pushLesionReviewHistory(r, 'structural_plan_rolled_back', { executionId:ex.executionId });
     try{ await saveLesionRevisions(); }catch(_e){}
     return { ok:true, reason:null, executionId:ex.executionId };
@@ -22509,7 +22518,7 @@ function openStructuralPlanImportModal(onDone){
       return;
     }
     close();
-    openStructuralPlanPreviewModal(res.resolutions);
+    openStructuralPlanPreviewModal(res.resolutions, onDone);
     toast('Plano importado: prévia sem execução.');
   };
 }
@@ -22625,11 +22634,8 @@ function openStructuralPlanExecuteConfirmModal(reviewId, onDone){
     const res = await executeStructuralPlan(reviewId);
     try{ toast(res.ok ? ('Execução concluída ('+res.executionId+'). Revisão resolvida.') : ('Execução bloqueada: '+(res.reason||'erro'))); }catch(_e){}
     close();
-    try{ if(typeof renderBothListsRef==='function') renderBothListsRef(); }catch(_e){}
     if(typeof onDone==='function') onDone();
   };
-  let renderBothListsRef = null;
-  try{ renderBothListsRef = null; }catch(_e){}
 }
 function openStructuralPlanRollbackConfirmModal(reviewId, onDone){
   // Reversão manual: mostra snapshot guardado (before) → confirmação → rollback.
@@ -22667,14 +22673,35 @@ function openStructuralPlanRollbackConfirmModal(reviewId, onDone){
     if(typeof onDone==='function') onDone();
   };
 }
-function openStructuralPlanPreviewModal(validated){
+function structuralPlanLiveView(reviewId){
+  // Visão da prévia lida do ESTADO VIVO (nunca de cópia antiga): é o que
+  // permite reabrir a prévia de um plano já aceito sem reimportar o JSON.
+  const r = LESION_REVISIONS[reviewId];
+  if(!r || !r.structuralPlan) return null;
+  const s = r.structuralPlan, res = s.resolution || {};
+  return { reviewId, valid:true, type:s.type,
+    keeperId:res.keeperId, removeId:res.removeId,
+    keeperName:res.keeperName, removeName:res.removeName,
+    merge:res.merge, lesionId:res.lesionId,
+    lesionName:res.lesionName, placement:res.placement,
+    fromLesionId:res.fromLesionId, fromLesionName:res.fromLesionName,
+    toLesionId:res.toLesionId, toLesionName:res.toLesionName,
+    imageIds:res.imageIds, clinicalCases:res.clinicalCases,
+    reason:res.reason, reasoning:res.reasoning };
+}
+function openStructuralPlanPreviewModalForReview(reviewId, onDone){
+  const v = structuralPlanLiveView(reviewId);
+  if(!v){ try{ toast('Nenhum plano estrutural nesta revisão.'); }catch(_e){} return; }
+  openStructuralPlanPreviewModal([v], onDone);
+}
+function openStructuralPlanPreviewModal(validated, onDone){
   const ov = document.createElement('div');
   ov.className = 'overlay';
   ov.onclick = e=>{ if(e.target===ov) close(); };
   const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) close(); };
-  const close = ()=>{ document.removeEventListener('keydown', closeOnEsc); ov.remove(); if(typeof renderBothListsRef==='function') renderBothListsRef(); };
-  let renderBothListsRef = null;
-  try{ renderBothListsRef = null; }catch(_e){}
+  // onDone re-renderiza a lista por trás do modal (card com 🟢/▶ logo após o
+  // aceite). Sem ele, a lista exibiria o render desatualizado pré-import.
+  const close = ()=>{ document.removeEventListener('keydown', closeOnEsc); ov.remove(); try{ if(typeof onDone==='function') onDone(); }catch(_e){} };
   document.addEventListener('keydown', closeOnEsc);
   const rows = validated.map(v=>{
     const r = LESION_REVISIONS[v.reviewId];
@@ -22725,20 +22752,8 @@ function openStructuralPlanPreviewModal(validated){
   function openStructuralPlanPreviewModalRefresh(){
     try{
       const ids = validated.map(v=>v.reviewId);
-      const fresh = ids.map(id=>{
-        const r = LESION_REVISIONS[id];
-        if(!r || !r.structuralPlan) return null;
-        return { reviewId:id, valid:true, type:r.structuralPlan.type,
-          keeperId:r.structuralPlan.resolution.keeperId, removeId:r.structuralPlan.resolution.removeId,
-          keeperName:r.structuralPlan.resolution.keeperName, removeName:r.structuralPlan.resolution.removeName,
-          merge:r.structuralPlan.resolution.merge, lesionId:r.structuralPlan.resolution.lesionId,
-          lesionName:r.structuralPlan.resolution.lesionName, placement:r.structuralPlan.resolution.placement,
-          fromLesionId:r.structuralPlan.resolution.fromLesionId, fromLesionName:r.structuralPlan.resolution.fromLesionName,
-          toLesionId:r.structuralPlan.resolution.toLesionId, toLesionName:r.structuralPlan.resolution.toLesionName,
-          imageIds:r.structuralPlan.resolution.imageIds, clinicalCases:r.structuralPlan.resolution.clinicalCases,
-          reason:r.structuralPlan.resolution.reason, reasoning:r.structuralPlan.resolution.reasoning };
-      }).filter(Boolean);
-      if(fresh.length) openStructuralPlanPreviewModal(fresh);
+      const fresh = ids.map(id=>structuralPlanLiveView(id)).filter(Boolean);
+      if(fresh.length) openStructuralPlanPreviewModal(fresh, onDone);
     }catch(_e){}
   }
 }
