@@ -103,7 +103,7 @@ const reviewFns089 = ['normalizeReviewStamps', 'saveReviewStamps', 'mergeReviewB
   .map((n) => extractFunction(html, n).source).join('\n');
 // Ponte estrutural — codec do progresso embutido no snapshot da execução
 // (usado por readShardedState no caminho de adoção).
-const structuralSyncFns = ['structuralSnapshotProgressToFirestore', 'structuralSnapshotProgressFromFirestore']
+const structuralSyncFns = ['structuralSnapshotWalkMaps', 'structuralSnapshotProgressToFirestore', 'structuralSnapshotProgressFromFirestore']
   .map((n) => extractFunction(html, n).source).join('\n');
 // PROTEÇÃO 091c — mapa de fusão clínica (módulo real: normalize/merge/fold).
 const lesionMergesModule091c = html.slice(html.indexOf("const LESION_MERGES_KEY = 'atlas:lesionMerges';"), html.indexOf('/* Plano APROVADO pelo usuário (091c).'));

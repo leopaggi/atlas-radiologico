@@ -5544,23 +5544,33 @@ function reviewProgressFromFirestore(progress){
   }
   return normalizeReviewProgress(out);
 }
-// Ponte estrutural — o reviewProgress EMBUTIDO em
-// review.structuralExecution.beforeSnapshot.maps usa o MESMO codec da 090:
-// tuplas locais [t,ok,graded] viram [{t,ok,graded}] só na fronteira da nuvem
-// (o Firestore recusa array dentro de array). Clona — nunca muta o estado
-// vivo. O validator findNestedArrayPaths continua ativo como rede de
-// segurança para qualquer outro campo futuro.
+// Ponte estrutural — o reviewProgress EMBUTIDO nos snapshots da execução usa
+// o MESMO codec da 090: tuplas locais [t,ok,graded] viram [{t,ok,graded}] só
+// na fronteira da nuvem (o Firestore recusa array dentro de array). Vale para
+// TODO maps.reviewProgress dentro de structuralExecution (beforeSnapshot E
+// tombstone.previousSnapshot — o tombstone guarda o snapshot inteiro).
+// Clona — nunca muta o estado vivo. O validator findNestedArrayPaths
+// continua ativo como rede de segurança para qualquer outro campo futuro.
+function structuralSnapshotWalkMaps(node, convert){
+  if(!node || typeof node!=='object') return;
+  if(Array.isArray(node)){ node.forEach(x=>structuralSnapshotWalkMaps(x, convert)); return; }
+  try{
+    if(node.maps && node.maps.reviewProgress && typeof node.maps.reviewProgress==='object' && !Array.isArray(node.maps.reviewProgress))
+      node.maps.reviewProgress = convert(node.maps.reviewProgress);
+  }catch(_e){}
+  for(const k of Object.keys(node)){
+    if(k==='maps') continue;
+    try{ structuralSnapshotWalkMaps(node[k], convert); }catch(_e){}
+  }
+}
 function structuralSnapshotProgressToFirestore(revs){
   if(!revs || typeof revs!=='object' || Array.isArray(revs)) return revs;
   const out = {};
   for(const [id, r] of Object.entries(revs)){
     try{
-      const maps = r && r.structuralExecution && r.structuralExecution.beforeSnapshot
-        && r.structuralExecution.beforeSnapshot.maps;
-      if(r && typeof r==='object' && !Array.isArray(r) && maps
-        && maps.reviewProgress && typeof maps.reviewProgress==='object' && !Array.isArray(maps.reviewProgress)){
+      if(r && typeof r==='object' && !Array.isArray(r) && r.structuralExecution){
         const copy = JSON.parse(JSON.stringify(r));
-        copy.structuralExecution.beforeSnapshot.maps.reviewProgress = reviewProgressToFirestore(maps.reviewProgress);
+        structuralSnapshotWalkMaps(copy.structuralExecution, reviewProgressToFirestore);
         out[id] = copy;
       } else out[id] = r;
     }catch(_e){ out[id] = r; }
@@ -5575,12 +5585,9 @@ function structuralSnapshotProgressFromFirestore(revs){
   const out = {};
   for(const [id, r] of Object.entries(revs)){
     try{
-      const maps = r && r.structuralExecution && r.structuralExecution.beforeSnapshot
-        && r.structuralExecution.beforeSnapshot.maps;
-      if(r && typeof r==='object' && !Array.isArray(r) && maps
-        && maps.reviewProgress && typeof maps.reviewProgress==='object' && !Array.isArray(maps.reviewProgress)){
+      if(r && typeof r==='object' && !Array.isArray(r) && r.structuralExecution){
         const copy = JSON.parse(JSON.stringify(r));
-        copy.structuralExecution.beforeSnapshot.maps.reviewProgress = reviewProgressFromFirestore(maps.reviewProgress);
+        structuralSnapshotWalkMaps(copy.structuralExecution, reviewProgressFromFirestore);
         out[id] = copy;
       } else out[id] = r;
     }catch(_e){ out[id] = r; }

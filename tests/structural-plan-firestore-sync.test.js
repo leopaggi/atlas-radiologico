@@ -38,7 +38,7 @@ function fn(name) {
 const names = ['canonicalJsonString', 'stripUndefinedDeep', 'mergeLesionRevisions',
   'normalizeReviewProgress', 'normalizeReviewProgressEntry', 'foldReviewProgress', 'normalizeReviewAttempts',
   'reviewProgressToFirestore', 'reviewProgressFromFirestore',
-  'structuralSnapshotProgressToFirestore', 'structuralSnapshotProgressFromFirestore',
+  'structuralSnapshotWalkMaps', 'structuralSnapshotProgressToFirestore', 'structuralSnapshotProgressFromFirestore',
   'findNestedArrayPaths', 'syncFailureStatus', 'normalizeLesionMerges'];
 const src = names.map(fn).join('\n');
 const ATTEMPTS_MAX = 'const REVIEW_ATTEMPTS_MAX = 8;\n';
@@ -93,7 +93,15 @@ function teratomaExecuted(progressTuples) {
       snapshot: { createdAt: '2026-09-27T00:00:00.000Z', lesions: { seed_206: { index: 0 }, seed_575: { index: 1 } } } },
     structuralExecution: { executionId: 'exec_teratoma1', status: 'executed', type: 'merge_duplicates', at: '2026-09-27T00:03:00.000Z',
       affectedIds: ['seed_206', 'seed_575'], operations: ['transfer_data_to_keeper', 'remove_lesion_record'],
-      tombstone: { removeId: 'seed_575', keeperId: 'seed_206', previousName: 'Teratoma cístico maduro', timestamp: '2026-09-27T00:03:00.000Z', reviewId: RID },
+      // FIEL ao executor real: o tombstone carrega o snapshot inteiro (segunda
+      // cópia do progresso embutido — foi o path que faltou no primeiro fix).
+      tombstone: { removeId: 'seed_575', keeperId: 'seed_206', previousName: 'Teratoma cístico maduro', timestamp: '2026-09-27T00:03:00.000Z', reviewId: RID,
+        structuralPlan: { type: 'merge_duplicates' },
+        previousSnapshot: { lesions: { seed_206: { index: 0, lesion: richKeeper() } },
+          maps: { review: {}, reviewStamps: {},
+            reviewProgress: { seed_206: { b: 1, f: 0, a: [[1711111111111, 1, 1], [1711112222222, 0, 1]] } },
+            reviewOverride: {}, srs: {}, merges: {}, pendingAdds: {} },
+          reviewLesionIds: [{ reviewId: RID, lesionId: 'seed_575' }] } },
       beforeSnapshot: { lesions: { seed_206: { index: 0, lesion: richKeeper() } }, maps,
         reviewLesionIds: [{ reviewId: RID, lesionId: 'seed_575' }] },
       afterSnapshot: { lesions: { seed_206: { index: 0, lesion: richKeeper() } } },
@@ -239,6 +247,18 @@ test('TERATOMA LOCAL RECOVERY: executado local serializa e confirma sem reexecut
   assert.equal(back[RID].structuralPlan.status, 'executed');
   assert.equal(back[RID].structuralExecution.executionId, 'exec_teratoma1');
   assert.equal(back[RID].status, 'accepted', 'revisão segue resolvida; nada a reexecutar/reimportar');
+});
+
+test('4b. tombstone.previousSnapshot também é codificado (regressão do banner preso)', () => {
+  const ctx = ctxFixture();
+  const payload = firestorePayload(ctx, { [RID]: teratomaExecuted() });
+  assert.equal(nestedCount(ctx, payload), 0, 'tombstone + beforeSnapshot sem arrays aninhados');
+  const wire = payload.lesionRevisions[RID].structuralExecution;
+  assert.equal(wire.tombstone.previousSnapshot.maps.reviewProgress.seed_206.a[0].t, 1711111111111);
+  assert.equal(wire.beforeSnapshot.maps.reviewProgress.seed_206.a[0].t, 1711111111111);
+  const back = vm.runInContext('structuralSnapshotProgressFromFirestore(' + JSON.stringify(payload.lesionRevisions) + ')', ctx);
+  assert.equal(jstr(back[RID].structuralExecution.tombstone.previousSnapshot.maps.reviewProgress),
+    jstr(teratomaExecuted().structuralExecution.beforeSnapshot.maps.reviewProgress), 'decode simétrico nos dois snapshots');
 });
 
 test('UI: erro de sync resumido, detalhe no console', () => {

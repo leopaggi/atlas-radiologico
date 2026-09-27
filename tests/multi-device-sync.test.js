@@ -159,7 +159,7 @@ const reviewFns089 = ['normalizeReviewStamps', 'loadReviewStamps', 'saveReviewSt
   .map((n) => extractFunction(html, n).source).join('\n');
 // Ponte estrutural — codec do progresso embutido no snapshot da execução +
 // erro resumido de sync (usados por writeShardedState/readShardedState/push).
-const structuralSyncFns = ['structuralSnapshotProgressToFirestore', 'structuralSnapshotProgressFromFirestore', 'syncFailureStatus']
+const structuralSyncFns = ['structuralSnapshotWalkMaps', 'structuralSnapshotProgressToFirestore', 'structuralSnapshotProgressFromFirestore', 'syncFailureStatus']
   .map((n) => extractFunction(html, n).source).join('\n');
 // PROTEÇÃO 091c — mapa de fusão clínica (módulo real: normalize/merge/fold).
 const lesionMergesModule091c = html.slice(html.indexOf("const LESION_MERGES_KEY = 'atlas:lesionMerges';"), html.indexOf('/* Plano APROVADO pelo usuário (091c).'));
@@ -557,6 +557,103 @@ test('Firestore estrito: histórico 090b + conteúdo 093/093b/093d cruzam a tran
   assert.equal(b.context.DATA[0].clinicalCases[0].imageRefs[0].quizPick, 'on');
   assert.equal(b.context.DATA[0].radiologicSigns[0].title, 'Sinal');
   assert.equal(b.context.DATA[0].classificationSchemes[0].title, 'Esquema');
+});
+
+// ===========================================================================
+// PONTE ESTRUTURAL — RECOVERY E2E: Teratoma já executado sincroniza do estado
+// local existente (sem reimportar/reaceitar/reexecutar), com retry que limpa
+// o banner e proteção contra remoto pré-execução.
+// ===========================================================================
+
+test('PONTE ESTRUTURAL RECOVERY E2E: executed local falha 1x, retry confirma, banner limpa, remoto antigo não vence', async () => {
+  const cloud = makeFakeCloud();
+  const a = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await a.boot();
+  // 1. Estado local real pós-execução (como está no navegador do usuário).
+  const keeper = makeSeedEntry({ id: 'seed_206', name: 'Teratoma maduro (cisto dermoide)' });
+  keeper.images = [{ assetId: 'A206', data: 'https://res.cloudinary.com/x/A206.jpg', source: 'cloudinary', lesionId: 'seed_206', lesionName: keeper.name, mergedFromLesionId: 'seed_575' }];
+  keeper.tags = ['teratoma'];
+  keeper.clinicalCases = [{ id: 'c1', title: 'caso 1' }];
+  a.context.DATA = [keeper];
+  const tuples = { seed_206: { b: 1, f: 0, a: [[1711111111111, 1, 1]] } };
+  a.context.REVIEW_PROGRESS = JSON.parse(JSON.stringify(tuples));
+  const RID = 'lrev_muhmzdmv_6rak3k';
+  const snapMaps = () => ({ review: {}, reviewStamps: {},
+    reviewProgress: JSON.parse(JSON.stringify(tuples)), reviewOverride: {}, srs: {}, merges: {}, pendingAdds: {} });
+  a.context.LESION_MERGES = { seed_575: { into: 'seed_206', at: 5, group: 'structural:' + RID, finalName: keeper.name } };
+  a.context.LESION_REVISIONS[RID] = {
+    id: RID, lesionId: 'seed_206', status: 'accepted',
+    requestText: 'Teratoma', manualAction: { type: 'duplicate_merge', description: 'x' },
+    createdAt: 1, updatedAt: 3000, completedAt: 3000, resolvedManually: true, history: [],
+    structuralPlan: { status: 'executed', importedAt: '2026-09-27T00:00:00.000Z', decidedAt: '2026-09-27T00:02:00.000Z',
+      type: 'merge_duplicates',
+      resolution: { reviewId: RID, valid: true, type: 'merge_duplicates',
+        keeperId: 'seed_206', removeId: 'seed_575', keeperName: keeper.name, removeName: 'Teratoma cístico maduro',
+        merge: { name: keeper.name, tags: ['teratoma'], preserveAliases: ['cisto dermoide'] }, reasoning: 'x' },
+      snapshot: { createdAt: '2026-09-27T00:00:00.000Z', lesions: {} } },
+    structuralExecution: { executionId: 'exec_t1', status: 'executed', type: 'merge_duplicates', at: '2026-09-27T00:03:00.000Z',
+      affectedIds: ['seed_206', 'seed_575'], operations: ['transfer_data_to_keeper'],
+      tombstone: { removeId: 'seed_575', keeperId: 'seed_206', previousName: 'Teratoma cístico maduro',
+        timestamp: '2026-09-27T00:03:00.000Z', reviewId: RID, previousSnapshot: { lesions: {}, maps: snapMaps() } },
+      beforeSnapshot: { lesions: {}, maps: snapMaps(), reviewLesionIds: [{ reviewId: RID, lesionId: 'seed_575' }] },
+      afterSnapshot: { lesions: {}, maps: {} },
+      executorVersion: 'fase3-v1' }
+  };
+  // Nuvem estrita: rejeita arrays aninhados como o SDK real.
+  const realRun = cloud.runTransaction;
+  const seen = [];
+  const strictRun = (fn) => realRun((tx) => fn({
+    get: tx.get,
+    set: (ref, payload) => {
+      const paths = a.context.findNestedArrayPaths(payload, ref.__kind || 'doc');
+      if (paths.length) { seen.push(...paths); throw new Error('Nested arrays are not supported: ' + paths.slice(0, 4).join(' | ')); }
+      tx.set(ref, payload);
+    }
+  }));
+  a.context.fbDb = { runTransaction: strictRun };
+  // 2. Primeira tentativa falha (rede fora).
+  a.context.fbDb = { runTransaction: async () => { throw new Error('timeout de rede'); } };
+  await a.markDirty();
+  await a.save();
+  // 3+15. Banner/pendente + 4. local intacto.
+  assert.equal(a.context.syncPushPending, true, 'falha marca pendente (banner)');
+  assert.equal(a.context.LESION_REVISIONS[RID].structuralPlan.status, 'executed', 'local intacto após falha');
+  assert.ok(a.context.DATA.some((e) => e.id === 'seed_206'), 'keeper intacto');
+  assert.ok(!a.context.DATA.some((e) => e.id === 'seed_575'), 'remove continua ausente');
+  // 5. Retry com a nuvem de volta: 6. confirma, 7. banner some, 8. pendente limpo.
+  a.context.fbDb = { runTransaction: strictRun };
+  await a.save();
+  assert.equal(a.context.syncPushPending, false, 'sucesso limpa o pendente (banner some)');
+  // 9+10+11. Nuvem com executed + keeper, sem remove.
+  const meta = cloud.peekMeta();
+  assert.equal(meta.lesionRevisions[RID].structuralPlan.status, 'executed');
+  assert.equal(meta.lesionRevisions[RID].structuralExecution.executionId, 'exec_t1');
+  assert.deepEqual(Array.from(cloud.peekChunkItems(0)).map((e) => e.id).sort(), ['seed_206']);
+  // 12. Reboot no mesmo device continua executed.
+  await a.boot();
+  assert.equal(a.context.LESION_REVISIONS[RID].structuralPlan.status, 'executed', 'reload mantém executed');
+  // Quarentena fiel à produção (isQuarantinedSeedId consulta LESION_MERGES):
+  // id fundido nunca volta pelo SEED nem por PC desatualizado.
+  a.context.isQuarantinedSeedId = (id) => !!(a.context.LESION_MERGES && Object.prototype.hasOwnProperty.call(a.context.LESION_MERGES, id));
+  // 13. Remoto pré-execução (accepted + seed_575 de volta, revisão igual) não vence.
+  const oldMeta = JSON.parse(JSON.stringify(meta));
+  oldMeta.lesionRevisions[RID].structuralPlan.status = 'accepted';
+  oldMeta.lesionRevisions[RID].structuralPlan.decidedAt = '2026-09-27T00:01:00.000Z';
+  delete oldMeta.lesionRevisions[RID].structuralExecution;
+  const oldChunk = JSON.parse(JSON.stringify(Array.from(cloud.peekChunkItems(0))));
+  oldChunk.push(makeSeedEntry({ id: 'seed_575', name: 'Teratoma cístico maduro' }));
+  await cloud.FB_META_REF().set(oldMeta);
+  await cloud.FB_CHUNK_REF(0).set({ items: oldChunk });
+  await a.markDirty();
+  await a.save();
+  assert.equal(a.context.LESION_REVISIONS[RID].structuralPlan.status, 'executed', 'remoto antigo não reverte executed');
+  assert.ok(!a.context.DATA.some((e) => e.id === 'seed_575'), 'seed_575 não ressuscita no pull');
+  assert.deepEqual(Array.from(cloud.peekChunkItems(0)).map((e) => e.id).sort(), ['seed_206'], 'nuvem converge sem o remove');
+  // 14. Varredura completa: nenhum array aninhado no payload gravado.
+  const sweep = [];
+  sweep.push(...a.context.findNestedArrayPaths(cloud.peekMeta(), 'atlas_state/main'));
+  for (let i = 0; i < (cloud.peekMeta().chunkCount || 0); i++) sweep.push(...a.context.findNestedArrayPaths(Array.from(cloud.peekChunkItems(i)), 'DATA'));
+  assert.deepEqual(sweep, [], 'payload completo sem arrays aninhados');
 });
 
 // ===========================================================================
