@@ -8,6 +8,27 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**Ponte estrutural — Fase 1: exportação somente leitura (2026-09-26):** a aba
+💡 Ações manuais tem cópia individual e em lote no envelope JSON
+`atlas_manual_action_batch` v1 (`buildManualActionAiBatch`). Source é DATA
+atual, imagens passam por allowlist de metadados; candidatos apenas técnicos
+por nome/enTerm/tag, mapeamento explícito centralizado e plano 091c, sempre
+com `candidateReason`. Não há importador/executor da Ponte 2; Ponte 1
+permanece intocada. Cópia aguarda clipboard e oferece textarea manual se
+falhar. Nenhum dado do acervo, estado de revisão ou asset é alterado ao
+exportar. Teste novo `tests/manual-action-ai-export.test.js`.
+Validação local: `manual-action-ai-export` 10/10 (inclui rejeição
+`seroso`×`mucinoso`); `lesion-review` 138/138;
+`lesion-revisions-sync` 15/15; `clinical-cases` 47/47;
+`controlled-duplicate-merge` 27/27 com normalização de CRLF apenas no teste;
+`critical-flows` 23/23; `multi-device-sync` 181/181; `external-import`
+79/79. Suíte ampla Windows antes do último teste focado: 1458 testes ·
+1441 PASS · 12 FAIL · 5 TODO;
+10 FAIL históricos + 2 asserts estáticos herdados do stale-save em
+`image-metadata-sync`/`site-taxonomy` (esperam `existing.*`, código agora
+usa `saveEntryImages`/`t`). `duplicate-detection`: 6 PASS/1 FAIL histórico.
+Teste manual do pacote real no navegador autenticado ainda pendente.
+
 **Save stale do editor (2026-09-26):** o Salvar registrava tombstone para tudo que não estava na galeria da tela — inclusive imagem que chegou de outro PC com o formulário aberto — e gravava no objeto DATA destacado pelo pull. Agora o formulário fotografa as imagens da abertura (`formImagesOpenList`), resolve o objeto ATUAL em DATA no Save (`saveEntry`), une remotas novas via `mergeStaleFormImagesForSave` (identidade estável, metadados remotos intactos) e só tombstona o que estava na base e sumiu; 092 faz rebase no estado atual, stamp/079d usam a base atual. Teste `editor-stale-save` 18/18; `critical-flows` 23/23, `multi-device-sync` 181/181, demais sem regressão. Smoke em navegador real pendente.
 
 **Proteção 091c-b (2026-09-26, sem executar fusão):** keeper só por imagem real persistida (`isRealPersistedImageForMerge`: assetId/publicId/Cloudinary; placeholder/`img` legado nunca forçam); casos equivalentes fundidos campo a campo no fold (`mergeClinicalCasesForFold`: união de `imageRefs`/`quizPick`, textos complementares, escalares por `updatedAt`); sinais/classificações distintos sempre somam (`mergeDidacticItems`); nomes removidos e enTerms alternativos viram tags pesquisáveis; links pela normalização 080–082; progresso/revisões/tombstones/sync inalterados. Testes: `controlled-duplicate-merge` 27/27, `multi-device-sync` 181/181, `critical-flows` 23/23; suíte ampla 1431 testes · 1416 PASS · 10 FAIL já conhecidos na base Windows · 5 TODO, nenhuma falha nova. Dry-run real continua pendente de backup fresco + relatório do Atlas autenticado; NADA foi fundido.

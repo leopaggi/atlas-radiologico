@@ -15706,6 +15706,11 @@ function openReadySolutionsModal(){
       manualList.innerHTML = '<div class="review-center-empty">Nenhuma revisão exigindo ação manual.</div>';
       return;
     }
+    const copyAll = document.createElement('button');
+    copyAll.type = 'button'; copyAll.className = 'btn btn-ghost review-manual-copy-all';
+    copyAll.textContent = '📋 Copiar todas para IA';
+    copyAll.onclick = ()=>copyManualActionAiBatch(getManualActionSolutions().map(r=>r.id));
+    manualList.appendChild(copyAll);
     reviews.forEach(r=>{
       const meta = reviewCenterLesionMeta(r.lesionId, r);
       const reason = r.manualActionReason || (r.solution && r.solution.reason) || '';
@@ -15722,6 +15727,7 @@ function openReadySolutionsModal(){
           ${sug.applicable ? `<div class="review-placement-suggestion"><div><b>Sugestão da IA:</b> ${escAttr(meta.lesion?meta.lesion.s:'')}</div><div>→ também em <b>${escAttr(sug.label)}</b></div></div>` : ''}
         </div>
         <div class="review-center-row-actions">
+          <button type="button" class="btn btn-ghost review-manual-copy-one">📋 Copiar pacote para IA</button>
           ${sug.applicable?`<button type="button" class="btn btn-primary review-manual-apply-placement">✓ Aplicar localização sugerida</button>`:''}
           ${meta.found?`<button type="button" class="btn btn-ghost review-manual-open">${isImage?'🖼 Abrir lesão para ajustar imagens':'✏ Abrir lesão'}</button>`:''}
           <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}${reviewResolveButtonHtml(r)}
@@ -15729,6 +15735,7 @@ function openReadySolutionsModal(){
           <button type="button" class="btn btn-ghost review-manual-reopen">↩ Voltar para revisões</button>
           <button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>
         </div>`;
+      row.querySelector('.review-manual-copy-one').onclick = ()=>copyManualActionAiBatch([r.id]);
       const completeBtn = row.querySelector('.review-global-complete');
       if(completeBtn) completeBtn.onclick = async ()=>{ const res = completeGlobalReview(r.id); if(res.ok){ await saveLesionRevisions(); toast('Pendência concluída.'); renderBothLists(); } };
       const applyBtn = row.querySelector('.review-manual-apply-placement');
@@ -21501,6 +21508,157 @@ function auditImageHoldersByStableKey(queries){
     }
     return { assetId, stableKey: wanted, holders };
   });
+}
+
+/* PONTE ESTRUTURAL — FASE 1: exportação SOMENTE LEITURA das revisões já
+   marcadas manual_action_required. Não usa o parser/allowlist da Ponte 1,
+   não prepara execução e não altera DATA, revisões, imagens ou sync. */
+const STRUCTURAL_REVIEW_CANDIDATE_NAMES = {
+  'teratoma cistico maduro':['Teratoma maduro (cisto dermoide)'],
+  'cistadenoma mucinoso ovariano':['Cistoadenoma mucinoso'],
+  'cistadenoma seroso ovariano':['Cistoadenoma seroso'],
+  'carcinoma de endometrio':['Carcinoma endometrial'],
+  'carcinoma espinocelular do colo uterino':['Carcinoma do colo uterino'],
+  'gestacao ectopica tubaria':['Gravidez ectópica','Gestação ectópica'],
+  'cancer endometrial seroso':['Carcinoma endometrial'],
+  'placenta acreta spectrum':['Placenta acreta','Placenta accreta spectrum','Espectro de acretismo placentário'],
+  'paraovarian cyst':['Cisto paratubário (cisto de Morgagni)']
+};
+function structuralReviewPick(value, keys){
+  const out = {};
+  if(!value || typeof value!=='object' || Array.isArray(value)) return out;
+  keys.forEach(k=>{ if(Object.prototype.hasOwnProperty.call(value,k) && value[k]!==undefined) out[k]=value[k]; });
+  return out;
+}
+function structuralReviewImageMeta(im){
+  if(!im || typeof im!=='object') return null;
+  const fields = ['label','source','publicId','assetId','originalUrl','sourcePage','sourceSite','license','artist','attribution',
+    'lesionId','lesionName','assignedAt','mergedFromLesionId'];
+  const out = structuralReviewPick(im, fields);
+  if(im.metaUpdatedAt) out.metaUpdatedAt=structuralReviewPick(im.metaUpdatedAt,['label','sourcePage','sourceSite','license','artist','attribution']);
+  if(im.clinicalContext) out.clinicalContext=structuralReviewPick(im.clinicalContext,['presentation','patientAge','patientSex','notes']);
+  if(im.clinicalContextUpdatedAt) out.clinicalContextUpdatedAt=structuralReviewPick(im.clinicalContextUpdatedAt,['presentation','patientAge','patientSex','notes']);
+  if(typeof im.data==='string' && /^https?:\/\//i.test(im.data)) out.data=im.data;
+  if(typeof im.thumb==='string' && /^https?:\/\//i.test(im.thumb)) out.thumb=im.thumb;
+  return out;
+}
+function structuralReviewRecord(entry){
+  if(!entry) return null;
+  const map = (arr, keys)=>Array.isArray(arr) ? arr.filter(x=>x && typeof x==='object').map(x=>structuralReviewPick(x,keys)) : [];
+  const refKeys=['imageId','order','captionOverride','creditOverride','createdAt','updatedAt','deletedAt','quizPick','quizPickAt'];
+  const didactic = (arr, fields)=>map(arr,fields).map((item,i)=>{
+    const raw=arr.filter(x=>x && typeof x==='object')[i];
+    if(Array.isArray(raw.imageRefs)) item.imageRefs=map(raw.imageRefs,refKeys);
+    if(Array.isArray(raw.images)) item.images=raw.images.map(structuralReviewImageMeta).filter(Boolean);
+    if(Array.isArray(raw.links)) item.links=map(raw.links,['label','url']);
+    return item;
+  });
+  return {
+    id:entry.id, name:entry.name, section:entry.s, site:entry.site,
+    notes:entry.notes||'', classification:entry.classification||null,
+    tags:Array.isArray(entry.tags)?entry.tags.slice():[], enTerm:entry.enTerm||'',
+    images:Array.isArray(entry.images)?entry.images.map(structuralReviewImageMeta).filter(Boolean):[],
+    altPlacements:map(entry.altPlacements,['s','site']), links:map(entry.links,['label','url','userEdited']),
+    clinicalCases:didactic(entry.clinicalCases,['id','title','source','sourceUrl','origin','patientAge','patientSex','modality','presentation','notes','order','createdAt','updatedAt','deletedAt','addedAt','legacyKey']),
+    radiologicSigns:didactic(entry.radiologicSigns,['id','title','description','strength','modality','notes','referenceUrl','order','createdAt','updatedAt','deletedAt']),
+    classificationSchemes:didactic(entry.classificationSchemes,['id','title','content','order','createdAt','updatedAt','deletedAt'])
+  };
+}
+function findStructuralReviewCandidates(review, source){
+  if(!review || !source) return [];
+  const text=[review.requestText,review.manualAction && review.manualAction.type,review.manualActionReason,
+    review.solution && review.solution.text].filter(Boolean).join(' ');
+  if(!/duplic|clon|fundir|fus[aã]o|transferir imagens|merge/i.test(text)) return [];
+  const norm = s=>normalizeExternalTitle(s||'');
+  const srcName=norm(source.name), srcEn=norm(source.enTerm);
+  const declared=new Set();
+  const hints=STRUCTURAL_REVIEW_CANDIDATE_NAMES[srcName]||STRUCTURAL_REVIEW_CANDIDATE_NAMES[srcEn]||[];
+  hints.forEach(n=>declared.add(norm(n)));
+  // 091c: grupos clínicos já aprovados no plano; NÃO adiciona id novo nem
+  // afirma equivalência para grupos apenas semelhantes.
+  if(typeof APPROVED_CLINICAL_MERGES_091C!=='undefined'){
+    APPROVED_CLINICAL_MERGES_091C.forEach(g=>{
+      if(g.members.some(m=>norm(m.name)===srcName && m.s===source.s && m.site===source.site))
+        g.members.forEach(m=>declared.add(norm(m.name)));
+    });
+  }
+  const ignored=new Set(['carcinoma','cancer','tumor','lesao','colo','uterino','ovariano','ovario','massa']);
+  const tokens=s=>tokenizeExternalTitle(s).filter(t=>!ignored.has(t));
+  const srcTokens=tokens(source.name);
+  const out=[];
+  (Array.isArray(DATA)?DATA:[]).forEach(e=>{
+    if(!e || !e.id || e.id===source.id || (typeof LESION_MERGES!=='undefined' && LESION_MERGES[e.id])) return;
+    const name=norm(e.name), en=norm(e.enTerm);
+    // Histologias incompatíveis não entram por sobreposição lexical de
+    // "cistadenoma ovariano", "teratoma" etc. Isto NÃO decide diagnóstico;
+    // apenas evita candidatos técnicos sabidamente enganosos.
+    const exclusive=(a,b)=>new RegExp('\\b(?:'+a+')\\b').test(srcName) && new RegExp('\\b(?:'+b+')\\b').test(name);
+    if(exclusive('seroso|serosa','mucinoso|mucinosa') || exclusive('mucinoso|mucinosa','seroso|serosa') ||
+      exclusive('maduro|madura','imaturo|imatura') || exclusive('imaturo|imatura','maduro|madura')) return;
+    const reasons=[];
+    if(name && name===srcName) reasons.push('normalized_name_match');
+    if(srcEn && en && srcEn===en) reasons.push('same_enTerm');
+    if((Array.isArray(e.tags)?e.tags:[]).some(t=>norm(t)===srcName) || (Array.isArray(source.tags)?source.tags:[]).some(t=>norm(t)===name)) reasons.push('known_alias');
+    if(declared.has(name)) reasons.push('declared_candidate_name');
+    if(!reasons.length && e.s===source.s && e.site===source.site && srcTokens.length){
+      const shared=srcTokens.filter(t=>tokens(e.name).includes(t));
+      if(shared.length && externalMatchBand(source.name,e.name)==='alta') reasons.push('same_site_distinctive_name_similarity');
+    }
+    if(reasons.length) out.push({...structuralReviewRecord(e),candidateReason:reasons});
+  });
+  const rank={declared_candidate_name:0,normalized_name_match:1,same_enTerm:2,known_alias:3,same_site_distinctive_name_similarity:4};
+  return out.sort((a,b)=>Math.min(...a.candidateReason.map(x=>rank[x]))-Math.min(...b.candidateReason.map(x=>rank[x])) || String(a.id).localeCompare(String(b.id))).slice(0,8);
+}
+function buildManualActionAiBatch(reviewIds){
+  const ids=Array.isArray(reviewIds)?reviewIds:[];
+  const unique=[...new Set(ids)];
+  if(unique.length!==ids.length) throw new Error('Revisões repetidas no pacote');
+  const actions=unique.map(id=>{
+    const r=LESION_REVISIONS[id];
+    if(!r || r.status!=='manual_action_required') throw new Error('Ação manual não está mais disponível: '+id);
+    const scope=isGlobalReview(r)?'global':'lesion';
+    const source=scope==='lesion' ? (DATA.find(e=>e && e.id===r.lesionId)||null) : null;
+    const attempts=buildReviewAiAttempts(r);
+    return {
+      reviewId:r.id, scope, actionType:(r.manualAction && r.manualAction.type)||null,
+      requestText:r.requestText||'', aiSummary:(r.solution && r.solution.summary)||null,
+      aiReasoning:(r.solution && r.solution.reasoning)||null,
+      manualAction:r.manualAction?{
+        ...structuralReviewPick(r.manualAction,['type','description']),
+        suggestedPlacement:r.manualAction.suggestedPlacement?structuralReviewPick(r.manualAction.suggestedPlacement,['section','site']):null
+      }:null,
+      manualActionReason:r.manualActionReason||null,
+      source:structuralReviewRecord(source), candidateRecords:scope==='lesion'?findStructuralReviewCandidates(r,source):[],
+      previousAttempts:attempts, latestHumanFeedback:resolveLatestHumanFeedback(r,attempts),
+      previousOutcome:attempts.length?attempts[attempts.length-1].outcome:null,
+      rejectionReason:r.rejectionReason||null, rollbackReason:r.rollbackReason||null,
+      category:scope==='global'?(r.category||null):null,
+      previousSolution:r.solution?structuralReviewPick(r.solution,['text','summary','reasoning','createdAt','reason']):null
+    };
+  });
+  return {type:'atlas_manual_action_batch',version:1,generatedAt:new Date().toISOString(),count:actions.length,actions};
+}
+function openManualActionCopyFallback(json){
+  const ov=document.createElement('div'); ov.className='overlay review-manual-copy-fallback';
+  ov.innerHTML='<div class="modal review-center-modal"><h2>📋 Copiar pacote para IA</h2><div class="modal-sub">A cópia automática falhou. Selecione e copie o JSON abaixo.</div><textarea readonly style="width:100%;min-height:260px;max-height:55vh;"></textarea><div class="modal-actions"><button type="button" class="btn btn-ghost">fechar</button></div></div>';
+  const close=()=>{ document.removeEventListener('keydown',key); ov.remove(); };
+  const key=e=>{ if(e.key==='Escape' && ov.isConnected) close(); };
+  ov.onclick=e=>{ if(e.target===ov) close(); };
+  ov.querySelector('button').onclick=close;
+  ov.querySelector('textarea').value=json;
+  document.body.appendChild(ov);
+  document.addEventListener('keydown',key);
+  ov.querySelector('textarea').focus(); ov.querySelector('textarea').select();
+}
+async function copyManualActionAiBatch(reviewIds){
+  try{
+    const json=JSON.stringify(buildManualActionAiBatch(reviewIds),null,2);
+    try{
+      if(!navigator.clipboard || !navigator.clipboard.writeText) throw new Error('clipboard indisponível');
+      await navigator.clipboard.writeText(json);
+      toast('Pacote copiado para a área de transferência.');
+    }catch(_e){ openManualActionCopyFallback(json); }
+  }catch(e){ toast('Não foi possível preparar o pacote: '+e.message); }
 }
 
 </script>

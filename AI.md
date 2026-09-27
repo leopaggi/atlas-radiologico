@@ -1,5 +1,17 @@
 # AI.md — instruções para assistentes de IA (Claude, DeepSeek, ChatGPT, etc.)
 
+## Ponte estrutural — Fase 1: exportação somente leitura (2026-09-26)
+
+Na aba 💡 Ações manuais, `buildManualActionAiBatch` gera JSON de ações
+`manual_action_required` (individual/lote) consultando o `DATA` atual; imagens
+somente com metadados explicitamente selecionados, sem bytes/base64/segredos.
+`findStructuralReviewCandidates` usa identidade normalizada, `enTerm`, tags/
+aliases e nomes declarados em um mapa central + plano 091c; sem decisão de
+duplicidade ou fusão. `copyManualActionAiBatch` aguarda a cópia e oferece
+textarea manual se o clipboard falhar. A Ponte 1 (campos permitidos e
+validação humana) permanece intocada. **Nenhuma resposta da IA é importada,
+nenhum dado estrutural é aplicado nesta fase.**
+
 ## Save stale do editor (2026-09-26)
 
 `formImagesOpenList` fotografa as imagens da abertura (cópias por valor). No Save, `saveEntry` resolve o objeto ATUAL em DATA (o pull pode ter substituído o `existing`), `mergeStaleFormImagesForSave` une remotas novas (fora da base, metadados intactos, sem tombstone) e só a base ausente da galeria vira remoção explícita (073). 092/`stamp`/079d operam sobre o estado atual. Quiz, didático, 091c e sync inalterados. Teste: `node tests/editor-stale-save.test.js` (18/18).

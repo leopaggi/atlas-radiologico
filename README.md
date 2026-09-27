@@ -1,5 +1,15 @@
 # Atlas Radiológico
 
+### Ponte estrutural — Fase 1: exportação somente leitura
+
+Na aba **💡 Soluções disponíveis → 🛠 Ações manuais**, é possível copiar um
+pacote JSON de uma ação ou de todas as ações abertas para analisar com uma IA
+externa. Inclui contexto atual da lesão, imagens apenas como metadados e
+candidatos técnicos conservadores com o motivo da correspondência. Falha do
+clipboard mostra JSON selecionável para cópia manual. Copiar não altera
+revisões nem lesões e não executa planos estruturais. A ponte antiga de
+correções limitadas de conteúdo continua independente.
+
 ### Save do editor com outro PC (2026-09-26)
 
 Se outro computador adicionar uma imagem enquanto o formulário está aberto, o Salvar mantém essa imagem: só o que foi removido de propósito na tela gera exclusão. Teste: `node tests/editor-stale-save.test.js`.

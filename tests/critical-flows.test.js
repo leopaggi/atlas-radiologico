@@ -587,7 +587,8 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // SAVE STALE (+53 só no importHandler): helper puro mergeStaleFormImagesForSave
   // + base formImagesOpenList + resolução saveEntry/união/tombstones no f-save —
   // tudo depois de loadData; recovery/boot intactos.
-  assert.equal(importHandler.line, 16434);
+  // Ponte 2: 7 linhas de botões na aba Ações manuais (sem tocar o importador).
+  assert.equal(importHandler.line, 16441);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

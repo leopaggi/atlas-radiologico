@@ -1,5 +1,31 @@
 # Diario de desenvolvimento
 
+## Ponte estrutural — Fase 1: exportação somente leitura (26/09/2026)
+
+Na aba Ações manuais da Central, foram adicionados os botões “Copiar pacote
+para IA” (um card) e “Copiar todas para IA” (um JSON para a fila). O pacote
+inclui pedido, resumo da IA, tentativas anteriores, lesão atual, casos,
+vínculos, imagens como metadados e possíveis registros relacionados com
+explicação de por que foram sugeridos. A cópia não resolve revisão e não
+aplica nenhuma alteração. Se o navegador negar acesso à área de transferência,
+o JSON aparece numa caixa selecionável. A ponte anterior de correções de
+conteúdo não foi alterada. Importar um plano estrutural fica para uma etapa
+separada.
+
+Arquivos desta entrega: `index.html`, `tests/manual-action-ai-export.test.js`,
+`tests/critical-flows.test.js`, `AI.md`, `README.md`,
+`CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` e este diário. Nenhum dado do
+catálogo ou asset foi alterado por este recurso.
+
+Testes executados: ponte 10/10; Central 138/138; sincronização da Central
+15/15; casos 47/47; fusão controlada 27/27 (shim de CRLF só no runner do
+teste); fluxos críticos 23/23; multi-PC 181/181; importação 79/79. Suíte
+ampla no Windows antes do último teste focado: 1458 testes, 1441 PASS,
+12 FAIL conhecidos (10 antigos,
+mais 2 asserts estáticos do stale-save em image-metadata-sync/site-taxonomy)
+e 5 TODO. Integridade de duplicatas: 6 PASS, 1 FAIL histórico. Pacote real
+no navegador autenticado ainda não foi conferido.
+
 ## Save stale de imagens no editor (26/09/2026)
 
 Se o formulário ficava aberto enquanto outro PC adicionava uma imagem, o Salvar apagava essa imagem: a galeria antiga virava a verdade e tudo fora dela era tratado como remoção. Agora o Atlas fotografa as imagens da abertura; no Save, busca o estado atual, junta as imagens novas do outro PC e só registra remoção do que o usuário tirou de propósito. Metadados, contexto clínico, vínculos didáticos e sincronização seguem iguais.
