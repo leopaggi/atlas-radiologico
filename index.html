@@ -5840,6 +5840,27 @@ function mergeLesionRevisions(localRevs, remoteRevs){
       merged.requestHistory = unionBy(win.requestHistory, lose.requestHistory,
         h => (h && h.at) + '|' + (h && h.action) + '|' + (h && h.text), h => h && h.at);
     }
+    // Ponte estrutural — plano e execução têm carimbo PRÓPRIO (precedente
+    // 091d): a decisão mais nova vence independente do updatedAt da revisão,
+    // para uma edição concorrente (ex.: outro PC mexeu no requestText com
+    // updatedAt maior) nunca apagar um plano importado/aceito/executado.
+    // Sem plano/execução dos dois lados, vale o winner como antes.
+    const planTime = p=>{
+      if(!p || typeof p!=='object') return -1;
+      const t1 = Date.parse(p.importedAt||''), t2 = Date.parse(p.decidedAt||'');
+      return Math.max(isNaN(t1)?0:t1, isNaN(t2)?0:t2);
+    };
+    if(lose.structuralPlan && typeof lose.structuralPlan==='object'
+      && planTime(lose.structuralPlan) > planTime(win.structuralPlan))
+      merged.structuralPlan = clone(lose.structuralPlan);
+    const execTime = e=>{
+      if(!e || typeof e!=='object') return -1;
+      const t1 = Date.parse(e.at||''), t2 = Date.parse(e.rolledbackAt||'');
+      return Math.max(isNaN(t1)?0:t1, isNaN(t2)?0:t2);
+    };
+    if(lose.structuralExecution && typeof lose.structuralExecution==='object'
+      && execTime(lose.structuralExecution) > execTime(win.structuralExecution))
+      merged.structuralExecution = clone(lose.structuralExecution);
     out[id] = merged;
   }
   return out;
@@ -21970,12 +21991,19 @@ async function importStructuralResolutionBatch(obj){
   const checked = validateStructuralResolutionBatch(parsed);
   if(!checked.ok) return checked;
   const importedAt = new Date().toISOString();
+  const importedNow = Date.now();
   for(const v of checked.resolutions){
     const r = LESION_REVISIONS[v.reviewId];
     r.structuralPlan = {
       status:'imported', importedAt,
       type:v.type, resolution:v, snapshot:buildStructuralPlanSnapshot(v)
     };
+    // Carimbo de atividade OBRIGATÓRIO: sem ele, o merge 084 (vencedor =
+    // updatedAt maior; empate decide pelo JSON canônico) pode eleger uma
+    // cópia remota pré-import e APAGAR o plano do objeto vivo num sync —
+    // a prévia (cópia em memória) continuaria exibindo, mas o accept
+    // falharia com no_imported_plan. updatedAt novo = local vence.
+    r.updatedAt = importedNow;
     pushLesionReviewHistory(r, 'structural_plan_imported', { type:v.type, importedAt });
   }
   await saveLesionRevisions();
@@ -21985,8 +22013,13 @@ async function acceptStructuralPlan(reviewId){
   // Aceitar = "plano aprovado para futura execução" (Fase 3). NÃO executa nada:
   // não toca DATA, imagens, ownership, altPlacements ou tombstones.
   const r = LESION_REVISIONS[reviewId] || null;
-  if(!r || !r.structuralPlan || r.structuralPlan.status!=='imported')
-    return { ok:false, reason:'no_imported_plan' };
+  if(!r) return { ok:false, reason:'review_not_found' };
+  // Diagnóstico exato: distingue "plano sumiu do estado vivo" (persistência/
+  // sync) de "plano existe mas não está importado" (fluxo). Após a correção
+  // de persistência, o primeiro caso não ocorre no fluxo normal.
+  if(!r.structuralPlan) return { ok:false, reason:'missing_structural_plan_for_review:'+reviewId };
+  if(r.structuralPlan.status!=='imported')
+    return { ok:false, reason:'no_imported_plan', detail:r.structuralPlan.status };
   const stale = isStructuralPlanStale(r);
   if(stale.stale) return { ok:false, reason:'stale_plan', detail:stale };
   r.structuralPlan.status = 'accepted';
@@ -22002,8 +22035,10 @@ async function acceptStructuralPlan(reviewId){
 async function rejectStructuralPlan(reviewId){
   // Rejeitar descarta o plano (mantém histórico). Não executa nada.
   const r = LESION_REVISIONS[reviewId] || null;
-  if(!r || !r.structuralPlan || (r.structuralPlan.status!=='imported' && r.structuralPlan.status!=='accepted'))
-    return { ok:false, reason:'no_imported_plan' };
+  if(!r) return { ok:false, reason:'review_not_found' };
+  if(!r.structuralPlan) return { ok:false, reason:'missing_structural_plan_for_review:'+reviewId };
+  if(r.structuralPlan.status!=='imported' && r.structuralPlan.status!=='accepted')
+    return { ok:false, reason:'no_imported_plan', detail:r.structuralPlan.status };
   const was = r.structuralPlan.status;
   r.structuralPlan.status = 'rejected';
   r.structuralPlan.decidedAt = new Date().toISOString();
@@ -22436,7 +22471,7 @@ async function rollbackStructuralExecution(reviewId){
     try{ await saveData(); }catch(_e){}
     try{ await structuralPersistAll(); }catch(_e){}
     ex.status = 'rolledback'; ex.rolledbackAt = new Date().toISOString();
-    if(r.structuralPlan) r.structuralPlan.status = 'rolledback';
+    if(r.structuralPlan){ r.structuralPlan.status = 'rolledback'; r.structuralPlan.decidedAt = new Date().toISOString(); }
     if(r.status==='accepted'){ r.status = 'manual_action_required'; delete r.completedAt; r.resolvedManually = false; }
     r.updatedAt = Date.now(); // reabertura local vence cópia remota no merge 084
     pushLesionReviewHistory(r, 'structural_plan_rolled_back', { executionId:ex.executionId });

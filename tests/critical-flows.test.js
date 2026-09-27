@@ -577,9 +577,9 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // acrescentaram 52 linhas; sem alteração nos fluxos de recovery/boot.
   // 091c-b: helpers de imagem real + merge de casos (~122 linhas) antes da
   // primeira âncora; sem alteração nos fluxos de recovery/boot/import.
-  assert.equal(recovery.line, 9445);
-  assert.equal(brokenArtifacts.line, 9435);
-  assert.equal(loadData.line, 11996);
+  assert.equal(recovery.line, 9466);
+  assert.equal(brokenArtifacts.line, 9456);
+  assert.equal(loadData.line, 12017);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
@@ -596,7 +596,11 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // "Pré-visualizar plano" no card (+1) + wiring (+2); prévia relê estado
   // vivo e re-renderiza ao fechar; aceite/rejeição/rollback carimbam
   // updatedAt (merge 084 determinístico).
-  assert.equal(importHandler.line, 16455);
+  // Persistência do plano (2026-09-27, bug no_imported_plan): +21 nestas
+  // âncoras — bloco do merge 084 que preserva structuralPlan/Execution por
+  // carimbo próprio (antes do recovery). As mudanças em import/accept/
+  // reject/rollback ficam depois do importHandler e não o deslocam.
+  assert.equal(importHandler.line, 16476);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
