@@ -45,7 +45,7 @@ const names = [
   'structuralApplyMerge', 'structuralApplyRemovePlacement',
   'structuralApplyTransferImages', 'structuralApplyAddCases',
   'rollbackStructuralExecution',
-  'structuralDryRunSummaryHtml', 'structuralPlanCardBadgeHtml', 'structuralPlanCardButtonsHtml',
+  'structuralDryRunSummaryHtml', 'getEffectiveStructuralStatus', 'structuralPlanCardBadgeHtml', 'structuralPlanCardButtonsHtml',
   'resolveReviewManually',
   'imageOwnerIdV1', 'assertManualImageOwnershipChange', 'canChangeImageOwnership',
   'clinicalCaseIdentityKey'

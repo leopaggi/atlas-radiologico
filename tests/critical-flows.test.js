@@ -577,9 +577,9 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // acrescentaram 52 linhas; sem alteração nos fluxos de recovery/boot.
   // 091c-b: helpers de imagem real + merge de casos (~122 linhas) antes da
   // primeira âncora; sem alteração nos fluxos de recovery/boot/import.
-  assert.equal(recovery.line, 9548);
-  assert.equal(brokenArtifacts.line, 9538);
-  assert.equal(loadData.line, 12099);
+  assert.equal(recovery.line, 9559);
+  assert.equal(brokenArtifacts.line, 9549);
+  assert.equal(loadData.line, 12110);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
@@ -611,7 +611,10 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // Lote persistente (2026-09-27, UX lote): +6 no importHandler — resumo do
   // lote + botão Ver lote na aba Ações manuais. Registro via batchKey/hash
   // dentro do plano (sem estado global novo). Sem alteração nos fluxos.
-  assert.equal(importHandler.line, 16596);
+  // Status efetivo (2026-09-27, bug mucinoso amarelo): +11 nestas âncoras —
+  // getEffectiveStructuralStatus + guards already_executed + terminal pela
+  // execution. Sem alteração nos fluxos de recovery/boot/import.
+  assert.equal(importHandler.line, 16607);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

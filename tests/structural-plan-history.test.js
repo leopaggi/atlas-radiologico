@@ -33,7 +33,7 @@ function fn(name) {
 const names = ['canonicalJsonString', 'pushLesionReviewHistory',
   'structuralPlanLesion', 'structuralClone', 'structuralLesionIndex', 'structuralMapHas',
   'structuralSnapshotLesions', 'structuralSnapshotMaps', 'structuralRestoreSnapshots',
-  'rollbackStructuralExecution', 'getManualActionSolutions', 'getStructuralHistorySolutions',
+  'rollbackStructuralExecution', 'getEffectiveStructuralStatus', 'getManualActionSolutions', 'getStructuralHistorySolutions',
   'structuralHistoryCardHtml', 'structuralExecutionDetailsHtml', 'mergeLesionRevisions'];
 const src = names.map(fn).join('\n');
 const execConsts = html.slice(

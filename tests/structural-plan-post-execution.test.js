@@ -44,7 +44,7 @@ const names = [
   'structuralPersistAll', 'structuralRestoreSnapshots', 'executeStructuralPlan',
   'structuralApplyMerge', 'structuralPlanPreviewHtml', 'structuralPlanLiveView',
   'structuralPlanStatusRowHtml', 'structuralDryRunSummaryHtml',
-  'structuralPlanCardBadgeHtml', 'structuralPlanCardButtonsHtml',
+  'getEffectiveStructuralStatus', 'structuralPlanCardBadgeHtml', 'structuralPlanCardButtonsHtml',
   'resolveReviewManually', 'mergeLesionRevisions',
   'imageOwnerIdV1', 'assertManualImageOwnershipChange', 'canChangeImageOwnership'
 ];
