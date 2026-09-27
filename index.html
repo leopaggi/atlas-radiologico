@@ -15826,6 +15826,12 @@ function openReadySolutionsModal(){
     importBtn.textContent = '📥 Importar plano estrutural da IA';
     importBtn.onclick = ()=>openStructuralPlanImportModal(()=>renderBothLists());
     manualList.appendChild(importBtn);
+    const batchBox = document.createElement('div');
+    batchBox.className = 'review-structural-batch-box';
+    batchBox.innerHTML = structuralBatchSummaryHtml();
+    const batchOpenBtn = batchBox.querySelector('.review-structural-batch-open');
+    if(batchOpenBtn) batchOpenBtn.onclick = ()=> openStructuralBatchModal(renderBothLists);
+    manualList.appendChild(batchBox);
     reviews.forEach(r=>{
       const meta = reviewCenterLesionMeta(r.lesionId, r);
       const reason = r.manualActionReason || (r.solution && r.solution.reason) || '';
@@ -22119,6 +22125,58 @@ function validateStructuralResolutionBatch(obj){
   }
   return { ok:true, reason:null, resolutions:out };
 }
+/* Registro persistente do LOTE estrutural (sem duplicar payload).
+   Cada plano carrega só 3 campos extras (viajam no sync existente, dentro de
+   r.structuralPlan — nenhum estado global novo, nenhum merge novo):
+   batchKey (lote = mesmo conjunto de reviewIds), batchImportedAt e
+   resolutionHash (conteúdo desta resolution). A visão do lote é DERIVADA do
+   estado vivo: reload/sync nunca a perdem enquanto os planos existirem.
+   Planos antigos (pré-lote) aparecem no grupo "legado". */
+function structuralBatchKey(resolutions){
+  try{
+    const ids = (Array.isArray(resolutions)?resolutions:[])
+      .map(v=>v && v.reviewId).filter(id=>typeof id==='string' && id).sort();
+    return 'sb_' + ids.join('|');
+  }catch(_e){ return 'sb_unknown'; }
+}
+function structuralResolutionHash(v){
+  try{ return typeof canonicalJsonString==='function' ? canonicalJsonString(v) : JSON.stringify(v); }
+  catch(_e){ return null; }
+}
+function getStructuralPlanBatches(){
+  // Agrupa planos vivos por lote. Puro: só lê LESION_REVISIONS.
+  const groups = {};
+  for(const r of Object.values(LESION_REVISIONS || {})){
+    if(!r || !r.structuralPlan || !r.structuralPlan.resolution) continue;
+    const p = r.structuralPlan;
+    const key = (typeof p.batchKey==='string' && p.batchKey) || 'legado';
+    if(!groups[key]) groups[key] = { batchKey:key, importedAt:null, reviewIds:[], reviews:[] };
+    groups[key].reviews.push(r);
+    groups[key].reviewIds.push(r.id);
+    const imp = Date.parse(p.batchImportedAt || p.importedAt || '')||0;
+    const cur = groups[key].importedAt ? Date.parse(groups[key].importedAt) : 0;
+    if(imp > cur) groups[key].importedAt = p.batchImportedAt || p.importedAt;
+  }
+  return Object.values(groups).sort((a,b)=>String(b.importedAt||'') < String(a.importedAt||'') ? -1 : 1);
+}
+function structuralBatchCounts(group){
+  // Contagem por estado para o cabeçalho/auditoria do lote.
+  const c = { total:0, executed:0, accepted:0, imported:0, rejected:0, rolledback:0, unresolved:0, awaiting:0 };
+  (group && Array.isArray(group.reviews) ? group.reviews : []).forEach(r=>{
+    const p = r && r.structuralPlan;
+    if(!p) return;
+    c.total++;
+    const st = p.status, type = p.type;
+    if(st==='executed') c.executed++;
+    else if(st==='accepted') c.accepted++;
+    else if(st==='imported') c.imported++;
+    else if(st==='rejected') c.rejected++;
+    else if(st==='rolledback') c.rolledback++;
+    if(type==='unresolved' || type==='no_action') c.unresolved++;
+    else if(st==='imported' || st==='accepted') c.awaiting++;
+  });
+  return c;
+}
 async function importStructuralResolutionBatch(obj){
   // Tudo-ou-nada: qualquer item inválido rejeita o lote inteiro sem tocar nada.
   // Sucesso grava SÓ r.structuralPlan + histórico (via saveLesionRevisions, o
@@ -22133,11 +22191,28 @@ async function importStructuralResolutionBatch(obj){
   if(!checked.ok) return checked;
   const importedAt = new Date().toISOString();
   const importedNow = Date.now();
+  const batchKey = structuralBatchKey(checked.resolutions);
+  const imported = [], skipped = [];
   for(const v of checked.resolutions){
     const r = LESION_REVISIONS[v.reviewId];
+    const hash = structuralResolutionHash(v);
+    const cur = r && r.structuralPlan;
+    // Idempotência: MESMO conteúdo já importado → não duplica histórico,
+    // não reseta estado, não transforma executed em imported.
+    if(cur && cur.resolutionHash && hash && cur.resolutionHash===hash){
+      skipped.push({ reviewId:v.reviewId, reason:'already_imported' });
+      continue;
+    }
+    // Proteção terminal: executed/rolledback NUNCA são sobrescritos por
+    // reimportação (nem mesmo com conteúdo diferente).
+    if(cur && (cur.status==='executed' || cur.status==='rolledback')){
+      skipped.push({ reviewId:v.reviewId, reason:'terminal_state_preserved', status:cur.status });
+      continue;
+    }
     r.structuralPlan = {
       status:'imported', importedAt,
-      type:v.type, resolution:v, snapshot:buildStructuralPlanSnapshot(v)
+      type:v.type, resolution:v, snapshot:buildStructuralPlanSnapshot(v),
+      batchKey, batchImportedAt:importedAt, resolutionHash:hash
     };
     // Carimbo de atividade OBRIGATÓRIO: sem ele, o merge 084 (vencedor =
     // updatedAt maior; empate decide pelo JSON canônico) pode eleger uma
@@ -22145,10 +22220,11 @@ async function importStructuralResolutionBatch(obj){
     // a prévia (cópia em memória) continuaria exibindo, mas o accept
     // falharia com no_imported_plan. updatedAt novo = local vence.
     r.updatedAt = importedNow;
-    pushLesionReviewHistory(r, 'structural_plan_imported', { type:v.type, importedAt });
+    pushLesionReviewHistory(r, 'structural_plan_imported', { type:v.type, importedAt, batchKey });
+    imported.push(v.reviewId);
   }
   await saveLesionRevisions();
-  return { ok:true, reason:null, imported:checked.resolutions.map(v=>v.reviewId), resolutions:checked.resolutions };
+  return { ok:true, reason:null, imported, skipped, batchKey, resolutions:checked.resolutions };
 }
 async function acceptStructuralPlan(reviewId){
   // Aceitar = "plano aprovado para futura execução" (Fase 3). NÃO executa nada:
@@ -22695,7 +22771,11 @@ function openStructuralPlanImportModal(onDone){
     }
     close();
     openStructuralPlanPreviewModal(res.resolutions, onDone);
-    toast('Plano importado: prévia sem execução.');
+    {
+      const nNew = (res.imported||[]).length, nSkip = (res.skipped||[]).length;
+      toast(!nNew && nSkip ? 'Este lote já foi importado — estados preservados.'
+        : 'Plano importado: '+nNew+' novo(s), prévia sem execução.'+(nSkip ? ' ('+nSkip+' já carregado(s) preservado(s))' : ''));
+    }
   };
 }
 function structuralDryRunSummaryHtml(dry){
@@ -22995,6 +23075,78 @@ function openStructuralExecutionDetailsModal(reviewId, onDone){
   ov.querySelector('#structural-exec-details-close').onclick = ()=>{ close(); if(typeof onDone==='function') onDone(); };
   const rb = ov.querySelector('#structural-exec-details-rollback');
   if(rb) rb.onclick = ()=>{ close(); openStructuralPlanRollbackConfirmModal(reviewId, onDone); };
+}
+function structuralBatchEntryHtml(r){
+  // Uma linha do modal do lote ("🧾 Ver lote importado"). Pura: só lê a
+  // revisão — nunca toca DATA (não ressuscita removeId).
+  const esc = s=>String(s==null?'':s).replace(/</g,'&lt;');
+  if(!r || !r.structuralPlan) return '';
+  const p = r.structuralPlan, v = p.resolution || {}, st = p.status;
+  const badge = st==='executed' ? '✅ Executado'
+    : st==='accepted' ? '🔵 Aceito — aguardando execução'
+    : st==='rejected' ? '❌ Rejeitado'
+    : st==='rolledback' ? '↩️ Revertido'
+    : (p.type==='unresolved' || p.type==='no_action') ? '⚠️ Sem resolução segura'
+    : '🟡 Aguardando aprovação';
+  let route = '';
+  if(v.type==='merge_duplicates') route = esc(v.removeId||'')+' → '+esc(v.keeperId||'');
+  else if(v.type==='transfer_images') route = esc(v.fromLesionId||'')+' → '+esc(v.toLesionId||'');
+  else if(v.lesionId) route = esc(v.lesionName||v.lesionId);
+  return '<div class="review-center-row" data-batch-review="'+esc(r.id)+'">' +
+    '<div class="review-center-row-main">' +
+    '<div class="review-center-row-title">'+esc(v.keeperName||v.lesionName||v.toLesionName||v.removeName||r.lesionId||r.id)+'</div>' +
+    '<div class="review-center-row-meta">'+badge+'</div>' +
+    (route?'<div class="review-center-row-meta">'+route+'</div>':'') +
+    '</div><div class="review-center-row-actions">' +
+    '<button type="button" class="btn btn-ghost" data-batch-act="open">👁 Abrir plano</button>' +
+    '</div></div>';
+}
+function structuralBatchModalHtml(){
+  // Todas as resolutions do(s) lote(s) com status individual. Puro.
+  const esc = s=>String(s==null?'':s).replace(/</g,'&lt;');
+  const groups = getStructuralPlanBatches();
+  if(!groups.length) return '<div class="review-center-empty">Nenhum plano estrutural carregado.</div>';
+  return groups.map(g=>{
+    const c = structuralBatchCounts(g);
+    const title = g.batchKey==='legado' ? 'Importações anteriores' : 'Lote importado';
+    return '<div class="review-center-row-main"><div class="review-center-row-title">'+esc(title)+'</div>' +
+      '<div class="review-center-row-meta">'+c.total+' revisões · '+c.executed+' executadas · '+c.awaiting+' aguardando aprovação · '+c.unresolved+' não resolvidas</div></div>' +
+      g.reviews.map(structuralBatchEntryHtml).join('');
+  }).join('');
+}
+function structuralBatchSummaryHtml(){
+  // Cabeçalho da aba Ações manuais ("o lote já está carregado"). Puro.
+  // '' quando não há lote — a aba segue igual a antes.
+  const groups = getStructuralPlanBatches();
+  if(!groups.length) return '';
+  const t = { total:0, executed:0, awaiting:0, unresolved:0 };
+  groups.forEach(g=>{ const c = structuralBatchCounts(g); t.total+=c.total; t.executed+=c.executed; t.awaiting+=c.awaiting; t.unresolved+=c.unresolved; });
+  return '<div class="review-center-row-meta">✅ Plano estrutural carregado — '+t.total+' revisões no lote · '+
+    t.executed+' executadas · '+t.awaiting+' aguardando aprovação · '+t.unresolved+' não resolvidas</div>' +
+    '<button type="button" class="btn btn-ghost review-structural-batch-open">🧾 Ver lote importado</button>';
+}
+function openStructuralBatchModal(onDone){
+  // Modal de auditoria do lote. "Abrir plano" empilha a prévia da revisão
+  // (estado vivo — sem reimportar). Fecha sem alterar nada.
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) close(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) close(); };
+  const close = ()=>{ document.removeEventListener('keydown', closeOnEsc); ov.remove(); try{ if(typeof onDone==='function') onDone(); }catch(_e){} };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = '<div class="modal review-center-modal"><h2>🧾 Lote estrutural importado</h2>' +
+    '<div class="modal-sub">Todas as resolutions do lote com o estado atual de cada uma. Nada aqui executa.</div>' +
+    '<div class="review-center-list">'+structuralBatchModalHtml()+'</div>' +
+    '<div class="modal-actions"><button type="button" class="btn btn-ghost" id="structural-batch-close">fechar</button></div></div>';
+  document.body.appendChild(ov);
+  ov.querySelector('#structural-batch-close').onclick = close;
+  ov.querySelectorAll('[data-batch-act="open"]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const row = btn.closest('[data-batch-review]');
+      const id = row ? row.getAttribute('data-batch-review') : null;
+      if(id) openStructuralPlanPreviewModalForReview(id, onDone);
+    };
+  });
 }
 function openStructuralPlanPreviewModalForReview(reviewId, onDone){
   const v = structuralPlanLiveView(reviewId);

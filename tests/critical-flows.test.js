@@ -608,7 +608,10 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // Histórico estrutural (2026-09-27, UX pós-execução): +12 até recovery e
   // +44 no importHandler — getStructuralHistorySolutions + aba/cards/detalhes
   // no Soluções disponíveis. Sem alteração nos fluxos.
-  assert.equal(importHandler.line, 16590);
+  // Lote persistente (2026-09-27, UX lote): +6 no importHandler — resumo do
+  // lote + botão Ver lote na aba Ações manuais. Registro via batchKey/hash
+  // dentro do plano (sem estado global novo). Sem alteração nos fluxos.
+  assert.equal(importHandler.line, 16596);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
