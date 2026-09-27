@@ -276,8 +276,10 @@ test('UI: botão importador na aba manual + badge de plano no card',()=>{
   assert.match(src,/review-manual-import-plan/);
   assert.match(src,/Importar plano estrutural da IA/);
   assert.match(src,/openStructuralPlanImportModal/);
-  assert.match(src,/r\.structuralPlan \?/);
-  assert.match(src,/aguardando execução \(Fase 3\)/);
+  // Fase 3: o badge inline virou structuralPlanCardBadgeHtml (🟡/🟢/✅/🔴/⚠️ por estado)
+  // + structuralPlanCardButtonsHtml (▶ executar só em accepted fresco, ↩️ em executed).
+  assert.match(src,/structuralPlanCardBadgeHtml/);
+  assert.match(src,/structuralPlanCardButtonsHtml/);
 });
 test('primeiro lote de exemplo do escopo: teratoma/mucinoso/seroso/endometrial/ectopica/paraovarian/riedel',async()=>{
   const c=ctxFixture();

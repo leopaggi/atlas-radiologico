@@ -588,7 +588,11 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // + base formImagesOpenList + resolução saveEntry/união/tombstones no f-save —
   // tudo depois de loadData; recovery/boot intactos.
   // Ponte 2: 7 linhas de botões na aba Ações manuais (sem tocar o importador).
-  assert.equal(importHandler.line, 16441);
+  // Fase 3 (2026-09-27): +5 antes do importHandler — badge do plano no card
+  // (+1: structuralPlanCardBadgeHtml/ButtonsHtml) + wiring executar/reverter
+  // (+4). O +6 restante (16441->16447) já existia no commit da Fase 2 sem o
+  // bump correspondente; sem alteração nos fluxos de recovery/boot/import.
+  assert.equal(importHandler.line, 16452);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

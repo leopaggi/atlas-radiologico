@@ -15729,13 +15729,14 @@ function openReadySolutionsModal(){
           <div class="review-center-row-meta">${meta.sub?meta.sub+' · ':''}exige ação manual${reason?' · '+String(reason).replace(/</g,'&lt;'):''}</div>
           <div class="review-center-row-request"><b>Pedido:</b> ${(r.requestText||'').replace(/</g,'&lt;')}</div>
           ${r.solution && r.solution.text ? `<div class="review-center-row-solution"><b>Resumo da IA:</b> ${String(r.solution.text).replace(/</g,'&lt;')}</div>` : ''}
-          ${r.structuralPlan ? `<div class="review-center-row-meta">📥 plano estrutural: <b>${escAttr(r.structuralPlan.status)}</b> (${escAttr(r.structuralPlan.type||'?')}) — aguardando execução (Fase 3)</div>` : ''}
+          ${structuralPlanCardBadgeHtml(r)}
           ${sug.applicable ? `<div class="review-placement-suggestion"><div><b>Sugestão da IA:</b> ${escAttr(meta.lesion?meta.lesion.s:'')}</div><div>→ também em <b>${escAttr(sug.label)}</b></div></div>` : ''}
         </div>
         <div class="review-center-row-actions">
           <button type="button" class="btn btn-ghost review-manual-copy-one">📋 Copiar pacote para IA</button>
           ${sug.applicable?`<button type="button" class="btn btn-primary review-manual-apply-placement">✓ Aplicar localização sugerida</button>`:''}
           ${meta.found?`<button type="button" class="btn btn-ghost review-manual-open">${isImage?'🖼 Abrir lesão para ajustar imagens':'✏ Abrir lesão'}</button>`:''}
+          ${structuralPlanCardButtonsHtml(r)}
           <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}${reviewResolveButtonHtml(r)}
           ${isGlobalReview(r)?'<button type="button" class="btn btn-primary review-global-complete">✓ Concluir</button>':''}
           <button type="button" class="btn btn-ghost review-manual-reopen">↩ Voltar para revisões</button>
@@ -15749,6 +15750,10 @@ function openReadySolutionsModal(){
       const openBtn = row.querySelector('.review-manual-open');
       if(openBtn) openBtn.onclick = ()=> openManualActionModal(r.id, { onReopened: renderBothLists });
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
+      const structExecBtn = row.querySelector('.review-structural-execute');
+      if(structExecBtn) structExecBtn.onclick = (e)=>{ e.currentTarget.disabled = true; openStructuralPlanExecuteConfirmModal(r.id, renderBothLists); e.currentTarget.disabled = false; };
+      const structRbBtn = row.querySelector('.review-structural-rollback');
+      if(structRbBtn) structRbBtn.onclick = (e)=>{ e.currentTarget.disabled = true; openStructuralPlanRollbackConfirmModal(r.id, renderBothLists); e.currentTarget.disabled = false; };
       const mEditBtn = row.querySelector('.review-edit-request'); // PROTEÇÃO 091d
       if(mEditBtn) mEditBtn.onclick = ()=> openEditReviewRequestModal(r.id, renderBothLists);
       wireReviewResolveButton(row, r.id, renderBothLists); // PROTEÇÃO 091f
@@ -21999,6 +22004,439 @@ async function rejectStructuralPlan(reviewId){
   await saveLesionRevisions();
   return { ok:true, reason:null };
 }
+
+/* PONTE ESTRUTURAL — FASE 3: executor unitário controlado (UMA revisão por
+   vez, clique explícito). Só roda plano com structuralPlan.status ===
+   'accepted'. Fluxo: dry-run completo (puro) → stale check → snapshot →
+   apply atômico (falha restaura o snapshot) → tombstone de auditoria +
+   mapa anti-ressurreição → revisão resolvida. Rollback restaura o snapshot
+   guardado no próprio registro de execução (sobrevive a reload via
+   lesionRevisions). NUNCA Cloudinary delete; NUNCA execução em lote. */
+const STRUCTURAL_EXECUTOR_VERSION = 'fase3-v1';
+// Guarda de execução concorrente: UMA revisão por vez no mesmo reviewId.
+// Também bloqueia duplo clique (botão desabilitado + esta trava em memória).
+const STRUCTURAL_EXEC_IN_FLIGHT = {};
+function structuralExecutionId(){
+  return 'exec_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+function structuralClone(v){
+  try{ return JSON.parse(JSON.stringify(v)); }catch(_e){ return null; }
+}
+function structuralLesionIndex(id){
+  return (Array.isArray(DATA)?DATA:[]).findIndex(e=>e && e.id===id);
+}
+function structuralMapHas(obj, key){
+  return !!obj && Object.prototype.hasOwnProperty.call(obj, key);
+}
+function dryRunStructuralPlan(reviewId){
+  // 100% read-only: nenhum write em DATA, revisões, storage ou nuvem.
+  const r = LESION_REVISIONS[reviewId] || null;
+  if(!r || !r.structuralPlan || !r.structuralPlan.resolution)
+    return { ok:false, reason:'no_imported_plan' };
+  const v = r.structuralPlan.resolution;
+  const stale = isStructuralPlanStale(r);
+  const base = { ok:true, reviewId, type:v.type, executes:false, stale,
+    operations:[], affectedLesionIds:[], fieldChanges:[], imagesToTransfer:[], casesToTransfer:0,
+    signsToTransfer:0, schemesToTransfer:0, linksToTransfer:0,
+    altPlacementsToTransfer:[], altPlacementsToRemove:[], keeper:null, remove:null,
+    tombstonePreview:null, conflicts:[], warnings:[] };
+  if(v.type==='unresolved' || v.type==='no_action') return base;
+  const need = (id)=>{
+    const e = structuralPlanLesion(id);
+    if(!e) base.conflicts.push({ kind:'lesion_missing', id });
+    return e;
+  };
+  if(v.type==='merge_duplicates'){
+    const keeper = need(v.keeperId), remove = need(v.removeId);
+    if(base.conflicts.length) return Object.assign(base, { ok:false, reason:'dry_conflicts' });
+    if(keeper.id===remove.id){ base.conflicts.push({ kind:'keeper_equals_remove' }); return Object.assign(base, { ok:false, reason:'dry_conflicts' }); }
+    try{
+      if(typeof hasStrongAnatomicConflict==='function' && hasStrongAnatomicConflict(keeper, remove))
+        base.conflicts.push({ kind:'anatomic_conflict', keeper:keeper.id, remove:remove.id });
+    }catch(_e){}
+    const m = v.merge || {};
+    const keyOf = (im)=>{ try{ return (typeof stableImageKeyV208==='function') ? (stableImageKeyV208(im)||null) : null; }catch(_e){ return null; } };
+    const keeperKeys = new Set((Array.isArray(keeper.images)?keeper.images:[]).map(keyOf).filter(Boolean));
+    const transfer = (flag, list)=> flag!==false ? (Array.isArray(list)?list:[]) : [];
+    const tImages = transfer(m.transferImages, remove.images);
+    const tCases = transfer(m.transferClinicalCases, remove.clinicalCases);
+    const tSigns = transfer(m.transferRadiologicSigns, remove.radiologicSigns);
+    const tSchemes = transfer(m.transferClassificationSchemes, remove.classificationSchemes);
+    const tLinks = transfer(m.transferLinks, remove.links);
+    const tAlts = transfer(m.transferAltPlacements, remove.altPlacements);
+    const blocked = (label, list)=>{
+      if(m[label]===false && Array.isArray(list) && list.length)
+        base.conflicts.push({ kind:'transfer_disabled_with_data', field:label, count:list.length });
+    };
+    blocked('transferImages', remove.images); blocked('transferClinicalCases', remove.clinicalCases);
+    blocked('transferRadiologicSigns', remove.radiologicSigns); blocked('transferClassificationSchemes', remove.classificationSchemes);
+    blocked('transferLinks', remove.links); blocked('transferAltPlacements', remove.altPlacements);
+    const fresh = [], skipped = [];
+    tImages.forEach(im=>{ const k = keyOf(im); if(!k) return; if(keeperKeys.has(k)) skipped.push(k); else fresh.push(im); });
+    if(skipped.length) base.warnings.push({ kind:'images_already_in_keeper', count:skipped.length });
+    base.imagesToTransfer = fresh.map(im=>({ key:keyOf(im), assetId:im.assetId||null, publicId:im.publicId||null, label:im.label||'' }));
+    base.casesToTransfer = tCases.length; base.signsToTransfer = tSigns.length;
+    base.schemesToTransfer = tSchemes.length; base.linksToTransfer = tLinks.length;
+    base.altPlacementsToTransfer = tAlts.map(p=>({ s:p.s, site:p.site }));
+    for(const k of ['name','notes','classification','enTerm'])
+      if(m[k]!==undefined) base.fieldChanges.push({ field:k, from:keeper[k]===undefined?null:keeper[k], to:m[k] });
+    if(Array.isArray(m.tags)){
+      const have = new Set((Array.isArray(keeper.tags)?keeper.tags:[]).map(t=>String(t).toLowerCase()));
+      m.tags.forEach(t=>{ if(!have.has(String(t).toLowerCase())){ have.add(String(t).toLowerCase()); base.fieldChanges.push({ field:'tags_add', to:String(t) }); } });
+    }
+    if(Array.isArray(m.preserveAliases)){
+      const have = new Set((Array.isArray(keeper.tags)?keeper.tags:[]).map(t=>String(t).toLowerCase()));
+      m.preserveAliases.forEach(t=>{ if(!have.has(String(t).toLowerCase())) base.fieldChanges.push({ field:'alias_add', to:String(t) }); });
+    }
+    base.keeper = { id:keeper.id, name:keeper.name }; base.remove = { id:remove.id, name:remove.name };
+    base.affectedLesionIds = [keeper.id, remove.id];
+    base.operations = ['transfer_data_to_keeper','apply_merge_fields','redirect_progress_and_reviews','remove_lesion_record','register_merge_map'];
+    base.tombstonePreview = { removeId:remove.id, keeperId:keeper.id, previousName:remove.name, reviewId };
+    base.executes = true;
+    if(base.conflicts.length) return Object.assign(base, { ok:false, reason:'dry_conflicts', executes:false });
+    return base;
+  }
+  if(v.type==='remove_additional_section_placement'){
+    const lesion = need(v.lesionId);
+    if(base.conflicts.length) return Object.assign(base, { ok:false, reason:'dry_conflicts' });
+    const p = v.placement || {};
+    const found = (Array.isArray(lesion.altPlacements)?lesion.altPlacements:[]).some(x=>x && x.s===p.section && x.site===p.site);
+    if(!found){ base.conflicts.push({ kind:'placement_missing', placement:p }); return Object.assign(base, { ok:false, reason:'dry_conflicts' }); }
+    base.keeper = { id:lesion.id, name:lesion.name }; base.affectedLesionIds = [lesion.id];
+    base.altPlacementsToRemove = [{ s:p.section, site:p.site }];
+    base.operations = ['remove_exact_placement'];
+    base.executes = true;
+    return base;
+  }
+  if(v.type==='transfer_images'){
+    const from = need(v.fromLesionId), to = need(v.toLesionId);
+    if(base.conflicts.length) return Object.assign(base, { ok:false, reason:'dry_conflicts' });
+    if(from.id===to.id){ base.conflicts.push({ kind:'from_equals_to' }); return Object.assign(base, { ok:false, reason:'dry_conflicts' }); }
+    const toKeys = new Set((Array.isArray(to.images)?to.images:[]).map(im=>{ try{ return (typeof stableImageKeyV208==='function')?(stableImageKeyV208(im)||null):null; }catch(_e){ return null; } }).filter(Boolean));
+    (Array.isArray(v.imageIds)?v.imageIds:[]).forEach(id=>{
+      const im = structuralPlanResolveImage(from, id);
+      if(!im){ base.conflicts.push({ kind:'image_missing', imageId:id }); return; }
+      let k = null;
+      try{ k = (typeof stableImageKeyV208==='function') ? (stableImageKeyV208(im)||null) : null; }catch(_e){}
+      if(k && toKeys.has(k)) base.warnings.push({ kind:'image_already_in_target', imageId:id });
+      else base.imagesToTransfer.push({ key:k, assetId:im.assetId||null, publicId:im.publicId||null, label:im.label||'' });
+    });
+    if(base.conflicts.length) return Object.assign(base, { ok:false, reason:'dry_conflicts' });
+    base.keeper = { id:to.id, name:to.name }; base.remove = null;
+    base.affectedLesionIds = [from.id, to.id];
+    base.operations = ['transfer_listed_images'];
+    base.executes = true;
+    return base;
+  }
+  if(v.type==='add_clinical_cases'){
+    const lesion = need(v.lesionId);
+    if(base.conflicts.length) return Object.assign(base, { ok:false, reason:'dry_conflicts' });
+    base.keeper = { id:lesion.id, name:lesion.name }; base.affectedLesionIds = [lesion.id];
+    base.casesToTransfer = (Array.isArray(v.clinicalCases)?v.clinicalCases:[]).length;
+    base.operations = ['append_clinical_cases'];
+    base.executes = true;
+    return base;
+  }
+  return Object.assign(base, { ok:false, reason:'unknown_type' });
+}
+function structuralSnapshotLesions(ids){
+  const out = {};
+  (Array.isArray(ids)?ids:[]).forEach(id=>{
+    if(typeof id!=='string' || !id || out[id]) return;
+    const i = structuralLesionIndex(id);
+    if(i<0) return;
+    out[id] = { index:i, lesion:structuralClone(DATA[i]) };
+  });
+  return out;
+}
+function structuralSnapshotMaps(){
+  return {
+    review: structuralClone(REVIEW), reviewStamps: structuralClone(REVIEW_STAMPS),
+    reviewProgress: structuralClone(REVIEW_PROGRESS), reviewOverride: structuralClone(REVIEW_OVERRIDE),
+    srs: structuralClone(SRS), merges: structuralClone(LESION_MERGES),
+    pendingAdds: structuralClone(PENDING_LOCAL_IMAGE_ADDS)
+  };
+}
+async function structuralPersistAll(){
+  try{ if(typeof saveReview==='function') await saveReview(true); }catch(_e){}
+  try{ if(typeof saveSRS==='function') await saveSRS(true); }catch(_e){}
+  try{ if(typeof saveReviewStamps==='function') await saveReviewStamps(); }catch(_e){}
+  try{ if(typeof saveReviewProgressState==='function') await saveReviewProgressState(); }catch(_e){}
+  try{ if(typeof saveLesionRevisions==='function') await saveLesionRevisions(true); }catch(_e){}
+  try{ if(typeof saveLesionMerges==='function') await saveLesionMerges(); }catch(_e){}
+  try{ if(typeof savePendingLocalImageAdds==='function') await savePendingLocalImageAdds(); }catch(_e){}
+}
+function structuralRestoreSnapshots(snap){
+  // Restaura DATA + mapas a partir de snapshot guardado. Puro em memória
+  // (persistência decidida pelo chamador). Nunca toca Cloudinary.
+  if(!snap) return;
+  const lesions = snap.lesions || {};
+  for(const id of Object.keys(lesions)){
+    const rec = lesions[id];
+    if(!rec || !rec.lesion) continue;
+    const i = structuralLesionIndex(id);
+    const copy = structuralClone(rec.lesion);
+    if(i>=0) DATA[i] = copy;
+    else DATA.splice(Math.min(rec.index||DATA.length, DATA.length), 0, copy);
+  }
+  const maps = snap.maps || {};
+  const dropIds = Object.keys(lesions);
+  const restoreKey = (globalName, mapName)=>{
+    if(!maps[mapName]) return;
+    for(const id of dropIds.concat(Object.keys(maps[mapName]))){
+      if(!structuralMapHas(maps[mapName], id)){ delete globalName[id]; continue; }
+      globalName[id] = structuralClone(maps[mapName][id]);
+    }
+  };
+  if(typeof REVIEW!=='undefined') restoreKey(REVIEW, 'review');
+  if(typeof REVIEW_STAMPS!=='undefined') restoreKey(REVIEW_STAMPS, 'reviewStamps');
+  if(typeof REVIEW_PROGRESS!=='undefined') restoreKey(REVIEW_PROGRESS, 'reviewProgress');
+  if(typeof REVIEW_OVERRIDE!=='undefined') restoreKey(REVIEW_OVERRIDE, 'reviewOverride');
+  if(typeof SRS!=='undefined') restoreKey(SRS, 'srs');
+  if(typeof LESION_MERGES!=='undefined') restoreKey(LESION_MERGES, 'merges');
+  if(typeof PENDING_LOCAL_IMAGE_ADDS!=='undefined') restoreKey(PENDING_LOCAL_IMAGE_ADDS, 'pendingAdds');
+  if(Array.isArray(snap.reviewLesionIds)){
+    snap.reviewLesionIds.forEach(x=>{
+      const rev = LESION_REVISIONS[x.reviewId];
+      if(rev) rev.lesionId = x.lesionId;
+    });
+  }
+}
+async function executeStructuralPlan(reviewId){
+  // UMA revisão por vez, plano accepted, sem stale, com dry-run e snapshot.
+  // Falha em qualquer etapa restaura o snapshot e registra a falha — nunca
+  // deixa estado parcial. Só chama saveData/saveLesionRevisions no sucesso
+  // (ou para persistir a restauração após falha).
+  const r = LESION_REVISIONS[reviewId] || null;
+  if(!r || !r.structuralPlan || r.structuralPlan.status!=='accepted')
+    return { ok:false, reason:'plan_not_accepted' };
+  const stale = isStructuralPlanStale(r);
+  if(stale.stale) return { ok:false, reason:'stale_plan', detail:stale };
+  const dry = dryRunStructuralPlan(reviewId);
+  if(!dry.ok) return { ok:false, reason:dry.reason||'dry_failed', detail:dry.conflicts||null };
+  if(dry.conflicts.length) return { ok:false, reason:'dry_conflicts', detail:dry.conflicts };
+  if(!dry.executes) return { ok:false, reason:'nothing_to_execute' };
+  if(STRUCTURAL_EXEC_IN_FLIGHT[reviewId])
+    return { ok:false, reason:'already_running' };
+  STRUCTURAL_EXEC_IN_FLIGHT[reviewId] = true;
+  const v = r.structuralPlan.resolution;
+  const executionId = structuralExecutionId();
+  const now = Date.now();
+  const before = { lesions:structuralSnapshotLesions(dry.affectedLesionIds), maps:structuralSnapshotMaps(),
+    reviewLesionIds:Object.values(LESION_REVISIONS).filter(x=>x && x.lesionId).map(x=>({ reviewId:x.id, lesionId:x.lesionId })) };
+  const recordFailure = async (reason, detail)=>{
+    structuralRestoreSnapshots(before);
+    try{ await saveData(); }catch(_e){}
+    try{ await structuralPersistAll(); }catch(_e){}
+    r.structuralExecution = { executionId, status:'failed', reason, detail:detail||null, at:new Date().toISOString(), affectedIds:dry.affectedLesionIds.slice() };
+    pushLesionReviewHistory(r, 'structural_plan_failed', { reason, executionId });
+    try{ await saveLesionRevisions(); }catch(_e){}
+    delete STRUCTURAL_EXEC_IN_FLIGHT[reviewId];
+    return { ok:false, reason, detail:detail||null, executionId };
+  };
+  try{
+    if(v.type==='merge_duplicates') structuralApplyMerge(v, dry, now);
+    else if(v.type==='remove_additional_section_placement') structuralApplyRemovePlacement(v, now);
+    else if(v.type==='transfer_images') structuralApplyTransferImages(v, dry, now);
+    else if(v.type==='add_clinical_cases') structuralApplyAddCases(v, now);
+    else return await recordFailure('nothing_to_execute');
+    // Pós-condições: keeper existe; remove sumiu (merge); imagens preservadas.
+    const keeperAfter = v.keeperId ? structuralPlanLesion(v.keeperId) : (v.lesionId ? structuralPlanLesion(v.lesionId) : (v.toLesionId ? structuralPlanLesion(v.toLesionId) : null));
+    if(!keeperAfter) return await recordFailure('postcondition_keeper_missing');
+    if(v.type==='merge_duplicates' && structuralPlanLesion(v.removeId))
+      return await recordFailure('postcondition_remove_present');
+    if(dry.imagesToTransfer && dry.imagesToTransfer.length){
+      const have = new Set();
+      (Array.isArray(keeperAfter.images)?keeperAfter.images:[]).forEach(im=>{ try{ const k=(typeof stableImageKeyV208==='function')?stableImageKeyV208(im):null; if(k) have.add(k); }catch(_e){} });
+      const missing = dry.imagesToTransfer.filter(t=>t.key && !have.has(t.key));
+      if(missing.length) return await recordFailure('postcondition_images_lost', missing.map(t=>t.key));
+    }
+    const after = { lesions:structuralSnapshotLesions(dry.affectedLesionIds) };
+    const tombstone = v.type==='merge_duplicates'
+      ? { removeId:v.removeId, keeperId:v.keeperId, previousName:(before.lesions[v.removeId]&&before.lesions[v.removeId].lesion.name)||null,
+          timestamp:new Date().toISOString(), reviewId, structuralPlan:{ type:v.type }, previousSnapshot:before,
+          reason:v.reasoning||null, executorVersion:STRUCTURAL_EXECUTOR_VERSION }
+      : null;
+    r.structuralExecution = { executionId, status:'executed', type:v.type, at:new Date().toISOString(),
+      affectedIds:dry.affectedLesionIds.slice(), operations:dry.operations.slice(), tombstone, beforeSnapshot:before,
+      afterSnapshot:after, executorVersion:STRUCTURAL_EXECUTOR_VERSION };
+    if(v.type==='merge_duplicates') r.lesionId = v.keeperId;
+    r.structuralPlan.status = 'executed';
+    r.structuralPlan.decidedAt = new Date().toISOString();
+    pushLesionReviewHistory(r, 'structural_plan_executed', { type:v.type, executionId });
+    await saveData();
+    try{ await structuralPersistAll(); }catch(_e){}
+    const resolved = resolveReviewManually(reviewId);
+    if(!resolved.ok) return await recordFailure('resolve_failed', resolved.reason);
+    delete STRUCTURAL_EXEC_IN_FLIGHT[reviewId];
+    return { ok:true, reason:null, executionId };
+  }catch(e){
+    return await recordFailure('execution_failed', String((e&&e.message)||e));
+  }
+}
+function structuralApplyMerge(v, dry, now){
+  const keeper = structuralPlanLesion(v.keeperId), remove = structuralPlanLesion(v.removeId);
+  if(!keeper || !remove) throw new Error('lesion_missing');
+  const m = v.merge || {};
+  const keyOf = (im)=>{ try{ return (typeof stableImageKeyV208==='function')?(stableImageKeyV208(im)||null):null; }catch(_e){ return null; } };
+  if(m.transferImages!==false){
+    keeper.images = Array.isArray(keeper.images) ? keeper.images : [];
+    const have = new Set(keeper.images.map(keyOf).filter(Boolean));
+    (Array.isArray(remove.images)?remove.images:[]).forEach(im=>{
+      if(!im || typeof im!=='object') return;
+      const k = keyOf(im);
+      if(k && have.has(k)) return;
+      const cp = JSON.parse(JSON.stringify(im));
+      if(typeof assertManualImageOwnershipChange==='function' && typeof IMAGE_OWNERSHIP_MANUAL!=='undefined'){
+        const chk = assertManualImageOwnershipChange(cp, keeper.id, IMAGE_OWNERSHIP_MANUAL);
+        if(!chk.ok) throw new Error('ownership_blocked:'+(k||'?'));
+      }
+      cp.lesionId = keeper.id; cp.lesionName = keeper.name; cp.mergedFromLesionId = remove.id;
+      keeper.images.push(cp);
+      if(k) have.add(k);
+    });
+  }
+  if(m.transferClinicalCases!==false && typeof mergeClinicalCasesForFold==='function')
+    keeper.clinicalCases = mergeClinicalCasesForFold(keeper.clinicalCases, remove.clinicalCases);
+  if(m.transferRadiologicSigns!==false && typeof mergeDidacticItems==='function')
+    keeper.radiologicSigns = mergeDidacticItems(keeper.radiologicSigns, remove.radiologicSigns);
+  if(m.transferClassificationSchemes!==false && typeof mergeDidacticItems==='function')
+    keeper.classificationSchemes = mergeDidacticItems(keeper.classificationSchemes, remove.classificationSchemes);
+  if(m.transferLinks!==false){
+    keeper.links = Array.isArray(keeper.links) ? keeper.links : [];
+    const seen = new Set(keeper.links.map(lesionMergeLinkKey).filter(Boolean));
+    (Array.isArray(remove.links)?remove.links:[]).forEach(l=>{
+      if(!l) return;
+      const k = lesionMergeLinkKey(l);
+      if(k && !seen.has(k)){ seen.add(k); keeper.links.push(l); }
+    });
+  }
+  if(m.transferAltPlacements!==false){
+    keeper.altPlacements = Array.isArray(keeper.altPlacements) ? keeper.altPlacements : [];
+    const seen = new Set(keeper.altPlacements.map(p=>String((p&&p.s)||'')+'|||'+String((p&&p.site)||'')));
+    (Array.isArray(remove.altPlacements)?remove.altPlacements:[]).forEach(p=>{
+      if(!p) return;
+      const k = String(p.s||'')+'|||'+String(p.site||'');
+      if(!seen.has(k)){ seen.add(k); keeper.altPlacements.push(p); }
+    });
+  }
+  for(const k of ['name','notes','enTerm']) if(typeof m[k]==='string') keeper[k] = m[k];
+  if(m.classification!==undefined && (typeof m.classification==='string' || m.classification===null)) keeper.classification = m.classification;
+  if(Array.isArray(m.tags)){
+    keeper.tags = Array.isArray(keeper.tags) ? keeper.tags : [];
+    const have = new Set(keeper.tags.map(t=>String(t).toLowerCase()));
+    m.tags.forEach(t=>{ if(!have.has(String(t).toLowerCase())){ have.add(String(t).toLowerCase()); keeper.tags.push(t); } });
+  }
+  if(Array.isArray(m.preserveAliases)){
+    keeper.tags = Array.isArray(keeper.tags) ? keeper.tags : [];
+    const have = new Set(keeper.tags.map(t=>String(t).toLowerCase()));
+    m.preserveAliases.forEach(t=>{ if(!have.has(String(t).toLowerCase())){ have.add(String(t).toLowerCase()); keeper.tags.push(t); } });
+  }
+  keeper._userUpdatedAt = now;
+  // Progresso/estado: keeper vence se presente; senão herda do removido.
+  if(REVIEW[keeper.id]===undefined && REVIEW[remove.id]!==undefined) REVIEW[keeper.id] = REVIEW[remove.id];
+  if(REVIEW_STAMPS[keeper.id]===undefined && REVIEW_STAMPS[remove.id]!==undefined) REVIEW_STAMPS[keeper.id] = REVIEW_STAMPS[remove.id];
+  try{
+    if(typeof mergeReviewProgress==='function'){
+      const mp = mergeReviewProgress({ [keeper.id]:REVIEW_PROGRESS[keeper.id] }, { [keeper.id]:REVIEW_PROGRESS[remove.id] });
+      if(mp && mp[keeper.id]) REVIEW_PROGRESS[keeper.id] = mp[keeper.id];
+    }
+  }catch(_e){}
+  try{
+    if(typeof mergeReviewOverrides==='function'){
+      const mo = mergeReviewOverrides({ [keeper.id]:REVIEW_OVERRIDE[keeper.id] }, { [keeper.id]:REVIEW_OVERRIDE[remove.id] });
+      if(mo && mo[keeper.id]) REVIEW_OVERRIDE[keeper.id] = mo[keeper.id];
+    }
+  }catch(_e){}
+  if(!SRS[keeper.id] && SRS[remove.id]) SRS[keeper.id] = SRS[remove.id];
+  delete REVIEW[remove.id]; delete REVIEW_STAMPS[remove.id]; delete REVIEW_PROGRESS[remove.id];
+  delete REVIEW_OVERRIDE[remove.id]; delete SRS[remove.id];
+  Object.values(LESION_REVISIONS).forEach(rev=>{
+    if(rev && rev.lesionId===remove.id){
+      rev.lesionId = keeper.id;
+      pushLesionReviewHistory(rev, 'lesion_merged', { from:remove.id, into:keeper.id });
+    }
+  });
+  if(PENDING_LOCAL_IMAGE_ADDS && PENDING_LOCAL_IMAGE_ADDS[remove.id]){
+    PENDING_LOCAL_IMAGE_ADDS[keeper.id] = Object.assign({}, PENDING_LOCAL_IMAGE_ADDS[keeper.id]||{}, PENDING_LOCAL_IMAGE_ADDS[remove.id]);
+    delete PENDING_LOCAL_IMAGE_ADDS[remove.id];
+  }
+  const idx = structuralLesionIndex(remove.id);
+  if(idx>=0) DATA.splice(idx, 1);
+  LESION_MERGES[remove.id] = { into:keeper.id, at:now, group:'structural:'+v.reviewId, finalName:keeper.name };
+}
+function structuralApplyRemovePlacement(v, now){
+  const lesion = structuralPlanLesion(v.lesionId);
+  if(!lesion) throw new Error('lesion_missing');
+  const list = Array.isArray(lesion.altPlacements) ? lesion.altPlacements : [];
+  const i = list.findIndex(x=>x && x.s===v.placement.section && x.site===v.placement.site);
+  if(i<0) throw new Error('placement_missing');
+  list.splice(i, 1);
+  lesion._userUpdatedAt = now;
+}
+function structuralApplyTransferImages(v, dry, now){
+  const from = structuralPlanLesion(v.fromLesionId), to = structuralPlanLesion(v.toLesionId);
+  if(!from || !to) throw new Error('lesion_missing');
+  from.images = Array.isArray(from.images) ? from.images : [];
+  to.images = Array.isArray(to.images) ? to.images : [];
+  const keyOf = (im)=>{ try{ return (typeof stableImageKeyV208==='function')?(stableImageKeyV208(im)||null):null; }catch(_e){ return null; } };
+  const have = new Set(to.images.map(keyOf).filter(Boolean));
+  v.imageIds.forEach(id=>{
+    const i = from.images.findIndex(im=>im && (im.assetId===id || im.publicId===id || im.data===id || keyOf(im)===id ||
+      (function(){ try{ return (typeof imageIdentityKeys==='function') ? imageIdentityKeys(im).indexOf(id)>=0 : false; }catch(_e){ return false; } })()));
+    if(i<0) throw new Error('image_missing:'+id);
+    const im = from.images[i];
+    if(typeof assertManualImageOwnershipChange==='function' && typeof IMAGE_OWNERSHIP_MANUAL!=='undefined'){
+      const chk = assertManualImageOwnershipChange(im, to.id, IMAGE_OWNERSHIP_MANUAL);
+      if(!chk.ok) throw new Error('ownership_blocked:'+id);
+    }
+    const k = keyOf(im);
+    from.images.splice(i, 1);
+    if(k && have.has(k)) return;
+    im.lesionId = to.id; im.lesionName = to.name;
+    to.images.push(im);
+    if(k) have.add(k);
+  });
+  from._userUpdatedAt = now; to._userUpdatedAt = now;
+}
+function structuralApplyAddCases(v, now){
+  const lesion = structuralPlanLesion(v.lesionId);
+  if(!lesion) throw new Error('lesion_missing');
+  lesion.clinicalCases = Array.isArray(lesion.clinicalCases) ? lesion.clinicalCases : [];
+  (Array.isArray(v.clinicalCases)?v.clinicalCases:[]).forEach(c=>{
+    const item = { id:(typeof genDidacticId==='function')?genDidacticId('case'):'case_'+now+'_'+Math.random().toString(36).slice(2,8) };
+    ['title','source','sourceUrl','patientAge','patientSex','modality','presentation','notes'].forEach(k=>{
+      if(typeof c[k]==='string' && c[k].trim()) item[k] = c[k];
+    });
+    item.origin = 'structural-plan'; item.createdAt = now; item.updatedAt = now;
+    lesion.clinicalCases.push(item);
+  });
+  lesion._userUpdatedAt = now;
+}
+async function rollbackStructuralExecution(reviewId){
+  // Restaura o snapshot guardado na execução (lesões, mapas e redirecionamentos).
+  // Não depende de histórico do navegador: tudo vem de r.structuralExecution.
+  const r = LESION_REVISIONS[reviewId] || null;
+  const ex = r && r.structuralExecution;
+  if(!ex || ex.status!=='executed' || !ex.beforeSnapshot)
+    return { ok:false, reason:'no_executed_plan' };
+  if(STRUCTURAL_EXEC_IN_FLIGHT[reviewId])
+    return { ok:false, reason:'already_running' };
+  STRUCTURAL_EXEC_IN_FLIGHT[reviewId] = true;
+  try{
+    structuralRestoreSnapshots(ex.beforeSnapshot);
+    try{ await saveData(); }catch(_e){}
+    try{ await structuralPersistAll(); }catch(_e){}
+    ex.status = 'rolledback'; ex.rolledbackAt = new Date().toISOString();
+    if(r.structuralPlan) r.structuralPlan.status = 'rolledback';
+    if(r.status==='accepted'){ r.status = 'manual_action_required'; delete r.completedAt; r.resolvedManually = false; }
+    pushLesionReviewHistory(r, 'structural_plan_rolled_back', { executionId:ex.executionId });
+    try{ await saveLesionRevisions(); }catch(_e){}
+    return { ok:true, reason:null, executionId:ex.executionId };
+  }finally{
+    delete STRUCTURAL_EXEC_IN_FLIGHT[reviewId];
+  }
+}
 function structuralPlanPreviewHtml(v){
   // Prévia 100% a partir do plano VALIDADO + snapshot (nunca do DATA mutável
   // posterior): o que o usuário vê é exatamente o que foi validado.
@@ -22075,6 +22513,160 @@ function openStructuralPlanImportModal(onDone){
     toast('Plano importado: prévia sem execução.');
   };
 }
+function structuralDryRunSummaryHtml(dry){
+  // Resumo humano do dry-run PURO para o modal final de confirmação.
+  // Nunca executa nada; só descreve o que executeStructuralPlan faria.
+  const esc = s=>String(s==null?'':s).replace(/</g,'&lt;');
+  if(!dry || !dry.ok)
+    return '<div><b>Bloqueado:</b> '+esc((dry&&(dry.reason||'dry_failed'))||'dry_failed')+'</div>' +
+      ((dry&&dry.conflicts&&dry.conflicts.length)?'<div><b>Conflitos:</b><ul>'+
+        dry.conflicts.map(c=>'<li>'+esc(typeof c==='string'?c:JSON.stringify(c)).slice(0,300)+'</li>').join('')+'</ul></div>':'');
+  const parts = ['<div><b>Tipo:</b> '+esc(dry.type)+'</div>'];
+  if(dry.keeper) parts.push('<div><b>MANTER:</b> '+esc(dry.keeper.id)+' — '+esc(dry.keeper.name)+'</div>');
+  if(dry.remove) parts.push('<div><b>REMOVER:</b> '+esc(dry.remove.id)+' — '+esc(dry.remove.name)+'</div>');
+  if(dry.operations.length) parts.push('<div><b>Operações:</b> '+esc(dry.operations.join(', '))+'</div>');
+  if(dry.affectedLesionIds.length) parts.push('<div><b>Lesões afetadas:</b> '+esc(dry.affectedLesionIds.join(', '))+'</div>');
+  if(dry.imagesToTransfer.length) parts.push('<div><b>Imagens a transferir:</b> '+dry.imagesToTransfer.length+'</div>');
+  if(dry.casesToTransfer) parts.push('<div><b>Casos clínicos a transferir:</b> '+dry.casesToTransfer+'</div>');
+  if(dry.signsToTransfer) parts.push('<div><b>Sinais a transferir:</b> '+dry.signsToTransfer+'</div>');
+  if(dry.schemesToTransfer) parts.push('<div><b>Classificações a transferir:</b> '+dry.schemesToTransfer+'</div>');
+  if(dry.linksToTransfer) parts.push('<div><b>Links a transferir:</b> '+dry.linksToTransfer+'</div>');
+  if(dry.altPlacementsToTransfer.length) parts.push('<div><b>Localizações a transferir:</b> '+esc(JSON.stringify(dry.altPlacementsToTransfer)).slice(0,300)+'</div>');
+  if(dry.altPlacementsToRemove.length) parts.push('<div><b>Localizações a remover:</b> '+esc(JSON.stringify(dry.altPlacementsToRemove)).slice(0,300)+'</div>');
+  if(dry.fieldChanges.length) parts.push('<div><b>Campos:</b><ul>'+
+    dry.fieldChanges.map(f=>'<li>'+esc(f.field)+': '+esc(String(f.from)).slice(0,120)+' → '+esc(String(f.to)).slice(0,120)+'</li>').join('')+'</ul></div>');
+  if(dry.tombstonePreview) parts.push('<div><b>Auditoria:</b> tombstone de fusão será registrado para '+esc(dry.tombstonePreview.removeId)+' → '+esc(dry.tombstonePreview.keeperId)+'.</div>');
+  if(dry.warnings.length) parts.push('<div><b>Avisos:</b><ul>'+
+    dry.warnings.map(w=>'<li>'+esc(typeof w==='string'?w:JSON.stringify(w)).slice(0,300)+'</li>').join('')+'</ul></div>');
+  return parts.join('');
+}
+function structuralPlanCardBadgeHtml(r){
+  // Badge do card da revisão (Central → Ações manuais). Só leitura.
+  if(!r || !r.structuralPlan) return '';
+  const st = r.structuralPlan.status;
+  const type = r.structuralPlan.type || '?';
+  let stale = null;
+  try{ stale = isStructuralPlanStale(r); }catch(_e){}
+  const isStale = !!(stale && stale.stale);
+  const noExec = (type==='unresolved' || type==='no_action');
+  const staleHtml = isStale ? '<div class="review-center-row-meta">⚠️ Plano desatualizado'+(stale.reason?' ('+String(stale.reason).replace(/</g,'&lt;')+')':'')+' — reimporte antes de aprovar ou executar.</div>' : '';
+  if(st==='imported')
+    return '<div class="review-center-row-meta">🟡 Plano importado ('+String(type).replace(/</g,'&lt;')+') — aguardando aprovação. Prévia sem execução.</div>' + staleHtml;
+  if(st==='accepted'){
+    if(noExec) return '<div class="review-center-row-meta">🟢 Plano aprovado ('+String(type).replace(/</g,'&lt;')+').</div><div class="review-center-row-meta">⚠️ Sem resolução segura — nada a executar.</div>';
+    if(isStale) return '<div class="review-center-row-meta">🟢 Plano aprovado ('+String(type).replace(/</g,'&lt;')+').</div>' + staleHtml;
+    return '<div class="review-center-row-meta">🟢 Plano aprovado ('+String(type).replace(/</g,'&lt;')+') — pronto para execução manual.</div>';
+  }
+  if(st==='executed')
+    return '<div class="review-center-row-meta">✅ Executado ('+String(type).replace(/</g,'&lt;')+'). Tombstone e histórico registrados.</div>';
+  if(st==='rejected')
+    return '<div class="review-center-row-meta">🔴 Plano rejeitado ('+String(type).replace(/</g,'&lt;')+'). Nada foi executado.</div>';
+  if(st==='rolledback')
+    return '<div class="review-center-row-meta">↩️ Execução revertida ('+String(type).replace(/</g,'&lt;')+'). Estado anterior restaurado.</div>';
+  return '<div class="review-center-row-meta">📥 plano estrutural: <b>'+String(st).replace(/</g,'&lt;')+'</b> ('+String(type).replace(/</g,'&lt;')+')</div>' + staleHtml;
+}
+function structuralPlanCardButtonsHtml(r){
+  // Botões do card: executar SÓ para accepted + fresco + com o que executar.
+  // Nunca para imported/rejected/stale/unresolved. Só leitura (decisão no clique).
+  if(!r || !r.structuralPlan) return '';
+  const st = r.structuralPlan.status;
+  if(st==='executed')
+    return '<button type="button" class="btn btn-ghost review-structural-rollback">↩️ Reverter execução</button>';
+  if(st!=='accepted') return '';
+  const type = r.structuralPlan.type;
+  if(type==='unresolved' || type==='no_action') return '';
+  try{
+    if(isStructuralPlanStale(r).stale) return '';
+    const dry = dryRunStructuralPlan(r.id);
+    if(!dry || !dry.ok || !dry.executes || (dry.conflicts&&dry.conflicts.length)) return '';
+  }catch(_e){ return ''; }
+  return '<button type="button" class="btn btn-primary review-structural-execute">▶ Executar</button>';
+}
+function openStructuralPlanExecuteConfirmModal(reviewId, onDone){
+  // Modal FINAL: stale check + dry-run frescos → confirmação explícita →
+  // executeStructuralPlan() unitário. Sem auto-execute, sem lote.
+  const r = LESION_REVISIONS[reviewId] || null;
+  const v = r && r.structuralPlan ? r.structuralPlan.resolution : null;
+  if(!r || !v){ try{ toast('Plano não encontrado.'); }catch(_e){} return; }
+  const st = r.structuralPlan.status;
+  let stale = { stale:true, reason:'no_snapshot', changedIds:[] };
+  try{ stale = isStructuralPlanStale(r); }catch(_e){}
+  let dry = null;
+  try{ dry = dryRunStructuralPlan(reviewId); }catch(e){ dry = { ok:false, reason:'dry_threw', conflicts:[{ kind:'dry_threw', detail:String((e&&e.message)||e) }], warnings:[] }; }
+  const canRun = (st==='accepted' && !stale.stale && dry && dry.ok && dry.executes && !(dry.conflicts&&dry.conflicts.length));
+  const esc = s=>String(s==null?'':s).replace(/</g,'&lt;');
+  const blockReason = !canRun
+    ? (st!=='accepted' ? 'plano não está aprovado (status: '+st+')'
+      : stale.stale ? 'plano desatualizado ('+stale.reason+(stale.changedIds.length?': '+stale.changedIds.join(', '):'')+') — reimporte'
+      : (!dry || !dry.ok) ? ('dry-run bloqueou: '+((dry&&dry.reason)||'dry_failed'))
+      : 'nada a executar ou conflito detectado')
+    : null;
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) close(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) close(); };
+  const close = ()=>{ document.removeEventListener('keydown', closeOnEsc); ov.remove(); };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = '<div class="modal review-center-modal"><h2>▶ Confirmar execução estrutural</h2>' +
+    '<div class="modal-sub">Revisão <b>'+esc(reviewId)+'</b> · UMA execução unitária. O dry-run abaixo é o que será aplicado; a revisão só será resolvida após sucesso.</div>' +
+    '<div class="review-center-list"><div class="review-center-row">' +
+    structuralPlanPreviewHtml(v) +
+    '<div class="review-center-row-meta"><b>Ensaio (dry-run):</b></div>' + structuralDryRunSummaryHtml(dry) +
+    (blockReason ? '<div class="review-center-row-meta" style="color:var(--red);">⛔ '+esc(blockReason)+'</div>' : '<div class="review-center-row-meta">Snapshot das lesões será guardado no registro da execução para reversão.</div>') +
+    '</div></div>' +
+    '<div class="modal-actions"><button type="button" class="btn btn-ghost" id="structural-exec-cancel">voltar</button>' +
+    '<button type="button" class="btn btn-primary" id="structural-exec-confirm"'+(canRun?'':' disabled')+'>▶ Confirmar execução</button></div></div>';
+  document.body.appendChild(ov);
+  ov.querySelector('#structural-exec-cancel').onclick = close;
+  ov.querySelector('#structural-exec-confirm').onclick = async (e)=>{
+    const btn = e.currentTarget;
+    btn.disabled = true; // anti duplo clique
+    ov.querySelector('#structural-exec-cancel').disabled = true;
+    const res = await executeStructuralPlan(reviewId);
+    try{ toast(res.ok ? ('Execução concluída ('+res.executionId+'). Revisão resolvida.') : ('Execução bloqueada: '+(res.reason||'erro'))); }catch(_e){}
+    close();
+    try{ if(typeof renderBothListsRef==='function') renderBothListsRef(); }catch(_e){}
+    if(typeof onDone==='function') onDone();
+  };
+  let renderBothListsRef = null;
+  try{ renderBothListsRef = null; }catch(_e){}
+}
+function openStructuralPlanRollbackConfirmModal(reviewId, onDone){
+  // Reversão manual: mostra snapshot guardado (before) → confirmação → rollback.
+  // Preserva o histórico da execução e registra a reversão. Nunca Cloudinary.
+  const r = LESION_REVISIONS[reviewId] || null;
+  const ex = r && r.structuralExecution;
+  if(!ex || ex.status!=='executed' || !ex.beforeSnapshot){ try{ toast('Nada a reverter.'); }catch(_e){} return; }
+  const esc = s=>String(s==null?'':s).replace(/</g,'&lt;');
+  const beforeIds = ex.beforeSnapshot && ex.beforeSnapshot.lesions ? Object.keys(ex.beforeSnapshot.lesions) : (ex.affectedIds||[]);
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) close(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) close(); };
+  const close = ()=>{ document.removeEventListener('keydown', closeOnEsc); ov.remove(); };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = '<div class="modal review-center-modal"><h2>↩️ Reverter execução estrutural</h2>' +
+    '<div class="modal-sub">Revisão <b>'+esc(reviewId)+'</b> · execução <b>'+esc(ex.executionId)+'</b> ('+esc(ex.at||'')+').</div>' +
+    '<div class="review-center-list"><div class="review-center-row">' +
+    '<div><b>Será restaurado do snapshot:</b> '+esc(beforeIds.join(', ')||'(nenhuma lesão)')+'</div>' +
+    (ex.operations&&ex.operations.length?'<div><b>Operações desfeitas:</b> '+esc(ex.operations.join(', '))+'</div>':'') +
+    (ex.tombstone?'<div><b>Auditoria mantida:</b> tombstone de '+esc(ex.tombstone.removeId)+' → '+esc(ex.tombstone.keeperId)+' permanece no histórico.</div>':'') +
+    '<div class="review-center-row-meta">Lesões, imagens, ownership, altPlacements, casos, sinais, classificações e links voltam ao estado anterior. A revisão será reaberta.</div>' +
+    '</div></div>' +
+    '<div class="modal-actions"><button type="button" class="btn btn-ghost" id="structural-rb-cancel">voltar</button>' +
+    '<button type="button" class="btn btn-primary" id="structural-rb-confirm">↩️ Confirmar reversão</button></div></div>';
+  document.body.appendChild(ov);
+  ov.querySelector('#structural-rb-cancel').onclick = close;
+  ov.querySelector('#structural-rb-confirm').onclick = async (e)=>{
+    const btn = e.currentTarget;
+    btn.disabled = true; // anti duplo clique
+    ov.querySelector('#structural-rb-cancel').disabled = true;
+    const res = await rollbackStructuralExecution(reviewId);
+    try{ toast(res.ok ? 'Execução revertida. Revisão reaberta.' : ('Reversão bloqueada: '+(res.reason||'erro'))); }catch(_e){}
+    close();
+    if(typeof onDone==='function') onDone();
+  };
+}
 function openStructuralPlanPreviewModal(validated){
   const ov = document.createElement('div');
   ov.className = 'overlay';
@@ -22088,6 +22680,16 @@ function openStructuralPlanPreviewModal(validated){
     const r = LESION_REVISIONS[v.reviewId];
     const stale = r ? isStructuralPlanStale(r) : { stale:true, reason:'no_snapshot', changedIds:[] };
     const st = r && r.structuralPlan ? r.structuralPlan.status : '?';
+    // Botão executar SÓ para accepted + fresco + dry-run com o que executar.
+    // Nunca para imported/rejected/stale/unresolved. Reverter SÓ para executed.
+    let canExecute = false;
+    try{
+      if(st==='accepted' && !stale.stale){
+        const dry = dryRunStructuralPlan(v.reviewId);
+        canExecute = !!(dry && dry.ok && dry.executes && !(dry.conflicts&&dry.conflicts.length));
+      }
+    }catch(_e){ canExecute = false; }
+    const canRollback = (st==='executed');
     return '<div class="review-center-row" data-plan-review="'+String(v.reviewId).replace(/"/g,'&quot;')+'">' +
       structuralPlanPreviewHtml(v) +
       '<div class="review-center-row-meta">plano: <b>'+st+'</b>' +
@@ -22095,6 +22697,8 @@ function openStructuralPlanPreviewModal(validated){
       '<div class="review-center-row-actions">' +
       '<button type="button" class="btn btn-ghost" data-plan-act="accept"'+(stale.stale?' disabled':'')+'>✅ Aceitar plano</button>' +
       '<button type="button" class="btn btn-ghost" data-plan-act="reject">❌ Rejeitar plano</button>' +
+      (canExecute?'<button type="button" class="btn btn-primary" data-plan-act="execute">▶ Executar esta ação</button>':'') +
+      (canRollback?'<button type="button" class="btn btn-ghost" data-plan-act="rollback">↩️ Reverter execução</button>':'') +
       '</div></div>';
   }).join('');
   ov.innerHTML = '<div class="modal review-center-modal"><h2>PLANO ESTRUTURAL IMPORTADO</h2>' +
@@ -22109,6 +22713,9 @@ function openStructuralPlanPreviewModal(validated){
       const id = row ? row.getAttribute('data-plan-review') : null;
       if(!id) return;
       const act = btn.getAttribute('data-plan-act');
+      if(act==='execute'){ openStructuralPlanExecuteConfirmModal(id, ()=>{ close(); openStructuralPlanPreviewModalRefresh(); }); return; }
+      if(act==='rollback'){ openStructuralPlanRollbackConfirmModal(id, ()=>{ close(); openStructuralPlanPreviewModalRefresh(); }); return; }
+      btn.disabled = true; // anti duplo clique no aceite/rejeição
       const res = act==='accept' ? await acceptStructuralPlan(id) : await rejectStructuralPlan(id);
       toast(res.ok ? (act==='accept' ? 'Plano aceito para futura execução.' : 'Plano rejeitado.') : ('Não foi possível: '+(res.reason||'erro')));
       close();
