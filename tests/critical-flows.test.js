@@ -577,9 +577,9 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // acrescentaram 52 linhas; sem alteração nos fluxos de recovery/boot.
   // 091c-b: helpers de imagem real + merge de casos (~122 linhas) antes da
   // primeira âncora; sem alteração nos fluxos de recovery/boot/import.
-  assert.equal(recovery.line, 9466);
-  assert.equal(brokenArtifacts.line, 9456);
-  assert.equal(loadData.line, 12017);
+  assert.equal(recovery.line, 9529);
+  assert.equal(brokenArtifacts.line, 9519);
+  assert.equal(loadData.line, 12080);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
@@ -600,7 +600,10 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // âncoras — bloco do merge 084 que preserva structuralPlan/Execution por
   // carimbo próprio (antes do recovery). As mudanças em import/accept/
   // reject/rollback ficam depois do importHandler e não o deslocam.
-  assert.equal(importHandler.line, 16476);
+  // Sync Firestore pós-Fase 3 (2026-09-27, bug arrays aninhados): +63 nestas
+  // âncoras — syncFailureStatus, codec do progresso embutido no snapshot e
+  // hooks de codificação na escrita/leitura. Sem alteração nos fluxos.
+  assert.equal(importHandler.line, 16539);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

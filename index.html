@@ -2001,7 +2001,16 @@ function setSyncStatus(ok, detail){
   }
   el.style.display = 'block';
   el.className = 'sync-status sync-status-error';
-  el.textContent = '⚠ ' + (detail || 'falha ao sincronizar com a nuvem');
+  el.textContent = '? ' + (detail || 'falha ao sincronizar com a nuvem');
+}
+function syncFailureStatus(e){
+  // Mensagem de falha de sync para a UI (curta); o detalhe técnico completo
+  // fica no console. O local permanece intacto e o retry tenta de novo.
+  if(e && e.code==='firestore_nested_arrays'){
+    try{ console.error('[Atlas] sync recusado (arrays aninhados):', (e.message||e)); }catch(_e){}
+    return 'Sincronização pendente: dados estruturais não puderam ser enviados. Estado preservado neste dispositivo.';
+  }
+  return 'falha ao sincronizar — ficou salvo só neste dispositivo: ' + ((e&&(e.message||e))||e);
 }
 /* Firestore recusa qualquer campo com valor `undefined` (dá erro genérico
    "Unsupported field value: undefined", sem dizer qual dispositivo/lesão causou).
@@ -2308,6 +2317,11 @@ async function writeShardedState(ms=15000){
       // transitória: vale para TODO caminho (push, debounce, editor,
       // manual, force, trailing push, retry de conflito).
       let remoteMeta = metaSnap.exists ? (metaSnap.data()||{}) : {}; // let: 091c aplica o mapa numa cópia
+      // Ponte estrutural: decodifica o progresso embutido no snapshot da
+      // execução (objetos {t,ok,graded} → tuplas) para o merge comparar no
+      // mesmo formato local e nunca gravar forma remota na memória viva.
+      if(remoteMeta && typeof remoteMeta==='object' && !Array.isArray(remoteMeta) && remoteMeta.lesionRevisions)
+        remoteMeta = { ...remoteMeta, lesionRevisions: structuralSnapshotProgressFromFirestore(remoteMeta.lesionRevisions) };
       const remoteChunkCount = Number(remoteMeta.chunkCount)||0;
       let remoteData = [];
       if(remoteChunkCount > 0){
@@ -2379,7 +2393,11 @@ async function writeShardedState(ms=15000){
       }
       // Só a representação do histórico 090 cruza a fronteira: as tentativas
       // continuam tuplas no IndexedDB/backup/Quiz, mas objetos no Firestore.
-      const firestoreMeta = {...metaPayload, reviewProgress: reviewProgressToFirestore(writeProgress), [CLOUD_REVISION_FIELD]: nextRevision};
+      // Ponte estrutural: o progresso embutido no snapshot da execução usa o
+      // mesmo codec (nunca array dentro de array no payload).
+      const firestoreMeta = {...metaPayload, reviewProgress: reviewProgressToFirestore(writeProgress),
+        lesionRevisions: structuralSnapshotProgressToFirestore(metaPayload.lesionRevisions),
+        [CLOUD_REVISION_FIELD]: nextRevision};
       const nested = findNestedArrayPaths(firestoreMeta, 'atlas_state/main');
       nested.push(...findNestedArrayPaths(gated.data, 'DATA'));
       if(nested.length){
@@ -2476,7 +2494,9 @@ async function readShardedState(ms=15000){
     orderUpdatedAt: normalizeOrderStamps(meta.orderUpdatedAt), // PROTEÇÃO 085 — ausente = sem carimbo
     tombstones: (meta.tombstones && typeof meta.tombstones === 'object' && !Array.isArray(meta.tombstones)) ? meta.tombstones : {},
     // PROTEÇÃO 084 — documento antigo sem o campo = {} (compatível).
-    lesionRevisions: (meta.lesionRevisions && typeof meta.lesionRevisions === 'object' && !Array.isArray(meta.lesionRevisions)) ? meta.lesionRevisions : {} };
+    // Ponte estrutural: progresso embutido no snapshot volta a tuplas aqui
+    // (único ponto de leitura remota — adopt, pulls e auditorias).
+    lesionRevisions: structuralSnapshotProgressFromFirestore((meta.lesionRevisions && typeof meta.lesionRevisions === 'object' && !Array.isArray(meta.lesionRevisions)) ? meta.lesionRevisions : {}) };
 }
 
 /* envia o estado atual pra nuvem (com pequeno atraso pra juntar mudanças rápidas em uma escrita só) */
@@ -2529,7 +2549,7 @@ function pushToFirebase(){
       if(ok) await clearSyncDirty();
     }catch(e){
       console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e);
-      setSyncStatus(false, 'falha ao sincronizar — ficou salvo só neste dispositivo: ' + (e.message||e));
+      setSyncStatus(false, syncFailureStatus(e));
     }
   }, 400);
 }
@@ -2568,7 +2588,7 @@ async function pushToFirebaseNow(){
     if(ok) await clearSyncDirty();
   }catch(e){
     console.error('Firebase push falhou (ficou salvo só localmente por enquanto).', e);
-    setSyncStatus(false, 'falha ao sincronizar — ficou salvo só neste dispositivo: ' + (e.message||e));
+    setSyncStatus(false, syncFailureStatus(e));
     toast('⚠ Falha ao sincronizar com a nuvem — esta mudança ficou salva só neste dispositivo por enquanto.');
   }
 }
@@ -5523,6 +5543,49 @@ function reviewProgressFromFirestore(progress){
     }
   }
   return normalizeReviewProgress(out);
+}
+// Ponte estrutural — o reviewProgress EMBUTIDO em
+// review.structuralExecution.beforeSnapshot.maps usa o MESMO codec da 090:
+// tuplas locais [t,ok,graded] viram [{t,ok,graded}] só na fronteira da nuvem
+// (o Firestore recusa array dentro de array). Clona — nunca muta o estado
+// vivo. O validator findNestedArrayPaths continua ativo como rede de
+// segurança para qualquer outro campo futuro.
+function structuralSnapshotProgressToFirestore(revs){
+  if(!revs || typeof revs!=='object' || Array.isArray(revs)) return revs;
+  const out = {};
+  for(const [id, r] of Object.entries(revs)){
+    try{
+      const maps = r && r.structuralExecution && r.structuralExecution.beforeSnapshot
+        && r.structuralExecution.beforeSnapshot.maps;
+      if(r && typeof r==='object' && !Array.isArray(r) && maps
+        && maps.reviewProgress && typeof maps.reviewProgress==='object' && !Array.isArray(maps.reviewProgress)){
+        const copy = JSON.parse(JSON.stringify(r));
+        copy.structuralExecution.beforeSnapshot.maps.reviewProgress = reviewProgressToFirestore(maps.reviewProgress);
+        out[id] = copy;
+      } else out[id] = r;
+    }catch(_e){ out[id] = r; }
+  }
+  return out;
+}
+function structuralSnapshotProgressFromFirestore(revs){
+  // Inverso do codec acima: na leitura, o progresso embutido volta a tuplas
+  // (formato que Quiz/IndexedDB/restauração esperam). Idempotente: tuplas
+  // locais passam intactas (só objetos {t,ok,graded} são convertidos).
+  if(!revs || typeof revs!=='object' || Array.isArray(revs)) return revs;
+  const out = {};
+  for(const [id, r] of Object.entries(revs)){
+    try{
+      const maps = r && r.structuralExecution && r.structuralExecution.beforeSnapshot
+        && r.structuralExecution.beforeSnapshot.maps;
+      if(r && typeof r==='object' && !Array.isArray(r) && maps
+        && maps.reviewProgress && typeof maps.reviewProgress==='object' && !Array.isArray(maps.reviewProgress)){
+        const copy = JSON.parse(JSON.stringify(r));
+        copy.structuralExecution.beforeSnapshot.maps.reviewProgress = reviewProgressFromFirestore(maps.reviewProgress);
+        out[id] = copy;
+      } else out[id] = r;
+    }catch(_e){ out[id] = r; }
+  }
+  return out;
 }
 function normalizeReviewOverrides(v){
   const out = {};
@@ -14175,7 +14238,7 @@ function openForm(id, opts){
       }else{
         cloudOk = await withFirebaseTimeout(writeShardedStateSerialized(6000), 25000, 'salvar lesão').catch(e=>{
           console.error('Firebase push falhou ao salvar lesão (ficou salvo só localmente por enquanto).', e);
-          setSyncStatus(false, 'falha ao sincronizar — ficou salvo só neste dispositivo: ' + (e.message||e));
+          setSyncStatus(false, syncFailureStatus(e));
           return false;
         });
       }

@@ -139,11 +139,12 @@ test('084 PIPELINE: writeShardedState grava lesionRevisions no meta e une com o 
   assert.match(src, /lesionRevisions:\s*stripUndefinedDeep\(LESION_REVISIONS \|\| \{\}\)/);
   assert.match(src, /mergeLesionRevisions\((?:metaPayloadBase|txBase)\.lesionRevisions,\s*remoteMeta\.lesionRevisions\)/);
   assert.match(src, /lesionRevisions:\s*writeLesionRevisions/);
+  assert.match(src, /lesionRevisions:\s*structuralSnapshotProgressToFirestore\(metaPayload\.lesionRevisions\)/, 'escrita codifica progresso embutido no snapshot (sem arrays aninhados)');
 });
 
 test('084 PIPELINE: readShardedState devolve lesionRevisions com fallback {} para documento antigo', () => {
   const src = extractFunction(html, 'readShardedState');
-  assert.match(src, /lesionRevisions:\s*\(meta\.lesionRevisions && typeof meta\.lesionRevisions === 'object' && !Array\.isArray\(meta\.lesionRevisions\)\) \? meta\.lesionRevisions : \{\}/);
+  assert.match(src, /lesionRevisions:\s*structuralSnapshotProgressFromFirestore\(\(meta\.lesionRevisions && typeof meta\.lesionRevisions === 'object' && !Array\.isArray\(meta\.lesionRevisions\)\) \? meta\.lesionRevisions : \{\}\)/, 'leitura decodifica progresso embutido no snapshot (tuplas)');
 });
 
 test('084 PIPELINE: reconcile/persist/no-op/pull/adoção de device novo cobrem lesionRevisions sem marcar dirty', () => {

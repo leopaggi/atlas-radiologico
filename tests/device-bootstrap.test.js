@@ -101,6 +101,10 @@ const reviewFns089 = ['normalizeReviewStamps', 'saveReviewStamps', 'mergeReviewB
   'normalizeReviewProgressEntry', 'normalizeReviewProgress', 'reviewProgressToFirestore', 'reviewProgressFromFirestore', 'normalizeReviewOverrides', 'mergeReviewProgress',
   'mergeReviewOverrides', 'materializeReviewState', 'saveReviewProgressState']
   .map((n) => extractFunction(html, n).source).join('\n');
+// Ponte estrutural — codec do progresso embutido no snapshot da execução
+// (usado por readShardedState no caminho de adoção).
+const structuralSyncFns = ['structuralSnapshotProgressToFirestore', 'structuralSnapshotProgressFromFirestore']
+  .map((n) => extractFunction(html, n).source).join('\n');
 // PROTEÇÃO 091c — mapa de fusão clínica (módulo real: normalize/merge/fold).
 const lesionMergesModule091c = html.slice(html.indexOf("const LESION_MERGES_KEY = 'atlas:lesionMerges';"), html.indexOf('/* Plano APROVADO pelo usuário (091c).'));
 // PROTEÇÃO 085 — ordem de seções/sítios com carimbo (funções reais).
@@ -231,6 +235,7 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
     lesionMergesModule091c + '\n' +
     'function stripUndefinedDeep(v){try{return JSON.parse(JSON.stringify(v));}catch(_e){return v;}}\n' +
     extractFunction(html, 'findNestedArrayPaths').source + '\n' +
+    structuralSyncFns + '\n' +
     'function splitIntoChunks(arr,size){const out=[];for(let i=0;i<arr.length;i+=size)out.push(arr.slice(i,i+size));return out;}\n' +
     'function checkChunkSize(){return true;}\n' +
     imageIdentityKeysFn079b.source + '\n' +
@@ -765,6 +770,7 @@ function makeAdoptContext({ localData, remoteMeta, remoteChunks } = {}) {
     let REVIEW_PROGRESS = {}; let REVIEW_OVERRIDE = {};
     function __getReviewProgress090(){ return { REVIEW_PROGRESS, REVIEW_OVERRIDE }; }
     ${reviewFns089}
+    ${structuralSyncFns}
     ${lesionRevisionsFns084}
     ${lesionMergesModule091c}
     function __getLesionMerges091c(){ return LESION_MERGES; }

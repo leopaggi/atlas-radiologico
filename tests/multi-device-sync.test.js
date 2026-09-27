@@ -157,6 +157,10 @@ const reviewFns089 = ['normalizeReviewStamps', 'loadReviewStamps', 'saveReviewSt
   'ensureReviewProgressBase', 'recordReviewAttempt', 'gradeReviewAttempt', 'getReviewStateExplanation',
   'loadReviewProgressState', 'saveReviewProgressState', 'stampRestoredReviewOverrides', 'setReviewAuto', 'markLesionForReviewAgain']
   .map((n) => extractFunction(html, n).source).join('\n');
+// Ponte estrutural — codec do progresso embutido no snapshot da execução +
+// erro resumido de sync (usados por writeShardedState/readShardedState/push).
+const structuralSyncFns = ['structuralSnapshotProgressToFirestore', 'structuralSnapshotProgressFromFirestore', 'syncFailureStatus']
+  .map((n) => extractFunction(html, n).source).join('\n');
 // PROTEÇÃO 091c — mapa de fusão clínica (módulo real: normalize/merge/fold).
 const lesionMergesModule091c = html.slice(html.indexOf("const LESION_MERGES_KEY = 'atlas:lesionMerges';"), html.indexOf('/* Plano APROVADO pelo usuário (091c).'));
 // PROTEÇÃO 085 — ordem de seções/sítios com carimbo de reordenação manual.
@@ -454,6 +458,7 @@ function makeDevice(cloud, { seed = [] } = {}) {
     const REVIEW_PROGRESS_KEY = 'atlas:reviewProgress'; const REVIEW_OVERRIDE_KEY = 'atlas:reviewOverride'; const REVIEW_ATTEMPTS_MAX = 8;
     const REVIEW_LABELS = {0:'Não revisado',1:'Revisando',2:'Dominado'};
     ${reviewFns089}
+    ${structuralSyncFns}
     ${lesionMergesModule091c}
     function __getLesionMerges091c(){ return LESION_MERGES; }
     function __setLesionMerges091c(v){ LESION_MERGES = v; }
