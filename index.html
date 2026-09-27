@@ -21955,6 +21955,33 @@ function isStructuralPlanStale(review){
   }
   return changed.length ? { stale:true, reason:'lesions_changed', changedIds:changed } : { stale:false, reason:null, changedIds:[] };
 }
+function isStructuralExecutionStale(review){
+  // Pós-execução: compara o DATA atual com o afterSnapshot da execução
+  // (NUNCA com o snapshot pré-execução — keeper/remove mudarem É o efeito
+  // esperado do merge, não stale). Detecta alteração EXTERNA posterior.
+  // Puro (só leitura). Para não-executed: { postExecution:false }.
+  const ex = review && review.structuralExecution;
+  if(!ex || ex.status!=='executed' || !ex.afterSnapshot || !ex.afterSnapshot.lesions)
+    return { stale:false, reason:null, changedIds:[], postExecution:false };
+  const after = ex.afterSnapshot.lesions;
+  const changed = [];
+  for(const id of Object.keys(after)){
+    const rec = after[id];
+    const snap = (rec && typeof rec==='object' && rec.lesion) ? rec.lesion : rec;
+    const now = structuralPlanLesion(id);
+    if(!now){ changed.push(id); continue; }
+    try{
+      const a = typeof canonicalJsonString==='function' ? canonicalJsonString(now) : JSON.stringify(now);
+      const b = typeof canonicalJsonString==='function' ? canonicalJsonString(snap) : JSON.stringify(snap);
+      if(a!==b) changed.push(id);
+    }catch(_e){ changed.push(id); }
+  }
+  // O removeId ausente do afterSnapshot é ESPERADO (sumiu no merge) — só os
+  // ids do after contam. Ressuscitar removeId seria bug de render/restore.
+  return changed.length
+    ? { stale:true, reason:'changed_after_execution', changedIds:changed, postExecution:true }
+    : { stale:false, reason:null, changedIds:[], postExecution:true };
+}
 function validateStructuralResolutionBatch(obj){
   // Validação 100% read-only: nunca escreve em DATA, revisões ou storage.
   if(!obj || typeof obj!=='object' || Array.isArray(obj))
@@ -22724,6 +22751,48 @@ function structuralPlanLiveView(reviewId){
     imageIds:res.imageIds, clinicalCases:res.clinicalCases,
     reason:res.reason, reasoning:res.reasoning };
 }
+function structuralPlanStatusRowHtml(reviewId){
+  // Máquina de estados da PRÉVIA (pura, só leitura — testável sem DOM).
+  // executed/rolledback/rejected NUNCA usam o stale pré-execução e nunca
+  // mostram aceitar/rejeitar; executed mostra só reverter (+aviso se algo
+  // mudou APÓS a execução, comparado ao afterSnapshot).
+  const r = LESION_REVISIONS[reviewId] || null;
+  const esc = s=>String(s==null?'':s).replace(/</g,'&lt;');
+  if(!r || !r.structuralPlan)
+    return '<div class="review-center-row-meta">plano: <b>?</b> · sem plano nesta revisão</div>';
+  const st = r.structuralPlan.status;
+  if(st==='executed'){
+    let es = { stale:false, changedIds:[] };
+    try{ es = isStructuralExecutionStale(r); }catch(_e){}
+    return '<div class="review-center-row-meta">plano: <b>executed</b> · ✅ Executado' +
+      (es.stale ? ' · ⚠️ Alterado após a execução ('+es.changedIds.map(esc).join(', ')+')' : '') + '</div>' +
+      '<div class="review-center-row-actions">' +
+      '<button type="button" class="btn btn-ghost" data-plan-act="rollback">↩️ Reverter execução</button>' +
+      '</div>';
+  }
+  if(st==='rolledback')
+    return '<div class="review-center-row-meta">plano: <b>rolledback</b> · ↩️ Execução revertida. Estado anterior restaurado.</div>';
+  if(st==='rejected')
+    return '<div class="review-center-row-meta">plano: <b>rejected</b> · 🔴 Plano rejeitado. Nada foi executado.</div>';
+  // Pré-execução (imported/accepted): vale o stale pré-execução.
+  let stale = { stale:true, reason:'no_snapshot', changedIds:[] };
+  try{ stale = isStructuralPlanStale(r); }catch(_e){}
+  let canExecute = false;
+  try{
+    if(st==='accepted' && !stale.stale){
+      const dry = dryRunStructuralPlan(reviewId);
+      canExecute = !!(dry && dry.ok && dry.executes && !(dry.conflicts&&dry.conflicts.length));
+    }
+  }catch(_e){ canExecute = false; }
+  const badge = st==='accepted' ? ' · 🟢 Plano aprovado' : (st==='imported' ? ' · 🟡 Plano importado' : '');
+  return '<div class="review-center-row-meta">plano: <b>'+esc(st)+'</b>'+badge +
+    (stale.stale ? ' · ⚠️ PLANO DESATUALIZADO ('+esc(stale.reason)+(stale.changedIds.length?': '+stale.changedIds.map(esc).join(', '):'')+') — reimporte antes de aprovar' : '') + '</div>' +
+    '<div class="review-center-row-actions">' +
+    (st==='imported' ? '<button type="button" class="btn btn-ghost" data-plan-act="accept"'+(stale.stale?' disabled':'')+'>✅ Aceitar plano</button>' : '') +
+    ((st==='imported'||st==='accepted') ? '<button type="button" class="btn btn-ghost" data-plan-act="reject">❌ Rejeitar plano</button>' : '') +
+    (canExecute?'<button type="button" class="btn btn-primary" data-plan-act="execute">▶ Executar esta ação</button>':'') +
+    '</div>';
+}
 function openStructuralPlanPreviewModalForReview(reviewId, onDone){
   const v = structuralPlanLiveView(reviewId);
   if(!v){ try{ toast('Nenhum plano estrutural nesta revisão.'); }catch(_e){} return; }
@@ -22739,29 +22808,10 @@ function openStructuralPlanPreviewModal(validated, onDone){
   const close = ()=>{ document.removeEventListener('keydown', closeOnEsc); ov.remove(); try{ if(typeof onDone==='function') onDone(); }catch(_e){} };
   document.addEventListener('keydown', closeOnEsc);
   const rows = validated.map(v=>{
-    const r = LESION_REVISIONS[v.reviewId];
-    const stale = r ? isStructuralPlanStale(r) : { stale:true, reason:'no_snapshot', changedIds:[] };
-    const st = r && r.structuralPlan ? r.structuralPlan.status : '?';
-    // Botão executar SÓ para accepted + fresco + dry-run com o que executar.
-    // Nunca para imported/rejected/stale/unresolved. Reverter SÓ para executed.
-    let canExecute = false;
-    try{
-      if(st==='accepted' && !stale.stale){
-        const dry = dryRunStructuralPlan(v.reviewId);
-        canExecute = !!(dry && dry.ok && dry.executes && !(dry.conflicts&&dry.conflicts.length));
-      }
-    }catch(_e){ canExecute = false; }
-    const canRollback = (st==='executed');
     return '<div class="review-center-row" data-plan-review="'+String(v.reviewId).replace(/"/g,'&quot;')+'">' +
       structuralPlanPreviewHtml(v) +
-      '<div class="review-center-row-meta">plano: <b>'+st+'</b>' +
-      (stale.stale ? ' · ⚠️ PLANO DESATUALIZADO ('+stale.reason+(stale.changedIds.length?': '+stale.changedIds.join(', '):'')+') — reimporte antes de aprovar' : '') + '</div>' +
-      '<div class="review-center-row-actions">' +
-      '<button type="button" class="btn btn-ghost" data-plan-act="accept"'+(stale.stale?' disabled':'')+'>✅ Aceitar plano</button>' +
-      '<button type="button" class="btn btn-ghost" data-plan-act="reject">❌ Rejeitar plano</button>' +
-      (canExecute?'<button type="button" class="btn btn-primary" data-plan-act="execute">▶ Executar esta ação</button>':'') +
-      (canRollback?'<button type="button" class="btn btn-ghost" data-plan-act="rollback">↩️ Reverter execução</button>':'') +
-      '</div></div>';
+      structuralPlanStatusRowHtml(v.reviewId) +
+      '</div>';
   }).join('');
   ov.innerHTML = '<div class="modal review-center-modal"><h2>PLANO ESTRUTURAL IMPORTADO</h2>' +
     '<div class="modal-sub">Prévia humana — aceitar significa apenas "aprovado para futura execução". Nada foi executado.</div>' +
