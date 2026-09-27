@@ -6240,6 +6240,18 @@ function getManualActionSolutions(){
     .filter(r=>r.status==='manual_action_required')
     .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
 }
+function getStructuralHistorySolutions(){
+  // Histórico estrutural: revisões com plano executado ou revertido.
+  // executed/resolved SAI das pendências (não polui Ações manuais) mas segue
+  // visível aqui com detalhes e rollback. Puro: só lê LESION_REVISIONS.
+  return Object.values(LESION_REVISIONS)
+    .filter(r=>r && r.structuralPlan && (r.structuralPlan.status==='executed' || r.structuralPlan.status==='rolledback'))
+    .sort((a,b)=>{
+      const ta = Date.parse((a.structuralExecution&&(a.structuralExecution.rolledbackAt||a.structuralExecution.at))||a.structuralPlan.decidedAt||'')||0;
+      const tb = Date.parse((b.structuralExecution&&(b.structuralExecution.rolledbackAt||b.structuralExecution.at))||b.structuralPlan.decidedAt||'')||0;
+      return tb - ta;
+    });
+}
 /* Compatibilidade: mantido com o mesmo nome/uso de antes (badge 💡 e painel
    "Soluções disponíveis") — representa TUDO que aguarda alguma decisão/ação
    humana no 💡: propostas legadas + correções aplicadas aguardando validação
@@ -15604,30 +15616,37 @@ function openReadySolutionsModal(){
         <button type="button" class="review-tab-btn active" id="tab-btn-applied">Validar correções (<span id="tab-count-applied">0</span>)</button>
         <button type="button" class="review-tab-btn" id="tab-btn-manual" hidden>🛠 Ações manuais (<span id="tab-count-manual">0</span>)</button>
         <button type="button" class="review-tab-btn" id="tab-btn-proposed" hidden>Propostas (<span id="tab-count-proposed">0</span>)</button>
+        <button type="button" class="review-tab-btn" id="tab-btn-history" hidden>🧾 Histórico estrutural (<span id="tab-count-history">0</span>)</button>
       </div>
       <div class="review-center-list" id="proposed-list" hidden></div>
       <div class="review-center-list" id="manual-list" hidden></div>
+      <div class="review-center-list" id="history-list" hidden></div>
       <div class="review-center-list" id="applied-list"></div>
       <div class="modal-actions"><button class="btn btn-ghost" id="ready-solutions-close">fechar</button></div>
     </div>`;
   document.body.appendChild(ov);
   const proposedList = ov.querySelector('#proposed-list');
   const manualList = ov.querySelector('#manual-list');
+  const historyList = ov.querySelector('#history-list');
   const appliedList = ov.querySelector('#applied-list');
   const tabBtnProposed = ov.querySelector('#tab-btn-proposed');
   const tabBtnManual = ov.querySelector('#tab-btn-manual');
+  const tabBtnHistory = ov.querySelector('#tab-btn-history');
   const tabBtnApplied = ov.querySelector('#tab-btn-applied');
 
   const showTab = (which)=>{
     proposedList.hidden = which!=='proposed';
     manualList.hidden = which!=='manual';
+    historyList.hidden = which!=='history';
     appliedList.hidden = which!=='applied';
     tabBtnProposed.classList.toggle('active', which==='proposed');
     tabBtnManual.classList.toggle('active', which==='manual');
+    tabBtnHistory.classList.toggle('active', which==='history');
     tabBtnApplied.classList.toggle('active', which==='applied');
   };
   tabBtnProposed.onclick = ()=> showTab('proposed');
   tabBtnManual.onclick = ()=> showTab('manual');
+  tabBtnHistory.onclick = ()=> showTab('history');
   tabBtnApplied.onclick = ()=> showTab('applied');
 
   const closeAllAndCleanup = ()=>{ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); };
@@ -15866,7 +15885,32 @@ function openReadySolutionsModal(){
     });
   };
 
-  function renderBothLists(){ renderProposedList(); renderManualList(); renderAppliedList(); }
+  const renderHistoryList = ()=>{
+    // Histórico estrutural: SÓ executed/rolledback (nunca pendências).
+    // Puro na leitura: os cartões não tocam DATA nem ressuscitam removeId.
+    const reviews = getStructuralHistorySolutions();
+    ov.querySelector('#tab-count-history').textContent = String(reviews.length);
+    tabBtnHistory.hidden = reviews.length===0;
+    historyList.innerHTML = '';
+    if(reviews.length===0){
+      historyList.innerHTML = '<div class="review-center-empty">Nenhuma execução estrutural concluída.</div>';
+      return;
+    }
+    reviews.forEach(r=>{
+      const row = document.createElement('div');
+      row.className = 'review-center-row';
+      row.innerHTML = structuralHistoryCardHtml(r);
+      const detBtn = row.querySelector('.review-history-details');
+      if(detBtn) detBtn.onclick = ()=> openStructuralExecutionDetailsModal(r.id, renderBothLists);
+      const rbBtn = row.querySelector('.review-history-rollback');
+      if(rbBtn) rbBtn.onclick = (e)=>{ e.currentTarget.disabled = true; openStructuralPlanRollbackConfirmModal(r.id, renderBothLists); e.currentTarget.disabled = false; };
+      const histBtn = row.querySelector('.review-open-history');
+      if(histBtn) histBtn.onclick = ()=> openReviewHistoryModal(r.id);
+      historyList.appendChild(row);
+    });
+  };
+
+  function renderBothLists(){ renderProposedList(); renderManualList(); renderAppliedList(); renderHistoryList(); }
   renderBothLists();
   // Aba principal é "Validar correções"; cai em "Ação manual"/"Propostas"
   // apenas quando não há correção aplicada aguardando validação.
@@ -22862,6 +22906,95 @@ function structuralPlanStatusRowHtml(reviewId){
     ((st==='imported'||st==='accepted') ? '<button type="button" class="btn btn-ghost" data-plan-act="reject">❌ Rejeitar plano</button>' : '') +
     (canExecute?'<button type="button" class="btn btn-primary" data-plan-act="execute">▶ Executar esta ação</button>':'') +
     '</div>';
+}
+function structuralHistoryCardHtml(r){
+  // Cartão da aba Histórico estrutural. Puro: só LÊ a revisão (nunca escreve
+  // em DATA, nunca rematerializa removeId). Reverter passa pelo rollback real.
+  const esc = s=>String(s==null?'':s).replace(/</g,'&lt;');
+  if(!r || !r.structuralPlan) return '';
+  const st = r.structuralPlan.status, v = r.structuralPlan.resolution || {}, ex = r.structuralExecution || {};
+  if(st!=='executed' && st!=='rolledback') return '';
+  const head = st==='executed' ? '✅ Executado' : '↩️ Revertido';
+  const keepId = v.keeperId || v.lesionId || v.toLesionId || '';
+  const keep = keepId ? structuralPlanLesion(keepId) : null;
+  const when = ex.rolledbackAt || ex.at || r.structuralPlan.decidedAt || '';
+  let detail = '';
+  if(v.type==='merge_duplicates')
+    detail = '<div><b>MANTIDO:</b> '+esc(v.keeperId)+' — '+esc(v.keeperName||(keep&&keep.name)||'')+'</div>' +
+      '<div><b>REMOVIDO:</b> '+esc(v.removeId)+' — '+esc(v.removeName||'')+'</div>';
+  else if(v.type==='transfer_images')
+    detail = '<div><b>DE:</b> '+esc(v.fromLesionId)+' — '+esc(v.fromLesionName||'')+'</div>' +
+      '<div><b>PARA:</b> '+esc(v.toLesionId)+' — '+esc(v.toLesionName||'')+'</div>';
+  else if(v.type==='remove_additional_section_placement')
+    detail = '<div><b>Lesão:</b> '+esc(v.lesionId)+' — '+esc(v.lesionName||'')+'</div>';
+  else if(v.type==='add_clinical_cases')
+    detail = '<div><b>Lesão:</b> '+esc(v.lesionId)+' — '+esc(v.lesionName||'')+'</div>' +
+      '<div><b>Casos adicionados:</b> '+(Array.isArray(v.clinicalCases)?v.clinicalCases.length:0)+'</div>';
+  return '<div class="review-center-row-main">' +
+    '<div class="review-center-row-title">'+esc((keep&&keep.name)||v.keeperName||v.lesionName||v.toLesionName||r.lesionId||r.id)+'</div>' +
+    '<div class="review-center-row-meta">'+head+' ('+esc(v.type||r.structuralPlan.type||'?')+')</div>' +
+    detail +
+    '<div class="review-center-row-meta">executionId: <b>'+esc(ex.executionId||'(sem registro)')+'</b></div>' +
+    (when?'<div class="review-center-row-meta">'+(st==='executed'?'executado em: ':'revertido em: ')+esc(when)+'</div>':'') +
+    '</div><div class="review-center-row-actions">' +
+    '<button type="button" class="btn btn-ghost review-history-details">👁 Ver detalhes</button>' +
+    (st==='executed'?'<button type="button" class="btn btn-ghost review-history-rollback">↩️ Reverter execução</button>':'') +
+    '<button type="button" class="btn btn-ghost review-open-history">histórico</button>' +
+    '</div>';
+}
+function structuralExecutionDetailsHtml(reviewId){
+  // Resumo humano da execução (sem despejar JSON por padrão). Puro.
+  const esc = s=>String(s==null?'':s).replace(/</g,'&lt;');
+  const r = LESION_REVISIONS[reviewId] || null;
+  if(!r || !r.structuralPlan) return '<div>Nenhum plano estrutural nesta revisão.</div>';
+  const st = r.structuralPlan.status, v = r.structuralPlan.resolution || {}, ex = r.structuralExecution || {};
+  const aff = Array.isArray(ex.affectedIds)?ex.affectedIds:[];
+  const ops = Array.isArray(ex.operations)?ex.operations:[];
+  const tb = ex.tombstone || null;
+  const snapCount = (s)=>{ try{ return s && s.lesions ? Object.keys(s.lesions).length : 0; }catch(_e){ return 0; } };
+  const snapIds = (s)=>{ try{ return s && s.lesions ? Object.keys(s.lesions).join(', ') : '—'; }catch(_e){ return '—'; } };
+  let tech = null;
+  try{ tech = JSON.stringify({ structuralPlan:r.structuralPlan, structuralExecution:r.structuralExecution }, null, 1); }catch(_e){}
+  return '<div class="review-center-row-main">' +
+    '<div class="review-center-row-title">'+(st==='executed'?'✅ Execução estrutural':'↩️ Execução revertida')+'</div>' +
+    '<div class="review-center-row-meta">revisão: <b>'+esc(reviewId)+'</b></div>' +
+    '<div><b>executionId:</b> '+esc(ex.executionId||'—')+'</div>' +
+    '<div><b>structuralPlanStatus:</b> '+esc(st)+'</div>' +
+    '<div><b>MANTIDO:</b> '+esc(v.keeperId||v.lesionId||v.toLesionId||'—')+'</div>' +
+    (v.removeId?'<div><b>REMOVIDO:</b> '+esc(v.removeId)+'</div>':'') +
+    '<div><b>Lesões afetadas:</b> '+esc(aff.join(', ')||'—')+'</div>' +
+    (ops.length?'<div><b>Operações:</b> '+esc(ops.join(', '))+'</div>':'') +
+    (tb?'<div><b>Tombstone:</b> '+esc(tb.removeId)+' → '+esc(tb.keeperId)+'</div>':'') +
+    '<div><b>beforeSnapshot:</b> '+snapCount(ex.beforeSnapshot)+' lesão(ões) ('+esc(snapIds(ex.beforeSnapshot))+')</div>' +
+    '<div><b>afterSnapshot:</b> '+snapCount(ex.afterSnapshot)+' lesão(ões) ('+esc(snapIds(ex.afterSnapshot))+')</div>' +
+    '<div><b>Executado em:</b> '+esc(ex.at||'—')+'</div>' +
+    (ex.rolledbackAt?'<div><b>Revertido em:</b> '+esc(ex.rolledbackAt)+'</div>':'') +
+    '<div class="review-center-row-meta">'+(st==='executed'?'Rollback disponível abaixo. Não há reexecução automática.':'Sem nova execução a partir daqui.')+'</div>' +
+    (tech?'<details><summary>Ver JSON técnico</summary><pre style="white-space:pre-wrap;max-height:30vh;overflow:auto;">'+esc(tech)+'</pre></details>':'') +
+    '</div>';
+}
+function openStructuralExecutionDetailsModal(reviewId, onDone){
+  // Modal "Ver detalhes" do histórico. Pequeno, por cima da lista (padrão dos
+  // modais da Central — nunca getStudyOverlay, que é do fluxo do Quiz).
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) close(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) close(); };
+  const close = ()=>{ document.removeEventListener('keydown', closeOnEsc); ov.remove(); };
+  document.addEventListener('keydown', closeOnEsc);
+  const r = LESION_REVISIONS[reviewId] || null;
+  const canRollback = !!(r && r.structuralPlan && r.structuralPlan.status==='executed' && r.structuralExecution && r.structuralExecution.status==='executed');
+  ov.innerHTML = '<div class="modal review-center-modal"><h2>🧾 Detalhes da execução</h2>' +
+    '<div class="review-center-list"><div class="review-center-row">' +
+    structuralExecutionDetailsHtml(reviewId) +
+    '</div></div>' +
+    '<div class="modal-actions"><button type="button" class="btn btn-ghost" id="structural-exec-details-close">fechar</button>' +
+    (canRollback?'<button type="button" class="btn btn-primary" id="structural-exec-details-rollback">↩️ Reverter execução</button>':'') +
+    '</div></div>';
+  document.body.appendChild(ov);
+  ov.querySelector('#structural-exec-details-close').onclick = ()=>{ close(); if(typeof onDone==='function') onDone(); };
+  const rb = ov.querySelector('#structural-exec-details-rollback');
+  if(rb) rb.onclick = ()=>{ close(); openStructuralPlanRollbackConfirmModal(reviewId, onDone); };
 }
 function openStructuralPlanPreviewModalForReview(reviewId, onDone){
   const v = structuralPlanLiveView(reviewId);
