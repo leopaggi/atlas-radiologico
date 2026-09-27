@@ -12,6 +12,20 @@ textarea manual se o clipboard falhar. A Ponte 1 (campos permitidos e
 validação humana) permanece intocada. **Nenhuma resposta da IA é importada,
 nenhum dado estrutural é aplicado nesta fase.**
 
+## Ponte 1.1 — seleção conservadora de candidatos (2026-09-26)
+
+`findStructuralReviewCandidates` ancora em seção/sítio e trata nome declarado
+como pista, não prova: conflito anatômico forte (ovário×pâncreas,
+endométrio×ovário, colo×endométrio) veta o candidato; `enTerm` com órgão
+incompatível vira apenas o aviso `different_enTerm_anatomy` (metadado pode
+estar errado sem invalidar anatomia correta). Nomes inteiros citados em
+`requestText`/`manualAction.description` geram `explicit_name_in_review` e
+atravessam divergência de seção/sítio e o portão de duplicata. Cada candidato
+leva `candidateScore` explicativo (só ordena auditoria, nunca decide fusão).
+Teste: `tests/manual-action-ai-export.test.js` (15/15, inclui regressões do
+pacote real: seed_207 sim/seed_156 não, clone cervical citado, placenta
+declarada, Paraovarian com branding e os quatro pares remanescentes).
+
 ## Save stale do editor (2026-09-26)
 
 `formImagesOpenList` fotografa as imagens da abertura (cópias por valor). No Save, `saveEntry` resolve o objeto ATUAL em DATA (o pull pode ter substituído o `existing`), `mergeStaleFormImagesForSave` une remotas novas (fora da base, metadados intactos, sem tombstone) e só a base ausente da galeria vira remoção explícita (073). 092/`stamp`/079d operam sobre o estado atual. Quiz, didático, 091c e sync inalterados. Teste: `node tests/editor-stale-save.test.js` (18/18).

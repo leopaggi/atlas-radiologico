@@ -17,6 +17,21 @@ Arquivos desta entrega: `index.html`, `tests/manual-action-ai-export.test.js`,
 `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` e este diário. Nenhum dado do
 catálogo ou asset foi alterado por este recurso.
 
+## Ponte 1.1 — candidatos com âncora anatômica (26/09/2026)
+
+O pacote real de 12 ações mostrou quatro falhas na descoberta de clones: um
+candidato pancreático entrou para lesão ovariana só por nome declarado;
+carcinoma cervical, placenta, Paraovarian e equivalentes reais ficaram de
+fora. Agora seção/sítio mandam: conflito anatômico forte veta o candidato,
+`enTerm` incompatível vira aviso (`different_enTerm_anatomy`) em vez de veto
+e nomes inteiros citados no pedido/ação atravessam as barreiras como
+`explicit_name_in_review`. O `candidateScore` só ordena a auditoria humana.
+Nada estrutural é executado; nenhum dado do catálogo foi alterado.
+
+Arquivos desta entrega: `index.html`, `tests/manual-action-ai-export.test.js`,
+`AI.md`, `README.md`, `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` e este diário.
+Testes: ponte 15/15 (inclui as cinco regressões do pacote real).
+
 Testes executados: ponte 10/10; Central 138/138; sincronização da Central
 15/15; casos 47/47; fusão controlada 27/27 (shim de CRLF só no runner do
 teste); fluxos críticos 23/23; multi-PC 181/181; importação 79/79. Suíte

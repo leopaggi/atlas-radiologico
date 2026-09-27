@@ -24,9 +24,10 @@ function fn(name){
   }
   throw new Error('função não fechada '+name);
 }
-const names=['normalizeExternalTitle','tokenizeExternalTitle','externalTokenOverlap','levNormSimilarity','externalMatchBand',
+const names=['normalizeExternalTitle','normalizeRadiopaediaCaseTitle','tokenizeExternalTitle','externalTokenOverlap','levNormSimilarity','externalMatchBand',
   'reviewScope','isGlobalReview','buildReviewAiAttempts','resolveLatestHumanFeedback',
-  'structuralReviewPick','structuralReviewImageMeta','structuralReviewRecord','findStructuralReviewCandidates',
+  'structuralReviewPick','structuralReviewImageMeta','structuralSectionOf','structuralSiteOf','hasStrongAnatomicConflict',
+  'structuralReviewRecord','findStructuralReviewCandidates',
   'buildManualActionAiBatch','openManualActionCopyFallback','copyManualActionAiBatch'];
 const consts=html.slice(html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = '),html.indexOf('// Tokens relevantes:',html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = ')));
 const mapping=html.slice(html.indexOf('const STRUCTURAL_REVIEW_CANDIDATE_NAMES = '),html.indexOf('function structuralReviewPick('));
@@ -102,6 +103,85 @@ test('nomes parecidos com histologia oposta não viram candidatos técnicos',()=
   const candidates=plain(c.findStructuralReviewCandidates(c.LESION_REVISIONS.R1,c.DATA[0]));
   assert.ok(candidates.some(x=>x.id==='seed_208'));
   assert.ok(!candidates.some(x=>x.id==='seed_7'),'seroso ≠ mucinoso mesmo na mesma seção/site');
+});
+test('real: seroso ovariano inclui seed_207 mas exclui seed_156 de pâncreas; enTerm legado fica sinalizado',()=>{
+  const c=ctxFixture(), s=c.DATA[0];
+  s.id='seed_697';s.name='Cistadenoma seroso ovariano';s.s='Pelve Feminina';s.site='Ovário';s.enTerm='serous ovarian cystadenoma';
+  c.LESION_REVISIONS.R1.lesionId=s.id;
+  c.DATA.splice(1,2,
+    {id:'seed_156',name:'Cistoadenoma seroso',s:'Abdômen Superior',site:'Pâncreas',enTerm:'serous cystadenoma pancreas',classification:'LIRADS'},
+    {id:'seed_207',name:'Cistoadenoma seroso',s:'Pelve Feminina',site:'Ovário',enTerm:'serous cystadenoma pancreas',classification:'ORADS'});
+  const out=plain(c.buildManualActionAiBatch(['R1'])).actions[0].candidateRecords;
+  assert.deepEqual(out.map(x=>x.id),['seed_207']);
+  assert.equal(out[0].classification,'ORADS');
+  assert.ok(out[0].candidateReason.includes('same_section'));
+  assert.ok(out[0].candidateReason.includes('same_site'));
+  assert.ok(out[0].candidateReason.includes('different_enTerm_anatomy'),'enTerm legado é aviso, não elimina ovário real');
+  assert.ok(Number.isFinite(out[0].candidateScore));
+});
+test('real: carcinoma cervical genérico citado em pedido/descrição aparece, histologia/anatomia alheia não',()=>{
+  const c=ctxFixture(), s=c.DATA[0];
+  s.id='seed_600';s.name='Carcinoma espinocelular do colo uterino';s.s='Pelve Feminina';s.site='Colo uterino';s.enTerm='cervical squamous cell carcinoma';
+  c.LESION_REVISIONS.R1.lesionId=s.id;
+  c.LESION_REVISIONS.R1.requestText='Localizar clone';
+  c.LESION_REVISIONS.R1.manualAction.description='Localizar registro equivalente: Carcinoma do colo uterino';
+  c.DATA.splice(1,2,
+    {id:'seed_218',name:'Carcinoma do colo uterino',s:'Pelve Feminina',site:'Colo uterino'},
+    {id:'u_end',name:'Carcinoma de endométrio',s:'Pelve Feminina',site:'Endométrio'});
+  const out=plain(c.buildManualActionAiBatch(['R1'])).actions[0].candidateRecords;
+  assert.deepEqual(out.map(x=>x.id),['seed_218']);
+  assert.ok(out[0].candidateReason.includes('explicit_name_in_review'));
+});
+test('real: placenta declarada sem enTerm igual acha clone existente, não inventa ausente',()=>{
+  const c=ctxFixture(),s=c.DATA[0];
+  s.id='seed_530';s.name='Placenta acreta spectrum';s.s='Medicina Fetal';s.site='Placenta';s.enTerm='placenta accreta spectrum';
+  c.LESION_REVISIONS.R1.lesionId=s.id;c.LESION_REVISIONS.R1.requestText='LESÃO DUPLICADA - localizar clone';
+  c.DATA.splice(1,2,{id:'seed_42',name:'Placenta acreta',s:'Medicina Fetal',site:'Placenta'});
+  const out=plain(c.buildManualActionAiBatch(['R1'])).actions[0].candidateRecords;
+  assert.deepEqual(out.map(x=>x.id),['seed_42']);
+  assert.ok(out[0].candidateReason.includes('declared_candidate_name'));
+  c.DATA.pop();
+  assert.deepEqual(plain(c.buildManualActionAiBatch(['R1'])).actions[0].candidateRecords,[]);
+});
+test('real: Paraovarian cyst com branding encontra nome citado sem precisar de palavra "duplicata"',()=>{
+  const c=ctxFixture(),s=c.DATA[0];
+  s.name='Paraovarian cyst | Radiology Case | Radiopaedia.org';s.enTerm='';s.s='Pelve Feminina';s.site='Ovário';
+  c.LESION_REVISIONS.R1.requestText='Corrigir título externo';
+  c.LESION_REVISIONS.R1.manualAction={type:'title_review',description:'Registro correspondente: Cisto paratubário (cisto de Morgagni)'};
+  c.DATA.splice(1,2,{id:'seed_33',name:'Cisto paratubário (cisto de Morgagni)',s:'Pelve Feminina',site:'Tuba uterina'});
+  const out=plain(c.buildManualActionAiBatch(['R1'])).actions[0].candidateRecords;
+  assert.deepEqual(out.map(x=>x.id),['seed_33']);
+  assert.ok(out[0].candidateReason.includes('explicit_name_in_review'));
+});
+test('real: teratoma/endométrio/ectópica/hematometra continuam candidatos se existirem',()=>{
+  const cases=[
+    ['seed_575','Teratoma cístico maduro','seed_206','Teratoma maduro (cisto dermoide)','Ovário'],
+    ['seed_195','Carcinoma de endométrio','seed_574','Carcinoma endometrial','Endométrio'],
+    ['seed_601','Gestação ectópica tubária','seed_413','Gravidez ectópica','Tuba uterina'],
+    ['seed_693','Hematometra','seed_200','Hematometra','Útero']
+  ];
+  for(const [id,name,targetId,target,site] of cases){
+    const c=ctxFixture(),s=c.DATA[0];s.id=id;s.name=name;s.s='Pelve Feminina';s.site=site;s.enTerm='';
+    c.LESION_REVISIONS.R1.lesionId=id;
+    c.DATA.splice(1,2,{id:targetId,name:target,s:'Pelve Feminina',site});
+    const out=plain(c.buildManualActionAiBatch(['R1'])).actions[0].candidateRecords;
+    assert.ok(out.some(x=>x.id===targetId),name+' → '+target);
+  }
+});
+test('REGRESSÃO seed_156: ovário ≠ pâncreas mesmo com nome idêntico; seed_207 permanece',()=>{
+  const c=ctxFixture();
+  c.DATA.length=0;
+  c.DATA.push(
+    {id:'seed_697',name:'Cistadenoma seroso ovariano',section:'Pelve Feminina',site:'Ovário',enTerm:'serous cystadenoma ovary'},
+    {id:'seed_207',name:'Cistoadenoma seroso',section:'Pelve Feminina',site:'Ovário',classification:'ORADS'},
+    {id:'seed_156',name:'Cistoadenoma seroso',section:'Abdômen Superior',site:'Pâncreas',enTerm:'serous cystadenoma pancreas',classification:'LIRADS'}
+  );
+  c.LESION_REVISIONS.R1.lesionId='seed_697';
+  c.LESION_REVISIONS.R1.requestText='LESÃO DUPLICADA - fundir clone ovariano';
+  const out=plain(c.buildManualActionAiBatch(['R1'])).actions[0].candidateRecords;
+  assert.ok(out.some(x=>x.id==='seed_207'),'seed_207 (mesma anatomia) presente');
+  assert.ok(!out.some(x=>x.id==='seed_156'),'seed_156 (pâncreas) NUNCA como candidato de ovário');
+  assert.deepEqual(out.map(x=>x.id),['seed_207']);
 });
 test('metadados de imagem sem binário/base64, clinicalCases e altPlacements preservados',()=>{
   const c=ctxFixture();const s=plain(c.buildManualActionAiBatch(['R1'])).actions[0].source;

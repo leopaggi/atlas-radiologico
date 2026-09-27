@@ -10,6 +10,14 @@ clipboard mostra JSON selecionável para cópia manual. Copiar não altera
 revisões nem lesões e não executa planos estruturais. A ponte antiga de
 correções limitadas de conteúdo continua independente.
 
+### Ponte 1.1 — candidatos com âncora anatômica (2026-09-26)
+
+A seleção de `candidateRecords` privilegia mesma seção/sítio/`enTerm` e usa o
+texto do pedido/ação para localizar nomes citados. Conflito anatômico forte
+(ex.: ovário×pâncreas) veta o candidato; `enTerm` legado incompatível vira
+aviso sem eliminar registro anatomicamente correto. Cada candidato traz
+`candidateScore` apenas para ordenar a auditoria humana.
+
 ### Save do editor com outro PC (2026-09-26)
 
 Se outro computador adicionar uma imagem enquanto o formulário está aberto, o Salvar mantém essa imagem: só o que foi removido de propósito na tela gera exclusão. Teste: `node tests/editor-stale-save.test.js`.

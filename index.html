@@ -21554,7 +21554,7 @@ function structuralReviewRecord(entry){
     return item;
   });
   return {
-    id:entry.id, name:entry.name, section:entry.s, site:entry.site,
+    id:entry.id, name:entry.name, section:structuralSectionOf(entry), site:entry.site,
     notes:entry.notes||'', classification:entry.classification||null,
     tags:Array.isArray(entry.tags)?entry.tags.slice():[], enTerm:entry.enTerm||'',
     images:Array.isArray(entry.images)?entry.images.map(structuralReviewImageMeta).filter(Boolean):[],
@@ -21564,13 +21564,37 @@ function structuralReviewRecord(entry){
     classificationSchemes:didactic(entry.classificationSchemes,['id','title','content','order','createdAt','updatedAt','deletedAt'])
   };
 }
+/* Seção com tolerância aos dois formatos de campo (`s` do DATA e `section`
+   de pacotes/fixtures). Sem isso, dois registros sem `s` seriam considerados
+   "mesma seção" por compararem string vazia com string vazia. */
+function structuralSectionOf(entry){
+  return (entry && (entry.s || entry.section)) || '';
+}
+function structuralSiteOf(entry){
+  return (entry && entry.site) || '';
+}
+/* Conflito anatômico forte: seção E sítio diferentes ao mesmo tempo. Nome
+   semelhante sozinho nunca vence essa barreira — só ponte explícita
+   (nome citado na revisão) ou enTerm anatômico equivalente. Não é aplicada
+   cegamente como veto universal: quem chama decide quando ela elimina. */
+function hasStrongAnatomicConflict(source, candidate){
+  const norm = s=>normalizeExternalTitle(s||'');
+  const ss=norm(structuralSectionOf(source)), cs=norm(structuralSectionOf(candidate));
+  const st=norm(structuralSiteOf(source)), ct=norm(structuralSiteOf(candidate));
+  if(!ss || !cs || !st || !ct) return false;
+  return ss!==cs && st!==ct;
+}
 function findStructuralReviewCandidates(review, source){
   if(!review || !source) return [];
-  const text=[review.requestText,review.manualAction && review.manualAction.type,review.manualActionReason,
-    review.solution && review.solution.text].filter(Boolean).join(' ');
-  if(!/duplic|clon|fundir|fus[aã]o|transferir imagens|merge/i.test(text)) return [];
   const norm = s=>normalizeExternalTitle(s||'');
-  const srcName=norm(source.name), srcEn=norm(source.enTerm);
+  const srcName=norm(typeof normalizeRadiopaediaCaseTitle==='function' ? normalizeRadiopaediaCaseTitle(source.name) : source.name);
+  const srcEn=norm(source.enTerm);
+  // Só os textos de intenção humana, não o resumo livre da IA: um nome
+  // inteiro citado aqui é uma pista verificável no DATA, não um diagnóstico.
+  const requested=norm([review.requestText,review.manualAction && review.manualAction.description].filter(Boolean).join(' '));
+  const actionText=[review.requestText,review.manualAction && review.manualAction.type,review.manualActionReason,
+    review.manualAction && review.manualAction.description].filter(Boolean).join(' ');
+  const isDuplicateAction=/duplic|clon|fundir|fus[aã]o|mescl|transferir imagens|merge/i.test(actionText);
   const declared=new Set();
   const hints=STRUCTURAL_REVIEW_CANDIDATE_NAMES[srcName]||STRUCTURAL_REVIEW_CANDIDATE_NAMES[srcEn]||[];
   hints.forEach(n=>declared.add(norm(n)));
@@ -21578,13 +21602,38 @@ function findStructuralReviewCandidates(review, source){
   // afirma equivalência para grupos apenas semelhantes.
   if(typeof APPROVED_CLINICAL_MERGES_091C!=='undefined'){
     APPROVED_CLINICAL_MERGES_091C.forEach(g=>{
-      if(g.members.some(m=>norm(m.name)===srcName && m.s===source.s && m.site===source.site))
+      if(g.members.some(m=>norm(m.name)===srcName && m.s===structuralSectionOf(source) && m.site===structuralSiteOf(source)))
         g.members.forEach(m=>declared.add(norm(m.name)));
     });
   }
   const ignored=new Set(['carcinoma','cancer','tumor','lesao','colo','uterino','ovariano','ovario','massa']);
   const tokens=s=>tokenizeExternalTitle(s).filter(t=>!ignored.has(t));
   const srcTokens=tokens(source.name);
+  // A anatomia cadastrada em seção/sítio é a âncora principal. EnTerm pode
+  // estar ERRADO no próprio registro (ex.: seroso ovariano com texto legado
+  // pancreático): sinaliza conflito, mas não apaga candidato anatomicamente
+  // correto por causa desse erro de metadado.
+  const organs=t=>{
+    t=norm(t);
+    const found=new Set();
+    if(/\b(?:ovario|ovariano|ovariana|adnexo|adnexal)\b/.test(t)) found.add('ovario');
+    if(/\b(?:pancreas|pancreatico|pancreatica|pancreatic)\b/.test(t)) found.add('pancreas');
+    if(/\b(?:endometrio|endometrial)\b/.test(t)) found.add('endometrio');
+    if(/\b(?:cervix|colo uterino)\b/.test(t)) found.add('colo_uterino');
+    return found;
+  };
+  const srcOrg=organs([structuralSectionOf(source),structuralSiteOf(source)].join(' '));
+  const anatomicalConflict=e=>{
+    const other=organs([structuralSectionOf(e),structuralSiteOf(e)].join(' '));
+    return (srcOrg.has('ovario') && other.has('pancreas')) || (srcOrg.has('pancreas') && other.has('ovario')) ||
+      (srcOrg.has('endometrio') && other.has('ovario')) || (srcOrg.has('ovario') && other.has('endometrio')) ||
+      (srcOrg.has('colo_uterino') && other.has('endometrio')) || (srcOrg.has('endometrio') && other.has('colo_uterino'));
+  };
+  const enTermAnatomyConflict=e=>{
+    const en=organs(e.enTerm);
+    return (srcOrg.has('ovario') && en.has('pancreas')) || (srcOrg.has('pancreas') && en.has('ovario')) ||
+      (srcOrg.has('endometrio') && en.has('ovario')) || (srcOrg.has('ovario') && en.has('endometrio'));
+  };
   const out=[];
   (Array.isArray(DATA)?DATA:[]).forEach(e=>{
     if(!e || !e.id || e.id===source.id || (typeof LESION_MERGES!=='undefined' && LESION_MERGES[e.id])) return;
@@ -21593,21 +21642,38 @@ function findStructuralReviewCandidates(review, source){
     // "cistadenoma ovariano", "teratoma" etc. Isto NÃO decide diagnóstico;
     // apenas evita candidatos técnicos sabidamente enganosos.
     const exclusive=(a,b)=>new RegExp('\\b(?:'+a+')\\b').test(srcName) && new RegExp('\\b(?:'+b+')\\b').test(name);
-    if(exclusive('seroso|serosa','mucinoso|mucinosa') || exclusive('mucinoso|mucinosa','seroso|serosa') ||
-      exclusive('maduro|madura','imaturo|imatura') || exclusive('imaturo|imatura','maduro|madura')) return;
+    if(anatomicalConflict(e) || exclusive('seroso|serosa','mucinoso|mucinosa') ||
+      exclusive('mucinoso|mucinosa','seroso|serosa') || exclusive('maduro|madura','imaturo|imatura') ||
+      exclusive('imaturo|imatura','maduro|madura')) return;
+    const sameSection=norm(structuralSectionOf(e))===norm(structuralSectionOf(source));
+    const sameSite=norm(structuralSiteOf(e))===norm(structuralSiteOf(source));
     const reasons=[];
     if(name && name===srcName) reasons.push('normalized_name_match');
     if(srcEn && en && srcEn===en) reasons.push('same_enTerm');
     if((Array.isArray(e.tags)?e.tags:[]).some(t=>norm(t)===srcName) || (Array.isArray(source.tags)?source.tags:[]).some(t=>norm(t)===name)) reasons.push('known_alias');
     if(declared.has(name)) reasons.push('declared_candidate_name');
-    if(!reasons.length && e.s===source.s && e.site===source.site && srcTokens.length){
+    const explicit=!!name && name!==srcName && name.length>=8 && requested.includes(name) && !srcName.includes(name);
+    if(explicit) reasons.push('explicit_name_in_review');
+    if(!reasons.length && sameSection && sameSite && srcTokens.length){
       const shared=srcTokens.filter(t=>tokens(e.name).includes(t));
       if(shared.length && externalMatchBand(source.name,e.name)==='alta') reasons.push('same_site_distinctive_name_similarity');
     }
-    if(reasons.length) out.push({...structuralReviewRecord(e),candidateReason:reasons});
+    if(!reasons.length || (!isDuplicateAction && !explicit)) return;
+    // Dois endereços anatômicos diferentes sem ponte explícita não bastam
+    // para inclusão. Nome mapeado sozinho NÃO atravessa essa barreira:
+    // "Cistoadenoma seroso" de OVÁRIO ≠ "Cistoadenoma seroso" de PÂNCREAS,
+    // mesmo com o nome em português idêntico.
+    if(hasStrongAnatomicConflict(source,e) && !explicit) return;
+    if(sameSection) reasons.push('same_section'); else reasons.push('different_section');
+    if(sameSection && sameSite) reasons.push('same_site'); else reasons.push('different_site');
+    if(enTermAnatomyConflict(e)) reasons.push('different_enTerm_anatomy');
+    const evidence={explicit_name_in_review:100,same_enTerm:95,normalized_name_match:85,
+      known_alias:80,declared_candidate_name:70,same_site_distinctive_name_similarity:20};
+    const score=reasons.reduce((n,r)=>n+(evidence[r]||0),0)+(sameSection?35:-65)+(sameSection&&sameSite?25:-30)-
+      (reasons.includes('different_enTerm_anatomy')?60:0);
+    if(score>0) out.push({...structuralReviewRecord(e),candidateReason:reasons,candidateScore:score});
   });
-  const rank={declared_candidate_name:0,normalized_name_match:1,same_enTerm:2,known_alias:3,same_site_distinctive_name_similarity:4};
-  return out.sort((a,b)=>Math.min(...a.candidateReason.map(x=>rank[x]))-Math.min(...b.candidateReason.map(x=>rank[x])) || String(a.id).localeCompare(String(b.id))).slice(0,8);
+  return out.sort((a,b)=>b.candidateScore-a.candidateScore || String(a.id).localeCompare(String(b.id))).slice(0,8);
 }
 function buildManualActionAiBatch(reviewIds){
   const ids=Array.isArray(reviewIds)?reviewIds:[];

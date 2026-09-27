@@ -17,6 +17,16 @@ com `candidateReason`. Não há importador/executor da Ponte 2; Ponte 1
 permanece intocada. Cópia aguarda clipboard e oferece textarea manual se
 falhar. Nenhum dado do acervo, estado de revisão ou asset é alterado ao
 exportar. Teste novo `tests/manual-action-ai-export.test.js`.
+
+**Ponte 1.1 — candidatos com âncora anatômica (2026-09-26):** após pacote real
+de 12 ações, `findStructuralReviewCandidates` veta conflito anatômico forte
+(ovário×pâncreas, endométrio×ovário, colo×endométrio), rebaixa `enTerm`
+legado incompatível para o aviso `different_enTerm_anatomy` e aceita nomes
+inteiros citados em pedido/ação como `explicit_name_in_review` (atravessa
+seção/sítio e o portão de duplicata). `candidateScore` só ordena auditoria.
+Teste `manual-action-ai-export` 15/15 com as cinco regressões do pacote real
+(seed_207 sim/seed_156 não; clone cervical citado; placenta declarada;
+Paraovarian com branding; teratoma/endométrio/ectópica/hematometra).
 Validação local: `manual-action-ai-export` 10/10 (inclui rejeição
 `seroso`×`mucinoso`); `lesion-review` 138/138;
 `lesion-revisions-sync` 15/15; `clinical-cases` 47/47;
