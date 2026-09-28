@@ -8,6 +8,22 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**2º complemento — layout imagem/descrição no Quiz (2026-09-28, mesma
+revisão `lrev_mulfu0x2_ocobn9`, ainda não é nova):** reprodução visual real
+mostrou que a imagem ainda podia sair da área visível ao rolar a descrição.
+Causa raiz real: `.quiz-study-media` (painel INTEIRO) continuava com
+`overflow-y:auto` — imagem e texto compartilhavam o mesmo eixo de rolagem
+do container pai. Fix: `overflow-y:auto` removido do painel;
+`.quiz-media-text` virou `flex:0 0 auto` com teto por LINHAS
+(`line-height:1.4` + `max-height:calc(5 * 1.4em)` ≈ 98px/~5 linhas, menor
+no mobile) em vez de um pixel solto; imagem/`.quiz-carousel` ganharam
+`flex-shrink:0` explícito — nunca encolhem, nunca rolam, nunca somem.
+Continua sem line-clamp/overflow:hidden, nada truncado. Teste reescrito
+(20 casos): pai sem overflow-y, teto do texto calculado numericamente,
+1/~5/10+ linhas sempre presentes por inteiro, carrossel/lightbox
+preservados. Suíte completa: 1726 testes, 1709 PASS, os mesmos 12 FAIL
+históricos, 5 TODO. Detalhe completo no `CLAUDE_CHECKPOINT_ATLAS.md`.
+
 **Complemento — layout imagem/descrição no Quiz (2026-09-28, mesma revisão
 `lrev_mulfu0x2_ocobn9`, não é nova):** a correção anterior (piso
 `min-height` na imagem + `overflow-y:auto` no painel) reduzia mas não

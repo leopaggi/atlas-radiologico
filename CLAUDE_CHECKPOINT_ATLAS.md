@@ -96,6 +96,33 @@ MESMOS 12 FAIL históricos (nenhuma regressão nova), 5 TODO.
 `tests/critical-flows.test.js` teve as 4 âncoras de linha realinhadas de
 novo (+5 uniforme, CSS antes da primeira âncora).
 
+**2º COMPLEMENTO — `lrev_mulfu0x2_ocobn9` (2026-09-28, mesma revisão, ainda
+não é nova):** usuário reproduziu visualmente que a IMAGEM ainda podia sair
+da área visível ao rolar a descrição. **Causa raiz real:** `.quiz-study-media`
+(o painel INTEIRO) continuava com `overflow-y:auto` do 1º complemento —
+mesmo com o texto já num wrapper à parte, imagem e texto ainda
+compartilhavam o MESMO eixo de rolagem do container PAI; rolar essa barra
+deslocava a imagem pra fora da área visível. **Fix definitivo:**
+1) `overflow-y:auto` REMOVIDO de `.quiz-study-media` — o painel inteiro
+nunca mais rola; 2) `.quiz-media-text` virou `flex:0 0 auto` (não
+cresce/encolhe por causa da imagem) com teto por LINHAS em vez de pixel
+solto — `line-height:1.4` explícito + `max-height:calc(5 * 1.4em)`
+(≈5 linhas, 98px a 14px de fonte; mobile: `1.35em`/13px); 3) a imagem e o
+`.quiz-carousel` (seu wrapper) ganharam `flex-shrink:0` explícito, além do
+`min-height` já existente — nunca encolhem, nunca participam de rolagem
+nenhuma, nunca desaparecem. Continua sem `line-clamp`, sem
+`overflow:hidden`, nada truncado — o texto completo continua acessível
+rolando só `.quiz-media-text`. `renderMedia()` (JS) não mudou neste
+complemento — só CSS. Teste reescrito (20 casos,
+`tests/quiz-image-description-layout.test.js`): pai sem overflow-y,
+imagem/carrossel com flex-shrink:0, teto do texto por linhas (calculado
+numericamente = 98px), 1 linha / ~5 linhas / 10+ linhas sempre presentes
+por inteiro no HTML (nunca cortadas em JS — quem rola é o CSS),
+responsivo, carrossel/lightbox preservados. Suíte completa: 1726 testes,
+1709 PASS, os MESMOS 12 FAIL históricos (nenhuma regressão nova), 5 TODO.
+`tests/critical-flows.test.js` com as 4 âncoras realinhadas de novo (+2
+uniforme).
+
 ## CURRENT TASK (concluída nesta sessão, 2026-09-28)
 
 5 pendências globais da Central de Revisões resolvidas de ponta a ponta

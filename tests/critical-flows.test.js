@@ -598,9 +598,12 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // propria do bloco de texto do Quiz) — tudo no <style>, antes da primeira
   // ancora, deslocamento uniforme. O ajuste em renderMedia() (wrapper
   // .quiz-media-text) fica bem depois do importHandler e nao desloca nada.
-  assert.equal(recovery.line, 9751);
-  assert.equal(brokenArtifacts.line, 9741);
-  assert.equal(loadData.line, 12302);
+  // +2 nas quatro ancoras (2o complemento lrev_mulfu0x2_ocobn9, 2026-09-28):
+  // comentario CSS reescrito de novo (causa raiz real: overflow-y:auto no
+  // pai) — tudo no <style>, antes da primeira ancora.
+  assert.equal(recovery.line, 9753);
+  assert.equal(brokenArtifacts.line, 9743);
+  assert.equal(loadData.line, 12304);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
@@ -658,7 +661,9 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // 2026-09-28, ver comentário nas três primeiras âncoras acima).
   // +5 no importHandler (complemento lrev_mulfu0x2_ocobn9, ver comentário
   // nas três primeiras âncoras acima).
-  assert.equal(importHandler.line, 16878);
+  // +2 no importHandler (2o complemento lrev_mulfu0x2_ocobn9, ver comentário
+  // nas três primeiras âncoras acima).
+  assert.equal(importHandler.line, 16880);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

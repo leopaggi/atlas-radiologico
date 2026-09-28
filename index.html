@@ -867,23 +867,25 @@ body{
 .quiz-study-shell{display:grid;grid-template-columns:minmax(260px,.85fr) minmax(360px,1.15fr);gap:14px;margin-top:12px}
 .quiz-study-media,.quiz-study-question{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px}
 /* DESCRIÇÕES EXTENSAS NÃO PODEM COMPRIMIR A IMAGEM (lrev_mulfu0x2_ocobn9).
-   Complemento: o piso mínimo (min-height) na imagem reduzia a compressão
-   mas não eliminava — com texto MUITO longo (contexto clínico + descrição,
-   sem truncamento de propósito), o painel inteiro (`overflow-y:auto` no
-   `.quiz-study-media`) crescia e/ou o texto ainda disputava espaço com a
-   imagem dentro da altura vinda do grid stretch (acompanha a coluna da
-   pergunta, não o próprio conteúdo). Agora o texto (contexto clínico +
-   descrição da imagem) entra num wrapper PRÓPRIO (`.quiz-media-text`,
-   criado só quando há conteúdo — renderMedia()) com teto de altura e
-   rolagem interna — cresce normal até o limite, depois rola só o BLOCO DE
-   TEXTO (scrollbar só aparece quando o conteúdo excede o teto). A imagem
-   fica FORA desse wrapper, com `flex:1` + piso mínimo próprios — nunca
-   mais compete por espaço com o texto, nunca é comprimida, nunca precisa
-   de rolagem para aparecer inteira. Nada é truncado/escondido: o texto
-   completo continua acessível rolando o próprio bloco. */
-.quiz-study-media{display:flex;flex-direction:column;overflow-y:auto}
-.quiz-study-media .quiz-media-text{flex:0 1 auto;max-height:200px;overflow-y:auto;margin-bottom:10px}
-.quiz-study-media img{width:100%;flex:1;min-height:240px;max-height:min(58vh,560px);object-fit:contain;border-radius:7px;background:#07111b}
+   2º complemento — causa raiz real encontrada: `.quiz-study-media` tinha
+   `overflow-y:auto` no PAINEL INTEIRO. Mesmo com o texto num wrapper à
+   parte (1º complemento), esse `overflow-y:auto` externo fazia o painel
+   TODO virar uma área rolável quando o conteúdo total excedia a altura do
+   grid stretch — rolar essa barra deslocava a imagem pra fora da área
+   visível (ela "subia"/desaparecia), porque imagem e texto ainda
+   compartilhavam o MESMO eixo de rolagem do container pai. Fix definitivo:
+   1) `.quiz-study-media` NUNCA rola (sem overflow-y aqui — a imagem não
+   pode fazer parte de rolagem nenhuma); 2) `.quiz-media-text` vira
+   `flex:0 0 auto` (não cresce, não encolhe — tamanho sempre ditado só pelo
+   próprio conteúdo/teto, nunca pela imagem) com teto por LINHAS
+   (`line-height` explícito + `max-height:calc(5 * line-height)` — ~5
+   linhas; acima disso, rolagem só dentro do bloco); 3) a imagem
+   (`.quiz-study-media img` / `.quiz-carousel`) mantém `flex:1` +
+   `min-height` — cresce pra preencher o espaço que sobra, nunca encolhe
+   abaixo do piso, nunca participa de scroll nenhum, nunca some. */
+.quiz-study-media{display:flex;flex-direction:column}
+.quiz-study-media .quiz-media-text{flex:0 0 auto;font-size:14px;line-height:1.4;max-height:calc(5 * 1.4em);overflow-y:auto;margin-bottom:10px}
+.quiz-study-media img{width:100%;flex:1;flex-shrink:0;min-height:240px;max-height:min(58vh,560px);object-fit:contain;border-radius:7px;background:#07111b}
 /* CASO TEÓRICO (lesão sem imagem): o painel esquerdo estica pra acompanhar
    a altura do painel de pergunta/alternativas (grid stretch), e as pistas
    registradas na lesão SÃO a principal informação da questão — por isso
@@ -896,7 +898,7 @@ body{
 .quiz-theory-clues span{background:var(--tag-bg);border:1px solid var(--line);border-radius:16px;padding:10px 18px;font-size:clamp(16px,.7vw + 13px,19px);font-weight:600;color:var(--text)}
 /* Carrossel de imagens da questão — 2+ imagens ganham setas + contador;
    1 imagem mantém o visual simples de antes, sem controles desnecessários. */
-.quiz-study-media .quiz-carousel{flex:1;min-height:240px;display:flex;flex-direction:column;position:relative}
+.quiz-study-media .quiz-carousel{flex:1;flex-shrink:0;min-height:240px;display:flex;flex-direction:column;position:relative}
 .quiz-carousel-arrow{position:absolute;top:50%;transform:translateY(-50%);width:38px;height:38px;border-radius:50%;border:none;background:rgba(6,10,14,.6);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;z-index:2}
 .quiz-carousel-arrow:hover{background:rgba(6,10,14,.85)}
 .quiz-carousel-prev{left:8px}
@@ -921,7 +923,7 @@ body{
 .quiz-review-modal-overlay{position:fixed;inset:0;background:rgba(6,10,14,.7);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10020}
 .quiz-review-modal{max-width:540px}
 .quiz-integrated-title{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px}.quiz-integrated-title b{font-size:13px}.quiz-integrated-title span{font:600 10px 'IBM Plex Mono',monospace;color:#55c7ef}
-@media(max-width:780px){.quiz-study-shell{grid-template-columns:1fr}.quiz-study-media img{max-height:320px;min-height:180px}.quiz-study-media .quiz-carousel{min-height:180px}.quiz-study-media .quiz-media-text{max-height:140px}}
+@media(max-width:780px){.quiz-study-shell{grid-template-columns:1fr}.quiz-study-media img{max-height:320px;min-height:180px}.quiz-study-media .quiz-carousel{min-height:180px}.quiz-study-media .quiz-media-text{font-size:13px;line-height:1.35;max-height:calc(5 * 1.35em)}}
 @media(max-width:480px){.quiz-mcq-option{padding:13px 14px;gap:11px}.quiz-mcq-letter{width:29px;height:29px;font-size:13px}}
 /* ============================================================
    QUIZ & PROGRESSO — paleta viva (espelha o mockup aprovado)
