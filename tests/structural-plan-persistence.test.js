@@ -42,7 +42,7 @@ const names = ['normalizeExternalTitle', 'normalizeRadiopaediaCaseTitle', 'token
   'stableImageKeyV208', 'imageIdentityKeys', 'pushLesionReviewHistory',
   'structuralPlanError', 'structuralPlanString', 'structuralPlanStringArray', 'structuralPlanLesion', 'structuralPlanResolveImage', 'structuralPlanKnownIds',
   'validateStructuralResolution', 'buildStructuralPlanSnapshot', 'isStructuralPlanStale',
-  'validateStructuralResolutionBatch', 'importStructuralResolutionBatch', 'structuralBatchKey', 'structuralResolutionHash', 'acceptStructuralPlan', 'rejectStructuralPlan',
+  'validateStructuralResolutionBatch', 'persistValidatedStructuralPlan', 'importStructuralResolutionBatch', 'structuralBatchKey', 'structuralResolutionHash', 'acceptStructuralPlan', 'rejectStructuralPlan',
   'structuralPlanPreviewHtml', 'structuralExecutionId', 'structuralClone',
   'dryRunStructuralPlan', 'structuralPlanLiveView',
   'structuralPlanCardBadgeHtml', 'structuralPlanCardButtonsHtml',
@@ -221,11 +221,14 @@ test('15. erro no meio do batch não persiste parcial', async () => {
 });
 
 test('16. plano não fica só em variável local do modal', () => {
-  // Estático: import grava r.structuralPlan + persiste; accept lê o vivo.
+  // Estático: import delega ao persist compartilhado (que grava
+  // r.structuralPlan + persiste); accept lê o vivo.
   const importSrc = fn('importStructuralResolutionBatch');
-  assert.match(importSrc, /r\.structuralPlan = \{/);
+  assert.match(importSrc, /persistValidatedStructuralPlan\(v,/);
   assert.match(importSrc, /await saveLesionRevisions\(\)/);
-  assert.match(importSrc, /r\.updatedAt = /);
+  const persistSrc = fn('persistValidatedStructuralPlan');
+  assert.match(persistSrc, /r\.structuralPlan = \{/);
+  assert.match(persistSrc, /r\.updatedAt = /);
   const acceptSrc = fn('acceptStructuralPlan');
   assert.match(acceptSrc, /LESION_REVISIONS\[reviewId\]/);
   assert.match(acceptSrc, /missing_structural_plan_for_review/);

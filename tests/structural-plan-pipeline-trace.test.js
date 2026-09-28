@@ -44,7 +44,7 @@ const names = ['normalizeExternalTitle', 'normalizeRadiopaediaCaseTitle', 'token
   'stableImageKeyV208', 'imageIdentityKeys', 'pushLesionReviewHistory',
   'structuralPlanError', 'structuralPlanString', 'structuralPlanStringArray', 'structuralPlanLesion', 'structuralPlanResolveImage', 'structuralPlanKnownIds',
   'validateStructuralResolution', 'buildStructuralPlanSnapshot', 'isStructuralPlanStale',
-  'validateStructuralResolutionBatch', 'importStructuralResolutionBatch', 'structuralBatchKey', 'structuralResolutionHash',
+  'validateStructuralResolutionBatch', 'persistValidatedStructuralPlan', 'importStructuralResolutionBatch', 'structuralBatchKey', 'structuralResolutionHash',
   'getEffectiveStructuralStatus', 'getManualActionSolutions', 'getStructuralHistorySolutions',
   'structuralPlanPreviewHtml', 'structuralPlanStatusRowHtml', 'buildManualActionAiBatch'];
 const consts = html.slice(html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = '), html.indexOf('// Tokens relevantes:', html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = ')));
@@ -125,9 +125,12 @@ test('CERVIX PREVIEW: MANTER seed_218, REMOVER seed_600, Aceitar disponível', a
   assert.equal(inList(ctx, ctx.getManualActionSolutions, RID_CERVIX), true);
 });
 
-test('no_safe_candidate só existe em JSON externo (app nunca gera)', async () => {
+test('no_safe_candidate só existe em JSON externo (app nunca gera na prévia)', async () => {
   const ctx = ctxFixture();
-  assert.equal(html.includes('no_safe_candidate'), false, 'app não produz esse rótulo');
+  // A string existe só como reason de máquina do bridge; nenhum gerador de
+  // plano/prévia a produz — a prévia reflete o tipo vindo da IA.
+  assert.ok(!fn('structuralPlanPreviewHtml').includes('no_safe_candidate'), 'prévia nunca gera o rótulo');
+  assert.ok(!fn('importStructuralResolutionBatch').includes('no_safe_candidate'), 'import nunca gera o rótulo');
   const res = await ctx.importStructuralResolutionBatch(batch([
     { reviewId: RID_CERVIX, resolutionType: 'unresolved', reason: 'qualquer_coisa_da_ia', reasoning: 'IA' }]));
   assert.equal(res.ok, true);

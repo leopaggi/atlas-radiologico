@@ -39,7 +39,7 @@ const names = ['normalizeExternalTitle', 'normalizeRadiopaediaCaseTitle', 'token
   'stableImageKeyV208', 'imageIdentityKeys', 'pushLesionReviewHistory',
   'structuralPlanError', 'structuralPlanString', 'structuralPlanStringArray', 'structuralPlanLesion', 'structuralPlanResolveImage', 'structuralPlanKnownIds',
   'validateStructuralResolution', 'buildStructuralPlanSnapshot', 'isStructuralPlanStale',
-  'validateStructuralResolutionBatch', 'importStructuralResolutionBatch', 'structuralBatchKey', 'structuralResolutionHash',
+  'validateStructuralResolutionBatch', 'persistValidatedStructuralPlan', 'importStructuralResolutionBatch', 'structuralBatchKey', 'structuralResolutionHash',
   'acceptStructuralPlan', 'rejectStructuralPlan',
   'getEffectiveStructuralStatus', 'getManualActionSolutions', 'getStructuralHistorySolutions',
   'getStructuralPlanBatches', 'structuralBatchCounts',

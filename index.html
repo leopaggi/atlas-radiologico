@@ -6880,10 +6880,63 @@ function reviewAiManualActionReason(requestText, summary, reasoning){
 //      marca 'manual_action_required' (outcome 'manual_action_required'),
 //      SEM tocar DATA.
 // Campo FORA da allowlist continua sendo rejeitado; JSON inválido também.
+/* Ponte 1 → Ponte 2: resposta manual com tipo estrutural reconhecido
+   (manualAction.type = merge_duplicates) + exatamente UM clone seguro já
+   resolvido ⇒ constrói um structuralPlan REAL (imported), em vez de deixar a
+   revisão eternamente só-textual. Usa o MESMO persist da Ponte 2
+   (idempotência + terminal + carimbo + histórico). Nunca executa, nunca
+   aceita, nunca inventa ID; veto de órgãos e validação integral valem. */
+const STRUCTURAL_BRIDGE_ACTION_TYPES = ['merge_duplicates'];
+function bridgeManualActionToStructuralPlan(reviewId){
+  const r = LESION_REVISIONS[reviewId] || null;
+  if(!r || r.status!=='manual_action_required' || isGlobalReview(r))
+    return { bridged:false, reason:'not_manual' };
+  const ma = r.manualAction || {};
+  if(STRUCTURAL_BRIDGE_ACTION_TYPES.indexOf(ma.type)<0)
+    return { bridged:false, reason:'non_structural_type' };
+  if(ma.type!=='merge_duplicates') return { bridged:false, reason:'non_structural_type' };
+  const source = (r.lesionId && typeof structuralPlanLesion==='function') ? structuralPlanLesion(r.lesionId) : null;
+  if(!source) return { bridged:false, reason:'lesion_not_found' };
+  let cited = null;
+  try{ cited = findExplicitCloneMatches(r, source); }catch(_e){ return { bridged:false, reason:'matcher_failed' }; }
+  if(!cited || cited.status!=='FOUND' || !cited.matches[0])
+    return { bridged:false, reason: cited && cited.status==='AMBIGUOUS' ? 'ambiguous_clone' : 'no_safe_candidate' };
+  const keeper = cited.matches[0];
+  if(hasIncompatibleOrganAnatomy(keeper, source)) return { bridged:false, reason:'anatomic_conflict' };
+  const raw = { reviewId:r.id, resolutionType:'merge_duplicates', keeperId:keeper.id, removeId:source.id,
+    merge:{}, reasoning:((r.solution&&r.solution.text)||'').trim()||('Fusão '+source.id+' → '+keeper.id), humanOverride:false };
+  if(typeof hasStrongAnatomicConflict==='function' && hasStrongAnatomicConflict(keeper, source)){
+    raw.crossSectionOverride = true;
+    if(!isCrossSectionOverrideValid(r, keeper, source, raw)) return { bridged:false, reason:'anatomic_conflict' };
+  }
+  const checked = validateStructuralResolution(raw);
+  if(!checked.valid) return { bridged:false, reason:checked.reason, detail:checked.detail||null };
+  const importedAt = new Date().toISOString();
+  const pr = persistValidatedStructuralPlan(checked,
+    { importedAt, importedNow:Date.now(), batchKey:structuralBatchKey([checked]), via:'ponte1-manualAction' });
+  if(!pr.applied) return { bridged:false, reason:pr.skipped.reason, status:pr.skipped.status };
+  try{ saveLesionRevisions(); }catch(_e){}
+  return { bridged:true, reason:null, keeperId:keeper.id, removeId:source.id,
+    crossSectionOverride:checked.crossSectionOverride===true };
+}
 function importReviewAiSolution(reviewId, rawText){
   const review = LESION_REVISIONS[reviewId];
   if(!review) return { ok:false, reason:'not_found' };
-  if(!reviewAcceptsAiProposal(review)) return { ok:false, reason:'not_proposable', status:review.status };
+  if(!reviewAcceptsAiProposal(review)){
+    // Ponte 1 → 2: revisão MANUAL com tipo estrutural reconhecido entra pelo
+    // bridge (peek do tipo sem reordenar validações — precedência inalterada
+    // para todos os demais casos).
+    let bridgeType = '';
+    try{
+      const pre = JSON.parse(String(rawText||'').trim());
+      if(pre && typeof pre==='object' && !Array.isArray(pre) && String(pre.reviewId||'')===String(reviewId)){
+        const m0 = (pre.manualAction && typeof pre.manualAction==='object') ? pre.manualAction : null;
+        bridgeType = m0 ? String(m0.type||'').trim() : '';
+      }
+    }catch(_e){}
+    if(!(review.status==='manual_action_required' && bridgeType==='merge_duplicates' && !isGlobalReview(review)))
+      return { ok:false, reason:'not_proposable', status:review.status };
+  }
   let parsed;
   try{ parsed = JSON.parse(String(rawText||'').trim()); }
   catch(_e){ return { ok:false, reason:'invalid_json' }; }
@@ -6911,11 +6964,44 @@ function importReviewAiSolution(reviewId, rawText){
       if(!flagged.ok) return { ok:false, reason:flagged.reason };
       return { ok:true, applied:false, outcome:'manual_action_required', manualReason:reason, review: flagged.review };
     }
+    // Ponte 1 → 2: revisão MANUAL com tipo estrutural reconhecido tenta
+    // construir o structuralPlan (a importação Ponte 1 recusaria: review já
+    // manual). Atualiza só texto/manualAction; status continua manual.
+    if(review.status==='manual_action_required' && actionType==='merge_duplicates' && !isGlobalReview(review)){
+      review.manualAction = { type:'merge_duplicates',
+        description:String((manual&&manual.description)||'').trim()||null, suggestedPlacement:null };
+      review.solution = { text:solutionText, proposedChanges:{}, createdAt:Date.now(),
+        manualActionRequired:true, reason:review.manualActionReason||null };
+      review.updatedAt = Date.now();
+      pushLesionReviewHistory(review, 'solution_proposed', { solution: review.solution });
+      pushLesionReviewHistory(review, 'manual_action_required', { reason:review.manualActionReason, manualAction:review.manualAction });
+      const b = bridgeManualActionToStructuralPlan(reviewId);
+      try{ saveLesionRevisions(); }catch(_e){}
+      updateReviewCenterBadges();
+      return { ok:true, applied:false, outcome:'manual_action_required', manualReason:review.manualActionReason, review,
+        structuralPlan: b.bridged
+          ? { status:'imported', keeperId:b.keeperId, removeId:b.removeId, crossSectionOverride:b.crossSectionOverride||undefined }
+          : null,
+        bridgeReason: b.bridged ? null : b.reason };
+    }
     const manualReason = reviewAiManualActionReason(review.requestText, summary, reasoning);
     if(manualReason){
-      const flagged = flagManualActionRequired(reviewId, solutionText, manualReason);
+      // Ponte 1 → 2: para tipo estrutural, preserva o manualAction da IA na
+      // revisão (o flag padrão o descartaria); os demais tipos usam a chamada
+      // original, sem mudança de comportamento.
+      const flagged = (actionType==='merge_duplicates' && !isGlobalReview(review))
+        ? flagManualActionRequired(reviewId, solutionText, manualReason,
+            { type:actionType, description:String((manual&&manual.description)||'').trim()||null })
+        : flagManualActionRequired(reviewId, solutionText, manualReason);
       if(!flagged.ok) return { ok:false, reason:flagged.reason };
-      return { ok:true, applied:false, outcome:'manual_action_required', manualReason, review: flagged.review };
+      // Mesmo fluxo para pending/rejected: virou manual aqui, tenta a ponte.
+      let structuralPlan = null, bridgeReason = null;
+      if(actionType==='merge_duplicates' && !isGlobalReview(flagged.review)){
+        const b = bridgeManualActionToStructuralPlan(reviewId);
+        if(b.bridged) structuralPlan = { status:'imported', keeperId:b.keeperId, removeId:b.removeId, crossSectionOverride:b.crossSectionOverride||undefined };
+        else bridgeReason = b.reason;
+      }
+      return { ok:true, applied:false, outcome:'manual_action_required', manualReason, review: flagged.review, structuralPlan, bridgeReason };
     }
     return { ok:true, applied:false, outcome:'no_applicable_changes', review };
   }
@@ -15056,8 +15142,9 @@ function openReviewAiBridgeModal(reviewId, onImported){
       return;
     }
     // Resultado 3: exige ação manual (imagem/ownership/estrutura) — não altera os dados.
+    // Com ponte Ponte 1→2, pode trazer structuralPlan importado junto.
     if(res.outcome==='manual_action_required'){
-      toast('Esta revisão exige ação manual.');
+      toast(res.structuralPlan ? 'Plano estrutural criado — revise na prévia antes de aceitar.' : 'Esta revisão exige ação manual.');
       close();
       if(typeof onImported==='function') onImported();
       openManualActionModal(reviewId, { onReopened: ()=>{ if(typeof onImported==='function') onImported(); } });
@@ -22295,6 +22382,40 @@ function structuralBatchCounts(group){
   });
   return c;
 }
+function persistValidatedStructuralPlan(v, opts){
+  // Aplica UMA resolution já validada: idempotência (mesmo conteúdo pula),
+  // proteção terminal (executed/rolledback nunca sobrescritos), carimbo
+  // updatedAt (merge 084 determinístico) e histórico. Síncrono até o save —
+  // o chamador persiste (saveLesionRevisions). Usado pela Ponte 2 (lote) e
+  // pela ponte Ponte 1→2 (resposta manual com tipo estrutural).
+  const o = opts||{};
+  const r = LESION_REVISIONS[v.reviewId];
+  if(!r) return { applied:false, skipped:{ reviewId:v.reviewId, reason:'review_not_found' } };
+  const hash = structuralResolutionHash(v);
+  const cur = r && r.structuralPlan;
+  if(cur && cur.resolutionHash && hash && cur.resolutionHash===hash)
+    return { applied:false, skipped:{ reviewId:v.reviewId, reason:'already_imported' } };
+  const exSt = r && r.structuralExecution ? r.structuralExecution.status : null;
+  if(cur && (cur.status==='executed' || cur.status==='rolledback' || exSt==='executed' || exSt==='rolledback'))
+    return { applied:false, skipped:{ reviewId:v.reviewId, reason:'terminal_state_preserved', status:cur.status } };
+  r.structuralPlan = {
+    status:'imported', importedAt:o.importedAt,
+    type:v.type, resolution:v, snapshot:buildStructuralPlanSnapshot(v),
+    batchKey:o.batchKey||null, batchImportedAt:o.importedAt||null, resolutionHash:hash
+  };
+  // Carimbo de atividade OBRIGATÓRIO: sem ele, o merge 084 (vencedor =
+  // updatedAt maior; empate decide pelo JSON canônico) pode eleger uma
+  // cópia remota pré-import e APAGAR o plano do objeto vivo num sync —
+  // a prévia (cópia em memória) continuaria exibindo, mas o accept
+  // falharia com no_imported_plan. updatedAt novo = local vence.
+  r.updatedAt = o.importedNow || Date.now();
+  const det = { type:v.type, importedAt:o.importedAt };
+  if(o.batchKey) det.batchKey = o.batchKey;
+  if(v.crossSectionOverride===true) det.crossSectionOverride = true;
+  if(o.via) det.via = o.via;
+  pushLesionReviewHistory(r, 'structural_plan_imported', det);
+  return { applied:true, skipped:null };
+}
 async function importStructuralResolutionBatch(obj){
   // Tudo-ou-nada: qualquer item inválido rejeita o lote inteiro sem tocar nada.
   // Sucesso grava SÓ r.structuralPlan + histórico (via saveLesionRevisions, o
@@ -22312,37 +22433,9 @@ async function importStructuralResolutionBatch(obj){
   const batchKey = structuralBatchKey(checked.resolutions);
   const imported = [], skipped = [];
   for(const v of checked.resolutions){
-    const r = LESION_REVISIONS[v.reviewId];
-    const hash = structuralResolutionHash(v);
-    const cur = r && r.structuralPlan;
-    // Idempotência: MESMO conteúdo já importado → não duplica histórico,
-    // não reseta estado, não transforma executed em imported.
-    if(cur && cur.resolutionHash && hash && cur.resolutionHash===hash){
-      skipped.push({ reviewId:v.reviewId, reason:'already_imported' });
-      continue;
-    }
-    // Proteção terminal: executed/rolledback NUNCA são sobrescritos por
-    // reimportação (nem mesmo com conteúdo diferente) — vale o plano OU a
-    // execução (divergência por reimport/merge: o terminal vence).
-    const exSt = r && r.structuralExecution ? r.structuralExecution.status : null;
-    if(cur && (cur.status==='executed' || cur.status==='rolledback' || exSt==='executed' || exSt==='rolledback')){
-      skipped.push({ reviewId:v.reviewId, reason:'terminal_state_preserved', status:cur.status });
-      continue;
-    }
-    r.structuralPlan = {
-      status:'imported', importedAt,
-      type:v.type, resolution:v, snapshot:buildStructuralPlanSnapshot(v),
-      batchKey, batchImportedAt:importedAt, resolutionHash:hash
-    };
-    // Carimbo de atividade OBRIGATÓRIO: sem ele, o merge 084 (vencedor =
-    // updatedAt maior; empate decide pelo JSON canônico) pode eleger uma
-    // cópia remota pré-import e APAGAR o plano do objeto vivo num sync —
-    // a prévia (cópia em memória) continuaria exibindo, mas o accept
-    // falharia com no_imported_plan. updatedAt novo = local vence.
-    r.updatedAt = importedNow;
-    pushLesionReviewHistory(r, 'structural_plan_imported', { type:v.type, importedAt, batchKey,
-      crossSectionOverride: v.crossSectionOverride===true || undefined });
-    imported.push(v.reviewId);
+    const pr = persistValidatedStructuralPlan(v, { importedAt, importedNow, batchKey });
+    if(pr.applied) imported.push(v.reviewId);
+    else skipped.push(pr.skipped);
   }
   await saveLesionRevisions();
   return { ok:true, reason:null, imported, skipped, batchKey, resolutions:checked.resolutions };

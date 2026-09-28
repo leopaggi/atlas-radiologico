@@ -50,7 +50,7 @@ const names = ['normalizeExternalTitle', 'normalizeRadiopaediaCaseTitle', 'token
   'structuralPersistAll', 'structuralRestoreSnapshots', 'executeStructuralPlan',
   'structuralApplyMerge', 'rollbackStructuralExecution',
   'acceptStructuralPlan', 'rejectStructuralPlan',
-  'validateStructuralResolutionBatch', 'importStructuralResolutionBatch',
+  'validateStructuralResolutionBatch', 'persistValidatedStructuralPlan', 'importStructuralResolutionBatch',
   'structuralBatchKey', 'structuralResolutionHash',
   'getStructuralPlanBatches', 'structuralBatchCounts',
   'structuralBatchEntryHtml', 'structuralBatchModalHtml', 'structuralBatchSummaryHtml',
