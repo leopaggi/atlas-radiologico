@@ -15864,6 +15864,7 @@ function openReadySolutionsModal(){
           ${sug.applicable?`<button type="button" class="btn btn-primary review-manual-apply-placement">✓ Aplicar localização sugerida</button>`:''}
           ${meta.found?`<button type="button" class="btn btn-ghost review-manual-open">${isImage?'🖼 Abrir lesão para ajustar imagens':'✏ Abrir lesão'}</button>`:''}
           ${r.structuralPlan?`<button type="button" class="btn btn-ghost review-structural-preview">👁 Pré-visualizar plano</button>`:''}
+          ${structuralPlanCardDecideHtml(r)}
           ${structuralPlanCardButtonsHtml(r)}
           <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}${reviewResolveButtonHtml(r)}
           ${isGlobalReview(r)?'<button type="button" class="btn btn-primary review-global-complete">✓ Concluir</button>':''}
@@ -15880,6 +15881,20 @@ function openReadySolutionsModal(){
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
       const structPrevBtn = row.querySelector('.review-structural-preview');
       if(structPrevBtn) structPrevBtn.onclick = ()=> openStructuralPlanPreviewModalForReview(r.id, renderBothLists);
+      const structAcceptBtn = row.querySelector('.review-structural-accept');
+      if(structAcceptBtn) structAcceptBtn.onclick = async (e)=>{
+        e.currentTarget.disabled = true; // anti duplo clique
+        const res = await acceptStructuralPlan(r.id);
+        toast(res.ok ? 'Plano aceito. Pronto para execução.' : ('Não foi possível aceitar: '+(res.reason||'erro')));
+        renderBothLists();
+      };
+      const structRejectBtn = row.querySelector('.review-structural-reject');
+      if(structRejectBtn) structRejectBtn.onclick = async (e)=>{
+        e.currentTarget.disabled = true; // anti duplo clique
+        const res = await rejectStructuralPlan(r.id);
+        toast(res.ok ? 'Plano rejeitado.' : ('Não foi possível rejeitar: '+(res.reason||'erro')));
+        renderBothLists();
+      };
       const structExecBtn = row.querySelector('.review-structural-execute');
       if(structExecBtn) structExecBtn.onclick = (e)=>{ e.currentTarget.disabled = true; openStructuralPlanExecuteConfirmModal(r.id, renderBothLists); e.currentTarget.disabled = false; };
       const structRbBtn = row.querySelector('.review-structural-rollback');
@@ -22871,6 +22886,20 @@ function structuralPlanCardButtonsHtml(r){
     if(!dry || !dry.ok || !dry.executes || (dry.conflicts&&dry.conflicts.length)) return '';
   }catch(_e){ return ''; }
   return '<button type="button" class="btn btn-primary review-structural-execute">▶ Executar</button>';
+}
+function structuralPlanCardDecideHtml(r){
+  // Botões de decisão no card: imported → ✅ Aceitar + ❌ Rejeitar;
+  // accepted → ❌ Rejeitar (cancelar aprovação). Espelha a prévia (mesma
+  // máquina de estados). Aceitar desabilita se stale (o accept bloqueia com
+  // stale_plan de todo jeito). Puro: decisão final sempre no clique.
+  if(!r || !r.structuralPlan) return '';
+  const st = getEffectiveStructuralStatus(r);
+  if(st!=='imported' && st!=='accepted') return '';
+  let staleAccept = false;
+  try{ staleAccept = !!isStructuralPlanStale(r).stale; }catch(_e){ staleAccept = true; }
+  return (st==='imported'
+    ? '<button type="button" class="btn btn-primary review-structural-accept"'+(staleAccept?' disabled title="Plano desatualizado — reimporte antes de aprovar"':'')+'>✅ Aceitar plano</button>' : '') +
+    '<button type="button" class="btn btn-ghost review-structural-reject">❌ Rejeitar plano</button>';
 }
 function openStructuralPlanExecuteConfirmModal(reviewId, onDone){
   // Modal FINAL: stale check + dry-run frescos → confirmação explícita →

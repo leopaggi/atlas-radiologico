@@ -614,7 +614,10 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // Status efetivo (2026-09-27, bug mucinoso amarelo): +11 nestas âncoras —
   // getEffectiveStructuralStatus + guards already_executed + terminal pela
   // execution. Sem alteração nos fluxos de recovery/boot/import.
-  assert.equal(importHandler.line, 16607);
+  // Ações no card (2026-09-27, UX sem Aceitar): +15 no importHandler —
+  // structuralPlanCardDecideHtml + botões Aceitar/Rejeitar e wiring no card.
+  // Sem alteração nos fluxos.
+  assert.equal(importHandler.line, 16622);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
