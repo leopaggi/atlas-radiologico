@@ -22383,21 +22383,31 @@ function structuralBatchCounts(group){
   return c;
 }
 function persistValidatedStructuralPlan(v, opts){
-  // Aplica UMA resolution já validada: idempotência (mesmo conteúdo pula),
-  // proteção terminal (executed/rolledback nunca sobrescritos), carimbo
-  // updatedAt (merge 084 determinístico) e histórico. Síncrono até o save —
-  // o chamador persiste (saveLesionRevisions). Usado pela Ponte 2 (lote) e
-  // pela ponte Ponte 1→2 (resposta manual com tipo estrutural).
+  // Aplica UMA resolution já validada: proteção terminal primeiro (executed/
+  // rolledback nunca reinterpretados), depois idempotência COM upgrade:
+  // mesmo conteúdo só pula se já existir plano equivalente válido
+  // (imported/accepted); se o atual é rejected/unresolved/ausente, o mesmo
+  // conteúdo EVOLUI o estado (reconciliation após evolução do interpretador),
+  // sem duplicar attempts e sem apagar histórico. Carimbo updatedAt (merge
+  // 084 determinístico). Síncrono até o save — o chamador persiste
+  // (saveLesionRevisions). Usado pela Ponte 2 (lote) e pela ponte Ponte 1→2.
   const o = opts||{};
   const r = LESION_REVISIONS[v.reviewId];
   if(!r) return { applied:false, skipped:{ reviewId:v.reviewId, reason:'review_not_found' } };
   const hash = structuralResolutionHash(v);
   const cur = r && r.structuralPlan;
-  if(cur && cur.resolutionHash && hash && cur.resolutionHash===hash)
-    return { applied:false, skipped:{ reviewId:v.reviewId, reason:'already_imported' } };
   const exSt = r && r.structuralExecution ? r.structuralExecution.status : null;
   if(cur && (cur.status==='executed' || cur.status==='rolledback' || exSt==='executed' || exSt==='rolledback'))
     return { applied:false, skipped:{ reviewId:v.reviewId, reason:'terminal_state_preserved', status:cur.status } };
+  const sameContent = !!(cur && cur.resolutionHash && hash && cur.resolutionHash===hash);
+  if(sameContent){
+    const eff = getEffectiveStructuralStatus(r);
+    if(eff==='imported' || eff==='accepted')
+      return { applied:false, skipped:{ reviewId:v.reviewId, reason:'already_imported' } };
+    // Upgrade idempotente: mesmo conteúdo, estado atual não-terminal
+    // (rejected/unresolved) → constrói o plano equivalente válido.
+  }
+  const upgradedFrom = sameContent && cur ? cur.status : null;
   r.structuralPlan = {
     status:'imported', importedAt:o.importedAt,
     type:v.type, resolution:v, snapshot:buildStructuralPlanSnapshot(v),
@@ -22413,8 +22423,9 @@ function persistValidatedStructuralPlan(v, opts){
   if(o.batchKey) det.batchKey = o.batchKey;
   if(v.crossSectionOverride===true) det.crossSectionOverride = true;
   if(o.via) det.via = o.via;
-  pushLesionReviewHistory(r, 'structural_plan_imported', det);
-  return { applied:true, skipped:null };
+  if(upgradedFrom) det.upgradedFrom = upgradedFrom;
+  pushLesionReviewHistory(r, upgradedFrom ? 'structural_plan_upgraded_from_prior_resolution' : 'structural_plan_imported', det);
+  return { applied:true, skipped:null, upgradedFrom };
 }
 async function importStructuralResolutionBatch(obj){
   // Tudo-ou-nada: qualquer item inválido rejeita o lote inteiro sem tocar nada.
