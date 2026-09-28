@@ -10,6 +10,31 @@ untracked de sempre (ver `AGENTS.md` seção "Arquivos protegidos" e a lista
 de novos untracked ainda não classificados citada nos checkpoints
 anteriores — nenhum foi tocado nesta sessão).
 
+## STATUS ACEITO PELO USUÁRIO (2026-09-28) — NÃO REABRIR
+
+COMPLETED IN CODE:
+- `lrev_mul8jrtq_l2atyp` — navegação edição/visualização
+- `lrev_mul8vsjq_0bfwkd` — gerador de links Radiopaedia usando inglês curado
+- `lrev_mulclk3s_7le9tj` — edição de dados clínicos importados
+- `lrev_mulf9eek_h24i4h` — quadros de imagens em sinais/classificações
+- `lrev_mulfu0x2_ocobn9` — layout de imagem com descrições extensas
+
+COMMIT: `2ac0dff5a8d69ca85e76ba5aefc79764812780f9`
+
+PRODUCTION FOLLOW-UP: as cinco revisões acima ainda precisam apenas ser
+marcadas como ✓ Concluída pelo usuário na Central de Revisões — o agente
+não possui acesso ao Firestore/IndexedDB real para fazer isso.
+
+DO NOT TOUCH:
+- `lrev_muj3r3zn_efx2b4`
+- `seed_390`
+- Isquemia mesentérica aguda
+
+RADIOPAEDIA NOTE: 1213 registros auditados no catálogo disponível — 1009
+com termo inglês curado/correto, 204 sem `EN_TERMS`. Não fabricar tradução
+para esses 204; tratá-los futuramente somente quando houver termo inglês
+curado. O usuário já aceitou este estado — não reabrir a auditoria.
+
 ## CURRENT TASK (concluída nesta sessão, 2026-09-28)
 
 5 pendências globais da Central de Revisões resolvidas de ponta a ponta
