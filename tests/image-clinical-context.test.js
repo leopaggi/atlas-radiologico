@@ -118,7 +118,11 @@ test('088 QUIZ: contexto de uma imagem não contamina a outra (carrossel usa cur
   // 093d: o bloco agora passa por quizClinicalContextBlockHtml (caso clínico
   // vinculado À IMAGEM tem prioridade); sem caso, cai exatamente em
   // quizImageClinicalContextHtml(cur.clinicalContext) — mesma imagem ativa.
-  assert.match(render, /media\.innerHTML=`\$\{quizClinicalContextBlockHtml\(e, cur, st\.answered\)\}\$\{quizImageDescHtml\(cur\.label, st\.answered\)\}/);
+  // Complemento lrev_mulfu0x2_ocobn9: os dois blocos agora são montados num
+  // wrapper próprio (`mediaTextHtml`, com teto+rolagem via CSS) antes de
+  // entrarem no innerHTML — mesmos argumentos, mesma ordem, mesma imagem
+  // ativa (`cur`); só o agrupamento em torno deles mudou.
+  assert.match(render, /const mediaTextHtml = `\$\{quizClinicalContextBlockHtml\(e, cur, st\.answered\)\}\$\{quizImageDescHtml\(cur\.label, st\.answered\)\}`;/);
   assert.match(extractFunction(html, 'quizClinicalContextBlockHtml'), /return typeof quizImageClinicalContextHtml === 'function' \? quizImageClinicalContextHtml\(image && image\.clinicalContext\) : '';/);
   assert.match(render, /openImageLightbox\(\s*cur\.data, st\.answered \? cur\.label : ''/, 'gate do lightbox intacto');
 });

@@ -593,9 +593,14 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // botao/wiring "quadro de imagens" em signs/schemes (openDidacticItemEditor,
   // lrev_mulf9eek_h24i4h) + didacticImageCtx.addImage com _pendingKey
   // imediato — tudo entre loadData e o importHandler.
-  assert.equal(recovery.line, 9746);
-  assert.equal(brokenArtifacts.line, 9736);
-  assert.equal(loadData.line, 12297);
+  // +5 nas quatro ancoras (complemento lrev_mulfu0x2_ocobn9, 2026-09-28):
+  // comentario CSS reescrito + regra nova .quiz-media-text (teto+rolagem
+  // propria do bloco de texto do Quiz) — tudo no <style>, antes da primeira
+  // ancora, deslocamento uniforme. O ajuste em renderMedia() (wrapper
+  // .quiz-media-text) fica bem depois do importHandler e nao desloca nada.
+  assert.equal(recovery.line, 9751);
+  assert.equal(brokenArtifacts.line, 9741);
+  assert.equal(loadData.line, 12302);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
@@ -651,7 +656,9 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // additional_section_placement do import individual) — total +55.
   // +85 no importHandler (task Navigation/Radiopaedia/Clinical/Signs/Layout,
   // 2026-09-28, ver comentário nas três primeiras âncoras acima).
-  assert.equal(importHandler.line, 16873);
+  // +5 no importHandler (complemento lrev_mulfu0x2_ocobn9, ver comentário
+  // nas três primeiras âncoras acima).
+  assert.equal(importHandler.line, 16878);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

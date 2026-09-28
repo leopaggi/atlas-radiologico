@@ -18,6 +18,8 @@ COMPLETED IN CODE:
 - `lrev_mulclk3s_7le9tj` — edição de dados clínicos importados
 - `lrev_mulf9eek_h24i4h` — quadros de imagens em sinais/classificações
 - `lrev_mulfu0x2_ocobn9` — layout de imagem com descrições extensas
+  (complemento aplicado depois, ver seção "COMPLEMENTO" logo abaixo — MESMA
+  revisão, não foi criada uma nova)
 
 COMMIT: `2ac0dff5a8d69ca85e76ba5aefc79764812780f9`
 
@@ -61,6 +63,38 @@ usuário, as causas mais prováveis são externas ao código deste repositório
 servindo a versão anterior logo após o deploy, bloqueador de pop-up, ou
 console do navegador com um erro específico) — não há evidência para
 apontar qual delas sem um log de erro real do navegador do usuário.
+
+**COMPLEMENTO — `lrev_mulfu0x2_ocobn9` (2026-09-28, mesma revisão, não é
+nova):** a correção anterior (piso `min-height` na imagem +
+`overflow-y:auto` no painel inteiro) reduzia a compressão mas não eliminava
+de vez: com texto muito longo, o painel inteiro ainda podia crescer/rolar
+como bloco só, e a imagem só ficava garantidamente visível se o usuário
+rolasse o painel. **Root cause do que sobrava:** contexto clínico +
+descrição da imagem entravam soltos (sem wrapper próprio) direto no
+`.quiz-study-media` (flex column) junto com o carrossel — o teto de altura
+existia só na imagem, não no texto, então o texto continuava, na prática,
+disputando o orçamento de altura do painel. **Fix:** `renderMedia()` agora
+monta o texto (`quizClinicalContextBlockHtml` + `quizImageDescHtml`) num
+wrapper próprio — `.quiz-media-text` (criado só quando há conteúdo) — com
+`max-height:200px` (`140px` em ≤780px) + `overflow-y:auto` (SEM
+`line-clamp`, SEM `overflow:hidden`, texto nunca truncado — tudo acessível
+rolando o bloco). A imagem fica FORA desse wrapper, com o `flex:1` +
+`min-height` de sempre — nunca mais compete por espaço com o texto; área
+visual sempre estável, nunca precisa rolar o painel pra aparecer inteira.
+Carrossel/setas/overlay/lightbox intactos (mesma fiação). Duas outras
+suítes de teste tinham uma asserção acoplada ao literal antigo do template
+de `renderMedia()` (`tests/image-clinical-context.test.js`,
+`tests/quiz-clinical-case-context.test.js` — esta última já falha no
+baseline por CRLF, mas a asserção foi corrigida por consistência) —
+atualizadas para o novo literal, mesma intenção preservada. Teste dedicado:
+`tests/quiz-image-description-layout.test.js` reescrito (14 casos) — CSS
+real do wrapper, `renderMedia()` real, descrição curta (sem necessidade de
+rolagem) vs. longa (texto inteiro presente, nunca cortado em JS — quem
+decide rolar é o CSS), sem wrapper vazio quando não há conteúdo,
+carrossel/lightbox preservados. Suíte completa: 1720 testes, 1703 PASS, os
+MESMOS 12 FAIL históricos (nenhuma regressão nova), 5 TODO.
+`tests/critical-flows.test.js` teve as 4 âncoras de linha realinhadas de
+novo (+5 uniforme, CSS antes da primeira âncora).
 
 ## CURRENT TASK (concluída nesta sessão, 2026-09-28)
 

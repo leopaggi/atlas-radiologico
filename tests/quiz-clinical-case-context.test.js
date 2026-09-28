@@ -116,7 +116,10 @@ test('093d 11: depois da resposta — caso identificado + conteúdo educacional 
   const detail = A.lesionDidacticQuizHtml(e);
   assert.match(detail, /Sinal da massa vascular endometrial/);
   assert.match(detail, /Gutenberg/);
-  assert.match(quizFn, /media\.innerHTML=`\$\{quizClinicalContextBlockHtml\(e, cur, st\.answered\)\}\$\{quizImageDescHtml\(cur\.label, st\.answered\)\}/, 'bloco segue a imagem ATIVA do carrossel');
+  // Complemento lrev_mulfu0x2_ocobn9: os dois blocos entram num wrapper
+  // próprio (mediaTextHtml, teto+rolagem via CSS) antes do innerHTML — mesma
+  // imagem ATIVA do carrossel, mesmos argumentos/ordem.
+  assert.match(quizFn, /const mediaTextHtml = `\$\{quizClinicalContextBlockHtml\(e, cur, st\.answered\)\}\$\{quizImageDescHtml\(cur\.label, st\.answered\)\}`;/, 'bloco segue a imagem ATIVA do carrossel');
 });
 
 // ------------------------------------------------------------ MÚLTIPLAS IMAGENS

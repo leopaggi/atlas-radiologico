@@ -866,18 +866,23 @@ body{
 .quiz-question-title{margin:10px 0 12px;font-size:clamp(18px,1vw + 15px,22px);font-weight:700;line-height:1.35;color:var(--text)}
 .quiz-study-shell{display:grid;grid-template-columns:minmax(260px,.85fr) minmax(360px,1.15fr);gap:14px;margin-top:12px}
 .quiz-study-media,.quiz-study-question{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px}
-/* DESCRIÇÕES EXTENSAS NÃO PODEM COMPRIMIR A IMAGEM (lrev_mulfu0x2_ocobn9):
-   contexto clínico (093d) e descrição da imagem (sem truncamento de
-   propósito, ver quizImageDescHtml) entram ANTES do carrossel no mesmo
-   flex column — sem min-height a imagem (flex:1;min-height:0) podia ser
-   espremida até quase sumir quando o texto acima era longo, já que a
-   altura real do painel vem do grid stretch (acompanha a coluna da
-   pergunta), não do próprio conteúdo. Agora a imagem tem um piso estável
-   (min-height) que preserva textos/sequências queimados nela, e o painel
-   rola (overflow-y) se o texto acima for grande demais — a descrição
-   nunca é escondida/truncada permanentemente, só o layout deixa de
-   competir por espaço com a imagem. */
+/* DESCRIÇÕES EXTENSAS NÃO PODEM COMPRIMIR A IMAGEM (lrev_mulfu0x2_ocobn9).
+   Complemento: o piso mínimo (min-height) na imagem reduzia a compressão
+   mas não eliminava — com texto MUITO longo (contexto clínico + descrição,
+   sem truncamento de propósito), o painel inteiro (`overflow-y:auto` no
+   `.quiz-study-media`) crescia e/ou o texto ainda disputava espaço com a
+   imagem dentro da altura vinda do grid stretch (acompanha a coluna da
+   pergunta, não o próprio conteúdo). Agora o texto (contexto clínico +
+   descrição da imagem) entra num wrapper PRÓPRIO (`.quiz-media-text`,
+   criado só quando há conteúdo — renderMedia()) com teto de altura e
+   rolagem interna — cresce normal até o limite, depois rola só o BLOCO DE
+   TEXTO (scrollbar só aparece quando o conteúdo excede o teto). A imagem
+   fica FORA desse wrapper, com `flex:1` + piso mínimo próprios — nunca
+   mais compete por espaço com o texto, nunca é comprimida, nunca precisa
+   de rolagem para aparecer inteira. Nada é truncado/escondido: o texto
+   completo continua acessível rolando o próprio bloco. */
 .quiz-study-media{display:flex;flex-direction:column;overflow-y:auto}
+.quiz-study-media .quiz-media-text{flex:0 1 auto;max-height:200px;overflow-y:auto;margin-bottom:10px}
 .quiz-study-media img{width:100%;flex:1;min-height:240px;max-height:min(58vh,560px);object-fit:contain;border-radius:7px;background:#07111b}
 /* CASO TEÓRICO (lesão sem imagem): o painel esquerdo estica pra acompanhar
    a altura do painel de pergunta/alternativas (grid stretch), e as pistas
@@ -916,7 +921,7 @@ body{
 .quiz-review-modal-overlay{position:fixed;inset:0;background:rgba(6,10,14,.7);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10020}
 .quiz-review-modal{max-width:540px}
 .quiz-integrated-title{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px}.quiz-integrated-title b{font-size:13px}.quiz-integrated-title span{font:600 10px 'IBM Plex Mono',monospace;color:#55c7ef}
-@media(max-width:780px){.quiz-study-shell{grid-template-columns:1fr}.quiz-study-media img{max-height:320px;min-height:180px}.quiz-study-media .quiz-carousel{min-height:180px}}
+@media(max-width:780px){.quiz-study-shell{grid-template-columns:1fr}.quiz-study-media img{max-height:320px;min-height:180px}.quiz-study-media .quiz-carousel{min-height:180px}.quiz-study-media .quiz-media-text{max-height:140px}}
 @media(max-width:480px){.quiz-mcq-option{padding:13px 14px;gap:11px}.quiz-mcq-letter{width:29px;height:29px;font-size:13px}}
 /* ============================================================
    QUIZ & PROGRESSO — paleta viva (espelha o mockup aprovado)
@@ -17912,7 +17917,14 @@ function renderQuizCardIntegrated(host){
     // ANTES e depois da resposta (a descrição acima continua só depois).
     // PROTEÇÃO 093d — contexto do CASO CLÍNICO vinculado a ESTA imagem
     // (segue o carrossel); sem caso, o contexto manual da imagem (088).
-    media.innerHTML=`${quizClinicalContextBlockHtml(e, cur, st.answered)}${quizImageDescHtml(cur.label, st.answered)}<div class="quiz-carousel${hasMultiple?' has-multi':''}">
+    // COMPLEMENTO lrev_mulfu0x2_ocobn9: contexto clínico + descrição da
+    // imagem entram num wrapper próprio (`.quiz-media-text`) com teto de
+    // altura + rolagem interna (CSS) — cresce normal até o limite e depois
+    // rola SÓ o texto, nunca a imagem (que mantém `flex:1` fora deste
+    // wrapper, com área própria estável). Sem conteúdo, nenhum wrapper vazio
+    // é criado (sem scrollbar residual).
+    const mediaTextHtml = `${quizClinicalContextBlockHtml(e, cur, st.answered)}${quizImageDescHtml(cur.label, st.answered)}`;
+    media.innerHTML=`${mediaTextHtml?`<div class="quiz-media-text">${mediaTextHtml}</div>`:''}<div class="quiz-carousel${hasMultiple?' has-multi':''}">
         ${hasMultiple?'<button type="button" class="quiz-carousel-arrow quiz-carousel-prev" aria-label="imagem anterior">‹</button>':''}
         <img src="${cur.data}">
         ${hasMultiple?'<button type="button" class="quiz-carousel-arrow quiz-carousel-next" aria-label="imagem seguinte">›</button>':''}

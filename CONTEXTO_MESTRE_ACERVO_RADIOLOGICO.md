@@ -8,6 +8,26 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**Complemento — layout imagem/descrição no Quiz (2026-09-28, mesma revisão
+`lrev_mulfu0x2_ocobn9`, não é nova):** a correção anterior (piso
+`min-height` na imagem + `overflow-y:auto` no painel) reduzia mas não
+eliminava a compressão — texto muito longo ainda podia fazer o painel
+inteiro rolar como bloco só. Agora `renderMedia()` (Quiz) monta o contexto
+clínico + a descrição da imagem num wrapper próprio (`.quiz-media-text`,
+só quando há conteúdo) com `max-height:200px`/`140px` (≤780px) +
+`overflow-y:auto` — cresce normal até o limite, depois rola só o TEXTO
+(sem line-clamp, sem overflow:hidden, nada truncado). A imagem fica FORA
+desse wrapper, com `flex:1`+`min-height` de sempre — nunca mais compete
+por espaço com o texto, área visual sempre estável. Também investigada (e
+descartada, sem regressão de código) uma suspeita de que o botão "📥
+Enviar ao Atlas" (userscript Radiopaedia) teria parado de funcionar após
+os commits anteriores — `git diff` do userscript entre o baseline e o HEAD
+está vazio (arquivo não tocado); o pipeline de recebimento no Atlas também
+não foi tocado; prova ponta a ponta em
+`tests/radiopaedia-send-receive-e2e.test.js` (7/7). Suíte completa: 1720
+testes, 1703 PASS, os mesmos 12 FAIL históricos, 5 TODO. Detalhe completo
+no `CLAUDE_CHECKPOINT_ATLAS.md`.
+
 **5 pendências globais da Central de Revisões resolvidas de ponta a ponta
 (2026-09-28):** `seed_390`/`lrev_muj3r3zn_efx2b4` (casos clínicos) foi
 DELIBERADAMENTE excluída desta task por instrução explícita do usuário —
