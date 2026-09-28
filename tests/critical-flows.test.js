@@ -577,9 +577,14 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // acrescentaram 52 linhas; sem alteração nos fluxos de recovery/boot.
   // 091c-b: helpers de imagem real + merge de casos (~122 linhas) antes da
   // primeira âncora; sem alteração nos fluxos de recovery/boot/import.
-  assert.equal(recovery.line, 9648);
-  assert.equal(brokenArtifacts.line, 9638);
-  assert.equal(loadData.line, 12199);
+  // Bugfix ponte no lote + citação "manter o clone X" (2026-09-27): +12
+  // nestas âncoras — o bloco novo fica dentro de processReviewAiBatchItem,
+  // bem antes do recovery/loadData; a correção do regex de citação
+  // (findExplicitCloneMatches) fica bem depois do importHandler e não
+  // desloca nenhuma âncora.
+  assert.equal(recovery.line, 9660);
+  assert.equal(brokenArtifacts.line, 9650);
+  assert.equal(loadData.line, 12211);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
@@ -624,7 +629,9 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // até recovery e +87 no importHandler — persist compartilhado +
   // bridgeManualActionToStructuralPlan + gate no import Ponte 1. Sem
   // alteração nos fluxos de recovery/boot/import.
-  assert.equal(importHandler.line, 16720);
+  // Mesmo bugfix: +1 extra no importHandler (nota "🟡 plano estrutural
+  // criado" no resultado do lote) — total +13.
+  assert.equal(importHandler.line, 16733);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

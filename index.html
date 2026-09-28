@@ -7137,7 +7137,19 @@ function processReviewAiBatchItem(raw, seen){
     const reason = description || actionType || reviewAiManualActionReason(review.requestText, summary, reasoning) || 'manual_action_required';
     const flagged = flagManualActionRequired(reviewId, solutionText, reason, { type:actionType, description, suggestedPlacement });
     if(!flagged.ok) return { reviewId, status:'failed', reason:flagged.reason };
-    return { reviewId, status:'manual_action_required', review:flagged.review, actionType, reason, suggestedPlacement };
+    // Ponte 1 → 2 no LOTE: mesma ponte do fluxo individual
+    // (importReviewAiSolution/bridgeManualActionToStructuralPlan). Sem isto,
+    // uma resposta manual_action_required processada pelo lote (o formato
+    // real que "Processar lote" aceita) nunca cria/atualiza o structuralPlan
+    // — o card continua mostrando o plano antigo (ex.: rejected/unresolved)
+    // mesmo após reimportar a resolução correta.
+    let structuralPlan = null, bridgeReason = null;
+    if(actionType==='merge_duplicates'){
+      const b = bridgeManualActionToStructuralPlan(reviewId);
+      if(b.bridged) structuralPlan = { status:'imported', keeperId:b.keeperId, removeId:b.removeId, crossSectionOverride:b.crossSectionOverride||undefined };
+      else bridgeReason = b.reason;
+    }
+    return { reviewId, status:'manual_action_required', review:flagged.review, actionType, reason, suggestedPlacement, structuralPlan, bridgeReason };
   }
   if(result==='no_change'){
     review.lastAiAnalysis = { result:'no_change', summary, reasoning, at: Date.now() };
@@ -15452,6 +15464,7 @@ function openReviewAiBatchResultModal(result){
     const meta = reviewCenterLesionMeta(review ? review.lesionId : '');
     const name = review ? meta.name : '(revisão não encontrada)';
     const reason = it.reason ? escAttr(it.reason) + (it.detail ? ' (' + escAttr(it.detail) + ')' : '') : '';
+    const structuralNote = it.structuralPlan ? ' · 🟡 plano estrutural criado — revise na prévia antes de aceitar' : '';
     let actions = '';
     if(it.status==='applied') actions = '<button type="button" class="btn btn-primary batch-result-validate">🔎 Validar</button>';
     else if(it.status==='manual_action_required'){
@@ -15465,7 +15478,7 @@ function openReviewAiBatchResultModal(result){
     return `<div class="review-center-row" data-idx="${idx}">
       <div class="review-center-row-main">
         <div class="review-center-row-title">${escAttr(name)}</div>
-        <div class="review-center-row-meta">${labels[it.status]||it.status}${reason?' · '+reason:''}</div>
+        <div class="review-center-row-meta">${labels[it.status]||it.status}${reason?' · '+reason:''}${structuralNote}</div>
       </div>
       <div class="review-center-row-actions">${actions}${extra}</div>
     </div>`;
@@ -21904,8 +21917,9 @@ function isCrossSectionOverrideValid(review, keeper, remove, resolution){
 }
 function findExplicitCloneMatches(review, source){
   // Resolve nomes de clone CITADOS no pedido atual ("clone: X", "clone que
-  // deve ser mantido é X", "manter X") para registros REAIS do DATA — nunca
-  // inventa ID. Retorna {status:'FOUND'|'NOT_FOUND'|'AMBIGUOUS', cited, matches}.
+  // deve ser mantido é X", "manter X", "manter o clone X", "manter clone X")
+  // para registros REAIS do DATA — nunca inventa ID. Retorna
+  // {status:'FOUND'|'NOT_FOUND'|'AMBIGUOUS', cited, matches}.
   // Sem veto aqui: quem chama aplica o veto anatômico existente. Puro.
   const norm = s=>normalizeExternalTitle(s||'');
   const out = { status:'NOT_FOUND', cited:[], matches:[] };
@@ -21923,7 +21937,12 @@ function findExplicitCloneMatches(review, source){
     let m = null;
     const re1 = /clone\s*:\s*([^.;\n]+)/gi;
     while((m=re1.exec(str))) take(m[1]);
-    const re2 = /(?:clone[^.;\n]{0,60}?(?:deve ser mantido|deve ser mantida|a ser mantido|a ser mantida)|(?:manter|mantenha|mantido|mantida))\s+(?:é\s+)?(?:este|esta|esse|essa|o|a|um|uma)?\s*([^.;\n]+)/gi;
+    // "manter o clone X" / "manter clone X": o artigo opcional vem antes da
+    // palavra "clone" no pedido humano (ao contrário do 1º ramo, onde "clone"
+    // é o início da frase) — sem o grupo extra, "clone" ficava PRESO na
+    // citação e nunca batia com o nome real da lesão (bug real: pedido real
+    // do usuário "manter o clone \"X\"" nunca resolvia X).
+    const re2 = /(?:clone[^.;\n]{0,60}?(?:deve ser mantido|deve ser mantida|a ser mantido|a ser mantida)|(?:manter|mantenha|mantido|mantida))\s+(?:é\s+)?(?:este|esta|esse|essa|o|a|um|uma)?\s*(?:clone\s*:?\s*)?([^.;\n]+)/gi;
     while((m=re2.exec(str))) take(m[1]);
   });
   out.cited = cited;

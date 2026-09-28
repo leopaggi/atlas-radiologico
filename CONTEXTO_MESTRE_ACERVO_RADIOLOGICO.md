@@ -8,6 +8,48 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**Bugfix real — ponte 1→2 faltando no LOTE + citação "manter o clone X" (2026-09-27):**
+diagnóstico independente pediu para rastrear o caminho EXATO que a UI real
+executa ao colar `{"results":[...]}` (formato relatado com bug real em
+produção: card preso em "🔴 Plano rejeitado (unresolved)" mesmo após editar o
+pedido, reexportar, reimportar e Ctrl+Shift+R). Achado: esse JSON só pode ser
+colado pelo caminho **"🤖 Analisar pendências com IA" → "Colar respostas da
+IA" → "Processar lote"** (`importReviewAiBatch` → `processReviewAiBatchItem`),
+que é DIFERENTE do caminho de uma revisão por vez ("🤖 Preparar para IA" →
+"Colar solução da IA", `importReviewAiSolution`). Todos os testes anteriores
+da ponte estrutural (`structural-ponte1-bridge`, `structural-plan-upgrade-
+reimport`) só exercitavam `importReviewAiSolution` — por isso passavam com o
+bug real presente (hipótese B confirmada: importador de lote e importador
+único divergiam). Duas causas raiz, ambas em `index.html`:
+1. `processReviewAiBatchItem` (ramo `manual_action_required`) nunca chamava
+   `bridgeManualActionToStructuralPlan` — corrigido para chamá-la exatamente
+   como `importReviewAiSolution` já fazia, preservando idempotência/terminal/
+   carimbo (mesmo `persistValidatedStructuralPlan`).
+2. `findExplicitCloneMatches` (regex `re2`) não reconhecia a frase real do
+   usuário "manter o clone X" / "manter clone X" — a palavra "clone" ficava
+   PRESA dentro da citação capturada (`"clone \"X\""` ≠ nome real da lesão),
+   então mesmo com a ponte rodando o resultado seria `no_safe_candidate`.
+   Corrigido consumindo um "clone" opcional logo após o artigo, sem afetar as
+   frases já cobertas ("clone: X", "clone que deve ser mantido é X").
+Teste novo `tests/structural-plan-batch-manual-bridge.test.js` (5/5) reproduz
+o caminho de LOTE de ponta a ponta com o JSON exato relatado (CERVIX
+`lrev_muhq25u5_ijyqgq` rejected/unresolved → imported, keeper `seed_218`,
+remove `seed_600`; PLACENTA `lrev_muhqttye_tvd2bt` → imported, keeper
+`seed_846`, remove `seed_530`, override cross-section restrito) + save/reload/
+merge não regride + terminal `executed` nunca reinterpretado + sem citação
+explícita continua `unresolved` (sem inventar keeper). Suíte completa rodada
+arquivo a arquivo: 1631 PASS, 12 FAIL — todos históricos e idênticos ao
+baseline antes desta correção (CRLF/LF, `duplicate-detection`
+`DUPLICATE_PAIRS_V171`, datas fixas em `images-history`), nenhuma regressão
+nova. `tests/critical-flows.test.js` teve as âncoras de linha atualizadas
+(+12 nas três primeiras / +13 no importHandler) pelas ~13 linhas novas antes
+delas. Deploy/cache auditado: não há workflow do GitHub Actions nem service
+worker neste repositório — Pages publica direto o `index.html` do branch
+`main`; `origin/main` == HEAD local antes desta correção, então não havia
+bundle antigo servido — a causa era só o código, não o deploy (hipóteses J/K
+descartadas). **Corrigi o caminho real usado pela UI, não apenas
+helpers/testes isolados.**
+
 **Ponte estrutural — Fase 3: executor unitário controlado (2026-09-27, commit
 `15619f8`):** plano `accepted` executa UMA revisão por vez com confirmação
 explícita — stale check + dry-run obrigatório + snapshot guardado na execução
