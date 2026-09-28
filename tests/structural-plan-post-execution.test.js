@@ -34,6 +34,8 @@ function fn(name) {
 
 const names = [
   'normalizeExternalTitle', 'canonicalJsonString',
+  'structuralSectionOf', 'structuralSiteOf',
+  'structuralOrganTags', 'hasIncompatibleOrganAnatomy', 'isCrossSectionOverrideValid', 'findExplicitCloneMatches',
   'stableImageKeyV208', 'imageIdentityKeys', 'pushLesionReviewHistory',
   'lesionMergeLinkKey', 'mergeClinicalCasesForFold', 'mergeDidacticItems',
   'mergeReviewProgress', 'mergeReviewOverrides', 'clinicalCaseIdentityKey',

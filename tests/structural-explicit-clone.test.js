@@ -33,7 +33,7 @@ function fn(name) {
 
 const names = ['normalizeExternalTitle', 'normalizeRadiopaediaCaseTitle', 'tokenizeExternalTitle', 'externalTokenOverlap', 'levNormSimilarity', 'externalMatchBand',
   'structuralReviewPick', 'structuralReviewImageMeta', 'structuralSectionOf', 'structuralSiteOf', 'hasStrongAnatomicConflict',
-  'structuralReviewRecord', 'findExplicitCloneMatches', 'findStructuralReviewCandidates'];
+  'structuralReviewRecord', 'structuralOrganTags', 'hasIncompatibleOrganAnatomy', 'findExplicitCloneMatches', 'findStructuralReviewCandidates'];
 const consts = html.slice(html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = '), html.indexOf('// Tokens relevantes:', html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = ')));
 const mapping = html.slice(html.indexOf('const STRUCTURAL_REVIEW_CANDIDATE_NAMES = '), html.indexOf('function structuralReviewPick('));
 

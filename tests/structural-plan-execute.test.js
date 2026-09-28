@@ -32,6 +32,7 @@ function fn(name) {
 const names = [
   'normalizeExternalTitle', 'tokenizeExternalTitle',
   'structuralSectionOf', 'structuralSiteOf', 'hasStrongAnatomicConflict',
+  'structuralOrganTags', 'hasIncompatibleOrganAnatomy', 'isCrossSectionOverrideValid',
   'canonicalJsonString', 'stableImageKeyV208', 'imageIdentityKeys',
   'pushLesionReviewHistory', 'lesionMergeLinkKey',
   'mergeClinicalCasesForFold', 'mergeDidacticItems', 'genDidacticId',

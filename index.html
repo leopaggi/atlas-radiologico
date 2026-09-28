@@ -21776,6 +21776,45 @@ function hasStrongAnatomicConflict(source, candidate){
   if(!ss || !cs || !st || !ct) return false;
   return ss!==cs && st!==ct;
 }
+/* Pares de órgãos sabidamente incompatíveis (proteção usada pelo matcher e
+   pela validação estrutural). Seção/sítio diferentes por artefato de
+   taxonomia (ex.: placenta em Obstetrícia × útero na Pelve) NÃO formam par
+   incompatível — só estes pares bloqueiam. */
+function structuralOrganTags(text){
+  const t = normalizeExternalTitle(text||'');
+  const found = new Set();
+  if(/\b(?:ovario|ovariano|ovariana|adnexo|adnexal)\b/.test(t)) found.add('ovario');
+  if(/\b(?:pancreas|pancreatico|pancreatica|pancreatic)\b/.test(t)) found.add('pancreas');
+  if(/\b(?:endometrio|endometrial)\b/.test(t)) found.add('endometrio');
+  if(/\b(?:cervix|colo uterino)\b/.test(t)) found.add('colo_uterino');
+  return found;
+}
+function hasIncompatibleOrganAnatomy(a, b){
+  const sa = structuralOrganTags([structuralSectionOf(a),structuralSiteOf(a)].join(' '));
+  const sb = structuralOrganTags([structuralSectionOf(b),structuralSiteOf(b)].join(' '));
+  return (sa.has('ovario') && sb.has('pancreas')) || (sa.has('pancreas') && sb.has('ovario')) ||
+    (sa.has('endometrio') && sb.has('ovario')) || (sa.has('ovario') && sb.has('endometrio')) ||
+    (sa.has('colo_uterino') && sb.has('endometrio')) || (sa.has('endometrio') && sb.has('colo_uterino'));
+}
+function isCrossSectionOverrideValid(review, keeper, remove, resolution){
+  // Override HUMANO RESTRITO para fusão cross-section (ex.: placenta em
+  // Obstetrícia × útero na Pelve — artefato de taxonomia, não conflito real).
+  // Vale SOMENTE se, cumulativamente: (1) flag explícita no plano; (2) o
+  // keeper foi citado no pedido ATUAL e resolve para exatamente ele (nunca
+  // vale para outro par); (3) NENHUM par incompatível de órgãos (o veto
+  // global continua intacto: ovário×pâncreas etc. sempre bloqueados);
+  // (4) keeper≠remove. Prévia + aceite seguem obrigatórios. Puro.
+  if(!resolution || resolution.crossSectionOverride!==true) return false;
+  if(!review || !keeper || !remove || keeper.id===remove.id) return false;
+  if(hasIncompatibleOrganAnatomy(keeper, remove)) return false;
+  try{
+    const src = (review.lesionId && typeof structuralPlanLesion==='function')
+      ? structuralPlanLesion(review.lesionId) : null;
+    const cited = findExplicitCloneMatches(review, src || keeper);
+    if(!cited || cited.status!=='FOUND' || !cited.matches[0] || cited.matches[0].id!==keeper.id) return false;
+  }catch(_e){ return false; }
+  return true;
+}
 function findExplicitCloneMatches(review, source){
   // Resolve nomes de clone CITADOS no pedido atual ("clone: X", "clone que
   // deve ser mantido é X", "manter X") para registros REAIS do DATA — nunca
@@ -21849,22 +21888,9 @@ function findStructuralReviewCandidates(review, source){
   // estar ERRADO no próprio registro (ex.: seroso ovariano com texto legado
   // pancreático): sinaliza conflito, mas não apaga candidato anatomicamente
   // correto por causa desse erro de metadado.
-  const organs=t=>{
-    t=norm(t);
-    const found=new Set();
-    if(/\b(?:ovario|ovariano|ovariana|adnexo|adnexal)\b/.test(t)) found.add('ovario');
-    if(/\b(?:pancreas|pancreatico|pancreatica|pancreatic)\b/.test(t)) found.add('pancreas');
-    if(/\b(?:endometrio|endometrial)\b/.test(t)) found.add('endometrio');
-    if(/\b(?:cervix|colo uterino)\b/.test(t)) found.add('colo_uterino');
-    return found;
-  };
+  const organs=t=>structuralOrganTags(t);
   const srcOrg=organs([structuralSectionOf(source),structuralSiteOf(source)].join(' '));
-  const anatomicalConflict=e=>{
-    const other=organs([structuralSectionOf(e),structuralSiteOf(e)].join(' '));
-    return (srcOrg.has('ovario') && other.has('pancreas')) || (srcOrg.has('pancreas') && other.has('ovario')) ||
-      (srcOrg.has('endometrio') && other.has('ovario')) || (srcOrg.has('ovario') && other.has('endometrio')) ||
-      (srcOrg.has('colo_uterino') && other.has('endometrio')) || (srcOrg.has('endometrio') && other.has('colo_uterino'));
-  };
+  const anatomicalConflict=e=>hasIncompatibleOrganAnatomy(source,e);
   const enTermAnatomyConflict=e=>{
     const en=organs(e.enTerm);
     return (srcOrg.has('ovario') && en.has('pancreas')) || (srcOrg.has('pancreas') && en.has('ovario')) ||
@@ -22029,7 +22055,7 @@ function validateStructuralResolution(raw){
     return structuralPlanError(r.reviewId, 'unknown_resolutionType');
   const type = r.resolutionType;
   const allowedKeys = {
-    merge_duplicates:['reviewId','resolutionType','keeperId','removeId','merge','reasoning','humanOverride'],
+    merge_duplicates:['reviewId','resolutionType','keeperId','removeId','merge','reasoning','humanOverride','crossSectionOverride'],
     remove_additional_section_placement:['reviewId','resolutionType','lesionId','placement','reasoning','humanOverride'],
     transfer_images:['reviewId','resolutionType','fromLesionId','toLesionId','imageIds','reasoning','humanOverride'],
     add_clinical_cases:['reviewId','resolutionType','lesionId','clinicalCases','reasoning','humanOverride'],
@@ -22042,6 +22068,8 @@ function validateStructuralResolution(raw){
   }
   if(r.humanOverride!==undefined && typeof r.humanOverride!=='boolean')
     return structuralPlanError(r.reviewId, 'humanOverride_not_boolean');
+  if(r.crossSectionOverride!==undefined && typeof r.crossSectionOverride!=='boolean')
+    return structuralPlanError(r.reviewId, 'crossSectionOverride_not_boolean');
   const reasoning = structuralPlanString(r.reasoning, false);
   if(reasoning===null) return structuralPlanError(r.reviewId, 'reasoning_missing');
   const fail = (reason, detail)=>structuralPlanError(r.reviewId, reason, detail);
@@ -22051,11 +22079,16 @@ function validateStructuralResolution(raw){
     if(!remove) return fail('remove_not_found', r.removeId);
     if(keeper.id===remove.id) return fail('keeper_equals_remove');
     // seed_156 NUNCA pode ser keeper de lesão ovariana: conflito anatômico
-    // forte rejeita mesmo com override (override só dispensa pertinência).
+    // forte rejeita, salvo override cross-section RESTRITO (alvo citado no
+    // pedido atual + par de órgãos compatível — ovário×pâncreas etc. seguem
+    // sempre bloqueados). Override genérico não existe. Fail-closed: qualquer
+    // erro aqui mantém o veto.
+    let vetoAnatomic = true;
     try{
-      if(typeof hasStrongAnatomicConflict==='function' && hasStrongAnatomicConflict(keeper, remove))
-        return fail('anatomic_conflict', keeper.id+' x '+remove.id);
-    }catch(_e){}
+      vetoAnatomic = typeof hasStrongAnatomicConflict==='function' && hasStrongAnatomicConflict(keeper, remove)
+        && !isCrossSectionOverrideValid(review, keeper, remove, r);
+    }catch(_e){ vetoAnatomic = true; }
+    if(vetoAnatomic) return fail('anatomic_conflict', keeper.id+' x '+remove.id);
     if(!r.humanOverride){
       const source = structuralPlanLesion(review.lesionId);
       const known = structuralPlanKnownIds(review, source);
@@ -22076,7 +22109,8 @@ function validateStructuralResolution(raw){
     for(const k of ['transferImages','transferClinicalCases','transferRadiologicSigns','transferClassificationSchemes','transferLinks','transferAltPlacements'])
       if(m[k]!==undefined && typeof m[k]!=='boolean') return fail('merge_bad_type', k);
     return { reviewId:r.reviewId, valid:true, type, keeperId:keeper.id, removeId:remove.id,
-      keeperName:keeper.name, removeName:remove.name, merge:m, reasoning, humanOverride:!!r.humanOverride };
+      keeperName:keeper.name, removeName:remove.name, merge:m, reasoning, humanOverride:!!r.humanOverride,
+      crossSectionOverride:r.crossSectionOverride===true };
   }
   if(type==='remove_additional_section_placement'){
     const lesion = structuralPlanLesion(r.lesionId);
@@ -22306,7 +22340,8 @@ async function importStructuralResolutionBatch(obj){
     // a prévia (cópia em memória) continuaria exibindo, mas o accept
     // falharia com no_imported_plan. updatedAt novo = local vence.
     r.updatedAt = importedNow;
-    pushLesionReviewHistory(r, 'structural_plan_imported', { type:v.type, importedAt, batchKey });
+    pushLesionReviewHistory(r, 'structural_plan_imported', { type:v.type, importedAt, batchKey,
+      crossSectionOverride: v.crossSectionOverride===true || undefined });
     imported.push(v.reviewId);
   }
   await saveLesionRevisions();
@@ -22335,7 +22370,8 @@ async function acceptStructuralPlan(reviewId){
   // empate decide pelo JSON canônico) pode ressuscitar uma cópia remota
   // desatualizada e reverter silenciosamente o aceite num sync/reload.
   r.updatedAt = Date.now();
-  pushLesionReviewHistory(r, 'structural_plan_accepted', { type:r.structuralPlan.type });
+  pushLesionReviewHistory(r, 'structural_plan_accepted', { type:r.structuralPlan.type,
+    crossSectionOverride: (r.structuralPlan.resolution && r.structuralPlan.resolution.crossSectionOverride===true) || undefined });
   await saveLesionRevisions();
   return { ok:true, reason:null };
 }
@@ -22458,8 +22494,15 @@ function dryRunStructuralPlan(reviewId){
     if(base.conflicts.length) return Object.assign(base, { ok:false, reason:'dry_conflicts' });
     if(keeper.id===remove.id){ base.conflicts.push({ kind:'keeper_equals_remove' }); return Object.assign(base, { ok:false, reason:'dry_conflicts' }); }
     try{
-      if(typeof hasStrongAnatomicConflict==='function' && hasStrongAnatomicConflict(keeper, remove))
-        base.conflicts.push({ kind:'anatomic_conflict', keeper:keeper.id, remove:remove.id });
+      if(typeof hasStrongAnatomicConflict==='function' && hasStrongAnatomicConflict(keeper, remove)){
+        const rr = LESION_REVISIONS[reviewId] || null;
+        const res = rr && rr.structuralPlan ? rr.structuralPlan.resolution : null;
+        let overrideOk = false;
+        try{ overrideOk = !!isCrossSectionOverrideValid(rr, keeper, remove, res); }catch(_e){ overrideOk = false; }
+        if(!overrideOk)
+          base.conflicts.push({ kind:'anatomic_conflict', keeper:keeper.id, remove:remove.id });
+        else base.warnings.push({ kind:'cross_section_override', keeper:keeper.id, remove:remove.id });
+      }
     }catch(_e){}
     const m = v.merge || {};
     const keyOf = (im)=>{ try{ return (typeof stableImageKeyV208==='function') ? (stableImageKeyV208(im)||null) : null; }catch(_e){ return null; } };
@@ -22673,7 +22716,8 @@ async function executeStructuralPlan(reviewId){
     if(v.type==='merge_duplicates') r.lesionId = v.keeperId;
     r.structuralPlan.status = 'executed';
     r.structuralPlan.decidedAt = new Date().toISOString();
-    pushLesionReviewHistory(r, 'structural_plan_executed', { type:v.type, executionId });
+    pushLesionReviewHistory(r, 'structural_plan_executed', { type:v.type, executionId,
+      crossSectionOverride: (v.crossSectionOverride===true) || undefined });
     await saveData();
     try{ await structuralPersistAll(); }catch(_e){}
     const resolved = resolveReviewManually(reviewId);
@@ -22865,6 +22909,7 @@ function structuralPlanPreviewHtml(v){
     ['transferImages','transferClinicalCases','transferRadiologicSigns','transferClassificationSchemes','transferLinks','transferAltPlacements']
       .forEach(k=>{ if(m[k]) rows.push([k.replace(/^transfer/,'transferir '), 'sim']); });
     return head('Fusão: '+v.removeName+' → '+v.keeperName, v.reviewId) +
+      (v.crossSectionOverride===true?'<div><b>⚠️ Fusão cross-section aprovada manualmente:</b> seções distintas, alvo citado no pedido, sem par incompatível de órgãos. Confira anatomia antes de aceitar.</div>':'') +
       '<div><b>MANTER:</b> '+esc(v.keeperId)+' — '+esc(v.keeperName)+'</div>' +
       '<div><b>REMOVER:</b> '+esc(v.removeId)+' — '+esc(v.removeName)+'</div>' +
       (rows.length?'<div><b>DADOS QUE SERIAM INCORPORADOS:</b><ul>'+rows.map(x=>'<li>'+esc(x[0])+': '+esc(String(x[1])).slice(0,300)+'</li>').join('')+'</ul></div>':'<div>Sem dados extras declarados.</div>') +
