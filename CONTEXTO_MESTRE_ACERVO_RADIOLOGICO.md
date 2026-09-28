@@ -8,6 +8,23 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**3º ajuste — layout imagem/descrição no Quiz (2026-09-28, mesma revisão
+`lrev_mulfu0x2_ocobn9`, ainda não é nova):** reprodução visual real mostrou
+que, mesmo com a imagem estável, "o quadro da descrição" ocupava quase todo
+o espaço vertical com apenas 1 linha de texto. Causa raiz real (achada
+investigando a cadeia CSS inteira, não só `.quiz-media-text`): o
+`.quiz-carousel` (wrapper do `<img>`) tinha `flex:1` sem teto próprio — só
+o `<img>` tinha `max-height`. Como o painel (`.quiz-study-media`) é
+esticado pelo grid pra acompanhar a coluna da pergunta (intencional,
+preservado), o CARROSSEL crescia até essa altura toda, sobrando uma área
+vazia grande e escura DENTRO do próprio wrapper da imagem — não no bloco de
+texto, que já estava correto desde o ajuste anterior. Prova numérica
+(simulação da distribuição flex): painel de 2000px, carrossel sem teto
+~1902px; com o teto, trava em 560px. Fix: `.quiz-carousel` ganhou o MESMO
+`max-height` do `<img>` (desktop e mobile) — a imagem em si não foi
+alterada. Suíte completa: 1729 testes, 1712 PASS, os mesmos 12 FAIL
+históricos, 5 TODO. Detalhe completo no `CLAUDE_CHECKPOINT_ATLAS.md`.
+
 **2º complemento — layout imagem/descrição no Quiz (2026-09-28, mesma
 revisão `lrev_mulfu0x2_ocobn9`, ainda não é nova):** reprodução visual real
 mostrou que a imagem ainda podia sair da área visível ao rolar a descrição.

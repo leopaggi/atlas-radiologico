@@ -601,9 +601,13 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // +2 nas quatro ancoras (2o complemento lrev_mulfu0x2_ocobn9, 2026-09-28):
   // comentario CSS reescrito de novo (causa raiz real: overflow-y:auto no
   // pai) — tudo no <style>, antes da primeira ancora.
-  assert.equal(recovery.line, 9753);
-  assert.equal(brokenArtifacts.line, 9743);
-  assert.equal(loadData.line, 12304);
+  // +12 nas quatro ancoras (3o ajuste lrev_mulfu0x2_ocobn9, 2026-09-28):
+  // comentario novo + max-height no .quiz-carousel (causa raiz real do
+  // "quadro escuro": o WRAPPER do carrossel crescia sem teto proprio,
+  // nao o texto) — tudo no <style>, antes da primeira ancora.
+  assert.equal(recovery.line, 9765);
+  assert.equal(brokenArtifacts.line, 9755);
+  assert.equal(loadData.line, 12316);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
@@ -663,7 +667,9 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // nas três primeiras âncoras acima).
   // +2 no importHandler (2o complemento lrev_mulfu0x2_ocobn9, ver comentário
   // nas três primeiras âncoras acima).
-  assert.equal(importHandler.line, 16880);
+  // +12 no importHandler (3o ajuste lrev_mulfu0x2_ocobn9, ver comentário
+  // nas três primeiras âncoras acima).
+  assert.equal(importHandler.line, 16892);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

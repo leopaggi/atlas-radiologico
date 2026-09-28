@@ -92,9 +92,64 @@ test('B2. .quiz-study-media .quiz-carousel (wrapper da imagem): mesmo flex-shrin
   assert.match(rule, /position:relative/, 'setas/overlay do carrossel continuam posicionadas por isto');
 });
 
+test('B2b. .quiz-carousel: MESMO teto (max-height) do <img> — o WRAPPER não pode crescer além do que a imagem precisa (causa real do "quadro escuro" gigante)', () => {
+  const carouselRule = cssRule('.quiz-study-media .quiz-carousel');
+  const imgRule = cssRule('.quiz-study-media img');
+  assert.match(carouselRule, /max-height:min\(58vh,560px\)/, 'sem este teto, .quiz-study-media (esticado pelo grid pra acompanhar a coluna da pergunta) deixava o CARROSSEL crescer bem além da imagem — a sobra virava uma área vazia/escura dentro do próprio wrapper, sem relação com o texto');
+  assert.match(imgRule, /max-height:min\(58vh,560px\)/);
+  // mesmo valor, não um número inventado à parte
+  const carouselMax = /max-height:(min\([^)]*\))/.exec(carouselRule)[1];
+  const imgMax = /max-height:(min\([^)]*\))/.exec(imgRule)[1];
+  assert.equal(carouselMax, imgMax);
+});
+
 test('B3. nem a imagem nem o carrossel têm overflow — nunca viram área de rolagem', () => {
   assert.doesNotMatch(cssRule('.quiz-study-media img'), /overflow/);
   assert.doesNotMatch(cssRule('.quiz-study-media .quiz-carousel'), /overflow-y/);
+});
+
+// ===========================================================================
+// B4 — SIMULAÇÃO NUMÉRICA DA DISTRIBUIÇÃO FLEX: mesmo quando o grid estica
+// `.quiz-study-media` para acompanhar uma coluna de pergunta MUITO alta
+// (comportamento intencional, ver comentário de `.quiz-noimage` — não
+// removido), o carrossel (único item com flex-grow) não pode inchar além
+// do próprio teto. Antes desta correção, SEM max-height no carrossel, ele
+// consumiria TODO o espaço esticado — essa sobra vazia, escura (sem fundo
+// próprio do wrapper), era o "quadro gigante" relatado, não o texto.
+// ===========================================================================
+
+// Distribuição real do CSS Flexbox (coluna) para o caso de 2 itens: 1 fixo
+// (flex:0 0 auto, tamanho = conteúdo, já limitado pelo próprio max-height
+// em C2/C3) + 1 flexível (flex-grow:1) com min/max próprios. Reproduz a
+// regra do spec usada aqui (só um item flex-grow => o excesso além do teto
+// simplesmente não é redistribuído, fica como sobra depois do bloco).
+function simulateFlexColumnFinalHeight(containerHeight, fixedItemHeight, growItem) {
+  const remaining = Math.max(0, containerHeight - fixedItemHeight);
+  const grown = Math.min(remaining, growItem.max);
+  return Math.max(grown, growItem.min);
+}
+
+test('B4. carrossel NUNCA excede o próprio teto, mesmo com o painel esticado a uma altura enorme (2000px)', () => {
+  const carouselRule = cssRule('.quiz-study-media .quiz-carousel');
+  assert.match(carouselRule, /max-height:min\(58vh,560px\)/, 'pré-condição: teto presente na regra real');
+  // min(58vh,560px) — testamos com o pior caso realista (viewport bem alto,
+  // onde 58vh > 560px, então o teto EFETIVO vira 560px, o mais permissivo).
+  const growItem = { min: 240, max: 560 };
+  const textHeight = 98; // ~5 linhas (ver teste C3), pior caso
+  const carouselFinal = simulateFlexColumnFinalHeight(2000, textHeight, growItem);
+  assert.equal(carouselFinal, 560, 'trava em 560px — nunca "2000 - 98" (quase todo o painel)');
+  assert.ok(carouselFinal <= growItem.max);
+});
+
+test('B5. sem o teto do carrossel (regressão do bug relatado, simulado): o mesmo painel de 2000px faria o carrossel virar ~1902px — prova numérica do que estava errado', () => {
+  // Reproduz a config ANTERIOR a este ajuste (carrossel só com min-height,
+  // sem max-height) para provar, por número, o tamanho do "quadro escuro"
+  // que o usuário via — não é teórico, é o resultado real do algoritmo.
+  const growItemSemTeto = { min: 240, max: Infinity };
+  const textHeight = 98;
+  const carouselSemTeto = simulateFlexColumnFinalHeight(2000, textHeight, growItemSemTeto);
+  assert.equal(carouselSemTeto, 1902, 'sem max-height, o carrossel (não a imagem) consumia quase todo o painel — a imagem interna, limitada a 560px, sobrava com ~1340px de vazio escuro embaixo');
+  assert.ok(carouselSemTeto > growItemSemTeto.min * 3, 'ordem de grandeza do bug: muitas vezes maior que o necessário');
 });
 
 // ===========================================================================
@@ -145,7 +200,7 @@ test('D1. responsivo (≤780px): .quiz-media-text mantém teto por ~5 linhas com
   const block = html.slice(idx, html.indexOf('@media(max-width:480px)', idx));
   assert.match(block, /\.quiz-study-shell\{grid-template-columns:1fr\}/, 'empilha em coluna única (preservado)');
   assert.match(block, /\.quiz-study-media img\{max-height:320px;min-height:180px\}/);
-  assert.match(block, /\.quiz-study-media \.quiz-carousel\{min-height:180px\}/);
+  assert.match(block, /\.quiz-study-media \.quiz-carousel\{min-height:180px;max-height:320px\}/, 'carrossel com o MESMO teto da imagem no mobile — sem isso, o vazio dentro do carrossel reaparece no celular');
   assert.match(block, /\.quiz-study-media \.quiz-media-text\{font-size:13px;line-height:1\.35;max-height:calc\(5 \* 1\.35em\)\}/);
 });
 

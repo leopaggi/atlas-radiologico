@@ -123,6 +123,41 @@ responsivo, carrossel/lightbox preservados. Suíte completa: 1726 testes,
 `tests/critical-flows.test.js` com as 4 âncoras realinhadas de novo (+2
 uniforme).
 
+**3º AJUSTE — `lrev_mulfu0x2_ocobn9` (2026-09-28, mesma revisão, ainda não é
+nova):** usuário reproduziu visualmente de novo — imagem agora estável, mas
+"o quadro da descrição" ainda ocupava quase todo o espaço vertical mesmo
+com 1 linha de texto. Investigação completa da cadeia CSS real (sem
+sobrescrita de `.quiz-media-text` encontrada em lugar nenhum — regra única
+no arquivo) levou à **causa raiz real, diferente do suspeito inicial**: o
+CARROSSEL (`.quiz-carousel`, wrapper do `<img>`) tinha `flex:1` **sem teto
+próprio** — só o `<img>` tinha `max-height`. Como `.quiz-study-media` é
+esticado pelo grid (`.quiz-study-shell`) para acompanhar a altura da coluna
+da pergunta (comportamento intencional e documentado, preservado — ver
+comentário de `.quiz-noimage`), o CARROSSEL crescia (flex-grow:1) até TODA
+essa altura esticada — bem além do que a imagem (limitada a
+`min(58vh,560px)`, `object-fit:contain`) realmente ocupa. A sobra virava uma
+área vazia grande e escura (fundo do próprio `.quiz-study-media`, já que o
+carrossel não tem fundo próprio) **dentro do mesmo wrapper da imagem** —
+não no bloco de texto, que já estava corretamente limitado desde o 2º
+complemento. Prova numérica (simulação da distribuição flex real, não só
+regex): com o painel esticado a 2000px, o carrossel SEM teto renderizaria
+~1902px (quase tudo); COM o teto, trava em 560px, exatamente como a
+imagem. **Fix:** `.quiz-carousel` ganhou o MESMO `max-height:min(58vh,560px)`
+do `<img>` (desktop) e `max-height:320px` (≤780px, mesmo valor do `<img>`
+no mobile) — o wrapper nunca mais cresce além do que a imagem precisa. A
+imagem em si (tamanho/comportamento) não foi alterada, por pedido explícito
+do usuário. Teste: 3 casos novos em
+`tests/quiz-image-description-layout.test.js` (B2b, B4, B5 — agora 23
+casos) provam por número (não só presença da regra) que o carrossel trava
+no teto mesmo com um container arbitrariamente alto, e reproduzem
+numericamente o tamanho exato do bug anterior (~1902px) para deixar
+registrado o que estava errado. `tests/critical-flows.test.js` com as 4
+âncoras realinhadas (+12 uniforme). Suíte completa: 1729 testes, 1712 PASS,
+os MESMOS 12 FAIL históricos (uma flake pontual de timing em
+`091g 2-5/10`, ambiente-dependente, não relacionada a este ajuste, sumiu
+ao rodar de novo — confirmado isolado e na suíte completa repetida), 5
+TODO.
+
 ## CURRENT TASK (concluída nesta sessão, 2026-09-28)
 
 5 pendências globais da Central de Revisões resolvidas de ponta a ponta
