@@ -35,6 +35,33 @@ com termo inglês curado/correto, 204 sem `EN_TERMS`. Não fabricar tradução
 para esses 204; tratá-los futuramente somente quando houver termo inglês
 curado. O usuário já aceitou este estado — não reabrir a auditoria.
 
+**INVESTIGAÇÃO — "Enviar ao Atlas" (2026-09-28, sem regressão encontrada):**
+usuário suspeitou que o botão "📥 Enviar ao Atlas" (Radiopaedia) parou de
+funcionar após `2ac0dff`/`3e61c01`. Rastreado o entrypoint real: o botão
+vive só em `tools/radiopaedia-to-atlas.user.js` — `git diff e0249ad 3e61c01
+-- tools/radiopaedia-to-atlas.user.js` está **vazio** (arquivo não tocado
+por nenhum dos 3 commits). O pipeline de recebimento no Atlas
+(`maybeHandleExternalImport`/`handleExternalImportHashChange`/
+`deliverExternalImportPayload`/`validateExternalImportPayload`/
+`openExternalImportModal`) também não foi tocado. Único ponto realmente
+alterado no caminho de importação: `buildClinicalCaseFromDraft()` (ganhou
+`id`/`origin`, correção 3 desta task), usado só depois que o usuário
+escolhe "vincular a lesão existente" → "Adicionar como caso clínico
+exemplo". Prova concreta (não helper isolado): novo teste
+`tests/radiopaedia-send-receive-e2e.test.js` (7/7) roda o payload REAL
+construído por `buildExternalPayload` (userscript) através da validação
+REAL do Atlas (`validateExternalImportPayload`) até a persistência REAL
+(`addClinicalCaseToLesion`), incluindo caso sem história clínica e
+detecção de duplicata — tudo passa, sem exceção. Suíte completa
+(1715 testes, 1698 PASS) confirma os MESMOS 12 FAIL históricos, nenhuma
+regressão nova. **Conclusão: nenhuma regressão de código encontrada nos 3
+commits recentes.** Se o botão realmente não respondeu no navegador do
+usuário, as causas mais prováveis são externas ao código deste repositório
+(userscript desatualizado no Tampermonkey, cache do GitHub Pages ainda
+servindo a versão anterior logo após o deploy, bloqueador de pop-up, ou
+console do navegador com um erro específico) — não há evidência para
+apontar qual delas sem um log de erro real do navegador do usuário.
+
 ## CURRENT TASK (concluída nesta sessão, 2026-09-28)
 
 5 pendências globais da Central de Revisões resolvidas de ponta a ponta
