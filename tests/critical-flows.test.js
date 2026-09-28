@@ -577,9 +577,9 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // acrescentaram 52 linhas; sem alteração nos fluxos de recovery/boot.
   // 091c-b: helpers de imagem real + merge de casos (~122 linhas) antes da
   // primeira âncora; sem alteração nos fluxos de recovery/boot/import.
-  assert.equal(recovery.line, 9559);
-  assert.equal(brokenArtifacts.line, 9549);
-  assert.equal(loadData.line, 12110);
+  assert.equal(recovery.line, 9562);
+  assert.equal(brokenArtifacts.line, 9552);
+  assert.equal(loadData.line, 12113);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
@@ -617,7 +617,10 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // Ações no card (2026-09-27, UX sem Aceitar): +15 no importHandler —
   // structuralPlanCardDecideHtml + botões Aceitar/Rejeitar e wiring no card.
   // Sem alteração nos fluxos.
-  assert.equal(importHandler.line, 16622);
+  // Stale refresh (2026-09-27, UX stale): +3 até recovery (CSS disabled) e
+  // +11 no importHandler — refreshStructuralPlan + botão Atualizar no card e
+  // na prévia. Sem alteração nos fluxos.
+  assert.equal(importHandler.line, 16633);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

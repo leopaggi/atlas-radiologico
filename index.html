@@ -621,6 +621,9 @@ body{
 .btn-ghost:hover{color:var(--text);border-color:var(--muted-2);}
 .btn-danger{background:none;color:var(--red);border:1px solid var(--amber-dim);}
 .btn-danger:hover{background:rgba(217,117,107,.1);}
+/* UX stale: botão desabilitado PRECISA parecer desabilitado — sem isso um
+   Aceitar bloqueado por stale parece operacional e o clique "não funciona". */
+.btn:disabled{opacity:.35;cursor:not-allowed;filter:none;}
 
 /* detail modal specifics */
 .detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0;}
@@ -15895,6 +15898,14 @@ function openReadySolutionsModal(){
         toast(res.ok ? 'Plano rejeitado.' : ('Não foi possível rejeitar: '+(res.reason||'erro')));
         renderBothLists();
       };
+      const structRefreshBtn = row.querySelector('.review-structural-refresh');
+      if(structRefreshBtn) structRefreshBtn.onclick = async (e)=>{
+        e.currentTarget.disabled = true; // anti duplo clique
+        const res = await refreshStructuralPlan(r.id);
+        toast(res.ok ? 'Plano atualizado contra o estado atual. Revise e aceite novamente.'
+          : ('Não foi possível atualizar: '+(res.reason||'erro')+(res.detail? ' ('+String(res.detail).slice(0,120)+')':'')));
+        renderBothLists();
+      };
       const structExecBtn = row.querySelector('.review-structural-execute');
       if(structExecBtn) structExecBtn.onclick = (e)=>{ e.currentTarget.disabled = true; openStructuralPlanExecuteConfirmModal(r.id, renderBothLists); e.currentTarget.disabled = false; };
       const structRbBtn = row.querySelector('.review-structural-rollback');
@@ -22299,6 +22310,61 @@ async function rejectStructuralPlan(reviewId){
   await saveLesionRevisions();
   return { ok:true, reason:null };
 }
+function structuralResolutionToRaw(v){
+  // Reconstrói a entrada crua a partir da resolution validada guardada, para
+  // revalidar contra o DATA ATUAL. Só reorganiza campos (sem inventar nada);
+  // nomes derivados (keeperName etc.) são recalculados na validação.
+  if(!v || typeof v!=='object') return null;
+  const base = { reviewId:v.reviewId, reasoning:v.reasoning };
+  if(typeof v.humanOverride==='boolean') base.humanOverride = v.humanOverride;
+  if(v.type==='merge_duplicates')
+    return Object.assign(base, { resolutionType:'merge_duplicates', keeperId:v.keeperId, removeId:v.removeId, merge:v.merge });
+  if(v.type==='remove_additional_section_placement')
+    return Object.assign(base, { resolutionType:'remove_additional_section_placement', lesionId:v.lesionId, placement:v.placement });
+  if(v.type==='transfer_images')
+    return Object.assign(base, { resolutionType:'transfer_images', fromLesionId:v.fromLesionId, toLesionId:v.toLesionId, imageIds:v.imageIds });
+  if(v.type==='add_clinical_cases')
+    return Object.assign(base, { resolutionType:'add_clinical_cases', lesionId:v.lesionId, clinicalCases:v.clinicalCases });
+  if(v.type==='unresolved')
+    return Object.assign(base, { resolutionType:'unresolved', reason:v.reason });
+  if(v.type==='no_action') return Object.assign(base, { resolutionType:'no_action' });
+  return null;
+}
+async function refreshStructuralPlan(reviewId){
+  // Atualiza SOMENTE esta revisão: revalida o plano guardado contra o DATA
+  // atual e, se válido, reconstrói o snapshot (volta a imported — exige novo
+  // aceite; o conteúdo antigo nunca é "revalidado" no lugar). Não toca nas
+  // demais revisões, não executa nada, nunca ressuscita lesão (a validação só
+  // encontra o que existe no DATA vivo).
+  const r = LESION_REVISIONS[reviewId] || null;
+  if(!r || !r.structuralPlan || !r.structuralPlan.resolution)
+    return { ok:false, reason:'missing_structural_plan_for_review:'+reviewId };
+  const eff = getEffectiveStructuralStatus(r);
+  if(eff==='executed' || eff==='rolledback')
+    return { ok:false, reason:'terminal_state_preserved', status:eff };
+  const raw = structuralResolutionToRaw(r.structuralPlan.resolution);
+  if(!raw) return { ok:false, reason:'unrefreshable_type', detail:r.structuralPlan.type };
+  // Re-baseline de conteúdo JÁ validado e aprovado: dispensa o portão de
+  // pertinência (era do export original, não do estado atual). O veto de
+  // conflito anatômico continua valendo, e dry-run + prévia + novo aceite
+  // seguem obrigatórios antes de qualquer execução.
+  raw.humanOverride = true;
+  const checked = validateStructuralResolution(raw);
+  if(!checked.valid)
+    return { ok:false, reason:checked.reason||'revalidation_failed', detail:checked.detail||null, reviewId:checked.reviewId };
+  const refreshedAt = new Date().toISOString();
+  r.structuralPlan = {
+    status:'imported', importedAt:refreshedAt,
+    type:checked.type, resolution:checked, snapshot:buildStructuralPlanSnapshot(checked),
+    batchKey:r.structuralPlan.batchKey||null, batchImportedAt:r.structuralPlan.batchImportedAt||null,
+    resolutionHash:structuralResolutionHash(checked), refreshedAt,
+    refreshedFrom: r.structuralPlan.importedAt||null
+  };
+  r.updatedAt = Date.now();
+  pushLesionReviewHistory(r, 'structural_plan_refreshed', { type:checked.type, refreshedAt });
+  await saveLesionRevisions();
+  return { ok:true, reason:null, resolution:checked };
+}
 
 /* PONTE ESTRUTURAL — FASE 3: executor unitário controlado (UMA revisão por
    vez, clique explícito). Só roda plano com structuralPlan.status ===
@@ -22899,7 +22965,11 @@ function structuralPlanCardDecideHtml(r){
   try{ staleAccept = !!isStructuralPlanStale(r).stale; }catch(_e){ staleAccept = true; }
   return (st==='imported'
     ? '<button type="button" class="btn btn-primary review-structural-accept"'+(staleAccept?' disabled title="Plano desatualizado — reimporte antes de aprovar"':'')+'>✅ Aceitar plano</button>' : '') +
-    '<button type="button" class="btn btn-ghost review-structural-reject">❌ Rejeitar plano</button>';
+    '<button type="button" class="btn btn-ghost review-structural-reject">❌ Rejeitar plano</button>' +
+    // Plano desatualizado: atualizar SÓ esta revisão (revalida contra o DATA
+    // atual, reconstrói o snapshot, volta a imported). Nunca o lote inteiro.
+    ((staleAccept && (st==='imported' || st==='accepted'))
+      ? '<button type="button" class="btn btn-ghost review-structural-refresh">🔄 Atualizar plano</button>' : '');
 }
 function openStructuralPlanExecuteConfirmModal(reviewId, onDone){
   // Modal FINAL: stale check + dry-run frescos → confirmação explícita →
@@ -23041,6 +23111,7 @@ function structuralPlanStatusRowHtml(reviewId){
     (st==='imported' ? '<button type="button" class="btn btn-ghost" data-plan-act="accept"'+(stale.stale?' disabled':'')+'>✅ Aceitar plano</button>' : '') +
     ((st==='imported'||st==='accepted') ? '<button type="button" class="btn btn-ghost" data-plan-act="reject">❌ Rejeitar plano</button>' : '') +
     (canExecute?'<button type="button" class="btn btn-primary" data-plan-act="execute">▶ Executar esta ação</button>':'') +
+    ((stale.stale && (st==='imported'||st==='accepted')) ? '<button type="button" class="btn btn-ghost" data-plan-act="refresh">🔄 Atualizar plano</button>' : '') +
     '</div>';
 }
 function structuralHistoryCardHtml(r){
@@ -23238,6 +23309,15 @@ function openStructuralPlanPreviewModal(validated, onDone){
       const act = btn.getAttribute('data-plan-act');
       if(act==='execute'){ openStructuralPlanExecuteConfirmModal(id, ()=>{ close(); openStructuralPlanPreviewModalRefresh(); }); return; }
       if(act==='rollback'){ openStructuralPlanRollbackConfirmModal(id, ()=>{ close(); openStructuralPlanPreviewModalRefresh(); }); return; }
+      if(act==='refresh'){
+        btn.disabled = true; // anti duplo clique
+        const res = await refreshStructuralPlan(id);
+        toast(res.ok ? 'Plano atualizado contra o estado atual. Revise e aceite novamente.'
+          : ('Não foi possível atualizar: '+(res.reason||'erro')));
+        close();
+        openStructuralPlanPreviewModalRefresh();
+        return;
+      }
       btn.disabled = true; // anti duplo clique no aceite/rejeição
       const res = act==='accept' ? await acceptStructuralPlan(id) : await rejectStructuralPlan(id);
       toast(res.ok ? (act==='accept' ? 'Plano aceito para futura execução.' : 'Plano rejeitado.') : ('Não foi possível: '+(res.reason||'erro')));
