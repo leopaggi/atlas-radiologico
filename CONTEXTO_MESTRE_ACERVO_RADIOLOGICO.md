@@ -8,6 +8,72 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**5 pendências globais da Central de Revisões resolvidas de ponta a ponta
+(2026-09-28):** `seed_390`/`lrev_muj3r3zn_efx2b4` (casos clínicos) foi
+DELIBERADAMENTE excluída desta task por instrução explícita do usuário —
+intocada, não resolvida, fora de qualquer commit (confirmado via `git diff`
+sem nenhuma ocorrência do reviewId ou de `clinicalCases` daquela lesão).
+Detalhe completo (root cause, arquivos, testes) de cada uma das 5 no
+`CLAUDE_CHECKPOINT_ATLAS.md`; resumo aqui:
+1. **Navegação após edição (`lrev_mul8jrtq_l2atyp`):** `openDetail()` →
+   "editar" agora passa `onSaved`/`onBackToView` para `openForm()`, ambos
+   reabrindo `openDetail(e.id, opts)` — a MESMA lesão, MESMO contexto
+   (`returnTo` etc. preservados). Novo botão "← Voltar para visualização"
+   no rodapé do formulário (só quando `onBackToView` existe — Quiz/"imagens
+   hoje" não ganham o botão, comportamento deles intacto).
+2. **Links do Radiopaedia em português (`lrev_mul8vsjq_0bfwkd`):** o
+   bootstrap do `SEED` fazia `enTerm = EN_TERMS[nome] || nome` — sem
+   tradução curada, o link automático "Radiopaedia — buscar casos" saía com
+   o nome em português (busca ruim; o site é em inglês). Nova
+   `radiopaediaAutoEnTerm()` só devolve termo com entrada REAL em
+   `EN_TERMS`; sem ela, nunca fabrica — usada no bootstrap do `SEED`,
+   `ensureLinks()` e no reparo automático de boot (`loadData()`, que agora
+   é fail-safe: sem termo real, mantém o link existente intocado, nunca
+   sobrescreve com português). Auditoria contra o catálogo `SEED` (não
+   temos acesso ao Firestore real do usuário): 1213 lesões, 204 sem
+   `EN_TERMS` (paravam de fabricar/perpetuar o link errado), 1009 já
+   corretas.
+3. **Dados clínicos importados do Radiopaedia (`lrev_mulclk3s_7le9tj`):**
+   `buildClinicalCaseFromDraft()` nascia sem `id`/`origin` — o Salvar do
+   editor do item casa por `id` (`upsertDidacticItem`); sem ele, criava um
+   duplicado em vez de atualizar o caso importado, e a validação exigia
+   "apresentação clínica" mesmo quando o Radiopaedia não trouxe. Agora
+   nasce com `id: genDidacticId('case')` + `origin:'imported'`; casos
+   legados sem essa identidade (importados ANTES da correção) ganham na
+   1ª gestão pelo botão "✏ editar" (mesma `ensureClinicalCaseIdentity` que
+   ↑/↓/✕ já usavam). `structuralApplyAddCases` (usado pela pendência MANUAL
+   de `seed_390`) é função separada, intocada.
+4. **Quadros de imagens em Sinais/Classificações (`lrev_mulf9eek_h24i4h`):**
+   novo botão "▦ criar quadro de imagens" em `openDidacticItemEditor`
+   (só signs/schemes — casos clínicos inalterados), reaproveitando 100% o
+   `openCollageBuilder` já existente e o vínculo por `imageRefs` (093b/093c)
+   — sem coleção paralela. Bug lateral corrigido no mesmo commit:
+   `didacticImageCtx.addImage()` não atribuía `_pendingKey` a uma imagem
+   pendente recém-criada (o quadro, por exemplo), impedindo o vínculo
+   imediato; agora atribui na hora, igual `addPendingFile` já fazia.
+5. **Descrição extensa comprimindo a imagem (`lrev_mulfu0x2_ocobn9`):** no
+   Quiz pós-resposta, `.quiz-study-media img`/`.quiz-carousel` tinham
+   `flex:1;min-height:0` — texto longo (contexto clínico + descrição, sem
+   truncamento de propósito) acima do carrossel espremia a imagem até quase
+   sumir, já que a altura do painel vem do grid stretch (acompanha a coluna
+   da pergunta, não o próprio conteúdo). Agora `min-height:240px` (180px em
+   ≤780px) garante uma área visual estável; `.quiz-study-media` ganhou
+   `overflow-y:auto` — texto muito longo rola o painel em vez de comprimir
+   a imagem; a descrição continua inteira (nunca truncada).
+
+Suíte: 1655→1708 testes (+53 novos, 5 arquivos), 1638→1691 PASS, **12 FAIL
+idênticos ao baseline** (nenhuma regressão nova, confirmado via `git stash`
+arquivo a arquivo), 5 TODO. `tests/critical-flows.test.js` teve as 4
+âncoras de linha realinhadas (+32/+32/+32/+85 — ver comentário no próprio
+teste). `git diff --check` limpo. Arquivos alterados:
+`index.html`, `tests/critical-flows.test.js` (âncoras),
+`tests/clinical-cases.test.js` (dependência `genDidacticId` no harness
+`loadRuntime()`), + 5 arquivos de teste novos (ver checkpoint). Nenhum
+arquivo protegido tocado; nenhuma migração destrutiva; nenhuma alteração em
+Firestore rules. Próximo passo: usuário confirma cada correção no app real
+e marca as 5 revisões como resolvidas na Central (não este agente — sem
+acesso ao Firestore/IndexedDB de produção).
+
 **Bugfix real — guarda anatômica de altPlacements (2026-09-27/28):** caso
 real reportado pelo usuário: `lrev_muknhymv_564ywe`, lesão `seed_928`
 "Depósito de gadolínio no SNC" (Neurorradiologia > Intra-axial (parênquima))

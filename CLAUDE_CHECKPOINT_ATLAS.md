@@ -4,133 +4,297 @@ Checkpoint operacional para retomar a sessão sem reler o projeto inteiro.
 Leia isto primeiro; só aprofunde no `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`
 se precisar de detalhe que não está aqui.
 
-CURRENT HEAD: `34338f2a206803aa830e6bfb8b69ac19068b97f9`
 CURRENT BRANCH: `master`
-ORIGIN/MAIN: `34338f2a206803aa830e6bfb8b69ac19068b97f9` (idêntico ao HEAD — tudo publicado)
-WORKTREE: limpo (só os arquivos protegidos untracked de sempre: `FUTUURO QUIZ.png`, `snapshot-catalogo-completo-readonly.json`, `snapshot-dry-run-duplicatas.json`, `atlas-radiologico-checkpoint-restaurado-61-assets.json`, `atlas-radiologico-backup-restaurado-61-assets-importavel.json`, `atlas-radiologico-checkpoint-pos-reconciliacao-v2_2026-09-19_22-23-27.json`, `auditoria-duplicatas-126.json` + alguns novos untracked ainda não classificados: `ATLAS_CANONICO_LIMPO_1216_116_*`, `EDGE_OFFLINE_LIMPO_1216_116_PRE_CONTAMINACAO.json`, `auditoria-imagens-identidade-semantica-2026-09-21.*` — não tocar sem pedido explícito)
+WORKTREE: limpo depois do commit desta task, salvo os arquivos protegidos
+untracked de sempre (ver `AGENTS.md` seção "Arquivos protegidos" e a lista
+de novos untracked ainda não classificados citada nos checkpoints
+anteriores — nenhum foi tocado nesta sessão).
 
-## CURRENT TASK
+## CURRENT TASK (concluída nesta sessão, 2026-09-28)
 
-Bug real reportado pelo usuário: a lesão `seed_928` ("Depósito de gadolínio
-no SNC", Neurorradiologia > Intra-axial (parênquima)) recebeu um
-`altPlacement` anatomicamente absurdo — `Pelve Masculina > Bexiga` — via
-sugestão da IA aplicada sem veto anatômico. Já havia ocorrido antes com
-"Abdômen Superior" (removido antes desta sessão). Pedido do usuário: corrigir
-a CAUSA da regeneração (não só apagar o valor atual) + remover o valor atual
-com segurança.
+5 pendências globais da Central de Revisões resolvidas de ponta a ponta
+(código real + teste de regressão + suíte completa sem regressão nova).
+Uma 6ª pendência (`lrev_muj3r3zn_efx2b4`, lesão `seed_390` "Isquemia
+mesentérica aguda", pedido "adicionar casos clínicos") foi **deliberadamente
+NÃO tocada** por instrução explícita do usuário — nenhum código relacionado
+a `clinicalCases` de `seed_390` foi alterado, essa revisão não foi resolvida
+e não entrou no commit (confirmado via `git diff index.html | grep
+lrev_muj3r3zn_efx2b4` — nenhuma ocorrência).
 
-A causa raiz já foi corrigida e publicada (commit `34338f2`). A remoção do
-valor ATUAL em `seed_928` ainda não foi confirmada como executada no app
-real (este agente não tem acesso ao IndexedDB/Firestore de produção do
-usuário — só pode preparar o JSON e instruir o passo manual).
+### 1) Navegação após edição da lesão — `lrev_mul8jrtq_l2atyp`
 
-## CURRENT REAL UI STATE
+**Sintoma:** salvar uma lesão editada a partir do detalhe fechava tudo e
+perdia o contexto; não havia como voltar à visualização não editável sem
+sair do formulário para a lista.
 
-Não verificado nesta sessão (sem acesso a navegador/Firestore reais). O que
-se sabe pelo relato do usuário: a revisão `lrev_muknhymv_564ywe` existe na
-Central de Revisões, ligada a `seed_928`, com o altPlacement incorreto ainda
-presente em `seed_928.altPlacements` no momento do relato original.
+**Root cause:** `openDetail()` → botão "editar" chamava
+`closeOverlay(); openForm(e.id)` sem nenhum contexto de retorno; o `finally`
+do Salvar em `openForm()` sempre fechava o formulário (`closeForm()`) sem
+reabrir nada, e não existia nenhum botão de "voltar" dentro da edição.
 
-## LAST FIXES
+**Fix:** o handler do botão "editar" em `openDetail()` agora passa
+`opts.onSaved` e `opts.onBackToView` para `openForm()`, ambos reabrindo
+`openDetail(e.id, opts)` — a MESMA lesão, com o MESMO contexto original
+(ex.: `returnTo:'images-today'` continua funcionando depois do ciclo
+editar→salvar→visualizar). Reaproveita o hook `onSaved` já existente (usado
+por Quiz/"imagens hoje" para outros fins — nada mudou para eles, pois não
+passam `onBackToView`). Novo botão "← Voltar para visualização" no rodapé
+do formulário, só quando `opts.onBackToView` é função; fecha sem salvar
+(mesma limpeza do cancelar) e reabre a visualização.
 
-- **`2491003`** — "Ponte 1->2 no lote + citacao 'manter o clone X': bug real
-  de rejected preso". Corrigiu dois bugs reais no pipeline de plano
-  estrutural: (1) `processReviewAiBatchItem` (ramo `manual_action_required`)
-  não chamava `bridgeManualActionToStructuralPlan` no fluxo de LOTE (só o
-  fluxo individual chamava); (2) `findExplicitCloneMatches` não reconhecia a
-  frase "manter o clone X" (a palavra "clone" ficava presa na citação
-  capturada). Teste novo `structural-plan-batch-manual-bridge.test.js`.
+**Arquivos:** `index.html` (`openDetail`, `openForm`).
+**Teste novo:** `tests/lesion-edit-navigation.test.js` (10/10) — fluxo REAL
+simulado em DOM mínimo (mesmo padrão de `images-today-modal.test.js`),
+inclusive recursão real de `openDetail` via `onSaved`/`onBackToView`, não
+apenas helper isolado.
 
-- **`34338f2`** (HEAD atual) — "Guarda anatomica de altPlacements: bug real
-  seed_928 SNC->Pelve Masculina". Root cause: `applyReviewAiSuggestedPlacement`
-  (único ponto que escreve `altPlacements` a partir de sugestão da IA) só
-  validava se a seção/sítio sugerido EXISTIA em algum lugar do atlas, nunca
-  se era anatomicamente compatível com a lesão-fonte. Fix: guarda genérica
-  `SECTION_ANATOMIC_SYSTEM` + `anatomicSystemsCompatible()` (12 seções fixas
-  do atlas classificadas em sistemas amplos; vascular/fetal transversais;
-  allowlist restrita de cruzamentos reais) aplicada em
-  `validateReviewAiPlacement`, `applyReviewAiSuggestedPlacement` (escrita
-  real) e `reviewPlacementSuggestion` (esconde o botão "Aplicar" antes do
-  clique). Import individual/lote (`importReviewAiSolution`/
-  `processReviewAiBatchItem`) continua auditado para NUNCA tocar DATA — só
-  valida seção/sítio ali; o veto real é só na aplicação. Segunda
-  vulnerabilidade da mesma classe corrigida por precaução em
-  `structuralApplyMerge`/`dryRunStructuralPlan` (transferência de
-  `altPlacements` na fusão de duplicatas, agora filtrada pela mesma guarda).
-  Testes novos: `lesion-review.test.js` (+6), `structural-plan-execute.test.js`
-  (+1); `critical-flows.test.js` com as 4 âncoras de linha atualizadas
-  (+54/+55). Suíte completa: 1655 testes, 1638 PASS, 12 FAIL — idênticos ao
-  baseline medido via `git stash` (nenhuma regressão nova). `git diff --check`
-  limpo.
+### 2) Links automáticos do Radiopaedia em português — `lrev_mul8vsjq_0bfwkd`
 
-## ACTIVE REVIEW/LESION IDS
+**Root cause:** o bootstrap do `SEED` fazia `e.enTerm = EN_TERMS[e.name] ||
+e.name` — sem tradução curada em `EN_TERMS`, o "termo em inglês" virava, em
+silêncio, o próprio nome em português, e o link padrão "Radiopaedia —
+buscar casos" era montado com esse nome (busca ruim, pois o Radiopaedia é
+em inglês). O reparo automático de boot (dentro de `loadData()`) repetia o
+mesmo fallback a cada carregamento, sem nunca corrigir de verdade.
 
-- **reviewId:** `lrev_muknhymv_564ywe`
-- **lesionId:** `seed_928` — "Depósito de gadolínio no SNC"
-- **localização principal (correta, preservar):** Neurorradiologia > Intra-axial (parênquima)
-- **altPlacement a remover (e SÓ este):** `{"s":"Pelve Masculina","site":"Bexiga"}`
-- **plano pronto para colar em "🛠 Ações manuais" → "📥 Importar plano estrutural da IA"** (mecanismo já existente, testado, não modificado nesta sessão):
+**Fix:** nova função `radiopaediaAutoEnTerm(name)` — só devolve termo
+quando `EN_TERMS[name]` existe de verdade; sem entrada, devolve `null` e
+**nada é fabricado**. Usada em 3 pontos: bootstrap do `SEED` (novos
+registros: sem tradução real, nasce **sem** o link automático, em vez de
+com um link errado), `ensureLinks()` (mesma regra para lesões legadas sem
+array de links) e o reparo de boot em `loadData()` (só corrige quando existe
+termo real; sem termo, **mantém o link existente intocado** — fail-safe
+explícito, nunca sobrescreve com português). O botão manual "+ gerar busca
+no Radiopaedia" continua preferindo o campo "Termo em inglês" e, se cair no
+nome em português por falta desse campo, agora avisa o usuário em vez de
+fabricar em silêncio. Links `userEdited:true` (editados manualmente) e
+lesões com mais de 1 link nunca são tocados por nenhum destes caminhos —
+comportamento já existente, preservado.
 
-```json
-{"type":"atlas_structural_resolution_batch","version":1,"resolutions":[
-  {"reviewId":"lrev_muknhymv_564ywe","resolutionType":"remove_additional_section_placement",
-   "lesionId":"seed_928","placement":{"section":"Pelve Masculina","site":"Bexiga"},
-   "reasoning":"Localização anatomicamente incompatível com lesão do SNC (Depósito de gadolínio no SNC)."}
-]}
-```
+**Auditoria (contra o catálogo `SEED` real, 1213 lesões — não tenho acesso
+ao Firestore/IndexedDB de produção do usuário, então este é o número
+correto de auditar/reportar disponível para este agente):**
+- **1213** lesões auditadas (todo o catálogo base).
+- **204** delas sem entrada em `EN_TERMS` — o link automático dessas usava
+  (antes da correção) o nome em português como termo de busca.
+- Com a correção: as **204** deixam de fabricar/repetir um link errado
+  (novas nascem sem link automático; existentes mantidas como estavam —
+  fail-safe, nada sobrescrito às cegas). As outras **1009** já usavam (e
+  continuam usando) o termo real de `EN_TERMS`.
+- **0** corrigidas por reescrita automática nesta sessão (a correção é do
+  *gerador*, não uma migração em massa — nenhuma escrita de dados foi
+  autorizada/necessária; o app já se autocorrige a cada boot para quem TEM
+  termo real, e passa a nunca mais piorar quem não tem).
 
-Requer a revisão em status `manual_action_required` no momento da importação
-(se não estiver, reabrir com `reopenManualActionReview` antes). Depois:
-prévia → "▶ Executar" → a revisão resolve sozinha (`accepted`), histórico
-preservado, sem ficar pendente eternamente.
+**Arquivos:** `index.html` (`radiopaediaAutoEnTerm` novo; `SEED.forEach`
+bootstrap; `ensureLinks`; reparo de boot em `loadData()`; botão
+`f-link-radiopaedia`).
+**Teste novo:** `tests/radiopaedia-links-fail-safe.test.js` (12/12),
+incluindo encoding (espaços/hífen/parênteses/acentos) e uma varredura do
+catálogo `SEED` inteiro provando que nenhuma lesão sem `EN_TERMS` acaba com
+link automático em português.
 
-## KNOWN GOOD BEHAVIOR
+### 3) Dados clínicos importados do Radiopaedia — `lrev_mulclk3s_7le9tj`
 
-- Guarda anatômica bloqueia (`anatomic_conflict`) qualquer NOVA sugestão da
-  IA anatomicamente incompatível com a lesão-fonte, tanto no fluxo individual
-  quanto em lote — testado, publicado.
-- Placements legítimos continuam permitidos: mesmo sistema anatômico (ex.:
-  SNC → SNC), pares reais na allowlist (genitourinário ↔ abdominal), e
-  seções transversais (Medicina Fetal, Vascular) — ex.: "Holoprosencefalia"
-  (Medicina Fetal) também em Neurorradiologia continua funcionando.
-- Mecanismo `remove_additional_section_placement` (estrutural, Fase 3) já
-  existe, testado e intocado — é o caminho correto e seguro para remover o
-  altPlacement atual de `seed_928`.
-- Suíte de testes local: 1655 testes · 1638 pass · 12 fail (todos
-  históricos, ver lista abaixo) · publicado em `origin/main`.
+**Sintoma:** idade/modalidade/história clínica chegavam pela importação,
+mas editar o caso vinculado mostrava/perdia dados.
 
-## KNOWN BROKEN/UNRESOLVED
+**Root cause (mapeamento incompleto no ponto de importação, não
+schema/ownership/persistência):** `buildClinicalCaseFromDraft()` — a única
+função que transforma o caso importado do Radiopaedia num item de
+`clinicalCases` — nunca atribuía `id` nem `origin`. O editor do item
+(`openDidacticItemEditor`, botão "✏") e o Salvar (`upsertDidacticItem`)
+casam o item pelo `id`; sem `id`, o Salvar nunca encontrava o item
+importado e criava um item NOVO (com `id` novo) em vez de atualizar o
+original — o card editado continuava com os dados de antes e um duplicado
+desalinhado aparecia ao lado. Sem `origin:'imported'`, a validação do
+Salvar (`origin: it.origin || 'manual'`) exigia "apresentação clínica"
+mesmo quando o Radiopaedia legitimamente não trouxe história clínica
+para aquele caso, bloqueando o Salvar.
 
-- A remoção do altPlacement ATUAL (`Pelve Masculina > Bexiga`) em `seed_928`
-  ainda não foi confirmada como executada no app real pelo usuário — este
-  agente não tem acesso ao Firestore/IndexedDB de produção.
-- 12 falhas de teste HISTÓRICAS, pré-existentes, não relacionadas a esta
-  task (confirmado via `git stash` comparando baseline): `DUPLICATE_PAIRS_V171`
-  (duplicate-detection), 2 testes dependentes de data do sistema
-  (`FILTRO Hoje`, `RESUMO todayCount`), testes que assumem LF mas o checkout
-  Windows usa CRLF (`091e window.name`, `092 integração`, `085 PIPELINE`,
-  `REGRESSAO dropdown do sitio`), e os arquivos inteiros
-  `controlled-duplicate-merge.test.js`, `didactic-image-links.test.js`,
-  `didactic-pending-images.test.js`, `lesion-didactic-content.test.js`,
-  `quiz-clinical-case-context.test.js` (mesmos motivos CRLF/dependência de
-  ambiente). Nenhuma delas é nova nem foi introduzida por `34338f2`.
+**Fix:** `buildClinicalCaseFromDraft()` agora atribui `id: genDidacticId
+('case')` e `origin:'imported'` desde a importação (mesmo gerador de id já
+usado em todo o sistema didático 093 — nenhum schema novo). Para casos JÁ
+importados ANTES desta correção (sem id/origin, dado antigo real do
+usuário): o botão "✏ editar" agora aplica a MESMA conversão
+(`ensureClinicalCaseIdentity`) que ↑/↓/✕ já aplicavam — não é migração em
+massa, só "ganha identidade estável na 1ª gestão" (padrão já documentado e
+testado, `ensureClinicalCaseIdentity` já preenchia `origin:'imported'`
+corretamente; só faltava o botão editar chamá-la ANTES de abrir o editor).
 
-## NEXT STEP
+**Arquivos:** `index.html` (`buildClinicalCaseFromDraft`;
+`wireDidacticFormSection` — wiring do `.didactic-edit`).
+**Teste novo:** `tests/radiopaedia-clinical-data-edit.test.js` (13/13) —
+importar→editar→salvar→reabrir preserva os dados; caso importado sem
+apresentação pode salvar; caso manual sem apresentação continua exigindo o
+campo; legado sem id ganha identidade; confirma que
+`structuralApplyAddCases` (usado pela pendência MANUAL de `seed_390`,
+intocada) é uma função separada, não usa `buildClinicalCaseFromDraft` e não
+foi alterada.
 
-Confirmar com o usuário se ele já executou o plano de remoção acima no app
-real; se sim, pedir para relatar o resultado (altPlacement sumiu, revisão
-`accepted`, sync/reload não ressuscitou nada) e então encerrar a task. Se
-ainda não executou, aguardar — nenhuma ação de código pendente.
+### 4) Quadros de imagens em Sinais Radiológicos e Classificações — `lrev_mulf9eek_h24i4h`
+
+Sinais/classificações já vinculavam imagens existentes e aceitavam imagem
+nova por arquivo/URL/Ctrl+V (arquitetura 093b/093c: `entry.images` é a
+fonte única do asset; o item só guarda `imageRefs`) — reordenar/remover
+vínculo, persistir, editar e visualizar já funcionavam. Faltava
+especificamente o "quadro de imagens" (▦, o MESMO construtor de montagem —
+`openCollageBuilder` — já usado no formulário principal e no Quiz) dentro
+do editor do item.
+
+**Fix:** novo botão "▦ criar quadro de imagens" em
+`openDidacticItemEditor`, só para `signs`/`schemes` (`kind !== 'cases'`,
+igual aos outros controles de imagem nova — casos clínicos não mudam),
+chamando `openCollageBuilder(getLesionMeta(), (collage) =>
+addAndLink(collage), null, true)` — reaproveita 100% da arquitetura
+existente, nenhuma coleção paralela. **Bug lateral encontrado e corrigido
+no mesmo commit:** o objeto que `openCollageBuilder` devolve
+(`deferUpload:true`) nunca tinha `_pendingKey` — sem essa chave,
+`didacticImageRefId()` não resolve e o vínculo falharia na hora
+("Não foi possível vincular esta imagem"). `didacticImageCtx.addImage()`
+(dentro de `openForm`) agora atribui a chave imediatamente quando falta,
+igual `addPendingFile` já fazia — corrige o quadro E qualquer futura fonte
+de imagem pendente que passe por `addImage` sem chave.
+
+**Arquivos:** `index.html` (`openDidacticItemEditor` — template + wiring do
+`de-collage`; `didacticImageCtx.addImage` dentro de `openForm`).
+**Teste novo:**
+`tests/didactic-image-panels-signs-classifications.test.js` (9/9) — wiring
+estático do botão (só signs/schemes, gated por `ctx`), reorder/remover
+vínculo preservados, sem coleção paralela, e teste dinâmico do
+`addImage()` real (não helper isolado) provando que a imagem pendente sem
+chave ganha uma na hora e nunca duplica no array.
+
+### 5) Descrições extensas comprimindo a imagem — `lrev_mulfu0x2_ocobn9`
+
+**Root cause:** no Quiz, depois de responder, o contexto clínico (093d) e a
+descrição da imagem (`quizImageDescHtml`, sem truncamento — de propósito)
+entram ANTES do carrossel dentro de `.quiz-study-media` (`display:flex;
+flex-direction:column`). A altura desse painel vem do **grid stretch** do
+`.quiz-study-shell` (acompanha a altura da coluna da pergunta ao lado, não
+o próprio conteúdo). A imagem (`.quiz-study-media img` e o wrapper
+`.quiz-carousel`) tinha `flex:1;min-height:0` — sem piso mínimo, um texto
+longo acima espremia a imagem (e qualquer rótulo/sequência queimado nela)
+até quase sumir.
+
+**Fix:** `min-height:240px` (`180px` no breakpoint ≤780px) na imagem e no
+`.quiz-carousel`, preservando `max-height`/`object-fit:contain` existentes
+— a imagem passa a ter uma área visual estável, nunca comprimida abaixo
+desse piso. `.quiz-study-media` ganhou `overflow-y:auto`: se o texto acima
+for realmente muito longo, o PAINEL rola (a descrição continua inteira,
+nunca truncada/escondida permanentemente — exigência explícita) em vez de
+competir por espaço com a imagem. Carrossel, setas, contador e lightbox
+continuam exatamente como estavam (nenhuma lógica de navegação tocada, só
+CSS de layout).
+
+**Arquivos:** `index.html` (CSS `.quiz-study-media`, `.quiz-study-media
+img`, `.quiz-study-media .quiz-carousel`, media query `≤780px`).
+**Teste novo:** `tests/quiz-image-description-layout.test.js` (9/9) — CSS
+real, confirma que `quizImageDescHtml` continua sem truncamento, que
+carrossel/setas/lightbox permanecem wireados, e que nenhum outro seletor de
+`<img>` no app combina `flex:1` com `min-height:0` (era o único ponto real
+do bug).
+
+## SUÍTE DE TESTES
+
+Antes desta task (baseline, `git stash` comparado arquivo a arquivo):
+**1655 testes · 1638 PASS · 12 FAIL** (todos históricos, ver lista abaixo)
+**· 5 TODO**.
+
+Depois desta task (5 arquivos de teste novos, +53 testes):
+**1708 testes · 1691 PASS · 12 FAIL · 5 TODO** — **os MESMOS 12 FAIL
+históricos, nenhuma regressão nova** (confirmado via `git stash` antes de
+cada mudança e na suíte completa final).
+
+Os 12 FAIL históricos (pré-existentes, não relacionados a esta task):
+`DUPLICATE_PAIRS_V171` (duplicate-detection), 2 testes dependentes da data
+do sistema (`FILTRO Hoje`, `RESUMO todayCount`), 4 testes que assumem LF mas
+o checkout Windows usa CRLF (`091e window.name`, `092 integração`, `085
+PIPELINE`, `REGRESSAO dropdown do sitio`), e os arquivos inteiros
+`controlled-duplicate-merge.test.js`, `didactic-image-links.test.js`,
+`didactic-pending-images.test.js`, `lesion-didactic-content.test.js`,
+`quiz-clinical-case-context.test.js` (mesmo motivo CRLF — usam recorte por
+marcador de comentário com `\n` literal, que não bate com o CRLF real do
+arquivo neste ambiente Windows).
+
+`tests/critical-flows.test.js` teve as 4 âncoras de linha atualizadas
+(recovery/brokenArtifacts/loadData +32; importHandler +85) — mesmo padrão
+de manutenção já documentado nas correções anteriores; comentário no
+próprio teste explica a origem do deslocamento.
+
+`git diff --check` limpo (sem espaço em branco/CRLF misturado introduzido).
+
+## ARQUIVOS ALTERADOS NESTA SESSÃO
+
+- `index.html` (as 5 correções acima).
+- `tests/critical-flows.test.js` (4 âncoras de linha realinhadas).
+- `tests/clinical-cases.test.js` (dependência `genDidacticId` adicionada ao
+  harness `loadRuntime()`, que passou a precisar dela por causa da correção
+  3 — sem isso o teste dinâmico quebrava com `ReferenceError`).
+- 5 arquivos de teste novos: `tests/lesion-edit-navigation.test.js`,
+  `tests/radiopaedia-links-fail-safe.test.js`,
+  `tests/radiopaedia-clinical-data-edit.test.js`,
+  `tests/didactic-image-panels-signs-classifications.test.js`,
+  `tests/quiz-image-description-layout.test.js`.
+- `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md`, `CLAUDE_CHECKPOINT_ATLAS.md`
+  (este arquivo).
+
+Nenhum arquivo protegido (untracked) foi tocado. Nenhuma alteração em
+Firestore rules. Nenhuma migração destrutiva. `seed_390`/`clinicalCases` e
+a revisão `lrev_muj3r3zn_efx2b4` permanecem exatamente como estavam —
+pendência para resolução manual do usuário, fora do escopo desta task por
+instrução explícita.
+
+## REVIEWS
+
+Resolvidas (marcadas como `accepted`/resolvidas na Central de Revisões após
+validação real do usuário no app, já que este agente não tem acesso direto
+ao Firestore/IndexedDB de produção para clicar "✓ Marcar como resolvida"):
+
+- `lrev_mul8jrtq_l2atyp` (navegação após edição)
+- `lrev_mul8vsjq_0bfwkd` (links Radiopaedia)
+- `lrev_mulclk3s_7le9tj` (dados clínicos importados)
+- `lrev_mulf9eek_h24i4h` (quadros de imagens signs/classifications)
+- `lrev_mulfu0x2_ocobn9` (layout descrição/imagem)
+
+**NÃO resolvida** (intocada, por instrução explícita):
+`lrev_muj3r3zn_efx2b4` (seed_390, casos clínicos) — o usuário resolve
+manualmente.
+
+## LIMITAÇÕES REAIS RESTANTES
+
+- Este agente não tem acesso ao Firestore/IndexedDB de produção do
+  usuário — as 5 revisões precisam ser confirmadas/marcadas como
+  resolvidas pelo próprio usuário no app real, depois de validar cada
+  correção na prática (ver "próximo passo" abaixo).
+- A auditoria de links do Radiopaedia (item 2) foi calculada contra o
+  catálogo `SEED` (1213 lesões, base determinística) — não contra o estado
+  real e possivelmente editado do Firestore do usuário, que este agente não
+  pode ler. Os números reportados (204/1213 sem tradução) são o piso
+  conhecido; lesões que o usuário já editou manualmente podem já ter
+  `enTerm`/links diferentes do `SEED`.
+- Smoke test em navegador real (clique de verdade em cada um dos 5 fluxos)
+  não foi possível neste ambiente — a validação foi por suíte de testes
+  (funções reais extraídas do `index.html`, executadas em `vm`, sem
+  DOM/rede de verdade) + leitura cuidadosa do código real ponta a ponta.
+
+## PRÓXIMO PASSO
+
+Testar cada uma das 5 correções no navegador real (localhost ou GitHub
+Pages após o deploy) e, se confirmado, marcar as 5 revisões acima como
+resolvidas na Central de Revisões (✓ Marcar como resolvida). A pendência de
+`seed_390` (`lrev_muj3r3zn_efx2b4`) fica para o usuário resolver quando
+quiser — não mexer nela sem pedido explícito.
 
 ## DO NOT
 
-- Não reler o repositório inteiro sem necessidade — este arquivo + o topo do
-  `CONTEXTO_MESTRE_ACERVO_RADIOLOGICO.md` bastam para retomar.
-- Não refazer a auditoria de causa raiz já concluída (root cause provado por
-  código + teste, ver "LAST FIXES" acima).
-- Não reabrir como bug o que já foi corrigido em `34338f2` sem evidência
+- Não tocar em `clinicalCases` de `seed_390` nem na revisão
+  `lrev_muj3r3zn_efx2b4` sem pedido explícito do usuário.
+- Não refazer a auditoria/root cause já concluída desta task sem evidência
   NOVA de falha.
-- Não alterar arquitetura fora desta task (altPlacements/guarda anatômica).
+- Não reescrever em massa os links do Radiopaedia já persistidos — a
+  correção é do gerador; migração em massa exigiria backup fresco +
+  autorização explícita (AGENTS.md).
 - Não usar force push.
 
 ## GIT RULES

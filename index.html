@@ -866,8 +866,19 @@ body{
 .quiz-question-title{margin:10px 0 12px;font-size:clamp(18px,1vw + 15px,22px);font-weight:700;line-height:1.35;color:var(--text)}
 .quiz-study-shell{display:grid;grid-template-columns:minmax(260px,.85fr) minmax(360px,1.15fr);gap:14px;margin-top:12px}
 .quiz-study-media,.quiz-study-question{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px}
-.quiz-study-media{display:flex;flex-direction:column}
-.quiz-study-media img{width:100%;flex:1;min-height:0;max-height:min(58vh,560px);object-fit:contain;border-radius:7px;background:#07111b}
+/* DESCRIÇÕES EXTENSAS NÃO PODEM COMPRIMIR A IMAGEM (lrev_mulfu0x2_ocobn9):
+   contexto clínico (093d) e descrição da imagem (sem truncamento de
+   propósito, ver quizImageDescHtml) entram ANTES do carrossel no mesmo
+   flex column — sem min-height a imagem (flex:1;min-height:0) podia ser
+   espremida até quase sumir quando o texto acima era longo, já que a
+   altura real do painel vem do grid stretch (acompanha a coluna da
+   pergunta), não do próprio conteúdo. Agora a imagem tem um piso estável
+   (min-height) que preserva textos/sequências queimados nela, e o painel
+   rola (overflow-y) se o texto acima for grande demais — a descrição
+   nunca é escondida/truncada permanentemente, só o layout deixa de
+   competir por espaço com a imagem. */
+.quiz-study-media{display:flex;flex-direction:column;overflow-y:auto}
+.quiz-study-media img{width:100%;flex:1;min-height:240px;max-height:min(58vh,560px);object-fit:contain;border-radius:7px;background:#07111b}
 /* CASO TEÓRICO (lesão sem imagem): o painel esquerdo estica pra acompanhar
    a altura do painel de pergunta/alternativas (grid stretch), e as pistas
    registradas na lesão SÃO a principal informação da questão — por isso
@@ -880,7 +891,7 @@ body{
 .quiz-theory-clues span{background:var(--tag-bg);border:1px solid var(--line);border-radius:16px;padding:10px 18px;font-size:clamp(16px,.7vw + 13px,19px);font-weight:600;color:var(--text)}
 /* Carrossel de imagens da questão — 2+ imagens ganham setas + contador;
    1 imagem mantém o visual simples de antes, sem controles desnecessários. */
-.quiz-study-media .quiz-carousel{flex:1;min-height:0;display:flex;flex-direction:column;position:relative}
+.quiz-study-media .quiz-carousel{flex:1;min-height:240px;display:flex;flex-direction:column;position:relative}
 .quiz-carousel-arrow{position:absolute;top:50%;transform:translateY(-50%);width:38px;height:38px;border-radius:50%;border:none;background:rgba(6,10,14,.6);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;z-index:2}
 .quiz-carousel-arrow:hover{background:rgba(6,10,14,.85)}
 .quiz-carousel-prev{left:8px}
@@ -905,7 +916,7 @@ body{
 .quiz-review-modal-overlay{position:fixed;inset:0;background:rgba(6,10,14,.7);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10020}
 .quiz-review-modal{max-width:540px}
 .quiz-integrated-title{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px}.quiz-integrated-title b{font-size:13px}.quiz-integrated-title span{font:600 10px 'IBM Plex Mono',monospace;color:#55c7ef}
-@media(max-width:780px){.quiz-study-shell{grid-template-columns:1fr}.quiz-study-media img{max-height:320px}}
+@media(max-width:780px){.quiz-study-shell{grid-template-columns:1fr}.quiz-study-media img{max-height:320px;min-height:180px}.quiz-study-media .quiz-carousel{min-height:180px}}
 @media(max-width:480px){.quiz-mcq-option{padding:13px 14px;gap:11px}.quiz-mcq-letter{width:29px;height:29px;font-size:13px}}
 /* ============================================================
    QUIZ & PROGRESSO — paleta viva (espelha o mockup aprovado)
@@ -5071,6 +5082,18 @@ const DEFAULT_SECTION_ORDER = ["Neurorradiologia","Cabeça e Pescoço","Coluna V
 function radiopaediaSearchUrl(term){
   return "https://radiopaedia.org/search?lang=us&q=" + encodeURIComponent(term);
 }
+// LINKS AUTOMÁTICOS DO RADIOPAEDIA (lrev_mul8vsjq_0bfwkd): termo em inglês
+// REAL para o link automático "Radiopaedia — buscar casos" — nunca fabrica
+// tradução. Só existe quando o dicionário EN_TERMS tem uma entrada explícita
+// (curada manualmente) para o nome; ausência de entrada faz o gerador/o
+// reparo de boot deixarem de tocar o link (fail-safe: nunca busca em
+// português no Radiopaedia, que é em inglês). `e.enTerm` (campo de
+// matching/exibição usado em outros lugares do app) continua com o
+// fallback antigo — nada muda para quem já depende dele.
+function radiopaediaAutoEnTerm(name){
+  const t = EN_TERMS[name];
+  return (typeof t === 'string' && t.trim()) ? t.trim() : null;
+}
 
 function renderClassificationBox(key){
   const sys = CLASSIFICATION_SYSTEMS[key];
@@ -8608,12 +8631,19 @@ const TAG_VOCAB = Object.values(TAG_GROUPS).flat();
 
 
 
-/* normaliza ids e adiciona link padrão de busca no Radiopaedia (em inglês) */
+/* normaliza ids e adiciona link padrão de busca no Radiopaedia (em inglês).
+   O link só é gerado quando existe termo em inglês REAL (EN_TERMS); sem
+   entrada no dicionário, nenhum link automático é fabricado com o nome em
+   português (lrev_mul8vsjq_0bfwkd) — fica sem link até alguém preencher um
+   termo em inglês manualmente. `e.enTerm` continua com o fallback antigo
+   (usado para matching/exibição em outros pontos do app; não relacionado
+   ao bug do link). */
 SEED.forEach((e,i)=>{
   e.id = 'seed_'+i;
   e.img = e.img || '';
   e.enTerm = EN_TERMS[e.name] || e.name;
-  e.links = [{label:"Radiopaedia — buscar casos", url: radiopaediaSearchUrl(e.enTerm)}];
+  const autoTerm = radiopaediaAutoEnTerm(e.name);
+  e.links = autoTerm ? [{label:"Radiopaedia — buscar casos", url: radiopaediaSearchUrl(autoTerm)}] : [];
 });
 
 /* limpeza única: tags que eram na verdade descrições relacionais específicas de um sítio
@@ -8960,8 +8990,10 @@ function resizeImageToDataUrl(file, maxDim, quality){
 }
 function ensureLinks(e){
   if(!Array.isArray(e.links)){
-    const term = EN_TERMS[e.name] || e.name;
-    e.links = [{label:"Radiopaedia — buscar casos", url: radiopaediaSearchUrl(term)}];
+    // Mesma regra fail-safe do bootstrap do SEED: sem EN_TERMS real, não
+    // fabrica link em português (lrev_mul8vsjq_0bfwkd).
+    const autoTerm = radiopaediaAutoEnTerm(e.name);
+    e.links = autoTerm ? [{label:"Radiopaedia — buscar casos", url: radiopaediaSearchUrl(autoTerm)}] : [];
   }
   return e.links;
 }
@@ -12330,14 +12362,29 @@ async function loadData(){
     if(canonicalRefreshed) console.log(`[Atlas] ${canonicalRefreshed} lesão(ões) canônica(s) sincronizada(s) com a versão atual do arquivo (cache antigo corrigido).`);
 
     let migrated = canonicalRefreshed > 0;
+    // AUDITORIA DE LINKS DO RADIOPAEDIA (lrev_mul8vsjq_0bfwkd) — relatório
+    // leve no console a cada boot, sem UI nova: quantos links automáticos
+    // (label padrão, não editados manualmente) foram auditados, quantos
+    // corrigidos para o termo em inglês real e quantos ficaram sem correção
+    // por falta de EN_TERMS (fail-safe: o link existente NUNCA é reescrito
+    // com o nome em português nesse caso — fica exatamente como estava).
+    let radAudited = 0, radCorrected = 0, radMissingEnTerm = 0;
     DATA.forEach(e=>{
       if(Array.isArray(e.links)){ const seen=new Set(); const clean=e.links.filter(l=>{ const k=String(l&&l.url||'').trim().replace(/\/+$/,''); if(!k) return true; if(seen.has(k)) return false; seen.add(k); return true; }); if(clean.length!==e.links.length){ e.links=clean; migrated=true; } } else { ensureLinks(e); migrated = true; }
       if(e.links.length===1 && isAutoRadiopaediaLink(e.links[0]) && !e.links[0].userEdited){
-        const term = EN_TERMS[e.name] || e.name;
-        const correctUrl = radiopaediaSearchUrl(term);
-        if(e.links[0].url !== correctUrl){ e.links[0].url = correctUrl; migrated = true; }
+        radAudited++;
+        const autoTerm = radiopaediaAutoEnTerm(e.name);
+        if(autoTerm){
+          const correctUrl = radiopaediaSearchUrl(autoTerm);
+          if(e.links[0].url !== correctUrl){ e.links[0].url = correctUrl; migrated = true; radCorrected++; }
+        } else {
+          // Sem EN_TERMS real: nunca fabrica inglês a partir do nome em
+          // português — o link automático existente é mantido intocado.
+          radMissingEnTerm++;
+        }
       }
     });
+    if(radAudited) console.log(`[Atlas] Radiopaedia: ${radAudited} link(s) automático(s) auditado(s), ${radCorrected} corrigido(s) para o termo em inglês, ${radMissingEnTerm} sem EN_TERMS (mantidos como estavam).`);
     if(runTagCleanup()) migrated = true;
     DATA.forEach(e=>{ if(typeof e.inc !== 'number'){ ensureInc(e); migrated = true; } });
     if(migrated) await saveData(true); // ALTERAÇÃO 072: migração automática de boot, nunca marca dirty
@@ -13300,7 +13347,19 @@ function openDetail(id, opts){
   // Dashboard/Quiz de fundo fica intacto) e reabre a lista, recalculada do
   // DATA (mesmo dia, mesmas contagens atualizadas). Sem history/reload.
   if(backTodayBtn) backTodayBtn.onclick = ()=>{ try{ ov.remove(); }catch(_e){} openImagesTodayModal(); };
-  document.getElementById('btn-edit').onclick = ()=>{ closeOverlay(); openForm(e.id); };
+  // NAVEGAÇÃO APÓS EDIÇÃO (lrev_mul8jrtq_l2atyp): editar a partir do detalhe
+  // reabre a MESMA lesão em modo visualização após salvar, e o formulário
+  // ganha um botão próprio para voltar à visualização sem perder o contexto
+  // (opts.returnTo, ex.: "← Voltar para imagens de hoje"). Reusa o hook
+  // onSaved já existente (Quiz/imagens-hoje continuam sem esse callback e
+  // portanto sem esse comportamento — nada muda para eles).
+  document.getElementById('btn-edit').onclick = ()=>{
+    closeOverlay();
+    openForm(e.id, {
+      onSaved: ()=>{ openDetail(e.id, opts); },
+      onBackToView: ()=>{ openDetail(e.id, opts); }
+    });
+  };
   document.getElementById('btn-del').onclick = async ()=>{
     if(confirm(`Excluir "${e.name}" do seu banco?`)){
       DATA = DATA.filter(x=>x.id!==id);
@@ -13517,6 +13576,7 @@ function openForm(id, opts){
 
       </div>
       <div class="modal-actions lesion-form-footer">
+        ${typeof opts.onBackToView==='function' ? `<button type="button" class="btn btn-ghost" id="f-back-view">← Voltar para visualização</button>` : ''}
         <button class="btn btn-ghost" id="f-cancel">cancelar</button>
         <button class="btn btn-primary" id="f-save">${existing?'salvar alterações':'adicionar ao banco'}</button>
       </div>
@@ -13593,7 +13653,12 @@ function openForm(id, opts){
   const newPendingKey = ()=> 'pending:'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);
   const didacticImageCtx = {
     getImages: ()=>{ pendingImgs.forEach(x=>{ if(x && x.source==='pending' && !x._pendingKey) x._pendingKey = newPendingKey(); }); return pendingImgs; },
-    addImage: (im)=>{ const n = { ...im, label: im.label||'', source: im.source||'url' }; pendingImgs.push(n); imgsChanged = true; renderImgGallery(); return n; },
+    // SIGNS/CLASSIFICATIONS IMAGE PANELS (lrev_mulf9eek_h24i4h): imagem
+    // pendente (quadro/collage com deferUpload, ou qualquer outra fonte
+    // futura) precisa da chave temporária JÁ no objeto devolvido — o
+    // chamador (addAndLink do editor de item) vincula pelo id retornado na
+    // hora, sem esperar o `getImages()` de baixo corrigir depois.
+    addImage: (im)=>{ const n = { ...im, label: im.label||'', source: im.source||'url' }; if(n.source==='pending' && !n._pendingKey) n._pendingKey = newPendingKey(); pendingImgs.push(n); imgsChanged = true; renderImgGallery(); return n; },
     addPendingFile: (file)=>{
       if(!file || !file.type || !file.type.startsWith('image/')) return null;
       const temp = buildPendingImage(file, trackObjectUrl);
@@ -13821,12 +13886,19 @@ function openForm(id, opts){
   };
   renderLinks();
   document.getElementById('f-link-radiopaedia').onclick = ()=>{
-    const nm = document.getElementById('f-en-term').value.trim() || document.getElementById('f-name').value.trim();
+    // lrev_mul8vsjq_0bfwkd: prefere o termo em inglês digitado no campo
+    // próprio; sem ele, cai para o nome em português (ação manual/explícita
+    // do usuário, não o gerador automático), mas AVISA em vez de fabricar em
+    // silêncio — reportar, nunca fingir que é uma tradução real.
+    const enTermField = document.getElementById('f-en-term').value.trim();
+    const nameField = document.getElementById('f-name').value.trim();
+    const nm = enTermField || nameField;
     if(!nm){ toast('Escreva o nome da lesão (ou o termo em inglês) primeiro.'); return; }
     const url = radiopaediaSearchUrl(nm);
     if(links.some(l=>l.url === url)) { toast('Esse link já foi adicionado.'); return; }
     links.push({label:'Radiopaedia — buscar casos', url});
     renderLinks();
+    if(!enTermField){ toast('⚠ Sem "termo em inglês" preenchido — o link foi gerado com o nome em português e pode trazer resultados ruins no Radiopaedia (em inglês). Considere preencher o termo em inglês.'); }
   };
 
   const chipWrap = document.getElementById('chip-wrap');
@@ -14192,6 +14264,19 @@ function openForm(id, opts){
   };
 
   document.getElementById('f-cancel').onclick = ()=>{ releasePendingObjectUrls(); document.removeEventListener('keydown', closeFormOnEsc); closeForm(); };
+  // "← Voltar para visualização" (lrev_mul8jrtq_l2atyp): só existe quando quem
+  // abriu o formulário passou onBackToView (hoje: editar a partir do detalhe).
+  // Fecha o formulário SEM salvar (mesma limpeza do cancelar) e reabre a
+  // visualização não editável da MESMA lesão, nunca outra e nunca a lista.
+  const backViewBtn = document.getElementById('f-back-view');
+  if(backViewBtn){
+    backViewBtn.onclick = ()=>{
+      releasePendingObjectUrls();
+      document.removeEventListener('keydown', closeFormOnEsc);
+      closeForm();
+      try{ opts.onBackToView(); }catch(_e){}
+    };
+  }
   document.getElementById('f-save').onclick = async ()=>{
     if(formSaving) return; // idempotência: submit já em andamento (duplo-clique, retry, Enter repetido)
     formSaving = true;
@@ -20041,9 +20126,23 @@ function renderImagesWeekSvg(series){
    clinicalCases e, se ainda não existir, a sourceUrl aos links.
    ============================================================ */
 // Só os campos realmente presentes no draft — nunca inventa um campo ausente.
+// DADOS CLÍNICOS IMPORTADOS DO RADIOPAEDIA (lrev_mulclk3s_7le9tj): antes,
+// um caso recém-importado nascia SEM `id` e SEM `origin`. O editor do item
+// (openDidacticItemEditor, "✏") casa o Salvar por id (upsertDidacticItem);
+// sem id, `idx` nunca batia e o Salvar criava um item NOVO em vez de
+// atualizar o importado — o card editado continuava com os dados antigos e
+// um duplicado desalinhado aparecia na lista. Sem `origin:'imported'`, a
+// validação do editor (normalizeManualClinicalCase) exigia "apresentação
+// clínica" mesmo quando o Radiopaedia não trouxe história clínica para
+// aquele caso, bloqueando o Salvar. Agora nasce com identidade estável
+// (mesmo gerador `genDidacticId` usado em todo o sistema didático 093) e
+// `origin:'imported'` desde a importação — nenhum dado a mais, só a
+// identidade que faltava.
 function buildClinicalCaseFromDraft(draft){
   const d = draft || {};
   const out = {
+    id: genDidacticId('case'),
+    origin: 'imported',
     source: String(d.source || '').trim(),
     title: String(d.title || '').trim(),
     sourceUrl: String(d.sourceUrl || '').trim(),
@@ -21089,7 +21188,19 @@ function wireDidacticFormSection(root, drafts, setDraft, getLesionMeta, imageCtx
       row.querySelector('.didactic-up').onclick = () => act((l, id) => moveDidacticItem(l, id, -1));
       row.querySelector('.didactic-down').onclick = () => act((l, id) => moveDidacticItem(l, id, 1));
       row.querySelector('.didactic-del').onclick = () => { if (confirm('Excluir este item? (a lesão e as demais áreas não são alteradas)')) act((l, id) => deleteDidacticItem(l, id)); };
-      row.querySelector('.didactic-edit').onclick = () => openDidacticItemEditor(kind, it, getLesionMeta, (saved) => act((l) => upsertDidacticItem(l, Object.assign({}, saved, { id: it.id }))), imageCtx);
+      row.querySelector('.didactic-edit').onclick = () => {
+        // lrev_mulclk3s_7le9tj: caso importado ANTES desta correção ainda
+        // pode estar sem id/origin persistidos (dado antigo, não é migração
+        // destrutiva). Mesma conversão que ↑/↓/✕ já aplicam (ensureClinicalCaseIdentity),
+        // só que ANTES de abrir o editor — senão o Salvar do item não casa
+        // por id e cria um duplicado em vez de atualizar o original.
+        if (kind === 'cases' && !it.id) {
+          const j = drafts.cases.indexOf(it);
+          const conv = drafts.cases.slice(); conv[j] = ensureClinicalCaseIdentity(it); setDraft('cases', conv); it = conv[j];
+          render(kind);
+        }
+        openDidacticItemEditor(kind, it, getLesionMeta, (saved) => act((l) => upsertDidacticItem(l, Object.assign({}, saved, { id: it.id }))), imageCtx);
+      };
       listEl.appendChild(row);
     });
   };
@@ -21129,7 +21240,13 @@ function openDidacticItemEditor(kind, item, getLesionMeta, onSave, imageCtx){
   body += '<div class="field didactic-linked"><label>Imagens vinculadas (<span id="de-linked-count">0</span>)</label><div id="de-images"></div>'
     + '<div id="de-legacy-note" class="didactic-meta"></div>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px;"><button type="button" class="btn btn-ghost" id="de-pick"' + (ctx ? '' : ' disabled title="abra pelo Editar da lesão"') + '>+ selecionar imagens da lesão</button>'
-    + (kind !== 'cases' ? '<label class="btn btn-ghost" style="margin:0;">+ adicionar nova imagem<input type="file" id="de-img-file" accept="image/*" multiple hidden></label>' : '') + '</div>'
+    + (kind !== 'cases' ? '<label class="btn btn-ghost" style="margin:0;">+ adicionar nova imagem<input type="file" id="de-img-file" accept="image/*" multiple hidden></label>' : '')
+    // SIGNS/CLASSIFICATIONS IMAGE PANELS (lrev_mulf9eek_h24i4h): mesmo
+    // construtor de quadro de imagens (▦) do formulário principal e do
+    // Quiz — reaproveitado aqui, sem arquitetura paralela; o quadro pronto
+    // entra pelo MESMO addAndLink() de qualquer outra imagem nova (galeria
+    // da lesão via ctx.addImage, nunca asset duplicado, vínculo por imageRefs).
+    + (kind !== 'cases' ? '<button type="button" class="btn btn-ghost" id="de-collage"' + (ctx ? '' : ' disabled title="abra pelo Editar da lesão"') + '>▦ criar quadro de imagens</button>' : '') + '</div>'
     + (kind !== 'cases' ? '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px;"><input id="de-img-url" placeholder="ou cole a URL da imagem (https://…)" style="flex:1;min-width:180px;"><button type="button" class="btn btn-ghost" id="de-img-url-add">+ URL</button></div>'
       + '<div class="didactic-paste-zone" id="de-paste" tabindex="0">📋 Cole com Ctrl+V aqui</div>' : '')
     + '<div class="didactic-meta" style="margin-top:4px;">A imagem fica na galeria da lesão (uma só cópia); aqui só o vínculo — desvincular não apaga a imagem. Nunca envie imagem com nome, prontuário ou outro dado identificável do paciente.</div></div>';
@@ -21260,6 +21377,17 @@ function openDidacticItemEditor(kind, item, getLesionMeta, onSave, imageCtx){
       if (activeImageRefs(refs).length >= DIDACTIC_LIMITS.images) err('Limite de ' + DIDACTIC_LIMITS.images + ' imagens por item.'); else err('');
       renderImgs();
     });
+  };
+  // SIGNS/CLASSIFICATIONS IMAGE PANELS (lrev_mulf9eek_h24i4h): mesmo
+  // openCollageBuilder() do formulário principal/Quiz (deferUpload:true —
+  // o quadro chega como imagem temporária, só sobe ao Cloudinary no Salvar
+  // da lesão). O quadro pronto entra pela MESMA porta de qualquer imagem
+  // nova do item (addAndLink -> ctx.addImage -> galeria da lesão, nunca
+  // asset duplicado); cancelar o item desfaz normalmente via `addedHere`.
+  if ($('de-collage')) $('de-collage').onclick = () => {
+    if (!ctx) return;
+    if (activeImageRefs(refs).length >= DIDACTIC_LIMITS.images) { err('Limite de ' + DIDACTIC_LIMITS.images + ' imagens por item.'); return; }
+    openCollageBuilder(getLesionMeta(), (collage) => { if (addAndLink(collage)) err(''); }, null, true);
   };
   // Cancelar/fechar o item: desfaz o que ESTE editor pôs na galeria (as
   // temporárias têm a blob URL revogada) — nenhum upload aconteceu.

@@ -117,6 +117,7 @@ function loadRuntime(dataFixture, opts) {
   const src = [
     extractFunction(html, 'normalizeExternalTitle'),
     extractFunction(html, 'sameExternalUrl'),
+    extractFunction(html, 'genDidacticId'), // lrev_mulclk3s_7le9tj: buildClinicalCaseFromDraft agora usa
     extractFunction(html, 'buildClinicalCaseFromDraft'),
     extractFunction(html, 'lesionHasClinicalCaseUrl'),
     extractFunction(html, 'findClinicalCaseElsewhere'),

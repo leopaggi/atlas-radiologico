@@ -582,9 +582,20 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // bem antes do recovery/loadData; a correção do regex de citação
   // (findExplicitCloneMatches) fica bem depois do importHandler e não
   // desloca nenhuma âncora.
-  assert.equal(recovery.line, 9714);
-  assert.equal(brokenArtifacts.line, 9704);
-  assert.equal(loadData.line, 12265);
+  // +32 nas tres primeiras ancoras (task Navigation/Radiopaedia/Clinical/
+  // Signs/Layout, 2026-09-28): radiopaediaAutoEnTerm() + comentario do
+  // bootstrap do SEED (fail-safe do link automatico, lrev_mul8vsjq_0bfwkd) +
+  // comentario/guarda do ensureLinks() — tudo antes da primeira ancora,
+  // deslocamento uniforme. +53 a mais em loadData->importHandler (85 no
+  // total): reparo do link automatico dentro de loadData() (auditoria/
+  // relatorio de console) + botao "Voltar para visualizacao" e reabertura
+  // da mesma lesao apos salvar (openDetail/openForm, lrev_mul8jrtq_l2atyp) +
+  // botao/wiring "quadro de imagens" em signs/schemes (openDidacticItemEditor,
+  // lrev_mulf9eek_h24i4h) + didacticImageCtx.addImage com _pendingKey
+  // imediato — tudo entre loadData e o importHandler.
+  assert.equal(recovery.line, 9746);
+  assert.equal(brokenArtifacts.line, 9736);
+  assert.equal(loadData.line, 12297);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
@@ -638,7 +649,9 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // módulo LESION_REVISIONS, bem antes de recovery/loadData/importHandler.
   // +1 extra no importHandler (comentário de 4 linhas em vez de 3 no ramo
   // additional_section_placement do import individual) — total +55.
-  assert.equal(importHandler.line, 16788);
+  // +85 no importHandler (task Navigation/Radiopaedia/Clinical/Signs/Layout,
+  // 2026-09-28, ver comentário nas três primeiras âncoras acima).
+  assert.equal(importHandler.line, 16873);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
