@@ -8,6 +8,102 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**Bugfix real — guarda anatômica de altPlacements (2026-09-27/28):** caso
+real reportado pelo usuário: `lrev_muknhymv_564ywe`, lesão `seed_928`
+"Depósito de gadolínio no SNC" (Neurorradiologia > Intra-axial (parênquima))
+com `altPlacements:[{s:"Pelve Masculina",site:"Bexiga"}]` — anatomicamente
+absurdo. Já havia ocorrido antes com "Abdômen Superior" (removido) antes
+desta lesão receber a nova localização errada em Pelve Masculina/Bexiga:
+padrão de REGENERAÇÃO, não um valor único voltando.
+**ROOT CAUSE provado por código + teste:** `applyReviewAiSuggestedPlacement`
+(único ponto que de fato grava `altPlacements` em DATA a partir de uma
+sugestão da IA) validava a sugestão só contra `validateReviewAiPlacement`,
+que checava apenas se a seção/sítio EXISTIA em algum lugar do atlas
+(`reviewAiKnownSections()`) — nunca se era anatomicamente compatível com a
+seção PRINCIPAL da lesão-fonte. Como "Pelve Masculina > Bexiga" é uma
+seção/sítio real do atlas (só que de outra lesão), a checagem passava e o
+clique humano em "✓ Aplicar localização sugerida" (fluxo individual ou em
+lote) gravava a localização sem nenhum veto. Investigados também e
+descartados como causa: `applyLegacyIdMigrationToState`/
+`LEGACY_ID_MIGRATION_MAP_V1` (comentário no próprio código: "ainda NÃO
+chamada por nenhum fluxo de produção" — dormente); `mergeAltPlacementsV2`
+(reconciliação V2 documentada como nunca decidindo o que é anatomicamente
+correto — só reconcilia duplicatas JÁ identificadas como a MESMA lesão);
+`foldLesionMergesIntoState` (fusão 091c só roda sobre uma lista de pares
+PRÉ-APROVADOS manualmente, fora do pipeline de IA); sync/pull multi-device
+(`mergeEntryNonDestructive` não inventa `altPlacements` — só replica o que
+já foi escrito por um dos caminhos acima, e como a remoção carimba
+`_userUpdatedAt`, o merge por recência já propaga a remoção corretamente).
+Uma SEGUNDA vulnerabilidade da mesma classe, também corrigida por
+precaução: `structuralApplyMerge`/`dryRunStructuralPlan` (execução de
+`merge_duplicates` do plano estrutural) transferia TODO o array
+`remove.altPlacements` para o keeper sem checagem anatômica, mesmo quando
+keeper e remove tinham a mesma seção/sítio principal (logo sem vetar na
+checagem de conflito já existente `hasStrongAnatomicConflict`) — um clone
+duplicado citado explicitamente pelo humano ("manter o clone X", ponte
+recém-corrigida no commit anterior) poderia carregar uma altPlacement
+própria anatomicamente distante que seria herdada silenciosamente.
+**GUARDA (genérica, não hardcoded em nenhuma lesão):** `SECTION_ANATOMIC_SYSTEM`
+classifica as 12 seções fixas do atlas em sistemas anatômicos amplos
+(nervous/head_neck/thoracic/abdominal/genitourinary/musculoskeletal; vascular
+e fetal são transversais e nunca bloqueiam) e `anatomicSystemsCompatible()`
+só permite cruzar sistemas diferentes numa allowlist restrita de pares
+clinicamente reais (base do crânio × intracraniano; genitourinário ×
+abdominal). Aplicada em `validateReviewAiPlacement` (parâmetro opcional
+`sourceSection`) e chamada com a seção real da lesão em
+`applyReviewAiSuggestedPlacement` (escrita real) e em `reviewPlacementSuggestion`
+(esconde o botão "Aplicar" antes mesmo do clique, via `reviewCenterLesionMeta`
+para não violar o invariante estático "importador não toca DATA"). O import
+individual/lote (`importReviewAiSolution`/`processReviewAiBatchItem`)
+continua auditado para NUNCA referenciar DATA (guarda só valida seção/sítio
+ali) — a sugestão pode ser flagada como `manual_action_required`, mas a
+ESCRITA em `applyReviewAiSuggestedPlacement` recusa com `anatomic_conflict`.
+Mesma guarda (com fallback `typeof anatomicSystemsCompatible==='function'`
+para não quebrar harnesses de teste que extraem só um subconjunto de
+funções) filtra a transferência de `altPlacements` em `structuralApplyMerge`/
+`dryRunStructuralPlan`, com aviso `alt_placement_anatomic_conflict_dropped`
+na prévia. Placements legítimos continuam permitidos: mesmo sistema (SNC →
+SNC), pares da allowlist (genitourinário → abdominal) e seções transversais
+(Medicina Fetal, Vascular) — teste de regressão preserva o caso pré-existente
+"Holoprosencefalia" (Medicina Fetal) também aparecendo em Neurorradiologia.
+Testes novos: `tests/lesion-review.test.js` (6 casos — sugestão SNC→Pelve
+recusada na aplicação individual e em lote, histórico do 1º incidente
+também bloqueado, placements legítimos preservados, transversal preservada,
+recusa sobrevive a reload/reabertura) e `tests/structural-plan-execute.test.js`
+(1 caso — clone fundido não injeta altPlacement incompatível no keeper,
+prévia e execução). `tests/critical-flows.test.js` teve as 4 âncoras de
+linha atualizadas (+54/+55) pelo bloco novo antes delas (mesmo padrão de
+âncoras documentado nas correções anteriores). Suíte completa: 1655 testes,
+1638 PASS, 12 FAIL — os mesmos 12 falhas históricas do baseline (medido
+antes desta correção via `git stash`, arquivo a arquivo idêntico), nenhuma
+regressão nova. `git diff --check` limpo.
+**REMOÇÃO DO CASO ATUAL (ação do usuário no app real — este agente não tem
+acesso ao IndexedDB/Firestore de produção):** a revisão `lrev_muknhymv_564ywe`
+precisa de um plano estrutural `remove_additional_section_placement` para
+`seed_928` removendo `{section:"Pelve Masculina", site:"Bexiga"}` — o
+mecanismo já existe, testado e intocado (`structuralApplyRemovePlacement`).
+Colar em "🛠 Ações manuais" → "📥 Importar plano estrutural da IA" (envelope
+`atlas_structural_resolution_batch` v1):
+```json
+{"type":"atlas_structural_resolution_batch","version":1,"resolutions":[
+  {"reviewId":"lrev_muknhymv_564ywe","resolutionType":"remove_additional_section_placement",
+   "lesionId":"seed_928","placement":{"section":"Pelve Masculina","site":"Bexiga"},
+   "reasoning":"Localização anatomicamente incompatível com lesão do SNC (Depósito de gadolínio no SNC)."}
+]}
+```
+Requer a revisão em `manual_action_required` no momento da importação
+(`review_not_manual` se não estiver — reabrir com `reopenManualActionReview`
+antes, se necessário). Depois: prévia → "▶ Executar" → a revisão resolve
+sozinha (`accepted`) — não fica pendente eternamente, histórico preservado.
+Após executar, confirmar no app: `seed_928.altPlacements` sem "Pelve
+Masculina > Bexiga" e sem nenhum resquício de "Abdômen Superior"; recarregar
+(F5) e rodar sync/merge com outro dispositivo para confirmar que nada
+ressuscita (a guarda nova bloqueia qualquer NOVA tentativa automática; a
+remoção em si é uma escrita comum com `_userUpdatedAt` novo, que vence no
+merge por recência).
+**Corrigi a origem da regeneração de altPlacements (guarda genérica no único
+ponto de escrita automática), não apenas removi o valor atual.**
+
 **Bugfix real — ponte 1→2 faltando no LOTE + citação "manter o clone X" (2026-09-27):**
 diagnóstico independente pediu para rastrear o caminho EXATO que a UI real
 executa ao colar `{"results":[...]}` (formato relatado com bug real em

@@ -2104,6 +2104,117 @@ test('LOCAL (UI): botão "Aplicar localização sugerida" aparece e exige confir
 
 
 // ===========================================================================
+// GUARDA ANATÔMICA de altPlacements (bug real: seed_928 "Depósito de
+// gadolínio no SNC" recebeu "Abdômen Superior" e depois "Pelve Masculina >
+// Bexiga" via sugestão da IA aplicada sem veto anatômico). A guarda é
+// GENÉRICA (SECTION_ANATOMIC_SYSTEM cobre as 12 seções fixas do Atlas, nunca
+// um id/nome de lesão específico). O import (individual/lote) continua sem
+// tocar DATA (invariante estático preservado — ver "SEGURANÇA ESTÁTICA" e
+// "não toca DATA diretamente" acima) e por isso só VALIDA seção/sítio
+// existentes; o veto anatômico fica em applyReviewAiSuggestedPlacement, o
+// único ponto que de fato ESCREVE altPlacements em DATA.
+// ===========================================================================
+
+function makeCnsPelvicCtx(){
+  const lesions = [
+    // Equivalente ao caso real: lesão do SNC (Neurorradiologia).
+    makeLesion({ id: 'seed_928', name: 'Depósito de gadolínio no SNC', s: 'Neurorradiologia', site: 'Intra-axial (parênquima)' }),
+    // Precisa existir no atlas para "Pelve Masculina > Bexiga" ser uma
+    // seção/sítio REAL (senão cairia em unknown_section, não no veto anatômico).
+    makeLesion({ id: 'seed_400', name: 'Câncer de bexiga', s: 'Pelve Masculina', site: 'Bexiga' }),
+    makeLesion({ id: 'seed_360', name: 'Massa retroperitoneal', s: 'Abdômen Superior', site: 'Retroperitônio' }),
+    makeLesion({ id: 'seed_9', name: 'Craniofaringioma', s: 'Neurorradiologia', site: 'Região selar' })
+  ];
+  const ctx = buildTestContext({ data: lesions });
+  return { ctx, lesions };
+}
+
+test('GUARDA ANATÔMICA: sugestão SNC → Pelve Masculina/Bexiga pode ser sugerida (import não toca DATA) mas a APLICAÇÃO é recusada', () => {
+  const { ctx, lesions } = makeCnsPelvicCtx();
+  const r = ctx.createLesionReview('seed_928', 'x').review;
+  const before = JSON.stringify(ctx.DATA);
+  const res = ctx.importReviewAiSolution(r.id, JSON.stringify({ reviewId: r.id, summary: 's', reasoning: 'r',
+    manualAction: { type: 'additional_section_placement', description: 'também na bexiga', suggestedPlacement: { section: 'Pelve Masculina', site: 'Bexiga' } }, proposedChanges: {} }));
+  assert.equal(res.ok, true, 'import só valida seção/sítio existentes — nunca consulta DATA');
+  assert.equal(r.status, 'manual_action_required');
+  assert.equal(JSON.stringify(ctx.DATA), before, 'DATA intocada ao sugerir');
+  // A ESCRITA real é recusada pela guarda anatômica.
+  const applied = ctx.applyReviewAiSuggestedPlacement(r.id);
+  assert.equal(applied.ok, false);
+  assert.equal(applied.reason, 'anatomic_conflict');
+  assert.equal(JSON.stringify(ctx.DATA), before, 'DATA continua intocada após a recusa');
+  assert.equal(lesions[0].altPlacements, undefined, 'seed_928 nunca recebe a localização absurda');
+});
+
+test('GUARDA ANATÔMICA: mesmo pelo LOTE (processReviewAiBatchItem), a aplicação de Pelve Masculina/Bexiga é recusada', () => {
+  const { ctx, lesions } = makeCnsPelvicCtx();
+  const r = ctx.createLesionReview('seed_928', 'x').review;
+  const res = ctx.importReviewAiBatch(JSON.stringify({ results: [JSON.parse(placementJson(r.id, 'Pelve Masculina', 'Bexiga'))] }));
+  assert.equal(res.summary.manual, 1, 'lote também não toca DATA para validar — só flag');
+  assert.equal(r.status, 'manual_action_required');
+  const applied = ctx.applyReviewAiSuggestedPlacement(r.id);
+  assert.equal(applied.ok, false);
+  assert.equal(applied.reason, 'anatomic_conflict');
+  assert.equal(lesions[0].altPlacements, undefined);
+});
+
+test('GUARDA ANATÔMICA: o histórico do 1º incidente (SNC → Abdômen Superior) também é bloqueado na aplicação', () => {
+  const { ctx, lesions } = makeCnsPelvicCtx();
+  const r = ctx.createLesionReview('seed_928', 'x').review;
+  ctx.importReviewAiBatch(JSON.stringify({ results: [JSON.parse(placementJson(r.id, 'Abdômen Superior', 'Retroperitônio'))] }));
+  const applied = ctx.applyReviewAiSuggestedPlacement(r.id);
+  assert.equal(applied.ok, false);
+  assert.equal(applied.reason, 'anatomic_conflict');
+  assert.equal(lesions[0].altPlacements, undefined);
+});
+
+test('GUARDA ANATÔMICA: NÃO bloqueia placements adicionais legítimos (mesmo sistema, ou cruzamentos reais na allowlist)', () => {
+  const { ctx, lesions } = makeCnsPelvicCtx();
+  // Mesmo sistema (SNC → SNC): sempre compatível.
+  const r1 = ctx.createLesionReview('seed_928', 'x').review;
+  ctx.importReviewAiBatch(JSON.stringify({ results: [JSON.parse(placementJson(r1.id, 'Neurorradiologia', 'Região selar'))] }));
+  assert.equal(ctx.applyReviewAiSuggestedPlacement(r1.id).ok, true, 'SNC -> SNC continua permitido');
+
+  // Cruzamento real da allowlist: genitourinário <-> abdominal (trato urinário
+  // alto x baixo / ginecologia x abdome) continua permitido.
+  const bexiga = lesions.find(l => l.id === 'seed_400');
+  const r2 = ctx.createLesionReview('seed_400', 'y').review;
+  ctx.importReviewAiBatch(JSON.stringify({ results: [JSON.parse(placementJson(r2.id, 'Abdômen Superior', 'Retroperitônio'))] }));
+  assert.equal(ctx.applyReviewAiSuggestedPlacement(r2.id).ok, true, 'genitourinário -> abdominal continua permitido');
+  assert.deepEqual(serialize(bexiga.altPlacements), [{ s: 'Abdômen Superior', site: 'Retroperitônio' }]);
+});
+
+test('GUARDA ANATÔMICA: Medicina Fetal (transversal) continua podendo cruzar com Neurorradiologia (regressão já existente preservada)', () => {
+  const { ctx, lesions } = makePlacementCtx();
+  const r = ctx.createLesionReview('seed_1', 'x').review;
+  ctx.importReviewAiBatch(JSON.stringify({ results: [JSON.parse(placementJson(r.id, 'Neurorradiologia', 'Encéfalo'))] }));
+  const res = ctx.applyReviewAiSuggestedPlacement(r.id);
+  assert.equal(res.ok, true, 'seção transversal (fetal) nunca é bloqueada pela guarda anatômica');
+  assert.deepEqual(serialize(lesions[0].altPlacements), [{ s: 'Neurorradiologia', site: 'Encéfalo' }]);
+});
+
+test('GUARDA ANATÔMICA: recusa sobrevive a reload e a reabertura da revisão (reimportar/reaplicar continua recusando)', async () => {
+  const { ctx, lesions } = makeCnsPelvicCtx();
+  const r = ctx.createLesionReview('seed_928', 'x').review;
+  ctx.importReviewAiBatch(JSON.stringify({ results: [JSON.parse(placementJson(r.id, 'Pelve Masculina', 'Bexiga'))] }));
+  const first = ctx.applyReviewAiSuggestedPlacement(r.id);
+  assert.equal(first.ok, false);
+  assert.equal(first.reason, 'anatomic_conflict');
+  await ctx.saveLesionRevisions();
+  await ctx.loadLesionRevisions();
+  const reloaded = readGlobal(ctx, 'LESION_REVISIONS');
+  assert.equal(reloaded[r.id].status, 'manual_action_required', 'reload não altera o status pendente de decisão');
+  // tentar aplicar de novo após o reload continua recusando (idempotente).
+  const second = ctx.applyReviewAiSuggestedPlacement(r.id);
+  assert.equal(second.ok, false);
+  assert.equal(second.reason, 'anatomic_conflict');
+  const lesion928 = ctx.DATA.find(e => e.id === 'seed_928');
+  assert.equal(lesion928.altPlacements, undefined, 'seed_928 nunca recebe a localização absurda');
+  assert.equal(lesions[0].altPlacements, undefined);
+});
+
+
+// ===========================================================================
 // LAYOUT RESPONSIVO DA CENTRAL DE SOLUÇÕES (aba Ações manuais e afins)
 // ===========================================================================
 

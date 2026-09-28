@@ -6643,9 +6643,55 @@ function reviewAiPlacementCatalog(){
   const map = reviewAiKnownSections();
   return Object.keys(map).sort().map(section=>({ section, sites: Object.keys(map[section]).sort() }));
 }
-// Valida uma sugestão { section, site? } contra as seções/sítios que EXISTEM.
+/* GUARDA ANATÔMICA GENÉRICA (bug real: altPlacement absurdo reaparecendo —
+   seed_928 "Depósito de gadolínio no SNC" recebeu "Abdômen Superior" e depois
+   "Pelve Masculina > Bexiga" via sugestão da IA aplicada sem veto). Nenhum
+   caminho AUTOMÁTICO (sugestão da IA aplicada por 1 clique, ou transferência
+   em fusão estrutural) pode empurrar uma lesão para uma seção anatomicamente
+   incompatível com a sua seção principal. Baseada só na arquitetura de seções
+   FIXA do Atlas (12 seções) — nunca referencia um id/nome de lesão específico,
+   então cobre qualquer lesão futura, não só o caso relatado. 'vascular' e
+   'fetal' são transversais (percorrem/afetam qualquer região do corpo) e
+   nunca bloqueiam. Os demais pares só passam se estiverem na allowlist restrita
+   de cruzamentos clinicamente reais e comuns (base do crânio × intracraniano;
+   trato urinário alto × baixo). Seção fora da taxonomia conhecida nunca
+   bloqueia sozinha (fail-open só na AUSÊNCIA de dado — nunca no confronto
+   positivo entre duas seções conhecidas e incompatíveis, que é fail-closed).
+   NÃO se aplica à adição manual pelo editor ("+ Adicionar localização"), onde
+   o julgamento é humano e informado pelo caso real. */
+const SECTION_ANATOMIC_SYSTEM = {
+  'Neurorradiologia': 'nervous',
+  'Coluna Vertebral': 'nervous',
+  'Cabeça e Pescoço': 'head_neck',
+  'Tórax': 'thoracic',
+  'Mamas': 'thoracic',
+  'Abdômen Superior': 'abdominal',
+  'Vascular': 'vascular',
+  'Musculoesquelético': 'musculoskeletal',
+  'Pelve Feminina': 'genitourinary',
+  'Pelve Masculina': 'genitourinary',
+  'Obstetrícia': 'genitourinary',
+  'Medicina Fetal': 'fetal'
+};
+const ANATOMIC_SYSTEM_COMPATIBLE_PAIRS = new Set([
+  'head_neck|nervous',
+  'genitourinary|abdominal'
+]);
+function anatomicSystemOfSection(section){
+  return SECTION_ANATOMIC_SYSTEM[String(section||'').trim()] || null;
+}
+function anatomicSystemsCompatible(sectionA, sectionB){
+  const a = anatomicSystemOfSection(sectionA), b = anatomicSystemOfSection(sectionB);
+  if(!a || !b) return true;
+  if(a===b) return true;
+  if(a==='vascular' || b==='vascular') return true;
+  if(a==='fetal' || b==='fetal') return true;
+  return ANATOMIC_SYSTEM_COMPATIBLE_PAIRS.has(a+'|'+b) || ANATOMIC_SYSTEM_COMPATIBLE_PAIRS.has(b+'|'+a);
+}
+// Valida uma sugestão { section, site? } contra as seções/sítios que EXISTEM
+// e, quando `sourceSection` é informado, contra a guarda anatômica acima.
 // site pode ser null/ausente (aplicação pedirá o sítio na confirmação).
-function validateReviewAiPlacement(suggested){
+function validateReviewAiPlacement(suggested, sourceSection){
   if(!suggested || typeof suggested!=='object' || Array.isArray(suggested)) return { valid:false, reason:'invalid_placement' };
   const section = String(suggested.section || suggested.s || '').trim();
   const rawSite = (suggested.site===undefined || suggested.site===null) ? '' : String(suggested.site).trim();
@@ -6653,6 +6699,7 @@ function validateReviewAiPlacement(suggested){
   const map = reviewAiKnownSections();
   if(!map[section]) return { valid:false, reason:'unknown_section' };
   if(rawSite && !map[section][rawSite]) return { valid:false, reason:'unknown_site' };
+  if(sourceSection && !anatomicSystemsCompatible(sourceSection, section)) return { valid:false, reason:'anatomic_conflict' };
   return { valid:true, reason:null, placement:{ s: section, site: rawSite } };
 }
 function normalizeReviewAltPlacementKey(section, site){
@@ -6676,11 +6723,11 @@ function applyReviewAiSuggestedPlacement(reviewId, siteOverride){
     ? String(siteOverride).trim()
     : ((suggested.site===undefined || suggested.site===null) ? '' : String(suggested.site).trim());
   if(!section) return { ok:false, reason:'missing_section' };
-  const check = validateReviewAiPlacement({ section, site });
-  if(!check.valid) return { ok:false, reason:check.reason };
-  if(!site) return { ok:false, reason:'missing_site' };
   const lesion = DATA.find(e=>e && e.id===review.lesionId);
   if(!lesion) return { ok:false, reason:'lesion_not_found' };
+  const check = validateReviewAiPlacement({ section, site }, lesion.s);
+  if(!check.valid) return { ok:false, reason:check.reason };
+  if(!site) return { ok:false, reason:'missing_site' };
   const targetKey = normalizeReviewAltPlacementKey(section, site);
   if(targetKey===normalizeReviewAltPlacementKey(lesion.s, lesion.site)) return { ok:false, reason:'already_primary' };
   const existing = Array.isArray(lesion.altPlacements) ? lesion.altPlacements : [];
@@ -6956,6 +7003,10 @@ function importReviewAiSolution(reviewId, rawText){
     const manual = (parsed.manualAction && typeof parsed.manualAction==='object') ? parsed.manualAction : null;
     const actionType = manual ? String(manual.type||'').trim() : '';
     if(actionType==='additional_section_placement'){
+      // Guarda anatômica: o veto contra a seção da lesão-fonte é aplicado em
+      // applyReviewAiSuggestedPlacement (único ponto que de fato grava o
+      // catálogo — este importador não pode consultá-lo, ver invariante
+      // estático logo abaixo). Aqui só valida seção/sítio EXISTENTES.
       const v = validateReviewAiPlacement(manual.suggestedPlacement);
       if(!v.valid) return { ok:false, reason:'invalid_placement', detail:v.reason };
       const description = String(manual.description||'').trim() || null;
@@ -7129,6 +7180,9 @@ function processReviewAiBatchItem(raw, seen){
     const actionType = String(manual.type||'').trim() || null;
     let suggestedPlacement = null;
     if(actionType==='additional_section_placement'){
+      // Guarda anatômica aplicada em applyReviewAiSuggestedPlacement (único
+      // ponto que grava o catálogo — este processador de lote é auditado
+      // para nunca consultá-lo, ver "SEGURANÇA ESTÁTICA" em lesion-review.test.js).
       const v = validateReviewAiPlacement(manual.suggestedPlacement);
       if(!v.valid) return { reviewId, status:'failed', reason:'invalid_placement', detail:v.reason };
       suggestedPlacement = { section: v.placement.s, site: v.placement.site || null };
@@ -15181,7 +15235,8 @@ function reviewPlacementSuggestion(review){
   const section = String(ma.suggestedPlacement.section||'').trim();
   const site = ma.suggestedPlacement.site ? String(ma.suggestedPlacement.site).trim() : '';
   if(!section) return { applicable:false };
-  const check = validateReviewAiPlacement({ section, site });
+  const sourceLesion = reviewCenterLesionMeta(review && review.lesionId).lesion;
+  const check = validateReviewAiPlacement({ section, site }, sourceLesion && sourceLesion.s);
   if(!check.valid) return { applicable:false, invalid:check.reason };
   return { applicable:true, section, site, label: site ? (section+' > '+site) : section, needsSite: !site };
 }
@@ -22636,7 +22691,14 @@ function dryRunStructuralPlan(reviewId){
     const tSigns = transfer(m.transferRadiologicSigns, remove.radiologicSigns);
     const tSchemes = transfer(m.transferClassificationSchemes, remove.classificationSchemes);
     const tLinks = transfer(m.transferLinks, remove.links);
-    const tAlts = transfer(m.transferAltPlacements, remove.altPlacements);
+    // Guarda anatômica (mesma de validateReviewAiPlacement): uma altPlacement
+    // do registro removido só é transferida ao keeper se for anatomicamente
+    // compatível com a seção PRINCIPAL do keeper — nunca herda cegamente a
+    // localização adicional de um "duplicado" anatomicamente distante.
+    const tAltsAll = transfer(m.transferAltPlacements, remove.altPlacements);
+    const tAlts = tAltsAll.filter(p=>p && (typeof anatomicSystemsCompatible!=='function' || anatomicSystemsCompatible(keeper.s, p.s)));
+    if(tAlts.length < tAltsAll.length)
+      base.warnings.push({ kind:'alt_placement_anatomic_conflict_dropped', count: tAltsAll.length - tAlts.length });
     const blocked = (label, list)=>{
       if(m[label]===false && Array.isArray(list) && list.length)
         base.conflicts.push({ kind:'transfer_disabled_with_data', field:label, count:list.length });
@@ -22893,6 +22955,7 @@ function structuralApplyMerge(v, dry, now){
     const seen = new Set(keeper.altPlacements.map(p=>String((p&&p.s)||'')+'|||'+String((p&&p.site)||'')));
     (Array.isArray(remove.altPlacements)?remove.altPlacements:[]).forEach(p=>{
       if(!p) return;
+      if(typeof anatomicSystemsCompatible==='function' && !anatomicSystemsCompatible(keeper.s, p.s)) return; // guarda anatômica fail-closed
       const k = String(p.s||'')+'|||'+String(p.site||'');
       if(!seen.has(k)){ seen.add(k); keeper.altPlacements.push(p); }
     });

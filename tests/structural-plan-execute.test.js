@@ -58,6 +58,14 @@ const execConsts = html.slice(
 );
 const ownershipConst = "const IMAGE_OWNERSHIP_MANUAL = { manual:true };\n";
 const statusesConst = "const ACTIVE_LESION_REVIEW_STATUSES = ['pending','rejected','proposed','applied_pending_validation','manual_action_required'];\n";
+// Guarda anatômica genérica de altPlacements (bug real: seed_928 recebeu
+// "Pelve Masculina > Bexiga" via transferência de merge sem veto) — usada por
+// structuralApplyMerge/dryRunStructuralPlan ao transferir altPlacements do
+// registro removido para o keeper.
+const anatomicGuardConst = html.slice(
+  html.indexOf('const SECTION_ANATOMIC_SYSTEM = {'),
+  html.indexOf('function validateReviewAiPlacement(suggested, sourceSection){')
+);
 
 function lesion(id, over) {
   return Object.assign({
@@ -109,7 +117,7 @@ function ctxFixture() {
   });
   ctx.calls = calls;
   ctx.mergeResolution = mergeResolution;
-  vm.runInContext(execConsts + '\n' + ownershipConst + statusesConst + src, ctx, { filename: 'fase3-test.js' });
+  vm.runInContext(execConsts + '\n' + ownershipConst + statusesConst + anatomicGuardConst + src, ctx, { filename: 'fase3-test.js' });
   return ctx;
 }
 
@@ -242,6 +250,40 @@ test('Fase 3: conflito anatômico (seed_156 x ovário) bloqueia no dry-run', () 
   assert.equal(dry.ok, false);
   assert.equal(dry.reason, 'dry_conflicts');
   assert.ok(dry.conflicts.some(c => c.kind === 'anatomic_conflict'));
+});
+
+// Bug real: seed_928 "Depósito de gadolínio no SNC" recebeu "Abdômen
+// Superior" e depois "Pelve Masculina > Bexiga" como altPlacement. Um dos
+// caminhos automáticos capazes de introduzir isso é a TRANSFERÊNCIA de
+// altPlacements de um "clone" removido numa fusão — mesmo quando keeper e
+// remove têm a MESMA seção/sítio principal (sem conflito anatômico na fusão
+// em si), o clone pode carregar uma altPlacement própria anatomicamente
+// distante da seção do keeper. A guarda filtra só o item incompatível,
+// preservando o que é anatomicamente plausível (mesmo sistema nervoso).
+test('Fase 3: guarda anatômica filtra altPlacement incompatível ao transferir de um clone fundido (não herda Pelve Masculina > Bexiga)', async () => {
+  const ctx = ctxFixture();
+  const keeper = lesion('seed_900', { name: 'Depósito de gadolínio no SNC', s: 'Neurorradiologia', site: 'Intra-axial (parênquima)' });
+  const remove = lesion('seed_901', {
+    name: 'clone duplicado', s: 'Neurorradiologia', site: 'Intra-axial (parênquima)',
+    altPlacements: [{ s: 'Coluna Vertebral', site: 'Intradural' }, { s: 'Pelve Masculina', site: 'Bexiga' }]
+  });
+  ctx.DATA.push(keeper, remove);
+  const resolution = {
+    reviewId: 'R208', valid: true, type: 'merge_duplicates',
+    keeperId: 'seed_900', removeId: 'seed_901',
+    keeperName: keeper.name, removeName: remove.name, merge: {}, reasoning: 'clone real citado no pedido'
+  };
+  const r = ctx.LESION_REVISIONS['R208'];
+  r.structuralPlan = { status: 'accepted', importedAt: 'x', type: 'merge_duplicates', resolution, snapshot: ctx.buildStructuralPlanSnapshot(resolution) };
+  const dry = ctx.dryRunStructuralPlan('R208');
+  assert.equal(dry.ok, true, 'fusão em si é válida (mesma seção/sítio principal)');
+  assert.equal(JSON.stringify(dry.altPlacementsToTransfer), JSON.stringify([{ s: 'Coluna Vertebral', site: 'Intradural' }]), 'só o item compatível aparece na prévia');
+  assert.ok(dry.warnings.some(w => w.kind === 'alt_placement_anatomic_conflict_dropped' && w.count === 1), 'prévia avisa do item descartado');
+
+  const res = await ctx.executeStructuralPlan('R208');
+  assert.equal(res.ok, true);
+  const merged = ctx.DATA.find(e => e.id === 'seed_900');
+  assert.equal(JSON.stringify(merged.altPlacements), JSON.stringify([{ s: 'Coluna Vertebral', site: 'Intradural' }]), 'Pelve Masculina > Bexiga NUNCA chega ao keeper');
 });
 
 test('Fase 3: falha de ownership restaura o snapshot (sem estado parcial)', async () => {
