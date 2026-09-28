@@ -27,7 +27,7 @@ function fn(name){
 const names=['normalizeExternalTitle','normalizeRadiopaediaCaseTitle','tokenizeExternalTitle','externalTokenOverlap','levNormSimilarity','externalMatchBand',
   'reviewScope','isGlobalReview','buildReviewAiAttempts','resolveLatestHumanFeedback',
   'structuralReviewPick','structuralReviewImageMeta','structuralSectionOf','structuralSiteOf','hasStrongAnatomicConflict',
-  'structuralReviewRecord','findStructuralReviewCandidates',
+  'structuralReviewRecord','findExplicitCloneMatches','findStructuralReviewCandidates',
   'buildManualActionAiBatch','openManualActionCopyFallback','copyManualActionAiBatch'];
 const consts=html.slice(html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = '),html.indexOf('// Tokens relevantes:',html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = ')));
 const mapping=html.slice(html.indexOf('const STRUCTURAL_REVIEW_CANDIDATE_NAMES = '),html.indexOf('function structuralReviewPick('));

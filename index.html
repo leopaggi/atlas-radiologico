@@ -21776,6 +21776,44 @@ function hasStrongAnatomicConflict(source, candidate){
   if(!ss || !cs || !st || !ct) return false;
   return ss!==cs && st!==ct;
 }
+function findExplicitCloneMatches(review, source){
+  // Resolve nomes de clone CITADOS no pedido atual ("clone: X", "clone que
+  // deve ser mantido é X", "manter X") para registros REAIS do DATA — nunca
+  // inventa ID. Retorna {status:'FOUND'|'NOT_FOUND'|'AMBIGUOUS', cited, matches}.
+  // Sem veto aqui: quem chama aplica o veto anatômico existente. Puro.
+  const norm = s=>normalizeExternalTitle(s||'');
+  const out = { status:'NOT_FOUND', cited:[], matches:[] };
+  if(!review || !source) return out;
+  const texts = [review.requestText, review.manualAction && review.manualAction.description].filter(Boolean);
+  if(!texts.length) return out;
+  const seen = new Set();
+  const cited = [];
+  const take = (s)=>{
+    const t = norm(String(s||'').replace(/[.;]+$/,''));
+    if(t.length>=5 && !seen.has(t)){ seen.add(t); cited.push(t); }
+  };
+  texts.forEach(raw=>{
+    const str = String(raw||'');
+    let m = null;
+    const re1 = /clone\s*:\s*([^.;\n]+)/gi;
+    while((m=re1.exec(str))) take(m[1]);
+    const re2 = /(?:clone[^.;\n]{0,60}?(?:deve ser mantido|deve ser mantida|a ser mantido|a ser mantida)|(?:manter|mantenha|mantido|mantida))\s+(?:é\s+)?(?:este|esta|esse|essa|o|a|um|uma)?\s*([^.;\n]+)/gi;
+    while((m=re2.exec(str))) take(m[1]);
+  });
+  out.cited = cited;
+  if(!cited.length) return out;
+  const noParen = s=>norm(String(s||'').replace(/\([^)]*\)/g,''));
+  const seenId = new Set();
+  (Array.isArray(DATA)?DATA:[]).forEach(e=>{
+    if(!e || !e.id || e.id===source.id || seenId.has(e.id)) return;
+    if(typeof LESION_MERGES!=='undefined' && LESION_MERGES[e.id]) return;
+    const cand = [norm(e.name), noParen(e.name), norm(e.enTerm),
+      ...((Array.isArray(e.tags)?e.tags:[]).map(norm))].filter(Boolean);
+    if(cited.some(c=>cand.includes(c))){ seenId.add(e.id); out.matches.push(e); }
+  });
+  out.status = out.matches.length>1 ? 'AMBIGUOUS' : (out.matches.length===1 ? 'FOUND' : 'NOT_FOUND');
+  return out;
+}
 function findStructuralReviewCandidates(review, source){
   if(!review || !source) return [];
   const norm = s=>normalizeExternalTitle(s||'');
@@ -21801,6 +21839,12 @@ function findStructuralReviewCandidates(review, source){
   const ignored=new Set(['carcinoma','cancer','tumor','lesao','colo','uterino','ovariano','ovario','massa']);
   const tokens=s=>tokenizeExternalTitle(s).filter(t=>!ignored.has(t));
   const srcTokens=tokens(source.name);
+  // Clone CITADO no pedido atual resolve primeiro (inclusive forma curta sem
+  // parênteses, que o includes() de nome inteiro não alcança). O veto
+  // anatômico acima continua valendo para citados; só o portão de score e a
+  // heurística de seção são atravessados — a prévia humana decide.
+  const citedMatches = findExplicitCloneMatches(review, source);
+  const citedIds = new Set(citedMatches.matches.map(e=>e.id));
   // A anatomia cadastrada em seção/sítio é a âncora principal. EnTerm pode
   // estar ERRADO no próprio registro (ex.: seroso ovariano com texto legado
   // pancreático): sinaliza conflito, mas não apaga candidato anatomicamente
@@ -21846,16 +21890,18 @@ function findStructuralReviewCandidates(review, source){
     if(declared.has(name)) reasons.push('declared_candidate_name');
     const explicit=!!name && name!==srcName && name.length>=8 && requested.includes(name) && !srcName.includes(name);
     if(explicit) reasons.push('explicit_name_in_review');
+    const cited = citedIds.has(e.id);
+    if(cited && !reasons.includes('explicit_name_in_review')) reasons.push('explicit_name_in_review');
     if(!reasons.length && sameSection && sameSite && srcTokens.length){
       const shared=srcTokens.filter(t=>tokens(e.name).includes(t));
       if(shared.length && externalMatchBand(source.name,e.name)==='alta') reasons.push('same_site_distinctive_name_similarity');
     }
-    if(!reasons.length || (!isDuplicateAction && !explicit)) return;
+    if(!reasons.length || (!isDuplicateAction && !explicit && !cited)) return;
     // Dois endereços anatômicos diferentes sem ponte explícita não bastam
     // para inclusão. Nome mapeado sozinho NÃO atravessa essa barreira:
     // "Cistoadenoma seroso" de OVÁRIO ≠ "Cistoadenoma seroso" de PÂNCREAS,
     // mesmo com o nome em português idêntico.
-    if(hasStrongAnatomicConflict(source,e) && !explicit) return;
+    if(hasStrongAnatomicConflict(source,e) && !explicit && !cited) return;
     if(sameSection) reasons.push('same_section'); else reasons.push('different_section');
     if(sameSection && sameSite) reasons.push('same_site'); else reasons.push('different_site');
     if(enTermAnatomyConflict(e)) reasons.push('different_enTerm_anatomy');
@@ -21863,7 +21909,7 @@ function findStructuralReviewCandidates(review, source){
       known_alias:80,declared_candidate_name:70,same_site_distinctive_name_similarity:20};
     const score=reasons.reduce((n,r)=>n+(evidence[r]||0),0)+(sameSection?35:-65)+(sameSection&&sameSite?25:-30)-
       (reasons.includes('different_enTerm_anatomy')?60:0);
-    if(score>0) out.push({...structuralReviewRecord(e),candidateReason:reasons,candidateScore:score});
+    if(score>0 || cited) out.push({...structuralReviewRecord(e),candidateReason:reasons,candidateScore:score});
   });
   return out.sort((a,b)=>b.candidateScore-a.candidateScore || String(a.id).localeCompare(String(b.id))).slice(0,8);
 }

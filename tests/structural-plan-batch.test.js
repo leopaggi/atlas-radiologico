@@ -34,7 +34,7 @@ function fn(name) {
 const names = ['normalizeExternalTitle', 'normalizeRadiopaediaCaseTitle', 'tokenizeExternalTitle', 'externalTokenOverlap', 'levNormSimilarity', 'externalMatchBand',
   'reviewScope', 'isGlobalReview', 'buildReviewAiAttempts', 'resolveLatestHumanFeedback',
   'structuralReviewPick', 'structuralReviewImageMeta', 'structuralSectionOf', 'structuralSiteOf', 'hasStrongAnatomicConflict',
-  'structuralReviewRecord', 'findStructuralReviewCandidates', 'canonicalJsonString',
+  'structuralReviewRecord', 'findExplicitCloneMatches', 'findStructuralReviewCandidates', 'canonicalJsonString',
   'stableImageKeyV208', 'imageIdentityKeys', 'pushLesionReviewHistory',
   'structuralPlanError', 'structuralPlanString', 'structuralPlanStringArray', 'structuralPlanLesion', 'structuralPlanResolveImage', 'structuralPlanKnownIds',
   'validateStructuralResolution', 'buildStructuralPlanSnapshot', 'isStructuralPlanStale',
