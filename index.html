@@ -635,14 +635,21 @@ body{
   position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;
   z-index:9999;padding:24px;cursor:zoom-out;
 }
-/* Agrupa imagem + descrição (quando houver) numa coluna própria, com scroll
-   interno se a descrição for longa — a imagem nunca fica coberta pelo texto.
-   A largura da coluna é independente do tamanho da imagem (senão uma imagem
-   estreita/retrato forçaria a descrição a quebrar em muitas linhas à toa) —
-   escala com a tela (min() cobre telas grandes E pequenas sem media query). */
+/* Agrupa imagem + descrição (quando houver) numa coluna própria.
+   lrev_mulfu0x2_ocobn9 — causa raiz real (achada via DevTools no navegador
+   real, não só código): `.lightbox-desc` não tinha `max-height`/`overflow-y`
+   próprios — crescia até a altura total do texto (`white-space:pre-wrap`
+   preserva cada quebra de linha literal do dado, podendo passar de 1000px).
+   Quem "rolava" era o PAI (`overflow:auto` aqui embaixo), arrastando a
+   coluna inteira — e como a imagem (`.lightbox-stage`/`.lightbox-img`) vem
+   ANTES da descrição no layout, rolar o conjunto empurrava a imagem pra
+   fora da área visível. Fix: a descrição ganha teto próprio (~5 linhas,
+   calculado a partir do PRÓPRIO font-size/line-height/padding da regra
+   abaixo) + rolagem interna; o pai deixa de precisar rolar o conjunto —
+   imagem e descrição nunca mais competem pelo mesmo eixo de rolagem. */
 .lightbox-content{
   display:flex;flex-direction:column;align-items:center;gap:10px;
-  width:min(1200px,94vw);max-width:100%;max-height:100%;overflow:auto;cursor:default;
+  width:min(1200px,94vw);max-width:100%;max-height:100%;cursor:default;
 }
 .lightbox-img{max-width:100%;max-height:75vh;object-fit:contain;border-radius:4px;flex:0 0 auto;cursor:zoom-out;}
 .lightbox-desc{
@@ -650,6 +657,7 @@ body{
   background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:10px;
   padding:8px 18px;color:#f2f4f6;font-size:14px;line-height:1.4;text-align:left;
   white-space:pre-wrap;overflow-wrap:anywhere;
+  max-height:calc(5 * 1.4em + 16px);overflow-y:auto;overflow-x:hidden;
 }
 .lightbox-close{
   position:absolute;top:16px;right:20px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);
