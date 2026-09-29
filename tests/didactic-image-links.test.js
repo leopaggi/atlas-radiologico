@@ -16,7 +16,10 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
+// Windows checkouts salvam index.html com CRLF; os marcadores abaixo usam \n
+// literal, então normalizamos aqui (só nesta cópia em memória para leitura de
+// testes — não altera o arquivo real).
+const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8').replace(/\r\n/g, '\n');
 const userscript = fs.readFileSync(path.resolve(__dirname, '..', 'tools', 'radiopaedia-to-atlas.user.js'), 'utf8');
 
 function extractFunction(source, name) {
@@ -175,14 +178,14 @@ test('093b 10-11: imagem NOVA de sinal/classificação entra em entry.images (vi
   // no formulário, addImage = pendingImgs (entry.images no Salvar, com lesionId/assignedAt/079d do fluxo normal)
   assert.match(formFn, /addImage: \(im\)=>\{ const n = \{ \.\.\.im, label: im\.label\|\|'', source: im\.source\|\|'url' \}; pendingImgs\.push\(n\); imgsChanged = true; renderImgGallery\(\); return n; \}/);
   assert.match(formFn, /markPendingLocalImageAdds\(entryId, prevForMark, remoteImgs\)/, 'imagem nova passa pelo marcador 079d de sempre');
-  // sinal E classificação têm arquivo/URL/Ctrl+V; caso clínico só seleção
-  assert.match(editorFn, /\(kind !== 'cases' \? '<label class="btn btn-ghost" style="margin:0;">\+ adicionar nova imagem<input type="file" id="de-img-file"/);
+  // paridade lrev_mumkdsuy_ub6vy9: os 3 kinds (cases/signs/schemes) têm arquivo/URL/Ctrl+V
+  assert.match(editorFn, /'<label class="btn btn-ghost" style="margin:0;">\+ adicionar nova imagem<input type="file" id="de-img-file"/);
   assert.match(editorFn, /\+ selecionar imagens da lesão/);
   assert.match(editorFn, /Imagens vinculadas \(<span id="de-linked-count">/);
 });
 
-test('093b 12-13: Ctrl+V em sinal e em classificação usa o mesmo fluxo de imagem temporária + vínculo', () => {
-  assert.match(editorFn, /if \(kind !== 'cases'\) ov\.addEventListener\('paste', \(ev\) => \{/);
+test('093b 12-13: Ctrl+V em sinal, classificação e caso clínico usa o mesmo fluxo de imagem temporária + vínculo (paridade lrev_mumkdsuy_ub6vy9)', () => {
+  assert.match(editorFn, /ov\.addEventListener\('paste', \(ev\) => \{/);
   assert.match(editorFn, /x\.type\.startsWith\('image\/'\)\) \{ const f = x\.getAsFile\(\); if \(f\) files\.push\(f\); \}\s*if \(files\.length\) \{ ev\.preventDefault\(\); addPendingFiles\(files\); return; \}/);
   assert.match(editorFn, /if \(typeof pasteTargetIsText === 'function' && pasteTargetIsText\(ev\.target\)\) return;/, 'texto colado em campo continua colagem normal');
   assert.match(editorFn, /📋 Cole com Ctrl\+V aqui/);

@@ -17,7 +17,10 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
+// Windows checkouts salvam index.html com CRLF; os marcadores abaixo usam \n
+// literal, então normalizamos aqui (só nesta cópia em memória para leitura de
+// testes — não altera o arquivo real).
+const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8').replace(/\r\n/g, '\n');
 
 function extractFunction(source, name) {
   const re = new RegExp('(?:async\\s+)?function\\s+' + name + '\\s*\\([^)]*\\)\\s*\\{');
@@ -54,9 +57,9 @@ const pending = (key) => Object.assign(A.buildPendingImage({ name: key + '.png',
 
 test('093c 1-3: Ctrl+V e arquivo (sinal e classificação) viram temporária do formulário — zero upload no editor', () => {
   assert.doesNotMatch(editorFn, /uploadToCloudinary|uploadPendingImage|fetch\(/, 'o editor do item nunca envia nada');
-  // arquivo e Ctrl+V caem no MESMO addPendingFiles (sinal e classificação: kind !== 'cases')
+  // arquivo e Ctrl+V caem no MESMO addPendingFiles, nos 3 kinds (paridade lrev_mumkdsuy_ub6vy9)
   assert.match(editorFn, /\$\('de-img-file'\)\.onchange = \(ev\) => \{[\s\S]{0,120}addPendingFiles\(files\);/);
-  assert.match(editorFn, /if \(kind !== 'cases'\) ov\.addEventListener\('paste', \(ev\) => \{[\s\S]{0,300}if \(files\.length\) \{ ev\.preventDefault\(\); addPendingFiles\(files\); return; \}/);
+  assert.match(editorFn, /ov\.addEventListener\('paste', \(ev\) => \{[\s\S]{0,300}if \(files\.length\) \{ ev\.preventDefault\(\); addPendingFiles\(files\); return; \}/);
   assert.match(editorFn, /const temp = ctx\.addPendingFile\(f\);\s*if \(!temp\) continue;\s*addedHere\.push\(temp\);\s*refs = linkImageRef\(refs, didacticImageRefId\(temp\)\);/);
   // no formulário: o MESMO buildPendingImage/trackObjectUrl do upload principal
   assert.match(formFn, /addPendingFile: \(file\)=>\{\s*if\(!file \|\| !file\.type \|\| !file\.type\.startsWith\('image\/'\)\) return null;\s*const temp = buildPendingImage\(file, trackObjectUrl\);\s*temp\._pendingKey = newPendingKey\(\);\s*pendingImgs\.push\(temp\); imgsChanged = true; renderImgGallery\(\);/);

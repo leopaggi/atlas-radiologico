@@ -21274,15 +21274,16 @@ function openDidacticItemEditor(kind, item, getLesionMeta, onSave, imageCtx){
   body += '<div class="field didactic-linked"><label>Imagens vinculadas (<span id="de-linked-count">0</span>)</label><div id="de-images"></div>'
     + '<div id="de-legacy-note" class="didactic-meta"></div>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px;"><button type="button" class="btn btn-ghost" id="de-pick"' + (ctx ? '' : ' disabled title="abra pelo Editar da lesão"') + '>+ selecionar imagens da lesão</button>'
-    + (kind !== 'cases' ? '<label class="btn btn-ghost" style="margin:0;">+ adicionar nova imagem<input type="file" id="de-img-file" accept="image/*" multiple hidden></label>' : '')
-    // SIGNS/CLASSIFICATIONS IMAGE PANELS (lrev_mulf9eek_h24i4h): mesmo
-    // construtor de quadro de imagens (▦) do formulário principal e do
-    // Quiz — reaproveitado aqui, sem arquitetura paralela; o quadro pronto
-    // entra pelo MESMO addAndLink() de qualquer outra imagem nova (galeria
-    // da lesão via ctx.addImage, nunca asset duplicado, vínculo por imageRefs).
-    + (kind !== 'cases' ? '<button type="button" class="btn btn-ghost" id="de-collage"' + (ctx ? '' : ' disabled title="abra pelo Editar da lesão"') + '>▦ criar quadro de imagens</button>' : '') + '</div>'
-    + (kind !== 'cases' ? '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px;"><input id="de-img-url" placeholder="ou cole a URL da imagem (https://…)" style="flex:1;min-width:180px;"><button type="button" class="btn btn-ghost" id="de-img-url-add">+ URL</button></div>'
-      + '<div class="didactic-paste-zone" id="de-paste" tabindex="0">📋 Cole com Ctrl+V aqui</div>' : '')
+    + '<label class="btn btn-ghost" style="margin:0;">+ adicionar nova imagem<input type="file" id="de-img-file" accept="image/*" multiple hidden></label>'
+    // SIGNS/CLASSIFICATIONS/CASES IMAGE PANELS (lrev_mulf9eek_h24i4h;
+    // paridade para cases: lrev_mumkdsuy_ub6vy9): mesmo construtor de quadro
+    // de imagens (▦) do formulário principal e do Quiz — reaproveitado aqui,
+    // sem arquitetura paralela; o quadro pronto entra pelo MESMO addAndLink()
+    // de qualquer outra imagem nova (galeria da lesão via ctx.addImage, nunca
+    // asset duplicado, vínculo por imageRefs).
+    + '<button type="button" class="btn btn-ghost" id="de-collage"' + (ctx ? '' : ' disabled title="abra pelo Editar da lesão"') + '>▦ criar quadro de imagens</button></div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px;"><input id="de-img-url" placeholder="ou cole a URL da imagem (https://…)" style="flex:1;min-width:180px;"><button type="button" class="btn btn-ghost" id="de-img-url-add">+ URL</button></div>'
+      + '<div class="didactic-paste-zone" id="de-paste" tabindex="0">📋 Cole com Ctrl+V aqui</div>'
     + '<div class="didactic-meta" style="margin-top:4px;">A imagem fica na galeria da lesão (uma só cópia); aqui só o vínculo — desvincular não apaga a imagem. Nunca envie imagem com nome, prontuário ou outro dado identificável do paciente.</div></div>';
   ov.innerHTML = '<div class="modal didactic-editor-modal"><h2>' + esc(title) + '</h2>' + body
     + '<div id="de-error" role="alert" style="color:var(--red);font-size:13px;min-height:16px;"></div>'
@@ -21386,10 +21387,10 @@ function openDidacticItemEditor(kind, item, getLesionMeta, onSave, imageCtx){
     ev.target.value = '';
     addPendingFiles(files);
   };
-  // Ctrl+V (sinal/classificação): imagem colada -> temporária (upload só no
-  // Salvar); URL colada fora de campo de texto -> imagem por URL. Texto em
+  // Ctrl+V (sinal/classificação/caso): imagem colada -> temporária (upload só
+  // no Salvar); URL colada fora de campo de texto -> imagem por URL. Texto em
   // campo = colar normal.
-  if (kind !== 'cases') ov.addEventListener('paste', (ev) => {
+  ov.addEventListener('paste', (ev) => {
     const items = (ev.clipboardData && ev.clipboardData.items) || [];
     const files = [];
     for (const x of items) if (x && x.type && x.type.startsWith('image/')) { const f = x.getAsFile(); if (f) files.push(f); }

@@ -14,7 +14,10 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
+// Windows checkouts salvam index.html com CRLF; os marcadores abaixo usam \n
+// literal, então normalizamos aqui (só nesta cópia em memória para leitura de
+// testes — não altera o arquivo real).
+const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8').replace(/\r\n/g, '\n');
 const userscript = fs.readFileSync(path.resolve(__dirname, '..', 'tools', 'radiopaedia-to-atlas.user.js'), 'utf8');
 
 function extractFunction(source, name) {

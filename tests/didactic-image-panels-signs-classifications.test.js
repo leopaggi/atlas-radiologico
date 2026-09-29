@@ -1,7 +1,7 @@
 'use strict';
 
-// QUADROS DE IMAGENS EM SINAIS RADIOLÓGICOS E CLASSIFICAÇÕES
-// (reviewId lrev_mulf9eek_h24i4h).
+// QUADROS DE IMAGENS EM SINAIS RADIOLÓGICOS, CLASSIFICAÇÕES E CASOS CLÍNICOS
+// (reviewId lrev_mulf9eek_h24i4h; paridade para casos clínicos: lrev_mumkdsuy_ub6vy9).
 // Sinais/classificações já vinculavam imagens EXISTENTES da galeria e
 // aceitavam imagem nova por arquivo/URL/Ctrl+V (arquitetura 093b/093c:
 // entry.images é a fonte única do asset; o item guarda só `imageRefs`).
@@ -56,11 +56,12 @@ const editorSrc = extractFunction(html, 'openDidacticItemEditor');
 // 1/2. ESTÁTICO — botão novo só para signs/schemes, reaproveita openCollageBuilder
 // ===========================================================================
 
-test('1. template do editor: "▦ criar quadro de imagens" existe só para signs/schemes (kind !== \'cases\'), igual aos outros controles de imagem nova', () => {
+test('1. template do editor: "▦ criar quadro de imagens" existe para os 3 kinds (cases/signs/schemes), igual aos outros controles de imagem nova (paridade lrev_mumkdsuy_ub6vy9)', () => {
   const idx = editorSrc.indexOf('id="de-collage"');
   assert.notEqual(idx, -1, 'botão não encontrado no template');
   const nearby = editorSrc.slice(Math.max(0, idx - 260), idx + 120);
-  assert.match(nearby, /kind !== 'cases' \? '<button type="button" class="btn btn-ghost" id="de-collage"/);
+  assert.doesNotMatch(nearby, /kind !== 'cases' \?/, 'não deve mais estar condicionado a kind — paridade total entre cases/signs/schemes');
+  assert.match(nearby, /'<button type="button" class="btn btn-ghost" id="de-collage"/);
   assert.match(nearby, /\(ctx \? '' : ' disabled title="abra pelo Editar da lesão"'\)/, 'desabilitado fora do contexto da lesão, igual ao de-pick');
 });
 
@@ -73,10 +74,13 @@ test('2. wiring do "de-collage": chama openCollageBuilder com deferUpload=true e
   assert.match(nearby, /openCollageBuilder\(getLesionMeta\(\), \(collage\) => \{ if \(addAndLink\(collage\)\) err\(''\); \}, null, true\);/);
 });
 
-test('3. o quadro NUNCA aparece para casos clínicos (kind===\'cases\' preserva o comportamento existente, sem alteração)', () => {
-  const idx = editorSrc.indexOf('id="de-collage"');
-  const before = editorSrc.slice(Math.max(0, idx - 260), idx);
-  assert.match(before, /kind !== 'cases' \?/, 'condicionado exatamente como os outros controles de imagem nova de signs/schemes');
+test('3. paridade lrev_mumkdsuy_ub6vy9: upload de arquivo novo, "+ URL" e a zona de colar (Ctrl+V) também deixaram de ser exclusivos de signs/schemes — cases ganha os mesmos controles', () => {
+  assert.doesNotMatch(editorSrc, /kind !== 'cases' \? '<label class="btn btn-ghost"/, 'upload de arquivo novo agora incondicional');
+  assert.doesNotMatch(editorSrc, /kind !== 'cases' \? '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px;"><input id="de-img-url"/, 'campo de URL agora incondicional');
+  assert.doesNotMatch(editorSrc, /if \(kind !== 'cases'\) ov\.addEventListener\('paste'/, 'listener de colar (Ctrl+V) agora incondicional');
+  assert.match(editorSrc, /id="de-img-file"/);
+  assert.match(editorSrc, /id="de-img-url"/);
+  assert.match(editorSrc, /id="de-paste"/);
 });
 
 test('4. reordenar/remover vínculo continuam disponíveis (↑/↓/✕ do editor, arquitetura já existente, não recriada)', () => {
