@@ -197,5 +197,5 @@ test('boot 1.4.2 = boot da 1.3.0: nada da ponte roda antes do botão; ponte só 
   assert.match(SRC, /try \{\s*sendToAtlasViaBridge\(payload, url, defaultBridgeEnv\(\)\);\s*\} catch \(e\) \{\s*openAtlasWindow\(url\);\s*\}/);
   assert.equal((SRC.match(/GM_setValue\(|GM_addValueChangeListener\(|new env\.BroadcastChannel\(/g) || []).length, 3, 'GM/BC só dentro das funções da ponte');
   assert.doesNotMatch(SRC, /[̀-ͯ]/, 'sem caracteres combinantes invisíveis no arquivo');
-  assert.match(SRC, /@version\s+1\.4\.2\b/);
+  assert.match(SRC, /@version\s+1\.4\.3\b/);
 });

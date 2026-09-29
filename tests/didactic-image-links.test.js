@@ -355,6 +355,6 @@ test('093b 27-28: casos importados continuam válidos; importação do Radiopaed
   assert.equal(A.sortDidacticItems(merged).length, 1);
   assert.equal(merged[0].imageRefs[0].imageId, 'asset:asset1');
   // userscript não muda (nem vincula por URL)
-  assert.match(userscript, /@version\s+1\.4\.2/);
+  assert.match(userscript, /@version\s+1\.4\.3/);
   assert.doesNotMatch(userscript, /imageRefs|imageId|radiologicSigns|classificationSchemes/);
 });
