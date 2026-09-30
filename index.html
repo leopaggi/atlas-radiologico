@@ -290,10 +290,13 @@ body{
 /* PROTEÇÃO 086 — alerta de revisão ativa junto ao nome da lesão */
 .lesion-review-warning{display:inline-flex;align-items:center;justify-content:center;margin-left:6px;padding:0 4px;min-width:1.25em;height:1.25em;border-radius:4px;background:#facc15;color:#1c1917;border:1px solid #a16207;font-size:.78em;font-weight:700;line-height:1;vertical-align:middle;white-space:nowrap;flex:none;cursor:pointer;}
 .didactic-block{border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin:8px 0;}
-.didactic-block>summary{cursor:pointer;font-weight:600;color:var(--text);padding:4px 0;}
-.didactic-item{border-top:1px solid var(--line);padding:6px 0;}
-.didactic-item>summary{cursor:pointer;color:var(--text);}
-.didactic-item-title{font-weight:600;}
+.didactic-block>summary{cursor:pointer;list-style:none;font-weight:600;font-size:13px;line-height:1.5;color:var(--muted);padding:4px 0;}
+.didactic-block>summary::-webkit-details-marker{display:none;}
+.didactic-block>summary::before{content:'▸ ';}
+.didactic-block[open]>summary::before{content:'▾ ';}
+.didactic-item{border-top:1px solid var(--line);padding:6px 0;margin-left:6px;}
+.didactic-item-head{margin-bottom:2px;}
+.didactic-item-title{font-weight:700;color:var(--text);}
 .didactic-item-body{padding:4px 0 2px 0;font-size:13px;}
 .didactic-text p{margin:4px 0;} .didactic-text ul{margin:4px 0 4px 18px;padding:0;}
 .didactic-subtitle{font-weight:700;margin:8px 0 2px 0;color:var(--text);}
@@ -20683,25 +20686,25 @@ function didacticViewsHtml(views, collapseCaseCaptions){
 function radiologicSignHtml(s, entry){
   const views = didacticImageViews(s, entry); // 093b: vínculos + antigas
   const n = views.length;
-  return '<details class="didactic-item didactic-sign"><summary><span class="didactic-item-title">' + esc(s.title) + '</span> '
+  return '<div class="didactic-item didactic-sign"><div class="didactic-item-head"><span class="didactic-item-title">' + esc(s.title) + '</span> '
     + '<span class="didactic-badge didactic-badge-' + escAttr(s.strength) + '">' + esc(DIDACTIC_SIGN_STRENGTHS[s.strength] || '') + '</span>'
-    + (n ? ' <span class="didactic-meta">· ' + n + (n === 1 ? ' imagem' : ' imagens') + '</span>' : '') + '</summary>'
+    + (n ? ' <span class="didactic-meta">· ' + n + (n === 1 ? ' imagem' : ' imagens') + '</span>' : '') + '</div>'
     + '<div class="didactic-item-body">'
     + (s.description ? '<div class="didactic-text">' + renderDidacticRichText(s.description) + '</div>' : '')
     + (s.modality ? '<div class="didactic-meta">Modalidade: ' + esc(s.modality) + '</div>' : '')
     + (s.notes ? '<div class="didactic-meta">' + esc(s.notes) + '</div>' : '')
     + didacticViewsHtml(views)
     + (s.referenceUrl ? '<a class="detail-link" href="' + escAttr(s.referenceUrl) + '" target="_blank" rel="noopener">↗ Referência</a>' : '')
-    + '</div></details>';
+    + '</div></div>';
 }
 function classificationSchemeHtml(c, entry){
   const links = Array.isArray(c.links) ? c.links : [];
-  return '<details class="didactic-item didactic-scheme"><summary><span class="didactic-item-title">' + esc(c.title) + '</span></summary>'
+  return '<div class="didactic-item didactic-scheme"><div class="didactic-item-title">' + esc(c.title) + '</div>'
     + '<div class="didactic-item-body">'
     + (c.content ? '<div class="didactic-text">' + renderDidacticRichText(c.content) + '</div>' : '')
     + didacticViewsHtml(didacticImageViews(c, entry)) // 093b
     + (links.length ? '<div class="didactic-links">' + links.map(l => '<a class="detail-link" href="' + escAttr(l.url) + '" target="_blank" rel="noopener">↗ ' + esc(l.label || l.url) + '</a>').join('') + '</div>' : '')
-    + '</div></details>';
+    + '</div></div>';
 }
 // Blocos do detalhe/Quiz (somem quando vazios no modo leitura).
 function radiologicSignsSectionHtml(entry){
