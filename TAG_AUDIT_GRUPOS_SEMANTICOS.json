@@ -1,0 +1,202 @@
+{
+  "gerado_em": "2026-10-01T02:15:08.161Z",
+  "observacao_geral": "Nenhuma tag literalmente generica (alteracao/lesao/massa/achado/inespecifico) foi encontrada como tag isolada. O vocabulario funciona como um conjunto de descritores facetados combinaveis, entao adjetivos amplos isolados podem ser legitimos \"blocos de montagem\" e nao ruido — tratados caso a caso como REVISAR, nunca ELIMINAR automatico.",
+  "tags_genericas_literais_encontradas": [],
+  "grupos": [
+    {
+      "id": "G1-infeccioso-inflamatorio-ordem",
+      "titulo": "Duplicata por ordem de palavras: infeccioso/inflamatório vs inflamatório/infeccioso",
+      "tags": [
+        "infeccioso/inflamatório",
+        "inflamatório/infeccioso"
+      ],
+      "tipo": "duplicata_ordem_palavras",
+      "analise": "Mesmos dois conceitos, apenas em ordem invertida. Nao ha diferenca semantica entre as duas grafias — e a unica dupla do catalogo onde a equivalencia e inequivoca (nao depende de nuance clinica).",
+      "sugestao": "EDITAR — padronizar para uma unica forma (ex.: \"infeccioso/inflamatório\") nas 9 lesoes que usam a forma invertida.",
+      "confianca": "alta"
+    },
+    {
+      "id": "G2-bem-circunscrita-familia",
+      "titulo": "Família \"margem bem definida\": bem circunscrita / bem delimitado / bordos bem definidos",
+      "tags": [
+        "bem circunscrita",
+        "bem delimitado",
+        "bordos bem definidos",
+        "massa bem delimitada",
+        "nódulo bem delimitado"
+      ],
+      "tipo": "sinonimo_possivel",
+      "analise": "\"bem circunscrita\" (216 usos) e \"bem delimitado\" (12 usos) parecem semanticamente equivalentes, com a diferenca podendo ser so concordancia de genero com o substantivo da lesao (lesao=fem, nodulo/contorno=masc) OU podendo refletir uma distincao real pretendida pelo autor (ex.: \"circunscrita\" = tem capsula/pseudocapsula vs \"delimitado\" = apenas contorno nitido sem implicar capsula). \"bordos bem definidos\" (1 uso) e provavelmente so uma variacao de fraseado da mesma ideia.",
+      "sugestao": "REVISAR — alto volume de uso (228 associacoes combinadas) torna qualquer fusao de alto impacto; decisao de normalizar deve ser humana.",
+      "confianca": "media"
+    },
+    {
+      "id": "G3-hemorragico-hematica",
+      "titulo": "hemorrágico vs hemática (exemplo citado pelo usuário)",
+      "tags": [
+        "hemorrágico",
+        "hemática"
+      ],
+      "tipo": "sinonimo_possivel",
+      "analise": "\"hemática\" e usada 1x, especificamente para describer liquido pleural em hemotorax traumatico (seed_419) — pode ser um adjetivo mais apropriado para FLUIDO (derrame hemático) do que \"hemorrágico\", que descreve tecido/processo. Nuance plausivel, nao e seguro assumir equivalencia total.",
+      "sugestao": "REVISAR.",
+      "confianca": "baixa-media"
+    },
+    {
+      "id": "G4-hematogenico-nao-e-hemorragico",
+      "titulo": "ALERTA: hematogênico/hematogênica NÃO é sinônimo de hemorrágico",
+      "tags": [
+        "hematogênico",
+        "hematogênica",
+        "hemorrágico"
+      ],
+      "tipo": "falso_sinonimo_descartado",
+      "analise": "Raiz textual parecida (\"hemat-\"), mas significado totalmente diferente: \"hematogênico/a\" descreve disseminacao PELA via sanguinea (ex.: metastase hematogenica), nao sangramento. Nao e um grupo de redundancia — apenas \"hematogênico\" (masc, 8 usos) e \"hematogênica\" (fem, 1 uso) entre si podem ser so concordancia de genero.",
+      "sugestao": "MANTER ambos frente a \"hemorrágico\" (conceitos distintos). REVISAR apenas o par hematogênico/hematogênica entre si (genero gramatical).",
+      "confianca": "alta (para o descarte do falso par)"
+    },
+    {
+      "id": "G5-genero-gramatical",
+      "titulo": "Pares de concordância de gênero gramatical (adjetivo acompanhando substantivo implícito)",
+      "tags": [
+        "sólido-cístico",
+        "sólido-cística",
+        "multilocular",
+        "multiloculada",
+        "benigna",
+        "benigno",
+        "benignidade"
+      ],
+      "tipo": "variacao_genero_gramatical",
+      "analise": "Padrao recorrente no catalogo: a mesma tag conceitual existe em forma masculina e feminina porque o autor concordou o adjetivo com o substantivo da lesao no momento de tagueamento (ex.: \"nódulo sólido-cístico\" vs \"massa sólido-cística\"). Isso NAO e necessariamente um erro — e uma particularidade de tagueamento em portugues que um sistema de tags totalmente neutro (ingles) nao teria. \"benignidade\" (substantivo, 16 usos) tambem convive com \"benigna\"/\"benigno\" (adjetivos, 6+3 usos) — aqui pode haver intencao real (characteristica \"sinal de benignidade\" vs classificacao \"e benigna\"), nao so genero.",
+      "sugestao": "REVISAR — decisao de politica do projeto (ex.: padronizar sempre para a forma masculina singular como \"chave canonica\" independente do substantivo real) e mais apropriada que corrigir tag a tag.",
+      "confianca": "media",
+      "excecao": "seed_692 \"Nódulo pulmonar subsólido persistente\" esta tagueado com \"subsólida\" (feminino), mas o proprio NOME da lesao usa \"subsólido\" (masculino, concordando com \"nódulo\"). Isso parece ser um erro de digitação, não uma variação intencional — ver tag \"subsólida\" na tabela principal (candidata a EDITAR, nao apenas REVISAR)."
+    },
+    {
+      "id": "G6-realce-familia",
+      "titulo": "Família \"realce\" — tag genérica convivendo com variantes qualificadas",
+      "tags": [
+        "realce",
+        "realce heterogêneo",
+        "realce homogêneo",
+        "realce em anel",
+        "realce periférico",
+        "realce nodular periférico",
+        "realce relativamente homogêneo",
+        "hiperrealce mucoso",
+        "realce mucoso"
+      ],
+      "tipo": "hierarquia_possivel",
+      "analise": "\"realce\" sozinho (29 usos) e generico frente as 20 variantes qualificadas (heterogêneo/homogêneo/em anel/periférico etc.) que já existem no vocabulário. Pode ser usado quando nenhuma qualificação se aplica (legítimo) ou pode ser um \"escape\" quando o autor não quis escolher — não dá para saber sem reler as 29 lesões. \"realce relativamente homogêneo\" (1 uso, seed_832) parece um hedge de \"realce homogêneo\" (28 usos). \"hiperrealce mucoso\" (2) e \"realce mucoso\" (1) tambem se sobrepõem.",
+      "sugestao": "REVISAR tag genérica \"realce\"; EDITAR candidato de baixa confiança: \"realce relativamente homogêneo\" → \"realce homogêneo\" (1 lesão).",
+      "confianca": "baixa (tag genérica) / média (hedge específico)"
+    },
+    {
+      "id": "G7-realce-periferico-vs-anel",
+      "titulo": "realce periférico vs realce em anel (exemplo citado pelo usuário, forma real no catálogo é \"realce em anel\")",
+      "tags": [
+        "realce periférico",
+        "realce em anel"
+      ],
+      "tipo": "hierarquia_nao_sinonimo",
+      "analise": "\"realce em anel\" (anular/em anel completo, 28 usos) é um PADRÃO específico (abscesso, metástase, glioblastoma); \"realce periférico\" (18 usos) é mais amplo (realce predominando na periferia, nem sempre formando anel completo). Prováveis conceitos relacionados em hierarquia (anel ⊂ periférico), não puros sinônimos.",
+      "sugestao": "MANTER ambos — a distinção parece clinicamente intencional.",
+      "confianca": "media-alta"
+    },
+    {
+      "id": "G8-ausencia-de-realce-familia",
+      "titulo": "ausência de realce / ausência de realce interno / ausência de realce significativo",
+      "tags": [
+        "ausência de realce",
+        "ausência de realce interno",
+        "ausência de realce significativo"
+      ],
+      "tipo": "gradacao_possivel",
+      "analise": "Possível gradação intencional: \"interno\" especifica que a PAREDE pode realçar mas o conteúdo não (típico de cisto simples com parede fina); \"significativo\" talvez indique realce mínimo/trivial presente mas não relevante. Não é claramente redundante.",
+      "sugestao": "REVISAR.",
+      "confianca": "baixa"
+    },
+    {
+      "id": "G9-compostos-either-or",
+      "titulo": "Padrão recorrente: tags compostas \"A ou B\" / \"A/B\" expressando incerteza diferencial",
+      "tags": [
+        "lítica ou esclerótica",
+        "focal ou multifocal",
+        "unilateral ou bilateral",
+        "adquirida ou congênita",
+        "agrupada ou segmentar",
+        "trauma/anticoagulação",
+        "septos espessos/nódulos",
+        "inflamatório/desmielinizante"
+      ],
+      "tipo": "padrao_estrutural",
+      "analise": "Em vez de aplicar as duas tags atômicas já existentes separadamente (ex.: \"focal\" + \"multifocal\" já existem como tags isoladas), o catálogo às vezes usa uma tag composta única para expressar \"pode ser A ou B\". Isso reduz a filtrabilidade (uma busca por \"multifocal\" não encontra lesões marcadas \"focal ou multifocal\"). \"unilateral ou bilateral\" é o caso mais fraco — praticamente não discrimina nada.",
+      "sugestao": "REVISAR o padrão como um todo (decisão de política: dividir em duas tags atômicas vs manter composto como \"incerteza registrada\"); \"unilateral ou bilateral\" é o candidato mais forte a reavaliação por baixo valor discriminativo.",
+      "confianca": "media"
+    },
+    {
+      "id": "G10-trauma-redundancia-pos-normalizacao",
+      "titulo": "Redundância potencial criada pela normalização de trauma já aplicada",
+      "tags": [
+        "trauma",
+        "trauma direto",
+        "trauma/anticoagulação"
+      ],
+      "tipo": "efeito_colateral_edicao_anterior",
+      "analise": "Após a tarefa anterior (normalização de \"contexto de trauma\" → \"trauma\" e adição de \"trauma\" aos 43 candidatos seguros), 4 lesões passaram a ter SIMULTANEAMENTE a tag genérica \"trauma\" e uma tag de mecanismo mais específica: seed_77, seed_317, seed_685 (\"trauma/anticoagulação\") e seed_1217 (\"trauma direto\"). As tags específicas ainda agregam informação de mecanismo (trauma direto vs trauma OU anticoagulação) que \"trauma\" sozinha não carrega — não é redundância pura.",
+      "sugestao": "REVISAR — decidir se as tags de mecanismo específico devem conviver com \"trauma\" (visão: trauma=categoria ampla, mecanismo=detalhe) ou se \"trauma\" deveria ter sido omitida nessas 4 lesões por já estar implícita.",
+      "confianca": "media",
+      "lesoesAfetadas": [
+        "seed_77:Hematoma paravertebral",
+        "seed_317:Hematoma muscular intramuscular",
+        "seed_685:Hematoma da parede torácica",
+        "seed_1217:Ruptura do ligamento cruzado posterior"
+      ]
+    },
+    {
+      "id": "G11-margens-familia",
+      "titulo": "margens irregulares / margens mal definidas / mal definida",
+      "tags": [
+        "margens irregulares",
+        "margens mal definidas",
+        "mal definida"
+      ],
+      "tipo": "sinonimo_parcial",
+      "analise": "\"irregulares\" (forma do contorno) e \"mal definidas\" (nitidez do contorno) são conceitos relacionados mas tecnicamente distintos em radiologia (uma margem pode ser regular porém mal definida, ou irregular porém nítida). \"mal definida\" (1 uso, seed_770 Elastofibroma dorsal) é provavelmente forma abreviada de \"margens mal definidas\" (12 usos) referindo-se à mesma lesão, não a um conceito novo.",
+      "sugestao": "MANTER \"margens irregulares\" vs \"margens mal definidas\" (conceitos distintos). EDITAR candidato de baixa confiança: \"mal definida\" → \"margens mal definidas\" (1 lesão) — mas requer confirmar no contexto que não se refere a outra coisa (ex. \"lesão mal definida\" como um todo).",
+      "confianca": "baixa-media"
+    },
+    {
+      "id": "G12-modalidade-vs-achado",
+      "titulo": "Observação estrutural: tags de MODALIDADE de imagem misturadas com tags de ACHADO",
+      "tags": [
+        "radiografia",
+        "RM",
+        "TC",
+        "US",
+        "US dinâmico",
+        "RM artrografia",
+        "dinâmica com contraste"
+      ],
+      "tipo": "observacao_arquitetural",
+      "analise": "Essas tags descrevem a TÉCNICA usada para evidenciar o achado, nao uma caracteristica da lesao em si — uma categoria semantica diferente de \"hemorrágico\", \"bem circunscrita\" etc. Nao sao redundantes entre si (cada uma e uma modalidade distinta), mas misturar as duas categorias na mesma lista de \"tags\" pode dificultar filtros (buscar por achados vs buscar por modalidade).",
+      "sugestao": "MANTER individualmente (nenhuma e redundante). REVISAR como observação de modelagem de dados: considerar campo separado \"modalidades\" no futuro, fora do escopo desta auditoria.",
+      "confianca": "alta (observação), nao e um problema de conteudo"
+    },
+    {
+      "id": "G13-septos-familia",
+      "titulo": "septos espessos / septos espessos+nódulos / septos internos / septos vascularizados",
+      "tags": [
+        "septos espessos",
+        "septos espessos/nódulos",
+        "septos internos",
+        "septos vascularizados"
+      ],
+      "tipo": "composto_divisivel",
+      "analise": "\"septos espessos/nódulos\" combina dois achados (septos espessos E presença de nódulos) que já existem como tags atômicas separadas no vocabulário (\"septos espessos\" e, implicitamente, achados nodulares). É um composto divisível, não um conceito novo.",
+      "sugestao": "EDITAR — dividir em duas tags atômicas já existentes nas 2 lesões afetadas (seed_192, seed_694).",
+      "confianca": "media"
+    }
+  ]
+}

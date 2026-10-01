@@ -628,6 +628,53 @@ body{
    Aceitar bloqueado por stale parece operacional e o clique "não funciona". */
 .btn:disabled{opacity:.35;cursor:not-allowed;filter:none;}
 
+/* ---------- Auditoria de tags (painel de decisão, somente leitura sobre DATA) ---------- */
+.tag-audit-modal{max-width:1180px;width:96vw;}
+.tag-audit-counters{display:flex;flex-wrap:wrap;gap:8px;font-size:12px;margin-bottom:10px;}
+.tag-audit-counters span{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:4px 10px;color:var(--muted);}
+.tag-audit-counters span b{color:var(--text);}
+.tag-audit-tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;}
+.tag-audit-filters{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0;align-items:center;}
+.tag-audit-filters select,.tag-audit-filters input{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:6px 8px;border-radius:var(--radius);font-size:12px;font-family:inherit;}
+.tag-audit-filters input[type=search]{flex:1;min-width:160px;}
+.tag-audit-table-wrap{max-height:58vh;overflow:auto;border:1px solid var(--line);border-radius:8px;}
+.tag-audit-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.tag-audit-table th{position:sticky;top:0;background:var(--panel-2);color:var(--muted);text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap;z-index:1;}
+.tag-audit-table td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--text);}
+.tag-audit-table tr.tar-decided-keep{background:rgba(95,199,212,.07);}
+.tag-audit-table tr.tar-decided-edit{background:rgba(232,147,91,.09);}
+.tag-audit-table tr.tar-decided-eliminate{background:rgba(217,117,107,.09);}
+.tag-audit-table tr.tar-decided-review{background:rgba(255,255,255,.035);}
+.tar-tagname{font-weight:600;}
+.tar-badge{font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:7px;margin-left:4px;display:inline-block;white-space:nowrap;}
+.tar-badge.manter{color:var(--teal);background:rgba(95,199,212,.14);}
+.tar-badge.editar{color:var(--amber);background:rgba(232,147,91,.16);}
+.tar-badge.eliminar{color:var(--red);background:rgba(217,117,107,.16);}
+.tar-badge.revisar{color:var(--muted);background:var(--panel);}
+.tar-badge.ausente{color:var(--red);background:rgba(217,117,107,.1);}
+.tar-badge.naoauditada{color:var(--amber);background:rgba(232,147,91,.1);}
+.tar-badge.unico{color:var(--muted-2);background:var(--panel);}
+.tar-badge.aplicada{color:var(--teal);background:rgba(95,199,212,.18);}
+.tar-reason{color:var(--muted);font-size:11.5px;}
+.tar-lesion-link{color:var(--teal);background:none;border:none;cursor:pointer;font-family:inherit;font-size:12px;padding:0;text-decoration:underline;}
+.tar-actions{display:flex;flex-wrap:wrap;gap:4px;}
+.tar-actions button{font-size:10.5px;padding:4px 7px;border-radius:6px;border:1px solid var(--line);background:var(--panel-2);color:var(--muted);cursor:pointer;font-family:inherit;}
+.tar-actions button:hover{color:var(--text);border-color:var(--muted-2);}
+.tar-actions button.active.keep{background:var(--teal);border-color:var(--teal);color:#04211d;}
+.tar-actions button.active.edit{background:var(--amber);border-color:var(--amber);color:#1a1108;}
+.tar-actions button.active.eliminate{background:var(--red);border-color:var(--red);color:#2a0e0b;}
+.tar-actions button.active.review{background:var(--line);border-color:var(--muted-2);color:var(--text);}
+.tag-audit-groups{display:flex;flex-direction:column;gap:10px;}
+.tag-audit-group-card{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel-2);font-size:12.5px;}
+.tag-audit-group-card h4{margin:0 0 4px;font-size:13px;color:var(--text);}
+.tag-audit-group-card .tar-group-meta{font-size:11px;color:var(--muted-2);margin-bottom:6px;}
+.tag-audit-group-card .tar-group-tags{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0;}
+.tag-audit-group-tagchip{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px 9px;font-size:11.5px;color:var(--text);}
+.tag-audit-group-tagchip b{color:var(--teal);}
+.tar-plan-box{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel-2);font-size:12.5px;margin-top:10px;}
+.tar-plan-box h4{margin:0 0 8px;font-size:13px;color:var(--text);}
+.tar-conflict{color:var(--red);}
+
 /* detail modal specifics */
 .detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0;}
 .detail-img{width:100%;max-height:260px;object-fit:cover;border-radius:var(--radius);margin-bottom:14px;background:var(--panel-2);}
@@ -1825,6 +1872,7 @@ body{
         <button class="foot-btn" id="btn-audit-images" title="Verifica se cada imagem está anexada à lesão certa, usando a etiqueta guardada na própria imagem">🔍 auditar vínculo de imagens<br><span class="foot-btn-sub">confere se as imagens continuam associadas às lesões corretas — não altera nada</span></button>
         <button class="foot-btn" id="btn-clinical-merges-091c" title="Fusão controlada dos 4 grupos de duplicatas clínicas APROVADOS pelo usuário. Mostra o relatório com os dados reais antes; exige backup recente e cria snapshot.">🧬 fusões clínicas aprovadas<br><span class="foot-btn-sub">relatório antes — só funde após backup + confirmação</span></button>
         <button class="foot-btn" id="btn-classification-audit" title="Compara a classificação de cada lesão com o SEED pela identidade (seção+sítio+nome) e aponta as inválidas; corrigir exige confirmação e cria snapshot">📋 auditar classificações<br><span class="foot-btn-sub">aponta classificações inválidas — não altera nada até você confirmar</span></button>
+        <button class="foot-btn" id="btn-tag-audit" title="Painel interativo para revisar as tags do catálogo (manter/editar/eliminar/revisar). Usa o DATA atual em runtime para contagens e lesões; não altera nenhuma tag — só registra suas decisões localmente">🏷️ auditoria de tags<br><span class="foot-btn-sub">revisão interativa — decisões ficam salvas no navegador, nada é aplicado aqui</span></button>
       </div>
     </div>
   </div>
@@ -9631,7 +9679,8 @@ const SAFETY_SNAPSHOT_RISK_REASONS = [
   'antes de operação em massa de ownership',
   'antes de corrigir classificações inválidas',
   'antes de migrar sítio de lesão',
-  'antes da fusão clínica controlada de duplicatas aprovadas' // PROTEÇÃO 091c
+  'antes da fusão clínica controlada de duplicatas aprovadas', // PROTEÇÃO 091c
+  'antes de aplicar decisões de auditoria de tags'
 ];
 function isRiskSnapshotReason(reason){ return SAFETY_SNAPSHOT_RISK_REASONS.includes(reason); }
 
@@ -12322,6 +12371,732 @@ function openClassificationAuditModal(){
     if(typeof renderAll==='function') renderAll();
     refresh();
   };
+}
+
+/* ============================================================
+   AUDITORIA DE TAGS — painel de decisão (interativo)
+   ------------------------------------------------------------
+   Lê sugestões estáticas de TAG_AUDIT_DECISOES.csv (tag, status
+   sugerido, ação, destino, motivo) e TAG_AUDIT_GRUPOS_SEMANTICOS.json
+   (grupos semânticos curados), mas SEMPRE recalcula contagem de uso e
+   lesões afetadas a partir do DATA atual em runtime — nunca da lista
+   estática do SEED/auditoria. Decisões humanas (manter/editar/
+   eliminar/revisar) ficam em localStorage, separadas dos dados
+   clínicos (DATA/SEED/Firestore não são tocados por nada aqui).
+   Mesmo que uma tag conste como "REVISAR" por decisão deliberada da
+   auditoria (ex.: grupo "trauma"/"trauma direto"/"trauma/
+   anticoagulação" — ver G10), este painel não sobrepõe isso: apenas
+   exibe o suggested_status como veio do arquivo.
+   ============================================================ */
+const TAG_AUDIT_DECISIONS_KEY = 'atlasTagAuditDecisions';
+let TAG_AUDIT_SOURCE = null;
+
+function tagAuditLoadDecisions(){
+  try{ const raw = window.localStorage.getItem(TAG_AUDIT_DECISIONS_KEY); return raw ? JSON.parse(raw) : {}; }
+  catch(e){ return {}; }
+}
+function tagAuditSaveDecisions(obj){
+  try{ window.localStorage.setItem(TAG_AUDIT_DECISIONS_KEY, JSON.stringify(obj)); }catch(e){}
+}
+function tagAuditSetDecision(tag, decision, extra){
+  const all = tagAuditLoadDecisions();
+  all[tag] = Object.assign({ decision: decision, decidedAt: new Date().toISOString() }, extra || {});
+  tagAuditSaveDecisions(all);
+  return all;
+}
+
+// Parser CSV minimalista (RFC4180-ish: aspas duplas, vírgula, "" escapada).
+function tagAuditParseCSV(text){
+  const rows = []; let row = [], field = '', inQuotes = false;
+  for(let i = 0; i < text.length; i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){ if(text[i+1] === '"'){ field += '"'; i++; } else inQuotes = false; }
+      else field += c;
+    } else {
+      if(c === '"') inQuotes = true;
+      else if(c === ','){ row.push(field); field = ''; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; }
+      else if(c === '\r'){ /* ignora */ }
+      else field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  if(!rows.length) return [];
+  const header = rows[0];
+  return rows.slice(1).filter(r => r.length > 1 || r[0] !== '').map(r => {
+    const o = {}; header.forEach((h, idx) => { o[h] = r[idx] !== undefined ? r[idx] : ''; }); return o;
+  });
+}
+
+async function tagAuditFetchSource(){
+  if(TAG_AUDIT_SOURCE) return TAG_AUDIT_SOURCE;
+  const byTag = new Map(); let groups = []; let decisoesOk = false, gruposOk = false;
+  try{
+    const res = await fetch('TAG_AUDIT_DECISOES.csv', { cache: 'no-store' });
+    if(res.ok){
+      const rows = tagAuditParseCSV(await res.text());
+      rows.forEach(r => {
+        if(!r.tag) return;
+        byTag.set(r.tag, {
+          usage_count_at_audit: Number(r.usage_count) || 0,
+          suggested_status: r.suggested_status || 'REVISAR',
+          suggested_action: r.suggested_action || '',
+          suggested_target: r.suggested_target || '',
+          reason: r.reason || ''
+        });
+      });
+      decisoesOk = true;
+    }
+  }catch(e){ console.warn('[TagAudit] Falha ao carregar TAG_AUDIT_DECISOES.csv', e); }
+  try{
+    const res2 = await fetch('TAG_AUDIT_GRUPOS_SEMANTICOS.json', { cache: 'no-store' });
+    if(res2.ok){ const j = await res2.json(); groups = Array.isArray(j.grupos) ? j.grupos : []; gruposOk = true; }
+  }catch(e){ console.warn('[TagAudit] Falha ao carregar TAG_AUDIT_GRUPOS_SEMANTICOS.json', e); }
+  TAG_AUDIT_SOURCE = { byTag: byTag, groups: groups, decisoesOk: decisoesOk, gruposOk: gruposOk };
+  return TAG_AUDIT_SOURCE;
+}
+
+function tagAuditComputeLiveIndex(){
+  const idx = new Map();
+  (Array.isArray(DATA) ? DATA : []).forEach(e => {
+    if(!e) return;
+    (Array.isArray(e.tags) ? e.tags : []).forEach(t => {
+      if(!idx.has(t)) idx.set(t, []);
+      idx.get(t).push({ id: e.id, name: e.name, s: e.s, site: e.site });
+    });
+  });
+  return idx;
+}
+
+function tagAuditBuildRows(source, liveIndex){
+  const decisions = tagAuditLoadDecisions();
+  // Inclui tags só com decisão salva (nem na auditoria nem mais vivas em DATA)
+  // — garante que elas apareçam como "ausente" em vez de somem silenciosamente.
+  const allTags = new Set([...source.byTag.keys(), ...liveIndex.keys(), ...Object.keys(decisions)]);
+  const rows = [];
+  for(const tag of allTags){
+    const audited = source.byTag.get(tag) || null;
+    const liveLesions = liveIndex.get(tag) || [];
+    const liveCount = liveLesions.length;
+    const decision = decisions[tag] || null;
+    // "ausente": a tag nao existe mais em DATA, mas existia na auditoria OU
+    // tem uma decisão humana salva (ex.: decidida quando ainda era "não
+    // auditada" e desde então sumiu do catálogo) — nunca fica invisível.
+    const absent = liveCount === 0 && (!!audited || !!decision);
+    const notAudited = !audited && liveCount > 0;
+    // "arquivada": decisão já foi efetivamente aplicada E a tag não existe
+    // mais em DATA — sai da tabela principal (ativa) e vai para a visão
+    // "Aplicadas / Arquivadas". Nunca apaga a decisão em si (ver abaixo).
+    const archived = !!(decision && decision.appliedAt) && liveCount === 0;
+    const groupMatches = source.groups.filter(g => Array.isArray(g.tags) && g.tags.indexOf(tag) !== -1);
+    rows.push({
+      tag: tag, liveCount: liveCount, auditedCount: audited ? audited.usage_count_at_audit : null,
+      suggested_status: audited ? audited.suggested_status : null,
+      suggested_action: audited ? audited.suggested_action : '',
+      suggested_target: audited ? audited.suggested_target : '',
+      reason: audited ? audited.reason : (notAudited ? 'Tag presente no catálogo atual, mas não fazia parte do arquivo de auditoria original.' : ''),
+      absent: absent, notAudited: notAudited, archived: archived,
+      decision: decision ? decision.decision : null,
+      decisionTarget: decision ? decision.target : null,
+      decidedAt: decision ? decision.decidedAt : null,
+      appliedAt: decision ? decision.appliedAt : null,
+      appliedCount: decision ? decision.appliedCount : null,
+      lesions: liveLesions, groups: groupMatches.map(g => g.id)
+    });
+  }
+  return rows;
+}
+
+function tagAuditStatusBadge(status){
+  if(!status) return '';
+  const map = { MANTER: ['manter', '✅ Manter'], EDITAR: ['editar', '✏️ Editar'], ELIMINAR: ['eliminar', '🗑️ Eliminar'], REVISAR: ['revisar', '⏸ Revisar'] };
+  const pair = map[status] || ['revisar', status];
+  return '<span class="tar-badge ' + pair[0] + '">' + pair[1] + '</span>';
+}
+function tagAuditDecisionLabel(d){
+  const map = { keep: ['manter', '✅ Manter'], edit: ['editar', '✏️ Editar'], eliminate: ['eliminar', '🗑️ Eliminar'], review: ['revisar', '⏸ Revisar'] };
+  return map[d] || null;
+}
+
+function tagAuditRenderRow(r){
+  const rowClass = r.decision ? ('tar-decided-' + (r.decision === 'keep' ? 'keep' : r.decision === 'edit' ? 'edit' : r.decision === 'eliminate' ? 'eliminate' : 'review')) : '';
+  const uniqueBadge = r.liveCount === 1 ? '<span class="tar-badge unico" title="Uso único não é necessariamente um problema">uso único</span>' : '';
+  const absentBadge = r.absent ? '<span class="tar-badge ausente">ausente no catálogo atual</span>' : '';
+  const naBadge = r.notAudited ? '<span class="tar-badge naoauditada">não auditada</span>' : '';
+  const groupLinks = r.groups.length ? r.groups.map(gid => '<button type="button" class="tar-lesion-link" data-tar-opengroup="' + escAttr(gid) + '">grupo</button>').join(' ') : '';
+  const decLabel = tagAuditDecisionLabel(r.decision);
+  const appliedBadge = r.appliedAt ? ('<br><span class="tar-badge aplicada">✓ aplicada em ' + (r.appliedCount != null ? r.appliedCount : '?') + ' lesão(ões)</span>') : '';
+  return '<tr class="' + rowClass + '" data-tar-row="' + escAttr(r.tag) + '">'
+    + '<td><span class="tar-tagname">' + escAttr(r.tag) + '</span> ' + uniqueBadge + absentBadge + naBadge + '</td>'
+    + '<td>' + r.liveCount + (r.auditedCount !== null && r.auditedCount !== r.liveCount ? ('<br><span class="tar-reason">(na auditoria: ' + r.auditedCount + ')</span>') : '') + '</td>'
+    + '<td>' + (tagAuditStatusBadge(r.suggested_status) || '<span class="tar-badge naoauditada">sem sugestão</span>') + '</td>'
+    + '<td><span class="tar-reason">' + escAttr(r.reason || '—') + '</span></td>'
+    + '<td>' + escAttr(r.suggested_target || '—') + '</td>'
+    + '<td><button type="button" class="tar-lesion-link" data-tar-lesions="' + escAttr(r.tag) + '">' + r.liveCount + (r.liveCount === 1 ? ' lesão' : ' lesões') + '</button> ' + groupLinks + '</td>'
+    + '<td>' + (decLabel ? ('<span class="tar-badge ' + decLabel[0] + '">' + decLabel[1] + '</span>' + (r.decisionTarget ? ('<br><span class="tar-reason">→ ' + escAttr(r.decisionTarget) + '</span>') : '') + appliedBadge) : '<span class="tar-reason">pendente</span>') + '</td>'
+    + '<td><div class="tar-actions">'
+    + '<button type="button" class="' + (r.decision === 'keep' ? 'active keep' : '') + '" data-tar-action="keep" data-tar-tag="' + escAttr(r.tag) + '">Manter</button>'
+    + '<button type="button" class="' + (r.decision === 'edit' ? 'active edit' : '') + '" data-tar-action="edit" data-tar-tag="' + escAttr(r.tag) + '">Editar</button>'
+    + '<button type="button" class="' + (r.decision === 'eliminate' ? 'active eliminate' : '') + '" data-tar-action="eliminate" data-tar-tag="' + escAttr(r.tag) + '">Eliminar</button>'
+    + '<button type="button" class="' + (r.decision === 'review' ? 'active review' : '') + '" data-tar-action="review" data-tar-tag="' + escAttr(r.tag) + '">Revisar</button>'
+    + '</div></td></tr>';
+}
+
+function tagAuditRenderGroupCard(g, allRows){
+  const rowsByTag = new Map(allRows.map(r => [r.tag, r]));
+  const chips = (g.tags || []).map(t => {
+    const r = rowsByTag.get(t);
+    const count = r ? r.liveCount : 0;
+    return '<span class="tag-audit-group-tagchip">' + escAttr(t) + ' <b>' + count + '</b></span>';
+  }).join('');
+  return '<div class="tag-audit-group-card">'
+    + '<h4>' + escAttr(g.titulo || g.id) + '</h4>'
+    + '<div class="tar-group-meta">Confiança: ' + escAttr(g.confianca || '—') + ' · Tipo: ' + escAttr(g.tipo || '—') + '</div>'
+    + '<div>' + escAttr(g.analise || '') + '</div>'
+    + '<div class="tar-group-tags">' + chips + '</div>'
+    + '<div class="tar-group-meta">Sugestão da auditoria: ' + escAttr(g.sugestao || '—') + '</div>'
+    + '<div class="tar-actions" style="margin-top:6px;">'
+    + '<button type="button" data-tar-group-apply="' + escAttr(g.id) + '" data-tar-group-decision="review">Marcar grupo inteiro como Revisar</button>'
+    + '<button type="button" data-tar-group-apply="' + escAttr(g.id) + '" data-tar-group-decision="keep">Marcar grupo inteiro como Manter</button>'
+    + '</div></div>';
+}
+
+function tagAuditBuildPlan(rows){
+  const decisions = tagAuditLoadDecisions();
+  const liveIndex = tagAuditComputeLiveIndex();
+  const liveTagsSet = new Set(liveIndex.keys());
+  const toKeep = [], toEdit = [], toEliminate = [], pending = [], skippedAbsent = [], conflicts = [];
+  for(const r of rows){
+    if(r.absent){ if(r.decision) skippedAbsent.push(r); continue; }
+    if(!r.decision || r.decision === 'review'){ pending.push(r); continue; }
+    if(r.decision === 'keep'){ toKeep.push(r); continue; }
+    if(r.decision === 'eliminate'){ toEliminate.push(Object.assign({}, r, { lesions: r.lesions })); continue; }
+    if(r.decision === 'edit'){
+      const target = (decisions[r.tag] && decisions[r.tag].target) || r.suggested_target || '';
+      if(!target){ conflicts.push({ tag: r.tag, issue: 'Decisão "editar" sem tag de destino definida.' }); continue; }
+      const targetExists = liveTagsSet.has(target);
+      toEdit.push({ tag: r.tag, target: target, liveCount: r.liveCount, targetExists: targetExists, targetCurrentCount: targetExists ? liveIndex.get(target).length : 0, lesions: r.lesions });
+    }
+  }
+  const editTargets = {};
+  toEdit.forEach(e => { editTargets[e.target] = (editTargets[e.target] || 0) + 1; });
+  toEliminate.forEach(t => { if(editTargets[t.tag]) conflicts.push({ tag: t.tag, issue: 'Marcada para ELIMINAR mas também é destino de edição de outra tag — receberia lesões e seria eliminada ao mesmo tempo.' }); });
+  return { toKeep: toKeep, toEdit: toEdit, toEliminate: toEliminate, pending: pending, skippedAbsent: skippedAbsent, conflicts: conflicts };
+}
+
+function tagAuditMakeOverlay(innerHtml, onMount){
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e => { if(e.target === ov) close(); };
+  const onEsc = e => { if(e.key === 'Escape' && ov.isConnected) close(); };
+  document.addEventListener('keydown', onEsc);
+  function close(){ ov.remove(); document.removeEventListener('keydown', onEsc); }
+  ov.innerHTML = innerHtml;
+  document.body.appendChild(ov);
+  if(typeof onMount === 'function') onMount(ov, close);
+  return { ov: ov, close: close };
+}
+
+function openTagAuditLesionsModal(tag, rows){
+  const row = rows.find(r => r.tag === tag);
+  const lesions = row ? row.lesions : [];
+  tagAuditMakeOverlay(
+    '<div class="modal" style="max-width:620px;max-height:80vh;overflow-y:auto;">'
+    + '<h2>Lesões com a tag "' + escAttr(tag) + '"</h2>'
+    + '<div class="modal-sub">Calculado agora a partir do catálogo atual (DATA), não da auditoria estática — ' + lesions.length + (lesions.length === 1 ? ' lesão.' : ' lesões.') + '</div>'
+    + '<div class="audit-list">' + (lesions.length ? lesions.map(l => {
+        const full = (DATA || []).find(e => e.id === l.id);
+        const tagsTxt = full && Array.isArray(full.tags) ? full.tags.join(', ') : '';
+        return '<div class="cls-audit-row">' + escAttr(l.id) + ' · <b>' + escAttr(l.name) + '</b> · ' + escAttr(l.s || '') + ' / ' + escAttr(l.site || '')
+          + '<br><span style="color:var(--muted-2);font-size:11px;">tags atuais: ' + escAttr(tagsTxt) + '</span></div>';
+      }).join('') : '<div class="sync-audit-note">Nenhuma lesão.</div>') + '</div>'
+    + '<div class="modal-actions"><button class="btn btn-ghost" id="tar-lesions-close">fechar</button><span></span></div>'
+    + '</div>',
+    (ov, close) => { ov.querySelector('#tar-lesions-close').onclick = close; }
+  );
+}
+
+function openTagAuditEditModal(tag, row, onSaved){
+  const suggestion = row && row.suggested_target ? row.suggested_target : '';
+  const existingTarget = row && row.decisionTarget ? row.decisionTarget : suggestion;
+  const lesionsHtml = (row && row.lesions.length) ? row.lesions.map(l => escAttr(l.id + ' · ' + l.name)).join('<br>') : '—';
+  tagAuditMakeOverlay(
+    '<div class="modal" style="max-width:520px;max-height:85vh;overflow-y:auto;">'
+    + '<h2>✏️ Editar tag — decisão de migração</h2>'
+    + '<div class="modal-sub">Isto SALVA uma decisão de renomear/padronizar. A migração real das lesões afetadas só acontece numa etapa futura, depois de "Preparar plano de aplicação" + sua aprovação explícita.</div>'
+    + '<div class="field"><label>Tag atual</label><input type="text" value="' + escAttr(tag) + '" disabled></div>'
+    + '<div class="field"><label>Nova tag (destino)</label><input type="text" id="tar-edit-target" value="' + escAttr(existingTarget) + '" placeholder="Digite a tag de destino…"></div>'
+    + '<div class="field"><label>Sugestão da auditoria</label><input type="text" value="' + escAttr(suggestion || '— nenhuma sugestão —') + '" disabled></div>'
+    + '<div class="field"><label>Motivo (auditoria)</label><textarea disabled>' + escAttr(row ? row.reason : '') + '</textarea></div>'
+    + '<div class="field"><label>Uso atual</label><input type="text" value="' + (row ? row.liveCount : 0) + ' lesão(ões)" disabled></div>'
+    + '<div class="field"><label>Lesões afetadas</label><div class="sync-audit-note" style="max-height:140px;overflow-y:auto;">' + lesionsHtml + '</div></div>'
+    + '<div class="modal-actions"><button class="btn btn-ghost" id="tar-edit-cancel">Cancelar</button><button class="btn btn-primary" id="tar-edit-save">Salvar decisão</button></div>'
+    + '</div>',
+    (ov, close) => {
+      ov.querySelector('#tar-edit-cancel').onclick = close;
+      ov.querySelector('#tar-edit-save').onclick = () => {
+        const target = ov.querySelector('#tar-edit-target').value.trim();
+        if(!target){ alert('Informe a nova tag de destino.'); return; }
+        tagAuditSetDecision(tag, 'edit', { target: target });
+        close();
+        if(typeof onSaved === 'function') onSaved();
+      };
+    }
+  );
+}
+
+function openTagAuditEliminateModal(tag, row, onSaved){
+  const n = row ? row.liveCount : 0;
+  const names = (row && row.lesions.length) ? row.lesions.map(l => escAttr(l.id + ' · ' + l.name)).join('<br>') : '—';
+  tagAuditMakeOverlay(
+    '<div class="modal" style="max-width:520px;max-height:85vh;overflow-y:auto;">'
+    + '<h2>🗑️ Eliminar tag — decisão</h2>'
+    + '<div class="modal-sub">Esta decisão removeria a tag <b>' + escAttr(tag) + '</b> de <b>' + n + '</b> lesão(ões) quando o plano for aplicado numa etapa futura. Nada é removido agora.</div>'
+    + '<div class="field"><label>Lesões afetadas</label><div class="sync-audit-note" style="max-height:160px;overflow-y:auto;">' + names + '</div></div>'
+    + '<div class="modal-actions"><button class="btn btn-ghost" id="tar-elim-cancel">Cancelar</button><button class="btn btn-danger" id="tar-elim-save">Salvar decisão de eliminação</button></div>'
+    + '</div>',
+    (ov, close) => {
+      ov.querySelector('#tar-elim-cancel').onclick = close;
+      ov.querySelector('#tar-elim-save').onclick = () => { tagAuditSetDecision(tag, 'eliminate'); close(); if(typeof onSaved === 'function') onSaved(); };
+    }
+  );
+}
+
+function openTagAuditPlanModal(rows){
+  const plan = tagAuditBuildPlan(rows);
+  const editsHtml = plan.toEdit.length ? plan.toEdit.map(e => '<div class="cls-audit-row">' + escAttr(e.tag) + ' (' + e.liveCount + ' lesões) → <span>' + escAttr(e.target) + '</span>'
+    + (e.targetExists ? (' <em style="color:var(--amber);">— tag destino já existe em ' + e.targetCurrentCount + ' outra(s) lesão(ões); seriam fundidas</em>') : ' — tag nova') + '</div>').join('') : '<div class="sync-audit-note">Nenhuma.</div>';
+  const elimHtml = plan.toEliminate.length ? plan.toEliminate.map(e => '<div class="cls-audit-row">' + escAttr(e.tag) + ' — removeria de ' + e.liveCount + ' lesão(ões)</div>').join('') : '<div class="sync-audit-note">Nenhuma.</div>';
+  const conflictsHtml = plan.conflicts.length ? ('<div class="tar-plan-box"><h4 class="tar-conflict">⚠ Conflitos</h4>' + plan.conflicts.map(c => '<div class="cls-audit-row"><span>' + escAttr(c.tag) + '</span>: ' + escAttr(c.issue) + '</div>').join('') + '</div>') : '';
+  tagAuditMakeOverlay(
+    '<div class="modal" style="max-width:700px;max-height:85vh;overflow-y:auto;">'
+    + '<h2>📋 Preview do plano de aplicação</h2>'
+    + '<div class="modal-sub">Somente leitura — nada foi aplicado. Simulação do que aconteceria SE as decisões salvas até agora fossem aplicadas.</div>'
+    + '<div class="tar-plan-box"><h4>Resumo</h4><div class="sync-audit-table">'
+    + '<div class="sync-audit-row"><span>Tags mantidas (keep)</span><b>' + plan.toKeep.length + '</b><b>—</b></div>'
+    + '<div class="sync-audit-row"><span>Tags renomeadas (edit)</span><b>' + plan.toEdit.length + '</b><b>—</b></div>'
+    + '<div class="sync-audit-row"><span>Tags eliminadas</span><b>' + plan.toEliminate.length + '</b><b>—</b></div>'
+    + '<div class="sync-audit-row"><span>Sem decisão / em revisão (nenhuma ação)</span><b>' + plan.pending.length + '</b><b>—</b></div>'
+    + '<div class="sync-audit-row"><span>Decisões ignoradas (tag ausente no catálogo atual)</span><b>' + plan.skippedAbsent.length + '</b><b>—</b></div>'
+    + '<div class="sync-audit-row"><span>Conflitos encontrados</span><b style="' + (plan.conflicts.length ? 'color:var(--red)' : '') + '">' + plan.conflicts.length + '</b><b>—</b></div>'
+    + '</div></div>'
+    + conflictsHtml
+    + '<div class="tar-plan-box"><h4>Renomeações planejadas (' + plan.toEdit.length + ')</h4>' + editsHtml + '</div>'
+    + '<div class="tar-plan-box"><h4>Eliminações planejadas (' + plan.toEliminate.length + ')</h4>' + elimHtml + '</div>'
+    + '<div class="sync-audit-note warn">Este preview não aplica nada. A aplicação real (migração de fato das tags) é uma etapa futura separada, com aprovação explícita e snapshot de segurança — mesmo padrão já usado nas outras ferramentas avançadas deste Atlas.</div>'
+    + '<div class="modal-actions"><button class="btn btn-ghost" id="tar-plan-close">fechar</button><span></span></div>'
+    + '</div>',
+    (ov, close) => { ov.querySelector('#tar-plan-close').onclick = close; }
+  );
+}
+
+/* ============================================================
+   AUDITORIA DE TAGS — APLICAÇÃO REAL (edit/eliminate aprovados)
+   ------------------------------------------------------------
+   Só executa decisões "edit" e "eliminate"; "keep"/"review"/pendente
+   nunca tocam DATA. Fonte da verdade é sempre o DATA runtime (nunca
+   SEED). Fluxo: construir plano -> detectar conflitos críticos (aborta
+   se houver) -> estagiar mutação em memória SEM tocar DATA -> validar
+   o estágio -> snapshot de segurança (allowlist) -> só então mutar
+   DATA -> saveData() real (sem pipeline paralelo) -> relatório.
+   ============================================================ */
+
+// Aplica renomeações/eliminações a um array de tags de UMA lesão.
+// editMap: Map(tagOrigem -> tagDestino). eliminateSet: Set(tagsAEliminar).
+// Preserva ordem; nunca duplica (se origem E destino já coexistirem na
+// mesma lesão, sobra uma única ocorrência do destino).
+function tagAuditTransformTags(tags, editMap, eliminateSet){
+  const result = []; const seen = new Set();
+  for(const t of (Array.isArray(tags) ? tags : [])){
+    if(eliminateSet.has(t)) continue;
+    const out = editMap.has(t) ? editMap.get(t) : t;
+    if(seen.has(out)) continue;
+    seen.add(out);
+    result.push(out);
+  }
+  return result;
+}
+
+function tagAuditDetectChains(toEdit){
+  const sources = new Set(toEdit.map(e => e.tag));
+  const out = [];
+  toEdit.forEach(e => {
+    if(sources.has(e.target)){
+      out.push({ tag: e.tag, issue: 'Cadeia de edição detectada: "' + e.tag + '" → "' + e.target + '", mas "' + e.target + '" também está marcada para virar outra tag. Cadeias (A→B, B→C) não são resolvidas automaticamente — ajuste as decisões manualmente antes de aplicar.' });
+    }
+  });
+  return out;
+}
+
+// Plano estrito para APLICAÇÃO (mais rígido que o preview "Preparar plano
+// de aplicação", que é só informativo). Reaproveita tagAuditBuildPlan e
+// soma verificações extras obrigatórias antes de qualquer mutação real.
+function tagAuditBuildApplyPlan(rows){
+  const base = tagAuditBuildPlan(rows);
+  const extra = [];
+  base.toEdit.forEach(e => {
+    if(e.tag === e.target) extra.push({ tag: e.tag, issue: 'Tag de origem e destino são idênticas — decisão "editar" não faz sentido (deveria ser "manter").' });
+    if(!e.target || !String(e.target).trim()) extra.push({ tag: e.tag, issue: 'Tag de destino vazia ou inválida.' });
+  });
+  extra.push(...tagAuditDetectChains(base.toEdit));
+  return Object.assign({}, base, { conflicts: [...base.conflicts, ...extra] });
+}
+
+// Estagia a mutação em memória SEM tocar DATA. Retorna lista de lesões
+// afetadas (id, before{tags,_userUpdatedAt}, afterTags) + validação.
+function tagAuditStageMutations(plan){
+  const editMap = new Map(plan.toEdit.map(e => [e.tag, e.target]));
+  const eliminateSet = new Set(plan.toEliminate.map(e => e.tag));
+  const affected = [];
+  const problems = [];
+  for(const entry of (Array.isArray(DATA) ? DATA : [])){
+    if(!entry || !Array.isArray(entry.tags)) continue;
+    const before = entry.tags;
+    const after = tagAuditTransformTags(before, editMap, eliminateSet);
+    const changed = JSON.stringify(before) !== JSON.stringify(after);
+    if(!changed) continue;
+    // Validação por lesão: sem duplicatas; nenhuma tag de origem sobrevive; nenhuma tag eliminada sobrevive.
+    if(new Set(after).size !== after.length) problems.push({ id: entry.id, issue: 'Resultado teria tags duplicadas.' });
+    for(const src of editMap.keys()) if(after.indexOf(src) !== -1) problems.push({ id: entry.id, issue: 'Tag de origem "' + src + '" ainda presente após a transformação.' });
+    for(const elim of eliminateSet) if(after.indexOf(elim) !== -1) problems.push({ id: entry.id, issue: 'Tag eliminada "' + elim + '" ainda presente após a transformação.' });
+    affected.push({ id: entry.id, name: entry.name, before: { tags: before.slice(), _userUpdatedAt: entry._userUpdatedAt }, afterTags: after });
+  }
+  return { affected: affected, problems: problems, editMap: editMap, eliminateSet: eliminateSet };
+}
+
+async function tagAuditMarkApplied(tag, count){
+  const all = tagAuditLoadDecisions();
+  if(!all[tag]) return;
+  all[tag] = Object.assign({}, all[tag], { appliedAt: new Date().toISOString(), appliedCount: count });
+  tagAuditSaveDecisions(all);
+}
+
+// Orquestra a aplicação real. Retorna { ok, report } ou { ok:false, error }.
+async function tagAuditApplyApproved(plan){
+  if(plan.conflicts.length){
+    return { ok: false, error: 'Há ' + plan.conflicts.length + ' conflito(s) crítico(s) — aplicação abortada sem tocar em DATA.' };
+  }
+  const staged = tagAuditStageMutations(plan);
+  if(staged.problems.length){
+    return { ok: false, error: 'Validação pré-aplicação falhou (' + staged.problems.length + ' problema(s)) — nada foi alterado em DATA.', problems: staged.problems };
+  }
+  if(!staged.affected.length){
+    return { ok: false, error: 'Nenhuma lesão seria afetada pelas decisões aprovadas (nada a aplicar).' };
+  }
+
+  // Snapshot de segurança ANTES de qualquer mutação — usa a allowlist real existente.
+  const snapshot = createSafetySnapshot('antes de aplicar decisões de auditoria de tags');
+  if(!snapshot){
+    return { ok: false, error: 'Falha ao criar snapshot de segurança — aplicação abortada sem tocar em DATA.' };
+  }
+
+  // Mutação real (só agora; staged.affected já foi validado acima).
+  const byId = new Map((Array.isArray(DATA) ? DATA : []).map(e => [e.id, e]));
+  const appliedAt = Date.now();
+  for(const a of staged.affected){
+    const entry = byId.get(a.id);
+    if(!entry) continue; // não deveria acontecer (veio do próprio DATA), defensivo
+    entry.tags = a.afterTags;
+    entry._userUpdatedAt = appliedAt;
+  }
+
+  try{
+    await saveData(); // pipeline real único: storage.set + markSyncDirty + pushToFirebaseNow
+  }catch(e){
+    // Rollback em memória das lesões afetadas (o snapshot acima é o recurso definitivo).
+    for(const a of staged.affected){
+      const entry = byId.get(a.id);
+      if(entry){ entry.tags = a.before.tags; entry._userUpdatedAt = a.before._userUpdatedAt; }
+    }
+    return { ok: false, error: 'saveData() falhou: ' + (e && e.message ? e.message : e) + '. Alterações em memória foram revertidas. Snapshot de segurança disponível para recuperação manual: ' + snapshot.id, snapshotId: snapshot.id };
+  }
+
+  // Marca decisões como aplicadas (preserva decidedAt/target — nunca apaga histórico).
+  const perTagCount = {};
+  plan.toEdit.forEach(e => { perTagCount[e.tag] = staged.affected.filter(a => a.before.tags.indexOf(e.tag) !== -1).length; });
+  plan.toEliminate.forEach(e => { perTagCount[e.tag] = staged.affected.filter(a => a.before.tags.indexOf(e.tag) !== -1).length; });
+  for(const tag of Object.keys(perTagCount)) await tagAuditMarkApplied(tag, perTagCount[tag]);
+
+  // Validação pós-aplicação (confere no DATA real, pós-save).
+  const postIndex = tagAuditComputeLiveIndex();
+  const stillHasOldEdit = plan.toEdit.filter(e => postIndex.has(e.tag));
+  const targetsMissing = plan.toEdit.filter(e => !postIndex.has(e.target));
+  const stillHasEliminated = plan.toEliminate.filter(e => postIndex.has(e.tag));
+  // Nenhuma lesão fora de staged.affected teve .tags reatribuído — garantido
+  // por construção (o loop de mutação real só itera staged.affected).
+  const unexpectedlyTouched = [];
+
+  if(typeof renderAll === 'function'){ try{ renderAll(); }catch(_e){} }
+
+  return {
+    ok: true,
+    report: {
+      snapshotId: snapshot.id,
+      appliedAtIso: new Date(appliedAt).toISOString(),
+      lesõesAlteradas: staged.affected.map(a => ({ id: a.id, name: a.name })),
+      tagsEditadas: plan.toEdit.map(e => ({ tag: e.tag, target: e.target, afetadas: perTagCount[e.tag] || 0 })),
+      tagsEliminadas: plan.toEliminate.map(e => ({ tag: e.tag, afetadas: perTagCount[e.tag] || 0 })),
+      conflitos: [],
+      operaçõesIgnoradas: plan.skippedAbsent.map(r => ({ tag: r.tag, motivo: 'ausente no catálogo atual' })),
+      validaçãoPósAplicação: {
+        tagsOrigemAindaPresentes: stillHasOldEdit.map(e => e.tag),
+        tagsDestinoAusentes: targetsMissing.map(e => e.target),
+        tagsEliminadasAindaPresentes: stillHasEliminated.map(e => e.tag),
+        lesõesForaDoEscopoAlteradas: unexpectedlyTouched
+      }
+    }
+  };
+}
+
+function openTagAuditApplyReportModal(result){
+  const v = result.report.validaçãoPósAplicação;
+  const allClear = !v.tagsOrigemAindaPresentes.length && !v.tagsDestinoAusentes.length && !v.tagsEliminadasAindaPresentes.length && !v.lesõesForaDoEscopoAlteradas.length;
+  tagAuditMakeOverlay(
+    '<div class="modal" style="max-width:680px;max-height:85vh;overflow-y:auto;">'
+    + '<h2>✅ Decisões aplicadas</h2>'
+    + '<div class="modal-sub">Snapshot de segurança: <b>' + escAttr(result.report.snapshotId) + '</b> · ' + escAttr(result.report.appliedAtIso) + '</div>'
+    + '<div class="tar-plan-box"><h4>Resumo</h4><div class="sync-audit-table">'
+    + '<div class="sync-audit-row"><span>Lesões alteradas</span><b>' + result.report.lesõesAlteradas.length + '</b><b>—</b></div>'
+    + '<div class="sync-audit-row"><span>Tags editadas</span><b>' + result.report.tagsEditadas.length + '</b><b>—</b></div>'
+    + '<div class="sync-audit-row"><span>Tags eliminadas</span><b>' + result.report.tagsEliminadas.length + '</b><b>—</b></div>'
+    + '<div class="sync-audit-row"><span>Operações ignoradas (tag ausente)</span><b>' + result.report.operaçõesIgnoradas.length + '</b><b>—</b></div>'
+    + '</div></div>'
+    + '<div class="tar-plan-box"><h4>Validação pós-aplicação</h4>'
+    + (allClear ? '<div class="sync-audit-note ok">Tudo conferido: tags de origem sumiram, tags destino existem, tags eliminadas sumiram, nenhuma lesão fora do escopo foi tocada.</div>'
+      : '<div class="sync-audit-note warn">Atenção — divergências encontradas na validação pós-aplicação:<br>' + JSON.stringify(v) + '</div>')
+    + '</div>'
+    + '<div class="tar-plan-box"><h4>Tags editadas</h4>' + (result.report.tagsEditadas.length ? result.report.tagsEditadas.map(e => '<div class="cls-audit-row">' + escAttr(e.tag) + ' → <span>' + escAttr(e.target) + '</span> — ' + e.afetadas + ' lesão(ões)</div>').join('') : '<div class="sync-audit-note">Nenhuma.</div>') + '</div>'
+    + '<div class="tar-plan-box"><h4>Tags eliminadas</h4>' + (result.report.tagsEliminadas.length ? result.report.tagsEliminadas.map(e => '<div class="cls-audit-row">' + escAttr(e.tag) + ' — ' + e.afetadas + ' lesão(ões)</div>').join('') : '<div class="sync-audit-note">Nenhuma.</div>') + '</div>'
+    + '<div class="tar-plan-box"><h4>Lesões alteradas (' + result.report.lesõesAlteradas.length + ')</h4><div style="max-height:160px;overflow-y:auto;">' + result.report.lesõesAlteradas.map(l => escAttr(l.id + ' · ' + l.name)).join('<br>') + '</div></div>'
+    + '<div class="modal-actions"><button class="btn btn-primary" id="tar-report-close">fechar</button><span></span></div>'
+    + '</div>',
+    (ov, close) => { ov.querySelector('#tar-report-close').onclick = close; }
+  );
+}
+
+function openTagAuditApplyPreviewModal(rows, onApplied){
+  const plan = tagAuditBuildApplyPlan(rows);
+  const editsHtml = plan.toEdit.length ? plan.toEdit.map(e => '<div class="cls-audit-row"><b>EDITAR</b><br>"' + escAttr(e.tag) + '" → "' + escAttr(e.target) + '"<br>Afeta: ' + e.liveCount + ' lesão(ões)'
+    + (e.targetExists ? (' <em style="color:var(--amber);">— tag destino já existe em ' + e.targetCurrentCount + ' outra(s) lesão(ões); seriam fundidas, sem duplicar</em>') : ' — tag nova')
+    + '<br><span style="color:var(--muted-2);font-size:11px;">' + (e.lesions || []).map(l => escAttr(l.id + ':' + l.name)).join(' | ') + '</span></div>').join('') : '<div class="sync-audit-note">Nenhuma.</div>';
+  const elimHtml = plan.toEliminate.length ? plan.toEliminate.map(e => '<div class="cls-audit-row"><b>ELIMINAR</b><br>"' + escAttr(e.tag) + '"<br>Afeta: ' + e.liveCount + ' lesão(ões)'
+    + '<br><span style="color:var(--muted-2);font-size:11px;">' + (e.lesions || []).map(l => escAttr(l.id + ':' + l.name)).join(' | ') + '</span></div>').join('') : '<div class="sync-audit-note">Nenhuma.</div>';
+  const totalLesoes = new Set([...plan.toEdit.flatMap(e => (e.lesions || []).map(l => l.id)), ...plan.toEliminate.flatMap(e => (e.lesions || []).map(l => l.id))]).size;
+  const hasConflicts = plan.conflicts.length > 0;
+  const conflictsHtml = hasConflicts ? ('<div class="tar-plan-box"><h4 class="tar-conflict">⚠ Conflitos críticos — aplicação bloqueada até corrigir</h4>' + plan.conflicts.map(c => '<div class="cls-audit-row"><span>' + escAttr(c.tag) + '</span>: ' + escAttr(c.issue) + '</div>').join('') + '</div>') : '';
+  const { ov, close } = tagAuditMakeOverlay(
+    '<div class="modal" style="max-width:700px;max-height:85vh;overflow-y:auto;">'
+    + '<h2>🚀 Aplicar decisões aprovadas — confirmação final</h2>'
+    + '<div class="modal-sub">Isto VAI ALTERAR tags reais em DATA (edit/eliminate apenas). Keep/Revisar/pendentes são ignoradas. Um snapshot de segurança é criado antes.</div>'
+    + '<div class="tar-plan-box"><h4>Resumo</h4><div class="sync-audit-table">'
+    + '<div class="sync-audit-row"><span>Tags a renomear</span><b>' + plan.toEdit.length + '</b><b>—</b></div>'
+    + '<div class="sync-audit-row"><span>Tags a eliminar</span><b>' + plan.toEliminate.length + '</b><b>—</b></div>'
+    + '<div class="sync-audit-row"><span>Total de lesões afetadas (únicas)</span><b>' + totalLesoes + '</b><b>—</b></div>'
+    + '<div class="sync-audit-row"><span>Conflitos encontrados</span><b style="' + (hasConflicts ? 'color:var(--red)' : '') + '">' + plan.conflicts.length + '</b><b>—</b></div>'
+    + '</div></div>'
+    + conflictsHtml
+    + '<div class="tar-plan-box"><h4>Operações — EDITAR</h4>' + editsHtml + '</div>'
+    + '<div class="tar-plan-box"><h4>Operações — ELIMINAR</h4>' + elimHtml + '</div>'
+    + '<div class="modal-actions"><button class="btn btn-ghost" id="tar-apply-cancel">Cancelar</button><button class="btn btn-danger" id="tar-apply-confirm" ' + (hasConflicts ? 'disabled' : '') + '>Aplicar alterações</button></div>'
+    + '</div>'
+  );
+  ov.querySelector('#tar-apply-cancel').onclick = close;
+  const confirmBtn = ov.querySelector('#tar-apply-confirm');
+  if(!hasConflicts){
+    confirmBtn.onclick = async () => {
+      confirmBtn.disabled = true; confirmBtn.textContent = 'Aplicando…';
+      const result = await tagAuditApplyApproved(plan);
+      close();
+      if(result.ok){
+        openTagAuditApplyReportModal(result);
+        if(typeof onApplied === 'function') onApplied();
+      } else {
+        alert('Aplicação abortada.\n\n' + result.error + (result.problems ? ('\n\n' + JSON.stringify(result.problems, null, 2)) : ''));
+      }
+    };
+  }
+}
+
+async function openTagAuditModal(){
+  const { ov, close } = tagAuditMakeOverlay(
+    '<div class="modal tag-audit-modal">'
+    + '<h2>🏷️ Auditoria de tags</h2>'
+    + '<div class="modal-sub">Painel de decisão — nada é alterado em DATA/tags aqui. Decisões ficam salvas no seu navegador até você aprovar um plano de aplicação futuro.</div>'
+    + '<div id="tar-loading">Carregando auditoria e catálogo atual…</div>'
+    + '<div id="tar-body" hidden></div>'
+    + '<div class="modal-actions"><button class="btn btn-ghost" id="tar-close">fechar</button>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-ghost" id="tar-export">⬇ Exportar decisões</button><button class="btn btn-ghost" id="tar-import">⬆ Importar decisões</button><button class="btn btn-ghost" id="tar-plan">📋 Preparar plano de aplicação</button><button class="btn btn-danger" id="tar-apply">🚀 Aplicar decisões aprovadas</button></div>'
+    + '</div></div>'
+  );
+  ov.querySelector('#tar-close').onclick = close;
+
+  const source = await tagAuditFetchSource();
+  const loadingEl = ov.querySelector('#tar-loading');
+  const bodyEl = ov.querySelector('#tar-body');
+  if(!ov.isConnected) return; // modal fechado enquanto carregava
+
+  if(!source.decisoesOk){
+    loadingEl.innerHTML = '<div class="sync-audit-note warn">Não foi possível carregar TAG_AUDIT_DECISOES.csv (precisa estar na mesma pasta do index.html, servido via http/https — não funciona abrindo o arquivo direto com file://). As sugestões da auditoria não estarão disponíveis, mas as tags do catálogo atual ainda podem ser revisadas.</div>';
+  }
+
+  const state = { statusFilter: 'all', usageFilter: 'all', groupFilter: '', search: '', sortBy: 'tag', sortDir: 'asc', view: 'table' };
+  function getRows(){ return tagAuditBuildRows(source, tagAuditComputeLiveIndex()); }
+  function applyFilters(allRows){
+    // "arquivadas" é uma visão à parte: por padrão (e em qualquer outro
+    // filtro de status) elas nunca aparecem misturadas com as tags ativas —
+    // só aparecem quando o filtro de status é explicitamente "archived".
+    let out = state.statusFilter === 'archived' ? allRows.filter(r => r.archived) : allRows.filter(r => !r.archived);
+    if(state.search.trim()){ const q = state.search.trim().toLowerCase(); out = out.filter(r => r.tag.toLowerCase().indexOf(q) !== -1); }
+    if(state.statusFilter === 'pending') out = out.filter(r => !r.decision);
+    else if(state.statusFilter !== 'all' && state.statusFilter !== 'archived') out = out.filter(r => r.decision === state.statusFilter);
+    if(state.usageFilter === 'eq1') out = out.filter(r => r.liveCount === 1);
+    else if(state.usageFilter === 'lte3') out = out.filter(r => r.liveCount <= 3);
+    else if(state.usageFilter === 'gte10') out = out.filter(r => r.liveCount >= 10);
+    if(state.groupFilter) out = out.filter(r => r.groups.indexOf(state.groupFilter) !== -1);
+    out = out.slice().sort((a, b) => {
+      let cmp = 0;
+      if(state.sortBy === 'tag') cmp = a.tag.localeCompare(b.tag, 'pt');
+      else if(state.sortBy === 'uso') cmp = a.liveCount - b.liveCount;
+      else if(state.sortBy === 'status') cmp = String(a.suggested_status || '').localeCompare(String(b.suggested_status || ''));
+      return state.sortDir === 'asc' ? cmp : -cmp;
+    });
+    return out;
+  }
+  function renderCounters(allRows){
+    // "Total" e os demais contadores refletem só tags ATIVAS (uso atual > 0
+    // ou ainda sem aplicação) — tags já aplicadas/arquivadas têm contador
+    // próprio, separado, para não inflar/confundir a leitura do estado atual.
+    const active = allRows.filter(r => !r.archived);
+    const archived = allRows.filter(r => r.archived);
+    const total = active.length, pend = active.filter(r => !r.decision).length, keep = active.filter(r => r.decision === 'keep').length,
+      edit = active.filter(r => r.decision === 'edit').length, elim = active.filter(r => r.decision === 'eliminate').length, rev = active.filter(r => r.decision === 'review').length;
+    return '<div class="tag-audit-counters"><span>Total ativo: <b>' + total + '</b></span><span>Pendentes: <b>' + pend + '</b></span><span>Manter: <b>' + keep + '</b></span>'
+      + '<span>Editar: <b>' + edit + '</b></span><span>Eliminar: <b>' + elim + '</b></span><span>Revisar: <b>' + rev + '</b></span>'
+      + '<span>Aplicadas/Arquivadas: <b>' + archived.length + '</b></span></div>';
+  }
+  function render(){
+    const hadFocus = document.activeElement && document.activeElement.id === 'tar-f-search';
+    const caret = hadFocus ? document.activeElement.selectionStart : null;
+    const allRows = getRows();
+    const filtered = applyFilters(allRows);
+    const groupOptions = source.groups.map(g => '<option value="' + escAttr(g.id) + '">' + escAttr(g.titulo) + '</option>').join('');
+    let viewHtml;
+    if(state.view === 'table'){
+      const baseCount = (state.statusFilter === 'archived' ? allRows.filter(r => r.archived) : allRows.filter(r => !r.archived)).length;
+      const archivedNote = state.statusFilter === 'archived'
+        ? '<div class="sync-audit-note">Tags já aplicadas (uso atual = 0). Histórico preservado — decisão, alvo, <code>decidedAt</code>/<code>appliedAt</code>/<code>appliedCount</code> continuam no localStorage. Você ainda pode registrar uma nova decisão aqui se a tag reaparecer no catálogo.</div>'
+        : '';
+      viewHtml = '<div class="tag-audit-filters">'
+        + '<select id="tar-f-status"><option value="all">Todos ativos</option><option value="pending">Pendentes</option><option value="keep">Manter</option><option value="edit">Editar</option><option value="eliminate">Eliminar</option><option value="review">Revisar</option><option value="archived">Aplicadas / Arquivadas</option></select>'
+        + '<select id="tar-f-usage"><option value="all">Qualquer uso</option><option value="eq1">Uso = 1</option><option value="lte3">Uso ≤ 3</option><option value="gte10">Uso ≥ 10</option></select>'
+        + '<select id="tar-f-group"><option value="">Qualquer grupo</option>' + groupOptions + '</select>'
+        + '<input type="search" id="tar-f-search" placeholder="Buscar tag…" value="' + escAttr(state.search) + '">'
+        + '<select id="tar-f-sort"><option value="tag">Ordenar: nome</option><option value="uso">Ordenar: uso</option><option value="status">Ordenar: status sugerido</option></select>'
+        + '</div>'
+        + archivedNote
+        + '<div class="sync-audit-note">' + filtered.length + ' de ' + baseCount + ' tags exibidas.</div>'
+        + '<div class="tag-audit-table-wrap"><table class="tag-audit-table"><thead><tr><th>Tag</th><th>Uso</th><th>Sugestão</th><th>Motivo</th><th>Destino</th><th>Lesões</th><th>Minha decisão</th><th>Ações</th></tr></thead>'
+        + '<tbody>' + (filtered.map(tagAuditRenderRow).join('') || '<tr><td colspan="8" class="sync-audit-note">Nenhuma tag encontrada com esses filtros.</td></tr>') + '</tbody></table></div>';
+    } else {
+      viewHtml = '<div class="tag-audit-groups">' + source.groups.map(g => tagAuditRenderGroupCard(g, allRows)).join('') + '</div>';
+    }
+    bodyEl.innerHTML = renderCounters(allRows)
+      + '<div class="tag-audit-tabs"><button type="button" class="btn ' + (state.view === 'table' ? 'btn-primary' : 'btn-ghost') + '" data-tar-view="table">Tabela</button>'
+      + '<button type="button" class="btn ' + (state.view === 'groups' ? 'btn-primary' : 'btn-ghost') + '" data-tar-view="groups">Grupos semelhantes (' + source.groups.length + ')</button></div>'
+      + '<div id="tar-view-area">' + viewHtml + '</div>';
+    if(state.view === 'table'){
+      bodyEl.querySelector('#tar-f-status').value = state.statusFilter;
+      bodyEl.querySelector('#tar-f-usage').value = state.usageFilter;
+      bodyEl.querySelector('#tar-f-group').value = state.groupFilter;
+      bodyEl.querySelector('#tar-f-sort').value = state.sortBy;
+      if(hadFocus){ const inp = bodyEl.querySelector('#tar-f-search'); if(inp){ inp.focus(); if(caret != null) inp.setSelectionRange(caret, caret); } }
+    }
+  }
+
+  bodyEl.addEventListener('click', ev => {
+    const t = ev.target; if(!t || typeof t.closest !== 'function') return;
+    const viewBtn = t.closest('[data-tar-view]');
+    if(viewBtn){ state.view = viewBtn.getAttribute('data-tar-view'); render(); return; }
+    const actionBtn = t.closest('[data-tar-action]');
+    if(actionBtn){
+      const tag = actionBtn.getAttribute('data-tar-tag'); const action = actionBtn.getAttribute('data-tar-action');
+      const row = getRows().find(r => r.tag === tag);
+      if(action === 'edit'){ openTagAuditEditModal(tag, row, render); return; }
+      if(action === 'eliminate'){ openTagAuditEliminateModal(tag, row, render); return; }
+      if(action === 'keep'){ tagAuditSetDecision(tag, 'keep'); render(); return; }
+      if(action === 'review'){ tagAuditSetDecision(tag, 'review'); render(); return; }
+      return;
+    }
+    const lesionsBtn = t.closest('[data-tar-lesions]');
+    if(lesionsBtn){ openTagAuditLesionsModal(lesionsBtn.getAttribute('data-tar-lesions'), getRows()); return; }
+    const groupBtn = t.closest('[data-tar-opengroup]');
+    if(groupBtn){ state.view = 'groups'; render(); return; }
+    const groupApplyBtn = t.closest('[data-tar-group-apply]');
+    if(groupApplyBtn){
+      const gid = groupApplyBtn.getAttribute('data-tar-group-apply'); const decision = groupApplyBtn.getAttribute('data-tar-group-decision');
+      const group = source.groups.find(g => g.id === gid);
+      if(group){
+        const lbl = tagAuditDecisionLabel(decision);
+        if(confirm('Aplicar a decisão "' + (lbl ? lbl[1] : decision) + '" a todas as ' + (group.tags || []).length + ' tags do grupo "' + group.titulo + '"?\n\nIsso só salva a decisão — nenhuma tag é alterada agora.')){
+          (group.tags || []).forEach(tg => tagAuditSetDecision(tg, decision));
+          render();
+        }
+      }
+      return;
+    }
+  });
+  let tarSearchDebounce = null;
+  bodyEl.addEventListener('input', ev => {
+    if(ev.target && ev.target.id === 'tar-f-search'){ state.search = ev.target.value; clearTimeout(tarSearchDebounce); tarSearchDebounce = setTimeout(render, 220); }
+  });
+  bodyEl.addEventListener('change', ev => {
+    const id = ev.target && ev.target.id;
+    if(id === 'tar-f-status'){ state.statusFilter = ev.target.value; render(); }
+    else if(id === 'tar-f-usage'){ state.usageFilter = ev.target.value; render(); }
+    else if(id === 'tar-f-group'){ state.groupFilter = ev.target.value; render(); }
+    else if(id === 'tar-f-sort'){ state.sortBy = ev.target.value; render(); }
+  });
+
+  ov.querySelector('#tar-export').onclick = () => {
+    const decisions = tagAuditLoadDecisions();
+    const payload = { generatedAt: new Date().toISOString(), decisions: Object.keys(decisions).map(tag => Object.assign({ tag: tag }, decisions[tag])) };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    const now = new Date(); const pad = n => String(n).padStart(2, '0');
+    a.download = 'tag-audit-decisoes_' + now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + '_' + pad(now.getHours()) + '-' + pad(now.getMinutes()) + '.json';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  };
+  ov.querySelector('#tar-import').onclick = () => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json'; inp.style.display = 'none';
+    document.body.appendChild(inp);
+    inp.addEventListener('change', () => {
+      const file = inp.files && inp.files[0];
+      if(!file){ inp.remove(); return; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        try{
+          const parsed = JSON.parse(reader.result);
+          const list = Array.isArray(parsed.decisions) ? parsed.decisions : [];
+          if(!list.length){ alert('Arquivo não contém decisões reconhecíveis.'); inp.remove(); return; }
+          if(!confirm('Importar ' + list.length + ' decisão(ões)? Decisões existentes para a mesma tag serão sobrescritas.')){ inp.remove(); return; }
+          const current = tagAuditLoadDecisions();
+          list.forEach(item => { if(!item || !item.tag) return; const copy = Object.assign({}, item); delete copy.tag; current[item.tag] = copy; });
+          tagAuditSaveDecisions(current);
+          render();
+        }catch(e){ alert('Arquivo JSON inválido.'); }
+        inp.remove();
+      };
+      reader.readAsText(file);
+    });
+    inp.click();
+  };
+  ov.querySelector('#tar-plan').onclick = () => { openTagAuditPlanModal(getRows()); };
+  ov.querySelector('#tar-apply').onclick = () => { openTagAuditApplyPreviewModal(getRows(), render); };
+
+  loadingEl.hidden = true; bodyEl.hidden = false;
+  render();
 }
 
 async function loadData(){
@@ -16742,6 +17517,7 @@ function openImageAuditModal(){
 document.getElementById('btn-system-diagnostic').onclick = openSystemDiagnosticModal;
 document.getElementById('btn-audit-images').onclick = openImageAuditModal;
 document.getElementById('btn-classification-audit').onclick = openClassificationAuditModal;
+document.getElementById('btn-tag-audit').onclick = openTagAuditModal;
 document.getElementById('btn-clinical-merges-091c').onclick = openClinicalMergesModal091c; // PROTEÇÃO 091c
 document.getElementById('btn-sync-to-cloud').onclick = openSyncDeviceToCloudModal;
 document.getElementById('btn-sync-from-cloud').onclick = openUpdateFromCloudModal;
