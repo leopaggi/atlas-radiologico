@@ -644,13 +644,15 @@ body{
 .tag-audit-table tr.tar-decided-keep{background:rgba(95,199,212,.07);}
 .tag-audit-table tr.tar-decided-edit{background:rgba(232,147,91,.09);}
 .tag-audit-table tr.tar-decided-eliminate{background:rgba(217,117,107,.09);}
-.tag-audit-table tr.tar-decided-review{background:rgba(255,255,255,.035);}
+.tag-audit-table tr.tar-decided-review{background:rgba(140,160,172,.16);}
+@keyframes tarRowFlash{ from{ background:rgba(95,199,212,.35); } to{ background:transparent; } }
+.tag-audit-table tr.tar-row-flash{ animation: tarRowFlash 900ms ease-out; }
 .tar-tagname{font-weight:600;}
 .tar-badge{font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:7px;margin-left:4px;display:inline-block;white-space:nowrap;}
 .tar-badge.manter{color:var(--teal);background:rgba(95,199,212,.14);}
 .tar-badge.editar{color:var(--amber);background:rgba(232,147,91,.16);}
 .tar-badge.eliminar{color:var(--red);background:rgba(217,117,107,.16);}
-.tar-badge.revisar{color:var(--muted);background:var(--panel);}
+.tar-badge.revisar{color:var(--text);background:rgba(140,160,172,.28);font-weight:700;}
 .tar-badge.ausente{color:var(--red);background:rgba(217,117,107,.1);}
 .tar-badge.naoauditada{color:var(--amber);background:rgba(232,147,91,.1);}
 .tar-badge.unico{color:var(--muted-2);background:var(--panel);}
@@ -663,7 +665,7 @@ body{
 .tar-actions button.active.keep{background:var(--teal);border-color:var(--teal);color:#04211d;}
 .tar-actions button.active.edit{background:var(--amber);border-color:var(--amber);color:#1a1108;}
 .tar-actions button.active.eliminate{background:var(--red);border-color:var(--red);color:#2a0e0b;}
-.tar-actions button.active.review{background:var(--line);border-color:var(--muted-2);color:var(--text);}
+.tar-actions button.active.review{background:#3a4a58;border-color:var(--muted-2);color:var(--text);font-weight:700;}
 .tag-audit-groups{display:flex;flex-direction:column;gap:10px;}
 .tag-audit-group-card{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel-2);font-size:12.5px;}
 .tag-audit-group-card h4{margin:0 0 4px;font-size:13px;color:var(--text);}
@@ -674,6 +676,35 @@ body{
 .tar-plan-box{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel-2);font-size:12.5px;margin-top:10px;}
 .tar-plan-box h4{margin:0 0 8px;font-size:13px;color:var(--text);}
 .tar-conflict{color:var(--red);}
+
+/* ---------- Taxonomia clínico-radiológica (TAXO-02, painel somente leitura) ---------- */
+.taxo-modal{max-width:1180px;width:96vw;}
+.taxo-metrics{display:flex;flex-wrap:wrap;gap:8px;font-size:12px;margin-bottom:10px;}
+.taxo-metrics span{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:4px 10px;color:var(--muted);}
+.taxo-metrics span b{color:var(--text);}
+.taxo-search{width:100%;box-sizing:border-box;background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:8px 10px;border-radius:var(--radius);font-family:inherit;font-size:13px;margin:10px 0;}
+.taxo-tabs{margin-bottom:10px;}
+.taxo-filters{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0;align-items:center;}
+.taxo-filters select{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:6px 8px;border-radius:var(--radius);font-size:12px;font-family:inherit;}
+.taxo-table-wrap{max-height:52vh;overflow:auto;border:1px solid var(--line);border-radius:8px;}
+.taxo-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.taxo-table th{position:sticky;top:0;background:var(--panel-2);color:var(--muted);text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap;z-index:1;}
+.taxo-table td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--text);}
+.taxo-table tbody tr[data-taxo-concept]{cursor:pointer;}
+.taxo-table tbody tr[data-taxo-concept]:hover{background:rgba(95,199,212,.08);}
+.taxo-chip{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:2px 8px;font-size:11px;color:var(--text);display:inline-block;margin:1px 3px 1px 0;}
+.taxo-badge{font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:7px;margin-left:4px;display:inline-block;white-space:nowrap;}
+.taxo-badge.exclusive-sim{color:var(--teal);background:rgba(95,199,212,.14);}
+.taxo-badge.exclusive-nao{color:var(--muted-2);background:var(--panel);}
+.taxo-badge.erro{color:var(--red);background:rgba(217,117,107,.16);}
+.taxo-badge.aviso{color:var(--amber);background:rgba(232,147,91,.16);}
+.taxo-group-card{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel-2);font-size:12.5px;margin-bottom:8px;}
+.taxo-group-card h4{margin:0 0 4px;font-size:13px;color:var(--text);}
+.taxo-group-meta{font-size:11px;color:var(--muted-2);margin-bottom:6px;}
+.taxo-issue-row{border:1px solid var(--line);border-radius:6px;padding:5px 8px;margin:3px 0;font-size:12px;overflow-wrap:anywhere;}
+.taxo-issue-row.erro{border-color:var(--red);}
+.taxo-issue-row.aviso{border-color:var(--amber);}
+.taxo-error-box{padding:28px 10px;text-align:center;color:var(--muted);font-size:13px;}
 
 /* detail modal specifics */
 .detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0;}
@@ -1873,6 +1904,7 @@ body{
         <button class="foot-btn" id="btn-clinical-merges-091c" title="Fusão controlada dos 4 grupos de duplicatas clínicas APROVADOS pelo usuário. Mostra o relatório com os dados reais antes; exige backup recente e cria snapshot.">🧬 fusões clínicas aprovadas<br><span class="foot-btn-sub">relatório antes — só funde após backup + confirmação</span></button>
         <button class="foot-btn" id="btn-classification-audit" title="Compara a classificação de cada lesão com o SEED pela identidade (seção+sítio+nome) e aponta as inválidas; corrigir exige confirmação e cria snapshot">📋 auditar classificações<br><span class="foot-btn-sub">aponta classificações inválidas — não altera nada até você confirmar</span></button>
         <button class="foot-btn" id="btn-tag-audit" title="Painel interativo para revisar as tags do catálogo (manter/editar/eliminar/revisar). Usa o DATA atual em runtime para contagens e lesões; não altera nenhuma tag — só registra suas decisões localmente">🏷️ auditoria de tags<br><span class="foot-btn-sub">revisão interativa — decisões ficam salvas no navegador, nada é aplicado aqui</span></button>
+        <button class="foot-btn" id="btn-taxonomy-panel" title="Carrega TAXONOMY.json (dicionário clínico-radiológico aprovado na TAXO-01) e permite explorar grupos/conceitos/sinônimos/relações. Somente leitura: não cria attributes em nenhuma lesão, não altera DATA/SEED/Firestore/IndexedDB/localStorage">🧬 Taxonomia clínico-radiológica<br><span class="foot-btn-sub">painel somente leitura do dicionário aprovado — nenhuma lesão é alterada aqui</span></button>
       </div>
     </div>
   </div>
@@ -12499,6 +12531,8 @@ function tagAuditBuildRows(source, liveIndex){
       absent: absent, notAudited: notAudited, archived: archived,
       decision: decision ? decision.decision : null,
       decisionTarget: decision ? decision.target : null,
+      // Compatibilidade: decisões antigas não têm additionalTags — default [].
+      decisionAdditionalTags: (decision && Array.isArray(decision.additionalTags)) ? decision.additionalTags : [],
       decidedAt: decision ? decision.decidedAt : null,
       appliedAt: decision ? decision.appliedAt : null,
       appliedCount: decision ? decision.appliedCount : null,
@@ -12527,6 +12561,7 @@ function tagAuditRenderRow(r){
   const groupLinks = r.groups.length ? r.groups.map(gid => '<button type="button" class="tar-lesion-link" data-tar-opengroup="' + escAttr(gid) + '">grupo</button>').join(' ') : '';
   const decLabel = tagAuditDecisionLabel(r.decision);
   const appliedBadge = r.appliedAt ? ('<br><span class="tar-badge aplicada">✓ aplicada em ' + (r.appliedCount != null ? r.appliedCount : '?') + ' lesão(ões)</span>') : '';
+  const extraTagsLine = (r.decisionAdditionalTags && r.decisionAdditionalTags.length) ? ('<br><span class="tar-reason">+ ' + r.decisionAdditionalTags.map(escAttr).join(', ') + '</span>') : '';
   return '<tr class="' + rowClass + '" data-tar-row="' + escAttr(r.tag) + '">'
     + '<td><span class="tar-tagname">' + escAttr(r.tag) + '</span> ' + uniqueBadge + absentBadge + naBadge + '</td>'
     + '<td>' + r.liveCount + (r.auditedCount !== null && r.auditedCount !== r.liveCount ? ('<br><span class="tar-reason">(na auditoria: ' + r.auditedCount + ')</span>') : '') + '</td>'
@@ -12534,7 +12569,7 @@ function tagAuditRenderRow(r){
     + '<td><span class="tar-reason">' + escAttr(r.reason || '—') + '</span></td>'
     + '<td>' + escAttr(r.suggested_target || '—') + '</td>'
     + '<td><button type="button" class="tar-lesion-link" data-tar-lesions="' + escAttr(r.tag) + '">' + r.liveCount + (r.liveCount === 1 ? ' lesão' : ' lesões') + '</button> ' + groupLinks + '</td>'
-    + '<td>' + (decLabel ? ('<span class="tar-badge ' + decLabel[0] + '">' + decLabel[1] + '</span>' + (r.decisionTarget ? ('<br><span class="tar-reason">→ ' + escAttr(r.decisionTarget) + '</span>') : '') + appliedBadge) : '<span class="tar-reason">pendente</span>') + '</td>'
+    + '<td>' + (decLabel ? ('<span class="tar-badge ' + decLabel[0] + '">' + decLabel[1] + '</span>' + (r.decisionTarget ? ('<br><span class="tar-reason">→ ' + escAttr(r.decisionTarget) + '</span>') : '') + extraTagsLine + appliedBadge) : '<span class="tar-reason">pendente</span>') + '</td>'
     + '<td><div class="tar-actions">'
     + '<button type="button" class="' + (r.decision === 'keep' ? 'active keep' : '') + '" data-tar-action="keep" data-tar-tag="' + escAttr(r.tag) + '">Manter</button>'
     + '<button type="button" class="' + (r.decision === 'edit' ? 'active edit' : '') + '" data-tar-action="edit" data-tar-tag="' + escAttr(r.tag) + '">Editar</button>'
@@ -12573,14 +12608,23 @@ function tagAuditBuildPlan(rows){
     if(r.decision === 'keep'){ toKeep.push(r); continue; }
     if(r.decision === 'eliminate'){ toEliminate.push(Object.assign({}, r, { lesions: r.lesions })); continue; }
     if(r.decision === 'edit'){
-      const target = (decisions[r.tag] && decisions[r.tag].target) || r.suggested_target || '';
-      if(!target){ conflicts.push({ tag: r.tag, issue: 'Decisão "editar" sem tag de destino definida.' }); continue; }
-      const targetExists = liveTagsSet.has(target);
-      toEdit.push({ tag: r.tag, target: target, liveCount: r.liveCount, targetExists: targetExists, targetCurrentCount: targetExists ? liveIndex.get(target).length : 0, lesions: r.lesions });
+      const d = decisions[r.tag] || {};
+      const target = (d.target || r.suggested_target || '').trim();
+      // Compatibilidade: decisões antigas não têm additionalTags -> [].
+      const additionalTags = (Array.isArray(d.additionalTags) ? d.additionalTags : [])
+        .map(x => String(x || '').trim()).filter(x => x && x !== r.tag);
+      const destinations = [...new Set([target, ...additionalTags].filter(Boolean))];
+      if(!destinations.length){ conflicts.push({ tag: r.tag, issue: 'Decisão "editar" sem tag de destino e sem tags adicionais.' }); continue; }
+      const targetExists = target ? liveTagsSet.has(target) : false;
+      toEdit.push({
+        tag: r.tag, target: target, additionalTags: additionalTags, destinations: destinations,
+        liveCount: r.liveCount, targetExists: targetExists, targetCurrentCount: targetExists ? liveIndex.get(target).length : 0,
+        lesions: r.lesions
+      });
     }
   }
   const editTargets = {};
-  toEdit.forEach(e => { editTargets[e.target] = (editTargets[e.target] || 0) + 1; });
+  toEdit.forEach(e => { (e.destinations || []).forEach(d => { editTargets[d] = (editTargets[d] || 0) + 1; }); });
   toEliminate.forEach(t => { if(editTargets[t.tag]) conflicts.push({ tag: t.tag, issue: 'Marcada para ELIMINAR mas também é destino de edição de outra tag — receberia lesões e seria eliminada ao mesmo tempo.' }); });
   return { toKeep: toKeep, toEdit: toEdit, toEliminate: toEliminate, pending: pending, skippedAbsent: skippedAbsent, conflicts: conflicts };
 }
@@ -12617,28 +12661,225 @@ function openTagAuditLesionsModal(tag, rows){
   );
 }
 
+// ---- Helpers de texto/semelhança para o seletor de tags (só leitura de DATA) ----
+function tagAuditNormalizeForMatch(s){
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+function tagAuditStemWords(s){
+  return tagAuditNormalizeForMatch(s).split(/\s+/).filter(Boolean)
+    .map(w => w.replace(/(ões|ães)$/, 'ao').replace(/s$/, ''));
+}
+// Heurística leve (substring + Jaccard de palavras "stemizadas") — só para
+// SUGERIR tags parecidas ao criar uma nova; nunca bloqueia, nunca funde sozinha.
+function tagAuditSimilarity(a, b){
+  const na = tagAuditNormalizeForMatch(a), nb = tagAuditNormalizeForMatch(b);
+  if(!na || !nb) return 0;
+  if(na === nb) return 1;
+  if(na.indexOf(nb) !== -1 || nb.indexOf(na) !== -1) return 0.8;
+  const wa = new Set(tagAuditStemWords(a)), wb = new Set(tagAuditStemWords(b));
+  let common = 0; wa.forEach(w => { if(wb.has(w)) common++; });
+  const union = new Set([...wa, ...wb]).size || 1;
+  return common / union;
+}
+// Fonte da verdade = DATA runtime (nunca SEED/auditoria estática).
+function tagAuditAllLiveTagsWithCounts(){
+  const idx = tagAuditComputeLiveIndex();
+  return [...idx.entries()].map(([t, lesions]) => ({ tag: t, count: lesions.length }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'pt'));
+}
+
 function openTagAuditEditModal(tag, row, onSaved){
+  const existingDecision = tagAuditLoadDecisions()[tag] || {};
   const suggestion = row && row.suggested_target ? row.suggested_target : '';
-  const existingTarget = row && row.decisionTarget ? row.decisionTarget : suggestion;
-  const lesionsHtml = (row && row.lesions.length) ? row.lesions.map(l => escAttr(l.id + ' · ' + l.name)).join('<br>') : '—';
-  tagAuditMakeOverlay(
-    '<div class="modal" style="max-width:520px;max-height:85vh;overflow-y:auto;">'
+  let target = (existingDecision.target || row && row.decisionTarget || suggestion || '').trim();
+  // Compatibilidade: decisões antigas não têm additionalTags -> [].
+  let extras = (Array.isArray(existingDecision.additionalTags) ? existingDecision.additionalTags : []).slice();
+  const lesions = (row && row.lesions) || [];
+  const liveLesionTagsById = new Map(lesions.map(l => [l.id, ((DATA || []).find(e => e.id === l.id) || {}).tags || []]));
+  const allTagCounts = tagAuditAllLiveTagsWithCounts(); // [{tag,count}] — DATA atual, nunca SEED
+  const allTagsSet = new Set(allTagCounts.map(x => x.tag));
+  const datalistOptions = allTagCounts.map(x => '<option value="' + escAttr(x.tag) + '">').join('');
+
+  const { ov, close } = tagAuditMakeOverlay(
+    '<div class="modal" style="max-width:640px;max-height:88vh;overflow-y:auto;">'
     + '<h2>✏️ Editar tag — decisão de migração</h2>'
-    + '<div class="modal-sub">Isto SALVA uma decisão de renomear/padronizar. A migração real das lesões afetadas só acontece numa etapa futura, depois de "Preparar plano de aplicação" + sua aprovação explícita.</div>'
-    + '<div class="field"><label>Tag atual</label><input type="text" value="' + escAttr(tag) + '" disabled></div>'
-    + '<div class="field"><label>Nova tag (destino)</label><input type="text" id="tar-edit-target" value="' + escAttr(existingTarget) + '" placeholder="Digite a tag de destino…"></div>'
+    + '<div class="modal-sub">Isto SALVA uma decisão de renomear/consolidar. A migração real das lesões afetadas só acontece numa etapa futura, depois de "Aplicar decisões aprovadas" + sua confirmação explícita.</div>'
+    + '<div class="field"><label>Tag origem</label><input type="text" value="' + escAttr(tag) + '" disabled></div>'
+    + '<div class="field"><label>Tag principal (destino) — opcional se você só for adicionar tags abaixo</label>'
+    + '<input type="text" id="tar-edit-target" list="tar-edit-target-list" value="' + escAttr(target) + '" placeholder="Digite ou escolha uma tag existente…">'
+    + '<datalist id="tar-edit-target-list">' + datalistOptions + '</datalist>'
+    + '<div id="tar-edit-target-hint" class="tar-reason" style="margin-top:4px;"></div>'
+    + '</div>'
+    + '<div class="field">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
+    + '<label style="margin-bottom:0;">Tags adicionais (opcional) — somadas ao destino, nunca duplicadas</label>'
+    + '<button type="button" class="btn btn-ghost" id="tar-edit-extra-toggle" aria-expanded="false" style="margin-bottom:0;flex-shrink:0;">▸ Selecionar tags existentes</button>'
+    + '</div>'
+    + '<div class="chip-input-wrap" id="tar-edit-extra-wrap"><input id="tar-edit-extra-input" placeholder="digite e pressione Enter…"></div>'
+    + '<div class="suggest-row" id="tar-edit-extra-suggest" hidden>'
+    + '<input type="search" id="tar-edit-extra-search" placeholder="Buscar tag…" style="width:100%;margin-bottom:8px;box-sizing:border-box;background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:6px 8px;border-radius:var(--radius);font-size:12px;font-family:inherit;">'
+    + '<div id="tar-edit-extra-suggest-list" class="suggest-row-inner"></div>'
+    + '</div>'
+    + '</div>'
     + '<div class="field"><label>Sugestão da auditoria</label><input type="text" value="' + escAttr(suggestion || '— nenhuma sugestão —') + '" disabled></div>'
     + '<div class="field"><label>Motivo (auditoria)</label><textarea disabled>' + escAttr(row ? row.reason : '') + '</textarea></div>'
-    + '<div class="field"><label>Uso atual</label><input type="text" value="' + (row ? row.liveCount : 0) + ' lesão(ões)" disabled></div>'
-    + '<div class="field"><label>Lesões afetadas</label><div class="sync-audit-note" style="max-height:140px;overflow-y:auto;">' + lesionsHtml + '</div></div>'
+    + '<div class="field"><label>Lesões afetadas (' + lesions.length + ') — tags atuais (DATA agora, não SEED)</label>'
+    + '<div id="tar-edit-lesions-list" class="sync-audit-note" style="max-height:160px;overflow-y:auto;"></div></div>'
+    + '<div class="field"><label>Resultado previsto por lesão</label>'
+    + '<div id="tar-edit-preview" class="sync-audit-note" style="max-height:220px;overflow-y:auto;"></div></div>'
+    + '<div id="tar-edit-summary" class="tar-reason" style="margin-bottom:8px;"></div>'
+    + '<div id="tar-edit-error" class="sync-audit-note warn" hidden></div>'
     + '<div class="modal-actions"><button class="btn btn-ghost" id="tar-edit-cancel">Cancelar</button><button class="btn btn-primary" id="tar-edit-save">Salvar decisão</button></div>'
     + '</div>',
     (ov, close) => {
+      const targetInput = ov.querySelector('#tar-edit-target');
+      const hintEl = ov.querySelector('#tar-edit-target-hint');
+      const extraWrap = ov.querySelector('#tar-edit-extra-wrap');
+      const extraInput = ov.querySelector('#tar-edit-extra-input');
+      const extraToggle = ov.querySelector('#tar-edit-extra-toggle');
+      const extraSuggestBox = ov.querySelector('#tar-edit-extra-suggest');
+      const extraSearch = ov.querySelector('#tar-edit-extra-search');
+      const extraSuggestList = ov.querySelector('#tar-edit-extra-suggest-list');
+      const lesionsListEl = ov.querySelector('#tar-edit-lesions-list');
+      const previewEl = ov.querySelector('#tar-edit-preview');
+      const summaryEl = ov.querySelector('#tar-edit-summary');
+      const errorEl = ov.querySelector('#tar-edit-error');
+
+      function renderLesionsCurrentTags(){
+        lesionsListEl.innerHTML = lesions.length ? lesions.map(l => {
+          const curTags = liveLesionTagsById.get(l.id) || [];
+          return '<div class="cls-audit-row"><b>' + escAttr(l.id + ' · ' + l.name) + '</b><br>'
+            + (curTags.length ? curTags.map(t => '<span class="tag-audit-group-tagchip">' + escAttr(t) + '</span>').join(' ') : '<span class="tar-reason">sem tags</span>')
+            + '</div>';
+        }).join('') : '<div class="sync-audit-note">Nenhuma lesão.</div>';
+      }
+
+      function renderPreview(){
+        const selected = [...new Set([target, ...extras].filter(Boolean))];
+        previewEl.innerHTML = lesions.length ? lesions.map(l => {
+          const cur = liveLesionTagsById.get(l.id) || [];
+          const lines = [];
+          if(cur.indexOf(tag) !== -1) lines.push('<span style="color:var(--red);">− ' + escAttr(tag) + '</span>');
+          selected.forEach(t => {
+            if(cur.indexOf(t) !== -1) lines.push('<span style="color:var(--muted-2);">= ' + escAttr(t) + ' (já existe)</span>');
+            else lines.push('<span style="color:var(--teal);">+ ' + escAttr(t) + '</span>');
+          });
+          return '<div class="cls-audit-row"><b>' + escAttr(l.id + ' · ' + l.name) + '</b><br>' + (lines.join(' &nbsp; ') || '<span class="tar-reason">sem mudanças</span>') + '</div>';
+        }).join('') : '<div class="sync-audit-note">Nenhuma lesão.</div>';
+
+        if(selected.length){
+          summaryEl.innerHTML = selected.map(t => {
+            const already = lesions.filter(l => (liveLesionTagsById.get(l.id) || []).indexOf(t) !== -1).length;
+            const willAdd = lesions.length - already;
+            return escAttr(t) + ' — já existe em ' + already + '/' + lesions.length + ' lesão(ões)' + (willAdd ? ', será adicionada a ' + willAdd : '');
+          }).join('<br>');
+        } else {
+          summaryEl.innerHTML = '';
+        }
+      }
+
+      function renderExtraChips(){
+        extraWrap.querySelectorAll('.removable-tag').forEach(n => n.remove());
+        extras.forEach(t => {
+          const c = document.createElement('span');
+          c.className = 'removable-tag';
+          c.innerHTML = escAttr(t) + '<button type="button">✕</button>';
+          c.querySelector('button').onclick = () => { extras = extras.filter(x => x !== t); renderExtraChips(); renderExtraSuggest(); renderPreview(); };
+          extraWrap.insertBefore(c, extraInput);
+        });
+      }
+      function addExtra(t){
+        t = String(t || '').trim();
+        if(!t || t === tag) { extraInput.value = ''; return; }
+        if(extras.indexOf(t) === -1){ extras.push(t); renderExtraChips(); renderExtraSuggest(); renderPreview(); }
+        extraInput.value = '';
+      }
+      extraInput.addEventListener('keydown', ev => {
+        if(ev.key === 'Enter' || ev.key === ','){ ev.preventDefault(); addExtra(extraInput.value); }
+        else if(ev.key === 'Backspace' && extraInput.value === '' && extras.length){ extras.pop(); renderExtraChips(); renderExtraSuggest(); renderPreview(); }
+      });
+
+      // Seletor expansível de tags existentes — mesmo padrão visual já usado
+      // no formulário de lesão do Atlas (chip-input-wrap + suggest-row +
+      // suggest-chip + toggle "▸ Tags avançadas"), com busca adicionada por
+      // serem centenas de tags (o formulário de lesão usa grupos fixos pequenos).
+      function renderExtraSuggest(){
+        const q = tagAuditNormalizeForMatch(extraSearch.value);
+        let candidates = allTagCounts.filter(x => x.tag !== tag && x.tag !== target && extras.indexOf(x.tag) === -1);
+        if(q){
+          candidates = candidates.map(x => {
+            const n = tagAuditNormalizeForMatch(x.tag);
+            const score = n === q ? 3 : n.indexOf(q) === 0 ? 2 : n.indexOf(q) !== -1 ? 1 : 0;
+            return { x: x, score: score };
+          }).filter(o => o.score > 0)
+            .sort((a, b) => b.score - a.score || b.x.count - a.x.count || a.x.tag.localeCompare(b.x.tag, 'pt'))
+            .map(o => o.x);
+        } else {
+          candidates = candidates.slice().sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'pt'));
+        }
+        candidates = candidates.slice(0, 60);
+        extraSuggestList.innerHTML = '';
+        if(!candidates.length){ extraSuggestList.innerHTML = '<span class="tar-reason">Nenhuma tag encontrada.</span>'; return; }
+        candidates.forEach(x => {
+          const s = document.createElement('span');
+          s.className = 'suggest-chip';
+          s.textContent = '+ ' + x.tag + ' · ' + x.count + (x.count === 1 ? ' uso' : ' usos');
+          s.onclick = () => addExtra(x.tag);
+          extraSuggestList.appendChild(s);
+        });
+      }
+      extraSearch.addEventListener('input', renderExtraSuggest);
+      extraToggle.onclick = () => {
+        const opening = extraSuggestBox.hidden;
+        extraSuggestBox.hidden = !opening;
+        extraToggle.textContent = (opening ? '▾ ' : '▸ ') + 'Selecionar tags existentes';
+        extraToggle.setAttribute('aria-expanded', opening ? 'true' : 'false');
+        if(opening) renderExtraSuggest();
+      };
+
+      function renderTargetHint(){
+        target = targetInput.value.trim();
+        if(!target){ hintEl.innerHTML = ''; renderPreview(); return; }
+        if(allTagsSet.has(target)){
+          const count = (allTagCounts.find(x => x.tag === target) || {}).count || 0;
+          hintEl.innerHTML = '<span style="color:var(--teal);">✓ tag existente · ' + count + (count === 1 ? ' uso' : ' usos') + '</span>';
+        } else {
+          const similar = allTagCounts
+            .map(x => ({ x: x, score: tagAuditSimilarity(target, x.tag) }))
+            .filter(o => o.score >= 0.4 && o.x.tag !== tag)
+            .sort((a, b) => b.score - a.score || b.x.count - a.x.count)
+            .slice(0, 5);
+          let html = '<span style="color:var(--amber);">🆕 Nova tag — ainda não existe no catálogo</span>';
+          if(similar.length){
+            html += '<br><span>Existe(m) tag(s) semelhante(s) no catálogo. Usar uma existente em vez de criar nova?</span>'
+              + '<div class="suggest-row-inner" style="margin-top:4px;">'
+              + similar.map(o => '<span class="suggest-chip" data-tar-use-similar="' + escAttr(o.x.tag) + '">' + escAttr(o.x.tag) + ' · ' + o.x.count + (o.x.count === 1 ? ' uso' : ' usos') + '</span>').join('')
+              + '</div>';
+          }
+          hintEl.innerHTML = html;
+          hintEl.querySelectorAll('[data-tar-use-similar]').forEach(chip => {
+            chip.onclick = () => { targetInput.value = chip.getAttribute('data-tar-use-similar'); renderTargetHint(); };
+          });
+        }
+        renderPreview();
+      }
+      targetInput.addEventListener('input', renderTargetHint);
+
+      renderLesionsCurrentTags();
+      renderExtraChips();
+      renderTargetHint(); // já chama renderPreview() no final
+
       ov.querySelector('#tar-edit-cancel').onclick = close;
       ov.querySelector('#tar-edit-save').onclick = () => {
-        const target = ov.querySelector('#tar-edit-target').value.trim();
-        if(!target){ alert('Informe a nova tag de destino.'); return; }
-        tagAuditSetDecision(tag, 'edit', { target: target });
+        const finalTarget = targetInput.value.trim();
+        const finalExtras = [...new Set(extras.map(x => String(x || '').trim()).filter(x => x && x !== tag))];
+        if(!finalTarget && !finalExtras.length){
+          errorEl.hidden = false;
+          errorEl.textContent = 'Informe uma tag principal ou pelo menos uma tag adicional.';
+          return;
+        }
+        errorEl.hidden = true;
+        tagAuditSetDecision(tag, 'edit', { target: finalTarget, additionalTags: finalExtras });
         close();
         if(typeof onSaved === 'function') onSaved();
       };
@@ -12665,8 +12906,10 @@ function openTagAuditEliminateModal(tag, row, onSaved){
 
 function openTagAuditPlanModal(rows){
   const plan = tagAuditBuildPlan(rows);
-  const editsHtml = plan.toEdit.length ? plan.toEdit.map(e => '<div class="cls-audit-row">' + escAttr(e.tag) + ' (' + e.liveCount + ' lesões) → <span>' + escAttr(e.target) + '</span>'
-    + (e.targetExists ? (' <em style="color:var(--amber);">— tag destino já existe em ' + e.targetCurrentCount + ' outra(s) lesão(ões); seriam fundidas</em>') : ' — tag nova') + '</div>').join('') : '<div class="sync-audit-note">Nenhuma.</div>';
+  const editsHtml = plan.toEdit.length ? plan.toEdit.map(e => '<div class="cls-audit-row">' + escAttr(e.tag) + ' (' + e.liveCount + ' lesões) → <span>' + escAttr(e.target || '(sem tag principal)') + '</span>'
+    + (e.target ? (e.targetExists ? (' <em style="color:var(--amber);">— tag destino já existe em ' + e.targetCurrentCount + ' outra(s) lesão(ões); seriam fundidas</em>') : ' — tag nova') : '')
+    + (e.additionalTags && e.additionalTags.length ? ('<br><span style="color:var(--muted-2);font-size:11px;">+ também: ' + e.additionalTags.map(t => escAttr(t)).join(', ') + '</span>') : '')
+    + '</div>').join('') : '<div class="sync-audit-note">Nenhuma.</div>';
   const elimHtml = plan.toEliminate.length ? plan.toEliminate.map(e => '<div class="cls-audit-row">' + escAttr(e.tag) + ' — removeria de ' + e.liveCount + ' lesão(ões)</div>').join('') : '<div class="sync-audit-note">Nenhuma.</div>';
   const conflictsHtml = plan.conflicts.length ? ('<div class="tar-plan-box"><h4 class="tar-conflict">⚠ Conflitos</h4>' + plan.conflicts.map(c => '<div class="cls-audit-row"><span>' + escAttr(c.tag) + '</span>: ' + escAttr(c.issue) + '</div>').join('') + '</div>') : '';
   tagAuditMakeOverlay(
@@ -12703,17 +12946,26 @@ function openTagAuditPlanModal(rows){
    ============================================================ */
 
 // Aplica renomeações/eliminações a um array de tags de UMA lesão.
-// editMap: Map(tagOrigem -> tagDestino). eliminateSet: Set(tagsAEliminar).
-// Preserva ordem; nunca duplica (se origem E destino já coexistirem na
-// mesma lesão, sobra uma única ocorrência do destino).
+// editMap: Map(tagOrigem -> [tagDestino1, tagDestino2, ...]) — uma origem
+// pode expandir para UMA OU MAIS tags (tag principal + adicionais).
+// eliminateSet: Set(tagsAEliminar). Preserva ordem (destinos entram no
+// lugar da origem); nunca duplica (se origem e algum destino já
+// coexistirem na mesma lesão, sobra uma única ocorrência de cada destino).
 function tagAuditTransformTags(tags, editMap, eliminateSet){
   const result = []; const seen = new Set();
   for(const t of (Array.isArray(tags) ? tags : [])){
     if(eliminateSet.has(t)) continue;
-    const out = editMap.has(t) ? editMap.get(t) : t;
-    if(seen.has(out)) continue;
-    seen.add(out);
-    result.push(out);
+    if(editMap.has(t)){
+      for(const dest of editMap.get(t)){
+        if(seen.has(dest)) continue;
+        seen.add(dest);
+        result.push(dest);
+      }
+      continue;
+    }
+    if(seen.has(t)) continue;
+    seen.add(t);
+    result.push(t);
   }
   return result;
 }
@@ -12722,9 +12974,11 @@ function tagAuditDetectChains(toEdit){
   const sources = new Set(toEdit.map(e => e.tag));
   const out = [];
   toEdit.forEach(e => {
-    if(sources.has(e.target)){
-      out.push({ tag: e.tag, issue: 'Cadeia de edição detectada: "' + e.tag + '" → "' + e.target + '", mas "' + e.target + '" também está marcada para virar outra tag. Cadeias (A→B, B→C) não são resolvidas automaticamente — ajuste as decisões manualmente antes de aplicar.' });
-    }
+    (e.destinations || []).forEach(dest => {
+      if(sources.has(dest)){
+        out.push({ tag: e.tag, issue: 'Cadeia de edição detectada: "' + e.tag + '" → "' + dest + '", mas "' + dest + '" também está marcada para virar outra tag. Cadeias (A→B, B→C) não são resolvidas automaticamente — ajuste as decisões manualmente antes de aplicar.' });
+      }
+    });
   });
   return out;
 }
@@ -12736,8 +12990,9 @@ function tagAuditBuildApplyPlan(rows){
   const base = tagAuditBuildPlan(rows);
   const extra = [];
   base.toEdit.forEach(e => {
-    if(e.tag === e.target) extra.push({ tag: e.tag, issue: 'Tag de origem e destino são idênticas — decisão "editar" não faz sentido (deveria ser "manter").' });
-    if(!e.target || !String(e.target).trim()) extra.push({ tag: e.tag, issue: 'Tag de destino vazia ou inválida.' });
+    const dests = e.destinations || [];
+    if(!dests.length) extra.push({ tag: e.tag, issue: 'Tag de destino vazia e nenhuma tag adicional definida.' });
+    if(dests.indexOf(e.tag) !== -1) extra.push({ tag: e.tag, issue: 'Uma das tags de destino é idêntica à tag de origem — não faz sentido (seria "manter").' });
   });
   extra.push(...tagAuditDetectChains(base.toEdit));
   return Object.assign({}, base, { conflicts: [...base.conflicts, ...extra] });
@@ -12746,7 +13001,7 @@ function tagAuditBuildApplyPlan(rows){
 // Estagia a mutação em memória SEM tocar DATA. Retorna lista de lesões
 // afetadas (id, before{tags,_userUpdatedAt}, afterTags) + validação.
 function tagAuditStageMutations(plan){
-  const editMap = new Map(plan.toEdit.map(e => [e.tag, e.target]));
+  const editMap = new Map(plan.toEdit.map(e => [e.tag, (e.destinations && e.destinations.length) ? e.destinations : [e.target].filter(Boolean)]));
   const eliminateSet = new Set(plan.toEliminate.map(e => e.tag));
   const affected = [];
   const problems = [];
@@ -12821,7 +13076,13 @@ async function tagAuditApplyApproved(plan){
   // Validação pós-aplicação (confere no DATA real, pós-save).
   const postIndex = tagAuditComputeLiveIndex();
   const stillHasOldEdit = plan.toEdit.filter(e => postIndex.has(e.tag));
-  const targetsMissing = plan.toEdit.filter(e => !postIndex.has(e.target));
+  // "destino ausente" só se aplica a destinos que de fato foram declarados
+  // (tag principal vazia é um caso válido — "sem tag principal" — não é
+  // um destino "ausente", é um destino que nunca existiu por decisão).
+  const targetsMissing = [];
+  plan.toEdit.forEach(e => {
+    (e.destinations || []).forEach(dest => { if(!postIndex.has(dest)) targetsMissing.push({ tag: e.tag, target: dest }); });
+  });
   const stillHasEliminated = plan.toEliminate.filter(e => postIndex.has(e.tag));
   // Nenhuma lesão fora de staged.affected teve .tags reatribuído — garantido
   // por construção (o loop de mutação real só itera staged.affected).
@@ -12835,13 +13096,14 @@ async function tagAuditApplyApproved(plan){
       snapshotId: snapshot.id,
       appliedAtIso: new Date(appliedAt).toISOString(),
       lesõesAlteradas: staged.affected.map(a => ({ id: a.id, name: a.name })),
-      tagsEditadas: plan.toEdit.map(e => ({ tag: e.tag, target: e.target, afetadas: perTagCount[e.tag] || 0 })),
+      tagsEditadas: plan.toEdit.map(e => ({ tag: e.tag, target: e.target, additionalTags: e.additionalTags || [], afetadas: perTagCount[e.tag] || 0 })),
       tagsEliminadas: plan.toEliminate.map(e => ({ tag: e.tag, afetadas: perTagCount[e.tag] || 0 })),
       conflitos: [],
       operaçõesIgnoradas: plan.skippedAbsent.map(r => ({ tag: r.tag, motivo: 'ausente no catálogo atual' })),
       validaçãoPósAplicação: {
         tagsOrigemAindaPresentes: stillHasOldEdit.map(e => e.tag),
         tagsDestinoAusentes: targetsMissing.map(e => e.target),
+        tagsDestinoAusentesDetalhe: targetsMissing,
         tagsEliminadasAindaPresentes: stillHasEliminated.map(e => e.tag),
         lesõesForaDoEscopoAlteradas: unexpectedlyTouched
       }
@@ -12866,7 +13128,9 @@ function openTagAuditApplyReportModal(result){
     + (allClear ? '<div class="sync-audit-note ok">Tudo conferido: tags de origem sumiram, tags destino existem, tags eliminadas sumiram, nenhuma lesão fora do escopo foi tocada.</div>'
       : '<div class="sync-audit-note warn">Atenção — divergências encontradas na validação pós-aplicação:<br>' + JSON.stringify(v) + '</div>')
     + '</div>'
-    + '<div class="tar-plan-box"><h4>Tags editadas</h4>' + (result.report.tagsEditadas.length ? result.report.tagsEditadas.map(e => '<div class="cls-audit-row">' + escAttr(e.tag) + ' → <span>' + escAttr(e.target) + '</span> — ' + e.afetadas + ' lesão(ões)</div>').join('') : '<div class="sync-audit-note">Nenhuma.</div>') + '</div>'
+    + '<div class="tar-plan-box"><h4>Tags editadas</h4>' + (result.report.tagsEditadas.length ? result.report.tagsEditadas.map(e => '<div class="cls-audit-row">' + escAttr(e.tag) + ' → <span>' + escAttr(e.target || '(sem tag principal)') + '</span>'
+      + (e.additionalTags && e.additionalTags.length ? ('<br>+ também: ' + e.additionalTags.map(t => escAttr(t)).join(', ')) : '')
+      + ' — ' + e.afetadas + ' lesão(ões)</div>').join('') : '<div class="sync-audit-note">Nenhuma.</div>') + '</div>'
     + '<div class="tar-plan-box"><h4>Tags eliminadas</h4>' + (result.report.tagsEliminadas.length ? result.report.tagsEliminadas.map(e => '<div class="cls-audit-row">' + escAttr(e.tag) + ' — ' + e.afetadas + ' lesão(ões)</div>').join('') : '<div class="sync-audit-note">Nenhuma.</div>') + '</div>'
     + '<div class="tar-plan-box"><h4>Lesões alteradas (' + result.report.lesõesAlteradas.length + ')</h4><div style="max-height:160px;overflow-y:auto;">' + result.report.lesõesAlteradas.map(l => escAttr(l.id + ' · ' + l.name)).join('<br>') + '</div></div>'
     + '<div class="modal-actions"><button class="btn btn-primary" id="tar-report-close">fechar</button><span></span></div>'
@@ -12877,8 +13141,10 @@ function openTagAuditApplyReportModal(result){
 
 function openTagAuditApplyPreviewModal(rows, onApplied){
   const plan = tagAuditBuildApplyPlan(rows);
-  const editsHtml = plan.toEdit.length ? plan.toEdit.map(e => '<div class="cls-audit-row"><b>EDITAR</b><br>"' + escAttr(e.tag) + '" → "' + escAttr(e.target) + '"<br>Afeta: ' + e.liveCount + ' lesão(ões)'
-    + (e.targetExists ? (' <em style="color:var(--amber);">— tag destino já existe em ' + e.targetCurrentCount + ' outra(s) lesão(ões); seriam fundidas, sem duplicar</em>') : ' — tag nova')
+  const editsHtml = plan.toEdit.length ? plan.toEdit.map(e => '<div class="cls-audit-row"><b>EDITAR</b><br>"' + escAttr(e.tag) + '" → "' + escAttr(e.target || '(sem tag principal)') + '"'
+    + (e.additionalTags && e.additionalTags.length ? ('<br>Adicionar também: ' + e.additionalTags.map(t => '+ ' + escAttr(t)).join(', ')) : '')
+    + '<br>Afeta: ' + e.liveCount + ' lesão(ões)'
+    + (e.target ? (e.targetExists ? (' <em style="color:var(--amber);">— tag destino já existe em ' + e.targetCurrentCount + ' outra(s) lesão(ões); seriam fundidas, sem duplicar</em>') : ' — tag nova') : '')
     + '<br><span style="color:var(--muted-2);font-size:11px;">' + (e.lesions || []).map(l => escAttr(l.id + ':' + l.name)).join(' | ') + '</span></div>').join('') : '<div class="sync-audit-note">Nenhuma.</div>';
   const elimHtml = plan.toEliminate.length ? plan.toEliminate.map(e => '<div class="cls-audit-row"><b>ELIMINAR</b><br>"' + escAttr(e.tag) + '"<br>Afeta: ' + e.liveCount + ' lesão(ões)'
     + '<br><span style="color:var(--muted-2);font-size:11px;">' + (e.lesions || []).map(l => escAttr(l.id + ':' + l.name)).join(' | ') + '</span></div>').join('') : '<div class="sync-audit-note">Nenhuma.</div>';
@@ -12918,6 +13184,432 @@ function openTagAuditApplyPreviewModal(rows, onApplied){
   }
 }
 
+/* ===================== TAXO-02 — Painel mestre da taxonomia clínico-radiológica (somente leitura) =====================
+   Carrega TAXONOMY.json (dicionário aprovado na TAXO-01 — 33 groups / 194
+   concepts, metadata.status="approved") em runtime, só para
+   EXPLORAÇÃO/AUDITORIA do dicionário. Não cria/edita/remove conceito, não
+   grava `attributes` em nenhuma lesão, não aciona a persistência normal do
+   Atlas, não lê/escreve Firestore/IndexedDB/localStorage de dados
+   principais, não altera as variáveis globais do catálogo. Se o fetch
+   falhar, o Atlas continua funcionando normalmente — só este painel mostra
+   o erro, de forma isolada. */
+
+let TAXONOMY_CACHE = null;
+let TAXONOMY_LOAD_PROMISE = null;
+// Cache-busting por constante runtime simples: schemaVersion/taxonomyVersion
+// só existem DEPOIS do fetch (não dá pra usá-los na própria query string sem
+// um fetch prévio), então o cache-bust é esta constante — bumpar manualmente
+// junto de qualquer alteração real de conteúdo do TAXONOMY.json.
+const TAXONOMY_CACHE_BUST = 1;
+
+function loadTaxonomy(){
+  if(TAXONOMY_CACHE) return Promise.resolve(TAXONOMY_CACHE);
+  if(TAXONOMY_LOAD_PROMISE) return TAXONOMY_LOAD_PROMISE;
+  TAXONOMY_LOAD_PROMISE = fetch('TAXONOMY.json?v=' + TAXONOMY_CACHE_BUST)
+    .then(res => { if(!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+    .then(json => {
+      if(!json || !Array.isArray(json.groups) || !Array.isArray(json.concepts)) throw new Error('TAXONOMY.json com formato inesperado (groups/concepts ausentes)');
+      TAXONOMY_CACHE = json;
+      return json;
+    })
+    .catch(err => { TAXONOMY_LOAD_PROMISE = null; throw err; });
+  return TAXONOMY_LOAD_PROMISE;
+}
+
+function taxoNormalizeText(s){
+  return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+function taxoBuildIndices(taxonomy){
+  const conceptById = new Map();
+  const groupById = new Map();
+  const conceptsByGroup = new Map();
+  const conceptsByDomain = new Map();
+  const synonymIndex = new Map();
+  (taxonomy.groups || []).forEach(g => groupById.set(g.id, g));
+  (taxonomy.concepts || []).forEach(c => {
+    conceptById.set(c.id, c);
+    if(!conceptsByGroup.has(c.group)) conceptsByGroup.set(c.group, []);
+    conceptsByGroup.get(c.group).push(c);
+    if(!conceptsByDomain.has(c.domain)) conceptsByDomain.set(c.domain, []);
+    conceptsByDomain.get(c.domain).push(c);
+    (c.synonyms || []).forEach(syn => {
+      const key = taxoNormalizeText(syn);
+      if(!key) return;
+      if(!synonymIndex.has(key)) synonymIndex.set(key, []);
+      synonymIndex.get(key).push(c.id);
+    });
+  });
+  return { conceptById, groupById, conceptsByGroup, conceptsByDomain, synonymIndex };
+}
+
+function taxoSearch(taxonomy, query){
+  const q = taxoNormalizeText(query);
+  if(!q) return [];
+  return (taxonomy.concepts || []).filter(c => {
+    if(taxoNormalizeText(c.label).includes(q)) return true;
+    if(taxoNormalizeText(c.id).includes(q)) return true;
+    if(c.description && taxoNormalizeText(c.description).includes(q)) return true;
+    if((c.synonyms || []).some(s => taxoNormalizeText(s).includes(q))) return true;
+    if((c.subgroups || []).some(s => taxoNormalizeText(s).includes(q))) return true;
+    return false;
+  });
+}
+
+// Auditoria de integridade em runtime — mesmas invariantes de
+// tests/taxonomy-v1-structure.test.js, reimplementadas aqui porque o
+// navegador não roda node:test. Puramente diagnóstica: nunca corrige nada.
+function taxoRunIntegrityAudit(taxonomy){
+  const issues = [];
+  const err = message => issues.push({ level: 'erro', message });
+  const warn = message => issues.push({ level: 'aviso', message });
+  const concepts = taxonomy.concepts || [];
+  const groups = taxonomy.groups || [];
+  const ids = concepts.map(c => c.id);
+  const idSet = new Set(ids);
+  if(idSet.size !== ids.length) err('Há conceptId duplicado em concepts[].');
+  const groupIds = groups.map(g => g.id);
+  const groupIdSet = new Set(groupIds);
+  if(groupIdSet.size !== groupIds.length) err('Há group id duplicado em groups[].');
+  const prefixByDomain = { clinical: 'clin_', radiologic: 'rad_', etiology: 'etio_', demographics: 'demo_' };
+  concepts.forEach(c => {
+    if(!groupIdSet.has(c.group)) err('concept ' + c.id + ' referencia group inexistente: ' + c.group);
+    if(c.parentId != null && !idSet.has(c.parentId)) err('concept ' + c.id + ' tem parentId inexistente: ' + c.parentId);
+    if(c.aliasOf != null && !idSet.has(c.aliasOf)) err('concept ' + c.id + ' tem aliasOf inexistente: ' + c.aliasOf);
+    const r = c.relations || {};
+    ['relatedTo', 'oftenAssociatedWith', 'differentialOf'].forEach(key => {
+      (r[key] || []).forEach(target => { if(!idSet.has(target)) err('concept ' + c.id + ' tem ' + key + ' inexistente: ' + target); });
+    });
+    if(c.conflictsWith){
+      c.conflictsWith.forEach(target => {
+        if(target === c.id) err('concept ' + c.id + ' conflita consigo próprio.');
+        else if(!idSet.has(target)) err('concept ' + c.id + ' tem conflictsWith inexistente: ' + target);
+        else {
+          const other = concepts.find(x => x.id === target);
+          if(other && !(other.conflictsWith || []).includes(c.id)) err('conflictsWith assimétrico entre ' + c.id + ' e ' + target + ' (deveria apontar nos dois sentidos).');
+        }
+      });
+    }
+    if(!['active', 'deprecated'].includes(c.status)) err('concept ' + c.id + ' tem status inválido: ' + c.status);
+    const prefix = prefixByDomain[c.domain];
+    if(!prefix) err('concept ' + c.id + ' tem domain desconhecido: ' + c.domain);
+    else if(!c.id.startsWith(prefix)) err('concept ' + c.id + ' não usa o prefixo esperado (' + prefix + ') para domain ' + c.domain);
+  });
+  const meta = taxonomy.metadata || {};
+  if(meta.schemaVersion !== 1) warn('schemaVersion inesperado (esperado 1): ' + meta.schemaVersion);
+  if(meta.taxonomyVersion !== 1) warn('taxonomyVersion inesperado (esperado 1): ' + meta.taxonomyVersion);
+  if(meta.status !== 'approved') warn('metadata.status não é "approved" (atual: ' + meta.status + ').');
+  if(groups.length !== 33) warn('quantidade de groups divergiu da baseline aprovada (33): ' + groups.length);
+  if(concepts.length !== 194) warn('quantidade de concepts divergiu da baseline aprovada (194): ' + concepts.length);
+  return issues;
+}
+
+// "Qualifier" nesta baseline = concept com parentId (único sinal estrutural
+// que os distingue de um symptom/eixo independente) — evita hardcodar nomes
+// de group, que já mudaram de nome nesta própria sessão (TAXO-01 ajuste).
+function taxoQualifierCount(taxonomy){
+  return (taxonomy.concepts || []).filter(c => c.parentId != null).length;
+}
+
+function taxoComputeMetrics(taxonomy, indices){
+  const meta = taxonomy.metadata || {};
+  return {
+    schemaVersion: meta.schemaVersion,
+    taxonomyVersion: meta.taxonomyVersion,
+    status: meta.status,
+    groups: taxonomy.groups.length,
+    concepts: taxonomy.concepts.length,
+    clinical: (indices.conceptsByDomain.get('clinical') || []).length,
+    radiologic: (indices.conceptsByDomain.get('radiologic') || []).length,
+    etiology: (indices.conceptsByDomain.get('etiology') || []).length,
+    demographics: (indices.conceptsByDomain.get('demographics') || []).length,
+    symptoms: (indices.conceptsByGroup.get('clinical.symptoms') || []).length,
+    qualifiers: taxoQualifierCount(taxonomy),
+    deprecated: taxonomy.concepts.filter(c => c.status === 'deprecated').length,
+    aliases: taxonomy.concepts.filter(c => c.aliasOf).length
+  };
+}
+
+function taxoMetricsHtml(m){
+  const row = (label, value) => '<span>' + esc(label) + ' <b>' + esc(String(value)) + '</b></span>';
+  return '<div class="taxo-metrics">'
+    + row('schema', m.schemaVersion) + row('versão', m.taxonomyVersion) + row('status', m.status)
+    + row('groups', m.groups) + row('concepts', m.concepts)
+    + row('clinical', m.clinical) + row('radiologic', m.radiologic) + row('etiology', m.etiology) + row('demographics', m.demographics)
+    + row('symptoms', m.symptoms) + row('qualifiers', m.qualifiers)
+    + row('deprecated', m.deprecated) + row('aliases', m.aliases)
+    + '</div>';
+}
+
+const TAXO_TABS = [
+  ['concepts', 'Conceitos'], ['groups', 'Grupos'], ['synonyms', 'Sinônimos'],
+  ['relations', 'Relações'], ['coverage', 'Cobertura'], ['integrity', 'Integridade']
+];
+
+function taxoTabsHtml(state){
+  return '<div class="image-link-tabs taxo-tabs" role="tablist">' + TAXO_TABS.map(([key, label]) =>
+    '<button type="button" role="tab" class="btn btn-ghost image-link-tab taxo-tab' + (state.tab === key ? ' active' : '') + '" data-taxo-tab="' + key + '" aria-selected="' + (state.tab === key ? 'true' : 'false') + '">' + esc(label) + '</button>'
+  ).join('') + '</div>';
+}
+
+function taxoApplyConceptFilters(taxonomy, state){
+  let list = taxonomy.concepts;
+  if(state.search && state.search.trim()){
+    const matched = new Set(taxoSearch(taxonomy, state.search).map(c => c.id));
+    list = list.filter(c => matched.has(c.id));
+  }
+  const f = state.filters;
+  if(f.domain) list = list.filter(c => c.domain === f.domain);
+  if(f.group) list = list.filter(c => c.group === f.group);
+  if(f.subgroup) list = list.filter(c => (c.subgroups || []).includes(f.subgroup));
+  if(f.status) list = list.filter(c => c.status === f.status);
+  if(f.hasSynonym === 'yes') list = list.filter(c => (c.synonyms || []).length > 0);
+  if(f.hasSynonym === 'no') list = list.filter(c => !(c.synonyms || []).length);
+  if(f.hasDescription === 'yes') list = list.filter(c => !!c.description);
+  if(f.hasDescription === 'no') list = list.filter(c => !c.description);
+  return list;
+}
+
+function taxoRenderConceptsTab(taxonomy, indices, state){
+  const list = taxoApplyConceptFilters(taxonomy, state);
+  const domains = [...indices.conceptsByDomain.keys()].sort();
+  const groupsList = taxonomy.groups.map(g => g.id).sort();
+  const subgroups = [...new Set(taxonomy.concepts.flatMap(c => c.subgroups || []))].sort();
+  const statuses = [...new Set(taxonomy.concepts.map(c => c.status))].sort();
+  const f = state.filters;
+  const opt = (value, label, current) => '<option value="' + escAttr(value) + '"' + (current === value ? ' selected' : '') + '>' + esc(label) + '</option>';
+  const filtersHtml = '<div class="taxo-filters">'
+    + '<select data-taxo-filter="domain">' + opt('', 'domain: todos', f.domain) + domains.map(d => opt(d, d, f.domain)).join('') + '</select>'
+    + '<select data-taxo-filter="group">' + opt('', 'group: todos', f.group) + groupsList.map(g => opt(g, g, f.group)).join('') + '</select>'
+    + '<select data-taxo-filter="subgroup">' + opt('', 'subgroup: todos', f.subgroup) + subgroups.map(s => opt(s, s, f.subgroup)).join('') + '</select>'
+    + '<select data-taxo-filter="status">' + opt('', 'status: todos', f.status) + statuses.map(s => opt(s, s, f.status)).join('') + '</select>'
+    + '<select data-taxo-filter="hasSynonym">' + opt('', 'sinônimo: todos', f.hasSynonym) + opt('yes', 'com sinônimo', f.hasSynonym) + opt('no', 'sem sinônimo', f.hasSynonym) + '</select>'
+    + '<select data-taxo-filter="hasDescription">' + opt('', 'description: todos', f.hasDescription) + opt('yes', 'com description', f.hasDescription) + opt('no', 'sem description', f.hasDescription) + '</select>'
+    + '<span style="color:var(--muted-2);font-size:11.5px;">' + list.length + ' de ' + taxonomy.concepts.length + '</span>'
+    + '</div>';
+  const rows = list.map(c => (
+    '<tr data-taxo-concept="' + escAttr(c.id) + '">'
+    + '<td><b>' + esc(c.label) + '</b></td>'
+    + '<td><code>' + esc(c.id) + '</code></td>'
+    + '<td>' + esc(c.domain) + '</td>'
+    + '<td>' + esc(c.group) + '</td>'
+    + '<td>' + (c.subgroups || []).map(s => '<span class="taxo-chip">' + esc(s) + '</span>').join('') + '</td>'
+    + '<td>' + esc(c.status) + '</td>'
+    + '<td>' + (c.synonyms || []).map(s => '<span class="taxo-chip">' + esc(s) + '</span>').join('') + '</td>'
+    + '<td style="max-width:260px;">' + (c.description ? esc(c.description) : '<span style="color:var(--muted-2);">—</span>') + '</td>'
+    + '</tr>'
+  )).join('');
+  return filtersHtml
+    + '<div class="taxo-table-wrap taxo-scroll-wrap"><table class="taxo-table">'
+    + '<thead><tr><th>label</th><th>conceptId</th><th>domain</th><th>group</th><th>subgroups</th><th>status</th><th>synonyms</th><th>description</th></tr></thead>'
+    + '<tbody>' + (rows || '<tr><td colspan="8" style="text-align:center;color:var(--muted-2);">Nenhum concept encontrado.</td></tr>') + '</tbody>'
+    + '</table></div>';
+}
+
+function taxoRenderGroupsTab(taxonomy, indices){
+  return taxonomy.groups.map(g => {
+    const members = indices.conceptsByGroup.get(g.id) || [];
+    return '<div class="taxo-group-card">'
+      + '<h4>' + esc(g.label) + ' <code style="font-size:11px;color:var(--muted-2);">' + esc(g.id) + '</code></h4>'
+      + '<div class="taxo-group-meta">domain: ' + esc(g.domain)
+      + ' · <span class="taxo-badge ' + (g.exclusive ? 'exclusive-sim' : 'exclusive-nao') + '">exclusive: ' + (g.exclusive ? 'sim' : 'não') + '</span>'
+      + ' · <span class="taxo-badge ' + (g.allowMultipleInstances ? 'exclusive-sim' : 'exclusive-nao') + '">allowMultipleInstances: ' + (g.allowMultipleInstances ? 'sim' : 'não') + '</span>'
+      + ' · applicableSections: ' + esc(JSON.stringify(g.applicableSections))
+      + ' · ' + members.length + ' concept(s)</div>'
+      + '<button type="button" class="btn btn-ghost" style="font-size:11px;padding:3px 8px;" data-taxo-group-toggle="' + escAttr(g.id) + '">expandir/recolher</button>'
+      + '<div data-taxo-group-concepts="' + escAttr(g.id) + '" hidden style="margin-top:8px;">'
+      + (members.length ? members.map(c => '<span class="taxo-chip" data-taxo-concept="' + escAttr(c.id) + '" style="cursor:pointer;">' + esc(c.label) + ' <span style="color:var(--muted-2);">(' + esc(c.id) + ')</span></span>').join('') : '<span style="color:var(--muted-2);font-size:11.5px;">group vazio.</span>')
+      + '</div></div>';
+  }).join('');
+}
+
+function taxoRenderSynonymsTab(taxonomy, indices, state){
+  const entries = [];
+  taxonomy.concepts.forEach(c => (c.synonyms || []).forEach(syn => entries.push({ syn, concept: c })));
+  const q = taxoNormalizeText(state.search);
+  const filtered = q ? entries.filter(e => taxoNormalizeText(e.syn).includes(q) || taxoNormalizeText(e.concept.label).includes(q) || taxoNormalizeText(e.concept.id).includes(q)) : entries;
+  const bySynNorm = new Map();
+  entries.forEach(e => {
+    const k = taxoNormalizeText(e.syn);
+    if(!bySynNorm.has(k)) bySynNorm.set(k, []);
+    bySynNorm.get(k).push(e.concept.id);
+  });
+  const labelNormSet = new Set(taxonomy.concepts.map(c => taxoNormalizeText(c.label)));
+  const issues = [];
+  bySynNorm.forEach((conceptIds, key) => {
+    const uniqueIds = [...new Set(conceptIds)];
+    if(uniqueIds.length > 1) issues.push('Sinônimo "' + key + '" aponta para mais de um concept: ' + uniqueIds.join(', '));
+    if(labelNormSet.has(key)) issues.push('Sinônimo "' + key + '" é igual a um label canônico de outro concept.');
+  });
+  const rows = filtered.map(e => (
+    '<tr data-taxo-concept="' + escAttr(e.concept.id) + '">'
+    + '<td>' + esc(e.syn) + '</td><td>→ <b>' + esc(e.concept.label) + '</b></td><td>→ <code>' + esc(e.concept.id) + '</code></td>'
+    + '</tr>'
+  )).join('');
+  return (issues.length
+      ? '<div class="taxo-group-card">' + issues.map(i => '<div class="taxo-issue-row aviso">⚠ ' + esc(i) + '</div>').join('') + '</div>'
+      : '<div class="taxo-group-card"><span style="color:var(--teal);">✅ Nenhuma duplicata/ambiguidade de sinônimo detectada.</span></div>')
+    + '<div class="taxo-table-wrap taxo-scroll-wrap"><table class="taxo-table"><thead><tr><th>sinônimo</th><th>label canônico</th><th>conceptId</th></tr></thead>'
+    + '<tbody>' + (rows || '<tr><td colspan="3" style="text-align:center;color:var(--muted-2);">Nenhum sinônimo' + (q ? ' encontrado para a busca.' : ' cadastrado ainda.') + '</td></tr>') + '</tbody></table></div>';
+}
+
+function taxoRenderRelationsTab(taxonomy){
+  function section(title, items, render){
+    return '<div class="taxo-group-card"><h4>' + esc(title) + ' (' + items.length + ')</h4>'
+      + (items.length ? items.map(render).join('') : '<span style="color:var(--muted-2);font-size:11.5px;">nenhuma relação deste tipo nesta V1.</span>')
+      + '</div>';
+  }
+  const parentRel = taxonomy.concepts.filter(c => c.parentId);
+  const aliasRel = taxonomy.concepts.filter(c => c.aliasOf);
+  const conflictRel = taxonomy.concepts.filter(c => c.conflictsWith && c.conflictsWith.length);
+  const related = taxonomy.concepts.filter(c => c.relations && c.relations.relatedTo && c.relations.relatedTo.length);
+  const oftenAssoc = taxonomy.concepts.filter(c => c.relations && c.relations.oftenAssociatedWith && c.relations.oftenAssociatedWith.length);
+  const differential = taxonomy.concepts.filter(c => c.relations && c.relations.differentialOf && c.relations.differentialOf.length);
+  return section('parentId', parentRel, c => '<div class="taxo-issue-row" data-taxo-concept="' + escAttr(c.id) + '" style="cursor:pointer;">' + esc(c.label) + ' (' + esc(c.id) + ') → ' + esc(c.parentId) + '</div>')
+    + section('aliasOf', aliasRel, c => '<div class="taxo-issue-row" data-taxo-concept="' + escAttr(c.id) + '" style="cursor:pointer;">' + esc(c.id) + ' → ' + esc(c.aliasOf) + '</div>')
+    + section('conflictsWith', conflictRel, c => '<div class="taxo-issue-row" data-taxo-concept="' + escAttr(c.id) + '" style="cursor:pointer;">' + esc(c.id) + ' ⇎ ' + esc(c.conflictsWith.join(', ')) + '</div>')
+    + section('relatedTo', related, c => '<div class="taxo-issue-row" data-taxo-concept="' + escAttr(c.id) + '" style="cursor:pointer;">' + esc(c.id) + ' → ' + esc(c.relations.relatedTo.join(', ')) + '</div>')
+    + section('oftenAssociatedWith', oftenAssoc, c => '<div class="taxo-issue-row" data-taxo-concept="' + escAttr(c.id) + '" style="cursor:pointer;">' + esc(c.id) + ' → ' + esc(c.relations.oftenAssociatedWith.join(', ')) + '</div>')
+    + section('differentialOf', differential, c => '<div class="taxo-issue-row" data-taxo-concept="' + escAttr(c.id) + '" style="cursor:pointer;">' + esc(c.id) + ' → ' + esc(c.relations.differentialOf.join(', ')) + '</div>');
+}
+
+function taxoRenderCoverageTab(taxonomy, indices){
+  function byDomain(domain){
+    const groupsOfDomain = taxonomy.groups.filter(g => g.domain === domain);
+    return '<div class="taxo-group-card"><h4>' + esc(domain) + '</h4>'
+      + groupsOfDomain.map(g => {
+          const n = (indices.conceptsByGroup.get(g.id) || []).length;
+          return '<div class="taxo-issue-row' + (n === 0 ? ' aviso' : '') + '">' + esc(g.label) + ' (' + esc(g.id) + '): <b>' + n + '</b> concept(s)' + (n === 0 ? ' — group VAZIO' : '') + '</div>';
+        }).join('')
+      + '</div>';
+  }
+  const domains = [...new Set(taxonomy.groups.map(g => g.domain))].sort();
+  const subgroupCounts = new Map();
+  taxonomy.concepts.forEach(c => (c.subgroups || []).forEach(s => subgroupCounts.set(s, (subgroupCounts.get(s) || 0) + 1)));
+  const subgroupHtml = '<div class="taxo-group-card"><h4>Distribuição por subgroup</h4>'
+    + [...subgroupCounts.entries()].sort((a, b) => b[1] - a[1]).map(([s, n]) => '<div class="taxo-issue-row">' + esc(s) + ': <b>' + n + '</b></div>').join('')
+    + '</div>';
+  return domains.map(byDomain).join('') + subgroupHtml;
+}
+
+function taxoRenderIntegrityTab(taxonomy){
+  const issues = taxoRunIntegrityAudit(taxonomy);
+  if(!issues.length) return '<div class="taxo-group-card"><span style="color:var(--teal);font-weight:700;">✅ Integridade OK — nenhum problema encontrado nesta execução.</span></div>';
+  return '<div class="taxo-group-card">' + issues.map(i => '<div class="taxo-issue-row ' + (i.level === 'erro' ? 'erro' : 'aviso') + '"><span class="taxo-badge ' + (i.level === 'erro' ? 'erro' : 'aviso') + '">' + esc(i.level) + '</span> ' + esc(i.message) + '</div>').join('') + '</div>';
+}
+
+function taxoRenderTabContent(taxonomy, indices, state){
+  switch(state.tab){
+    case 'groups': return taxoRenderGroupsTab(taxonomy, indices);
+    case 'synonyms': return taxoRenderSynonymsTab(taxonomy, indices, state);
+    case 'relations': return taxoRenderRelationsTab(taxonomy);
+    case 'coverage': return taxoRenderCoverageTab(taxonomy, indices);
+    case 'integrity': return taxoRenderIntegrityTab(taxonomy);
+    default: return taxoRenderConceptsTab(taxonomy, indices, state);
+  }
+}
+
+function openTaxoConceptDetailModal(concept, taxonomy, indices){
+  const group = indices.groupById.get(concept.group);
+  const row = (label, value) => (value == null || value === '') ? '' : '<div class="field"><label>' + esc(label) + '</label><div>' + value + '</div></div>';
+  const chipList = arr => (arr && arr.length) ? arr.map(x => '<span class="taxo-chip">' + esc(x) + '</span>').join('') : '<span style="color:var(--muted-2);">—</span>';
+  const r = concept.relations || {};
+  tagAuditMakeOverlay(
+    '<div class="modal" style="max-width:640px;">'
+    + '<h2>' + esc(concept.label) + '</h2>'
+    + '<div class="modal-sub">' + esc(concept.id) + (concept.status === 'deprecated' ? ' · <span style="color:var(--red);">deprecated → aliasOf ' + esc(concept.aliasOf || '?') + '</span>' : '') + '</div>'
+    + row('domain', esc(concept.domain))
+    + row('group', esc(concept.group) + (group ? ' (' + esc(group.label) + ')' : ''))
+    + row('subgroups', chipList(concept.subgroups))
+    + row('status', esc(concept.status))
+    + row('synonyms', chipList(concept.synonyms))
+    + row('description', concept.description ? esc(concept.description) : '')
+    + row('parentId', concept.parentId ? esc(concept.parentId) : '')
+    + row('aliasOf', concept.aliasOf ? esc(concept.aliasOf) : '')
+    + row('conflictsWith', chipList(concept.conflictsWith))
+    + row('relatedTo', chipList(r.relatedTo))
+    + row('oftenAssociatedWith', chipList(r.oftenAssociatedWith))
+    + row('differentialOf', chipList(r.differentialOf))
+    + row('applicableSections (do group)', group ? esc(JSON.stringify(group.applicableSections)) : '')
+    + '<div class="modal-actions"><span></span><button class="btn btn-ghost" id="taxo-detail-close">fechar</button></div>'
+    + '</div>',
+    (ov, close) => { ov.querySelector('#taxo-detail-close').onclick = close; }
+  );
+}
+
+async function taxoMountPanel(ov){
+  const body = ov.querySelector('#taxo-body');
+  let taxonomy, indices;
+  try {
+    taxonomy = await loadTaxonomy();
+    indices = taxoBuildIndices(taxonomy);
+  } catch(err){
+    body.innerHTML = '<div class="taxo-error-box">⚠ Não foi possível carregar TAXONOMY.json.<br><span style="color:var(--muted-2);font-size:11.5px;">' + escAttr(String((err && err.message) || err)) + '</span><br><br>O restante do Atlas continua funcionando normalmente.</div>';
+    return;
+  }
+
+  const state = { tab: 'concepts', search: '', filters: { domain: '', group: '', subgroup: '', status: '', hasSynonym: '', hasDescription: '' } };
+
+  function wireTabContent(){
+    body.querySelectorAll('[data-taxo-filter]').forEach(sel => {
+      sel.onchange = () => { state.filters[sel.getAttribute('data-taxo-filter')] = sel.value; rerenderTabOnly(); };
+    });
+    body.querySelectorAll('[data-taxo-concept]').forEach(el => {
+      el.onclick = () => {
+        const c = indices.conceptById.get(el.getAttribute('data-taxo-concept'));
+        if(c) openTaxoConceptDetailModal(c, taxonomy, indices);
+      };
+    });
+    body.querySelectorAll('[data-taxo-group-toggle]').forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.getAttribute('data-taxo-group-toggle');
+        const box = body.querySelector('[data-taxo-group-concepts="' + id + '"]');
+        if(box) box.hidden = !box.hidden;
+      };
+    });
+  }
+
+  function rerenderTabOnly(){
+    const wrap = body.querySelector('.taxo-scroll-wrap');
+    const scrollTop = wrap ? wrap.scrollTop : 0;
+    const content = body.querySelector('#taxo-tab-content');
+    content.innerHTML = taxoRenderTabContent(taxonomy, indices, state);
+    wireTabContent();
+    const wrap2 = body.querySelector('.taxo-scroll-wrap');
+    if(wrap2) wrap2.scrollTop = scrollTop;
+  }
+
+  function render(){
+    const metrics = taxoComputeMetrics(taxonomy, indices);
+    body.innerHTML = taxoMetricsHtml(metrics)
+      + '<input type="search" id="taxo-search-input" class="taxo-search" placeholder="Buscar por label, conceptId, sinônimo, description ou subgroup…" value="' + escAttr(state.search) + '">'
+      + taxoTabsHtml(state)
+      + '<div id="taxo-tab-content">' + taxoRenderTabContent(taxonomy, indices, state) + '</div>';
+    const searchInput = body.querySelector('#taxo-search-input');
+    searchInput.oninput = () => { state.search = searchInput.value; rerenderTabOnly(); };
+    body.querySelectorAll('[data-taxo-tab]').forEach(btn => {
+      btn.onclick = () => { state.tab = btn.getAttribute('data-taxo-tab'); render(); };
+    });
+    wireTabContent();
+  }
+
+  render();
+}
+
+function openTaxonomyPanel(){
+  tagAuditMakeOverlay(
+    '<div class="modal taxo-modal"><h2>🧬 Taxonomia clínico-radiológica</h2>'
+    + '<div class="modal-sub">Painel somente leitura do dicionário aprovado (TAXONOMY.json) — não altera lesões, DATA, SEED, Firestore, IndexedDB ou localStorage.</div>'
+    + '<div id="taxo-body"><div class="taxo-error-box">Carregando TAXONOMY.json…</div></div>'
+    + '<div class="modal-actions"><span></span><button class="btn btn-ghost" id="taxo-close">fechar</button></div>'
+    + '</div>',
+    (ov, close) => {
+      ov.querySelector('#taxo-close').onclick = close;
+      taxoMountPanel(ov);
+    }
+  );
+}
+
 async function openTagAuditModal(){
   const { ov, close } = tagAuditMakeOverlay(
     '<div class="modal tag-audit-modal">'
@@ -12942,6 +13634,24 @@ async function openTagAuditModal(){
 
   const state = { statusFilter: 'all', usageFilter: 'all', groupFilter: '', search: '', sortBy: 'tag', sortDir: 'asc', view: 'table' };
   function getRows(){ return tagAuditBuildRows(source, tagAuditComputeLiveIndex()); }
+  // Ancoragem de posição: evita "voltar pro topo" a cada decisão. Antes de
+  // decidir uma tag, primeAnchor() guarda ela mesma (continua visível na
+  // visão "Todos ativos") e a PRÓXIMA linha da lista filtrada atual (para
+  // quando a decisão tira a linha do filtro corrente, ex.: "Pendentes") —
+  // render() consome essas variáveis uma única vez e rola só o necessário.
+  let lastActedTag = null;
+  let pendingFallbackAnchor = null;
+  function primeAnchor(tag){
+    const preRows = applyFilters(getRows());
+    const idx = preRows.findIndex(r => r.tag === tag);
+    let fallback = null;
+    if(idx !== -1){
+      if(idx + 1 < preRows.length) fallback = preRows[idx + 1].tag;
+      else if(idx - 1 >= 0) fallback = preRows[idx - 1].tag;
+    }
+    lastActedTag = tag;
+    pendingFallbackAnchor = fallback;
+  }
   function applyFilters(allRows){
     // "arquivadas" é uma visão à parte: por padrão (e em qualquer outro
     // filtro de status) elas nunca aparecem misturadas com as tags ativas —
@@ -12978,6 +13688,11 @@ async function openTagAuditModal(){
   function render(){
     const hadFocus = document.activeElement && document.activeElement.id === 'tar-f-search';
     const caret = hadFocus ? document.activeElement.selectionStart : null;
+    const oldWrap = bodyEl.querySelector('.tag-audit-table-wrap');
+    const oldScrollTop = oldWrap ? oldWrap.scrollTop : null;
+    const anchorTag = lastActedTag;
+    const fallbackTag = pendingFallbackAnchor;
+    lastActedTag = null; pendingFallbackAnchor = null; // consumidos nesta renderização
     const allRows = getRows();
     const filtered = applyFilters(allRows);
     const groupOptions = source.groups.map(g => '<option value="' + escAttr(g.id) + '">' + escAttr(g.titulo) + '</option>').join('');
@@ -13011,6 +13726,25 @@ async function openTagAuditModal(){
       bodyEl.querySelector('#tar-f-group').value = state.groupFilter;
       bodyEl.querySelector('#tar-f-sort').value = state.sortBy;
       if(hadFocus){ const inp = bodyEl.querySelector('#tar-f-search'); if(inp){ inp.focus(); if(caret != null) inp.setSelectionRange(caret, caret); } }
+
+      // Restaura posição: prioridade = a própria linha decidida (se ainda
+      // visível no filtro atual); senão, a linha que ocupava a posição
+      // seguinte ANTES da decisão (ex.: a próxima pendente); senão, apenas
+      // o scroll vertical anterior. Nunca scrollTo(0,0).
+      const newWrap = bodyEl.querySelector('.tag-audit-table-wrap');
+      if(newWrap){
+        const targetTag = (anchorTag && filtered.some(r => r.tag === anchorTag)) ? anchorTag
+          : (fallbackTag && filtered.some(r => r.tag === fallbackTag)) ? fallbackTag
+          : null;
+        let rowEl = targetTag ? newWrap.querySelector('tr[data-tar-row="' + (window.CSS && CSS.escape ? CSS.escape(targetTag) : targetTag) + '"]') : null;
+        if(rowEl){
+          rowEl.scrollIntoView({ block: 'nearest' });
+          rowEl.classList.add('tar-row-flash');
+          setTimeout(() => rowEl && rowEl.classList.remove('tar-row-flash'), 900);
+        } else if(oldScrollTop != null){
+          newWrap.scrollTop = Math.min(oldScrollTop, newWrap.scrollHeight);
+        }
+      }
     }
   }
 
@@ -13022,6 +13756,7 @@ async function openTagAuditModal(){
     if(actionBtn){
       const tag = actionBtn.getAttribute('data-tar-tag'); const action = actionBtn.getAttribute('data-tar-action');
       const row = getRows().find(r => r.tag === tag);
+      primeAnchor(tag); // sempre ANTES de abrir modal ou mudar a decisão — captura a ordem atual
       if(action === 'edit'){ openTagAuditEditModal(tag, row, render); return; }
       if(action === 'eliminate'){ openTagAuditEliminateModal(tag, row, render); return; }
       if(action === 'keep'){ tagAuditSetDecision(tag, 'keep'); render(); return; }
@@ -17518,6 +18253,7 @@ document.getElementById('btn-system-diagnostic').onclick = openSystemDiagnosticM
 document.getElementById('btn-audit-images').onclick = openImageAuditModal;
 document.getElementById('btn-classification-audit').onclick = openClassificationAuditModal;
 document.getElementById('btn-tag-audit').onclick = openTagAuditModal;
+document.getElementById('btn-taxonomy-panel').onclick = openTaxonomyPanel; // TAXO-02, somente leitura
 document.getElementById('btn-clinical-merges-091c').onclick = openClinicalMergesModal091c; // PROTEÇÃO 091c
 document.getElementById('btn-sync-to-cloud').onclick = openSyncDeviceToCloudModal;
 document.getElementById('btn-sync-from-cloud').onclick = openUpdateFromCloudModal;

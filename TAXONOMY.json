@@ -1,0 +1,3490 @@
+{
+  "metadata": {
+    "schemaVersion": 1,
+    "taxonomyVersion": 1,
+    "status": "approved"
+  },
+  "groups": [
+    {
+      "id": "clinical.symptoms",
+      "label": "Sintomas",
+      "domain": "clinical",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 10
+    },
+    {
+      "id": "clinical.chestPainQualifiers",
+      "label": "Qualificadores de dor torácica",
+      "domain": "clinical",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 20
+    },
+    {
+      "id": "clinical.abdominalPainLocation",
+      "label": "Localização da dor abdominal",
+      "domain": "clinical",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 30
+    },
+    {
+      "id": "clinical.distribution",
+      "label": "Distribuição clínica",
+      "domain": "clinical",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 40
+    },
+    {
+      "id": "clinical.laterality",
+      "label": "Lateralidade",
+      "domain": "clinical",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 50
+    },
+    {
+      "id": "clinical.symmetry",
+      "label": "Simetria",
+      "domain": "clinical",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 60
+    },
+    {
+      "id": "clinical.longitudinalDistribution",
+      "label": "Distribuição longitudinal",
+      "domain": "clinical",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 70
+    },
+    {
+      "id": "clinical.onset",
+      "label": "Início",
+      "domain": "clinical",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 80
+    },
+    {
+      "id": "clinical.timeCourse",
+      "label": "Tempo de evolução",
+      "domain": "clinical",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 90
+    },
+    {
+      "id": "clinical.course",
+      "label": "Curso",
+      "domain": "clinical",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 100
+    },
+    {
+      "id": "clinical.episodeDuration",
+      "label": "Duração do episódio",
+      "domain": "clinical",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 110
+    },
+    {
+      "id": "clinical.intensity",
+      "label": "Intensidade",
+      "domain": "clinical",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 120
+    },
+    {
+      "id": "clinical.evolution",
+      "label": "Evolução",
+      "domain": "clinical",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 130
+    },
+    {
+      "id": "radiologic.composition",
+      "label": "Composição",
+      "domain": "radiologic",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 140
+    },
+    {
+      "id": "radiologic.enhancementMorphology",
+      "label": "Padrão de realce",
+      "domain": "radiologic",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 150
+    },
+    {
+      "id": "radiologic.enhancementVascularity",
+      "label": "Realce — vascularização/intensidade",
+      "domain": "radiologic",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 160
+    },
+    {
+      "id": "radiologic.enhancementKinetics",
+      "label": "Realce — cinética",
+      "domain": "radiologic",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 170
+    },
+    {
+      "id": "radiologic.margins",
+      "label": "Margens",
+      "domain": "radiologic",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 180
+    },
+    {
+      "id": "radiologic.growthPattern",
+      "label": "Padrão de crescimento",
+      "domain": "radiologic",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 190
+    },
+    {
+      "id": "radiologic.extent",
+      "label": "Extensão",
+      "domain": "radiologic",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 200
+    },
+    {
+      "id": "radiologic.laterality",
+      "label": "Lateralidade radiológica",
+      "domain": "radiologic",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 210
+    },
+    {
+      "id": "radiologic.symmetry",
+      "label": "Simetria radiológica",
+      "domain": "radiologic",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 220
+    },
+    {
+      "id": "radiologic.regionalPattern",
+      "label": "Padrão regional",
+      "domain": "radiologic",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 230
+    },
+    {
+      "id": "radiologic.position",
+      "label": "Posição",
+      "domain": "radiologic",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 240
+    },
+    {
+      "id": "radiologic.longitudinalDistribution",
+      "label": "Distribuição longitudinal radiológica",
+      "domain": "radiologic",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 250
+    },
+    {
+      "id": "radiologic.boneDensity",
+      "label": "Densidade óssea",
+      "domain": "radiologic",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 260
+    },
+    {
+      "id": "radiologic.boneMatrix",
+      "label": "Matriz óssea",
+      "domain": "radiologic",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 270
+    },
+    {
+      "id": "radiologic.periostealReaction",
+      "label": "Reação periosteal",
+      "domain": "radiologic",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 280
+    },
+    {
+      "id": "radiologic.aggressiveness",
+      "label": "Agressividade",
+      "domain": "radiologic",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 290
+    },
+    {
+      "id": "radiologic.associatedFindings",
+      "label": "Achados associados",
+      "domain": "radiologic",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 300
+    },
+    {
+      "id": "etiology.primary",
+      "label": "Etiologia",
+      "domain": "etiology",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 310
+    },
+    {
+      "id": "demographics.ageGroup",
+      "label": "Faixa etária predominante",
+      "domain": "demographics",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 320
+    },
+    {
+      "id": "demographics.sexPredominance",
+      "label": "Sexo predominante",
+      "domain": "demographics",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 330
+    }
+  ],
+  "concepts": [
+    {
+      "id": "clin_symptom_fever",
+      "label": "Febre",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "general"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_sweating",
+      "label": "Sudorese",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "general"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_tremor",
+      "label": "Tremores",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "neurologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_weight_loss",
+      "label": "Perda de peso",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "general"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_weight_gain",
+      "label": "Ganho de peso",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "general"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_hyporexia",
+      "label": "Hiporexia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "general"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_hyperphagia",
+      "label": "Hiperfagia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "endocrine"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_visual_change",
+      "label": "Alteração visual",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "ophthalmologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_eye_pain",
+      "label": "Dor ocular",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "ophthalmologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_eye_irritation",
+      "label": "Irritação ocular",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "ophthalmologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_hearing_loss",
+      "label": "Hipoacusia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "otoneurologic",
+        "otolaryngologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_vertigo",
+      "label": "Vertigem",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "otoneurologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_tinnitus",
+      "label": "Tinnitus",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "otoneurologic",
+        "otolaryngologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_oronasal_bleeding",
+      "label": "Sangramento oronasal",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "otolaryngologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_odynophagia",
+      "label": "Odinofagia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "otolaryngologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_hoarseness",
+      "label": "Rouquidão",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "otolaryngologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_chest_pain",
+      "label": "Dor torácica",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "cardiovascular"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_syncope",
+      "label": "Síncope",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "cardiovascular"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_hypotension",
+      "label": "Hipotensão",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "cardiovascular"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_ankle_edema",
+      "label": "Edema de tornozelos",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "cardiovascular"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_dry_cough",
+      "label": "Tosse seca",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "respiratory"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_productive_cough",
+      "label": "Tosse produtiva",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "respiratory"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_wheezing",
+      "label": "Sibilância",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "respiratory"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_vomiting",
+      "label": "Vômitos",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "gastrointestinal"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_diarrhea",
+      "label": "Diarreia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "gastrointestinal"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_melena",
+      "label": "Melena",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "gastrointestinal"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_dysphagia",
+      "label": "Disfagia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "gastrointestinal"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_heartburn",
+      "label": "Pirose",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "gastrointestinal"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_dysuria",
+      "label": "Disúria",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "genitourinary"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_hematuria",
+      "label": "Hematúria",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "genitourinary"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_urinary_incontinence",
+      "label": "Incontinência urinária",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "genitourinary"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_urinary_retention",
+      "label": "Retenção urinária",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "genitourinary"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_urine_color_change",
+      "label": "Alteração da cor da urina",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "genitourinary"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_urethral_discharge",
+      "label": "Corrimento uretral",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "genitourinary"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_genital_lesion",
+      "label": "Lesão genital",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "genitourinary"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_menstrual_irregularity",
+      "label": "Irregularidade menstrual",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "genitourinary"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_sexual_dysfunction",
+      "label": "Disfunção sexual",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "genitourinary"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_lymphadenopathy",
+      "label": "Linfonodomegalia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "hematologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_bruising",
+      "label": "Hematomas",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "hematologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_jaundice",
+      "label": "Icterícia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "hepatobiliary"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_skin_nodules",
+      "label": "Nódulos cutâneos",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "integumentary"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_mucocutaneous_ulcers",
+      "label": "Úlceras mucocutâneas",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "integumentary"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_urticaria",
+      "label": "Urticária",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "integumentary"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_myalgia",
+      "label": "Mialgia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "musculoskeletal"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_arthralgia",
+      "label": "Artralgia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "musculoskeletal"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_rom_limitation",
+      "label": "Limitação do arco de movimento",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "musculoskeletal"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_muscle_weakness",
+      "label": "Fraqueza muscular",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "neurologic",
+        "musculoskeletal"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_joint_stiffness",
+      "label": "Rigidez articular",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "musculoskeletal"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_low_back_pain",
+      "label": "Lombalgia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "musculoskeletal"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_thoracic_back_pain",
+      "label": "Dorsalgia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "musculoskeletal"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_neck_pain",
+      "label": "Cervicalgia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "musculoskeletal"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_coma",
+      "label": "Coma",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "neurologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_seizure",
+      "label": "Convulsão",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "neurologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_dysarthria",
+      "label": "Disartria",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "neurologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_paresthesia",
+      "label": "Parestesia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "neurologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_headache",
+      "label": "Cefaleia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "neurologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_amnesia",
+      "label": "Amnésia",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "neurologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_imbalance",
+      "label": "Desequilíbrio",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "neurologic",
+        "otoneurologic"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_symptom_abdominal_pain",
+      "label": "Dor abdominal",
+      "domain": "clinical",
+      "group": "clinical.symptoms",
+      "subgroups": [
+        "gastrointestinal"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_chest_pain_pleuritic",
+      "label": "pleurítica",
+      "domain": "clinical",
+      "group": "clinical.chestPainQualifiers",
+      "subgroups": [
+        "chestPainCharacter"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      },
+      "parentId": "clin_symptom_chest_pain"
+    },
+    {
+      "id": "clin_chest_pain_rest",
+      "label": "em repouso",
+      "domain": "clinical",
+      "group": "clinical.chestPainQualifiers",
+      "subgroups": [
+        "chestPainCharacter"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      },
+      "parentId": "clin_symptom_chest_pain"
+    },
+    {
+      "id": "clin_chest_pain_exertional",
+      "label": "aos esforços",
+      "domain": "clinical",
+      "group": "clinical.chestPainQualifiers",
+      "subgroups": [
+        "chestPainCharacter"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      },
+      "parentId": "clin_symptom_chest_pain"
+    },
+    {
+      "id": "clin_chest_pain_positional",
+      "label": "posicional",
+      "domain": "clinical",
+      "group": "clinical.chestPainQualifiers",
+      "subgroups": [
+        "chestPainCharacter"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      },
+      "parentId": "clin_symptom_chest_pain"
+    },
+    {
+      "id": "clin_loc_fid",
+      "label": "FID",
+      "domain": "clinical",
+      "group": "clinical.abdominalPainLocation",
+      "subgroups": [
+        "abdominalLocation"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      },
+      "parentId": "clin_symptom_abdominal_pain",
+      "conflictsWith": [
+        "clin_loc_diffuse_abdominal"
+      ]
+    },
+    {
+      "id": "clin_loc_fie",
+      "label": "FIE",
+      "domain": "clinical",
+      "group": "clinical.abdominalPainLocation",
+      "subgroups": [
+        "abdominalLocation"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      },
+      "parentId": "clin_symptom_abdominal_pain",
+      "conflictsWith": [
+        "clin_loc_diffuse_abdominal"
+      ]
+    },
+    {
+      "id": "clin_loc_hypogastrium",
+      "label": "hipogástrio",
+      "domain": "clinical",
+      "group": "clinical.abdominalPainLocation",
+      "subgroups": [
+        "abdominalLocation"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      },
+      "parentId": "clin_symptom_abdominal_pain",
+      "conflictsWith": [
+        "clin_loc_diffuse_abdominal"
+      ]
+    },
+    {
+      "id": "clin_loc_mesogastrium",
+      "label": "mesogástrio",
+      "domain": "clinical",
+      "group": "clinical.abdominalPainLocation",
+      "subgroups": [
+        "abdominalLocation"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      },
+      "parentId": "clin_symptom_abdominal_pain",
+      "conflictsWith": [
+        "clin_loc_diffuse_abdominal"
+      ]
+    },
+    {
+      "id": "clin_loc_right_flank",
+      "label": "flanco direito",
+      "domain": "clinical",
+      "group": "clinical.abdominalPainLocation",
+      "subgroups": [
+        "abdominalLocation"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      },
+      "parentId": "clin_symptom_abdominal_pain",
+      "conflictsWith": [
+        "clin_loc_diffuse_abdominal"
+      ]
+    },
+    {
+      "id": "clin_loc_left_flank",
+      "label": "flanco esquerdo",
+      "domain": "clinical",
+      "group": "clinical.abdominalPainLocation",
+      "subgroups": [
+        "abdominalLocation"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      },
+      "parentId": "clin_symptom_abdominal_pain",
+      "conflictsWith": [
+        "clin_loc_diffuse_abdominal"
+      ]
+    },
+    {
+      "id": "clin_loc_right_hypochondrium",
+      "label": "hipocôndrio direito",
+      "domain": "clinical",
+      "group": "clinical.abdominalPainLocation",
+      "subgroups": [
+        "abdominalLocation"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      },
+      "parentId": "clin_symptom_abdominal_pain",
+      "conflictsWith": [
+        "clin_loc_diffuse_abdominal"
+      ]
+    },
+    {
+      "id": "clin_loc_left_hypochondrium",
+      "label": "hipocôndrio esquerdo",
+      "domain": "clinical",
+      "group": "clinical.abdominalPainLocation",
+      "subgroups": [
+        "abdominalLocation"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      },
+      "parentId": "clin_symptom_abdominal_pain",
+      "conflictsWith": [
+        "clin_loc_diffuse_abdominal"
+      ]
+    },
+    {
+      "id": "clin_loc_epigastrium",
+      "label": "epigástrio",
+      "domain": "clinical",
+      "group": "clinical.abdominalPainLocation",
+      "subgroups": [
+        "abdominalLocation"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      },
+      "parentId": "clin_symptom_abdominal_pain",
+      "conflictsWith": [
+        "clin_loc_diffuse_abdominal"
+      ]
+    },
+    {
+      "id": "clin_loc_diffuse_abdominal",
+      "label": "difusa",
+      "domain": "clinical",
+      "group": "clinical.abdominalPainLocation",
+      "subgroups": [
+        "abdominalLocation"
+      ],
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      },
+      "parentId": "clin_symptom_abdominal_pain",
+      "conflictsWith": [
+        "clin_loc_fid",
+        "clin_loc_fie",
+        "clin_loc_hypogastrium",
+        "clin_loc_mesogastrium",
+        "clin_loc_right_flank",
+        "clin_loc_left_flank",
+        "clin_loc_right_hypochondrium",
+        "clin_loc_left_hypochondrium",
+        "clin_loc_epigastrium"
+      ]
+    },
+    {
+      "id": "clin_dist_localized",
+      "label": "localizada",
+      "domain": "clinical",
+      "group": "clinical.distribution",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_dist_diffuse",
+      "label": "difusa",
+      "domain": "clinical",
+      "group": "clinical.distribution",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_lat_unilateral",
+      "label": "unilateral",
+      "domain": "clinical",
+      "group": "clinical.laterality",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_lat_bilateral",
+      "label": "bilateral",
+      "domain": "clinical",
+      "group": "clinical.laterality",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_sym_symmetric",
+      "label": "simétrica",
+      "domain": "clinical",
+      "group": "clinical.symmetry",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_sym_asymmetric",
+      "label": "assimétrica",
+      "domain": "clinical",
+      "group": "clinical.symmetry",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_long_proximal",
+      "label": "proximal",
+      "domain": "clinical",
+      "group": "clinical.longitudinalDistribution",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_long_distal",
+      "label": "distal",
+      "domain": "clinical",
+      "group": "clinical.longitudinalDistribution",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_onset_sudden",
+      "label": "súbito",
+      "domain": "clinical",
+      "group": "clinical.onset",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_onset_gradual",
+      "label": "gradual",
+      "domain": "clinical",
+      "group": "clinical.onset",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_tc_acute",
+      "label": "agudo",
+      "domain": "clinical",
+      "group": "clinical.timeCourse",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_tc_subacute",
+      "label": "subagudo",
+      "domain": "clinical",
+      "group": "clinical.timeCourse",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_tc_chronic",
+      "label": "crônico",
+      "domain": "clinical",
+      "group": "clinical.timeCourse",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_course_continuous",
+      "label": "contínuo",
+      "domain": "clinical",
+      "group": "clinical.course",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_course_recurrent",
+      "label": "recorrente",
+      "domain": "clinical",
+      "group": "clinical.course",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_course_episodic",
+      "label": "episódico",
+      "domain": "clinical",
+      "group": "clinical.course",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_dur_seconds",
+      "label": "segundos",
+      "domain": "clinical",
+      "group": "clinical.episodeDuration",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_dur_minutes",
+      "label": "minutos",
+      "domain": "clinical",
+      "group": "clinical.episodeDuration",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_dur_hours",
+      "label": "horas",
+      "domain": "clinical",
+      "group": "clinical.episodeDuration",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_dur_days",
+      "label": "dias",
+      "domain": "clinical",
+      "group": "clinical.episodeDuration",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_intensity_mild",
+      "label": "leve",
+      "domain": "clinical",
+      "group": "clinical.intensity",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_intensity_moderate",
+      "label": "moderada",
+      "domain": "clinical",
+      "group": "clinical.intensity",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_intensity_severe",
+      "label": "intensa",
+      "domain": "clinical",
+      "group": "clinical.intensity",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_evo_progressive",
+      "label": "progressiva",
+      "domain": "clinical",
+      "group": "clinical.evolution",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_evo_stable",
+      "label": "estável",
+      "domain": "clinical",
+      "group": "clinical.evolution",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "clin_evo_regressive",
+      "label": "regressiva",
+      "domain": "clinical",
+      "group": "clinical.evolution",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_comp_solid",
+      "label": "sólido",
+      "domain": "radiologic",
+      "group": "radiologic.composition",
+      "subgroups": null,
+      "status": "active",
+      "description": "Composição: componente sólido presente na composição geral da lesão. Distinto de rad_periosteal_solid, que descreve um padrão específico de reação periosteal (contínua, sem lamelação) no osso adjacente, não a composição da lesão em si.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_comp_cystic",
+      "label": "cístico",
+      "domain": "radiologic",
+      "group": "radiologic.composition",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_comp_fatty",
+      "label": "gorduroso",
+      "domain": "radiologic",
+      "group": "radiologic.composition",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_comp_hemorrhagic",
+      "label": "hemorrágico",
+      "domain": "radiologic",
+      "group": "radiologic.composition",
+      "subgroups": null,
+      "status": "active",
+      "description": "Composição: o elemento constitui parte relevante da composição estrutural da lesão (não apenas um achado focal/incidental). Ver o conceito equivalente em achados associados quando o mesmo elemento está presente sem caracterizar a composição predominante. (equivalente em achados associados: rad_assoc_hemorrhage, \"hemorragia\").",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_comp_necrotic",
+      "label": "necrótico",
+      "domain": "radiologic",
+      "group": "radiologic.composition",
+      "subgroups": null,
+      "status": "active",
+      "description": "Composição: o elemento constitui parte relevante da composição estrutural da lesão (não apenas um achado focal/incidental). Ver o conceito equivalente em achados associados quando o mesmo elemento está presente sem caracterizar a composição predominante. (equivalente em achados associados: rad_assoc_necrosis, \"necrose\").",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_comp_multiseptated",
+      "label": "multisseptado",
+      "domain": "radiologic",
+      "group": "radiologic.composition",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_comp_fibrous",
+      "label": "fibroso",
+      "domain": "radiologic",
+      "group": "radiologic.composition",
+      "subgroups": null,
+      "status": "active",
+      "description": "Composição: componente fibroso presente na composição geral da lesão (partes moles ou órgãos, sem especificidade óssea). Distinto de rad_bonematrix_fibrous, que descreve a tipificação fina de matriz óssea em lesões ósseas (ex.: displasia fibrosa).",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_comp_calcified",
+      "label": "calcificado",
+      "domain": "radiologic",
+      "group": "radiologic.composition",
+      "subgroups": null,
+      "status": "active",
+      "description": "Composição: o elemento constitui parte relevante da composição estrutural da lesão (não apenas um achado focal/incidental). Ver o conceito equivalente em achados associados quando o mesmo elemento está presente sem caracterizar a composição predominante. (equivalente em achados associados: rad_assoc_calcifications, \"calcificações\").",
+      "synonyms": [
+        "mineralizado"
+      ],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_comp_complex_cyst",
+      "label": "cisto complexo",
+      "domain": "radiologic",
+      "group": "radiologic.composition",
+      "subgroups": null,
+      "status": "active",
+      "description": "Categoria morfológica própria: cisto com componente sólido/septos espessos/vegetações, distinto de (a) cístico simples (conteúdo homogêneo, parede fina, sem componente sólido) e de (b) uma combinação arbitrária de \"sólido\" + \"cístico\" como dois achados independentes coexistindo na mesma lesão.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_enh_absent",
+      "label": "ausência de realce",
+      "domain": "radiologic",
+      "group": "radiologic.enhancementMorphology",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_enh_homogeneous",
+      "label": "realce homogêneo",
+      "domain": "radiologic",
+      "group": "radiologic.enhancementMorphology",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_enh_heterogeneous",
+      "label": "realce heterogêneo",
+      "domain": "radiologic",
+      "group": "radiologic.enhancementMorphology",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_enh_ring",
+      "label": "realce anelar",
+      "domain": "radiologic",
+      "group": "radiologic.enhancementMorphology",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [
+        "realce em anel"
+      ],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_enh_peripheral_nodular",
+      "label": "realce nodular periférico",
+      "domain": "radiologic",
+      "group": "radiologic.enhancementMorphology",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_enh_targetoid",
+      "label": "realce targetoid",
+      "domain": "radiologic",
+      "group": "radiologic.enhancementMorphology",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_vasc_hypervascular",
+      "label": "hipervascular",
+      "domain": "radiologic",
+      "group": "radiologic.enhancementVascularity",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_vasc_hypovascular",
+      "label": "hipovascular",
+      "domain": "radiologic",
+      "group": "radiologic.enhancementVascularity",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_vasc_high_enhancement",
+      "label": "hiper-realce",
+      "domain": "radiologic",
+      "group": "radiologic.enhancementVascularity",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_vasc_low_enhancement",
+      "label": "hipo-realce",
+      "domain": "radiologic",
+      "group": "radiologic.enhancementVascularity",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_kinetics_washout",
+      "label": "washout",
+      "domain": "radiologic",
+      "group": "radiologic.enhancementKinetics",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_kinetics_centripetal_fill",
+      "label": "preenchimento centrípeto",
+      "domain": "radiologic",
+      "group": "radiologic.enhancementKinetics",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_kinetics_persistent",
+      "label": "realce persistente",
+      "domain": "radiologic",
+      "group": "radiologic.enhancementKinetics",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_kinetics_progressive",
+      "label": "realce progressivo",
+      "domain": "radiologic",
+      "group": "radiologic.enhancementKinetics",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_margin_circumscribed",
+      "label": "circunscritas",
+      "domain": "radiologic",
+      "group": "radiologic.margins",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_margin_illdefined",
+      "label": "mal definidas",
+      "domain": "radiologic",
+      "group": "radiologic.margins",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_margin_spiculated",
+      "label": "espiculadas",
+      "domain": "radiologic",
+      "group": "radiologic.margins",
+      "subgroups": null,
+      "status": "active",
+      "description": "Margem/contorno da lesão com espículas (irregularidade do contorno em relação ao tecido adjacente). Distinto de rad_periosteal_spiculated, que descreve o padrão da reação periosteal do osso subjacente, não o contorno da lesão em si.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_margin_lobulated",
+      "label": "lobuladas",
+      "domain": "radiologic",
+      "group": "radiologic.margins",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_growth_infiltrative",
+      "label": "infiltrativo",
+      "domain": "radiologic",
+      "group": "radiologic.growthPattern",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_growth_expansile",
+      "label": "expansivo",
+      "domain": "radiologic",
+      "group": "radiologic.growthPattern",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_growth_exophytic",
+      "label": "exofítico",
+      "domain": "radiologic",
+      "group": "radiologic.growthPattern",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_growth_sessile",
+      "label": "séssil",
+      "domain": "radiologic",
+      "group": "radiologic.growthPattern",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_growth_eccentric",
+      "label": "excêntrico",
+      "domain": "radiologic",
+      "group": "radiologic.growthPattern",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_extent_focal",
+      "label": "focal",
+      "domain": "radiologic",
+      "group": "radiologic.extent",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_extent_multifocal",
+      "label": "multifocal",
+      "domain": "radiologic",
+      "group": "radiologic.extent",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_extent_diffuse",
+      "label": "difuso",
+      "domain": "radiologic",
+      "group": "radiologic.extent",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_lat_unilateral",
+      "label": "unilateral",
+      "domain": "radiologic",
+      "group": "radiologic.laterality",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_lat_bilateral",
+      "label": "bilateral",
+      "domain": "radiologic",
+      "group": "radiologic.laterality",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_sym_symmetric",
+      "label": "simétrico",
+      "domain": "radiologic",
+      "group": "radiologic.symmetry",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_sym_asymmetric",
+      "label": "assimétrico",
+      "domain": "radiologic",
+      "group": "radiologic.symmetry",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_regional_segmental",
+      "label": "segmentar",
+      "domain": "radiologic",
+      "group": "radiologic.regionalPattern",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_regional_lobar",
+      "label": "lobar",
+      "domain": "radiologic",
+      "group": "radiologic.regionalPattern",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_regional_multilobar",
+      "label": "multilobar",
+      "domain": "radiologic",
+      "group": "radiologic.regionalPattern",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_position_central",
+      "label": "central",
+      "domain": "radiologic",
+      "group": "radiologic.position",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_position_peripheral",
+      "label": "periférico",
+      "domain": "radiologic",
+      "group": "radiologic.position",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_long_proximal",
+      "label": "proximal",
+      "domain": "radiologic",
+      "group": "radiologic.longitudinalDistribution",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_long_distal",
+      "label": "distal",
+      "domain": "radiologic",
+      "group": "radiologic.longitudinalDistribution",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_bonedensity_lytic",
+      "label": "lítico",
+      "domain": "radiologic",
+      "group": "radiologic.boneDensity",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_bonedensity_sclerotic",
+      "label": "esclerótico",
+      "domain": "radiologic",
+      "group": "radiologic.boneDensity",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_bonedensity_mixed",
+      "label": "misto",
+      "domain": "radiologic",
+      "group": "radiologic.boneDensity",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_bonematrix_chondroid",
+      "label": "condroide",
+      "domain": "radiologic",
+      "group": "radiologic.boneMatrix",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_bonematrix_osteoid",
+      "label": "osteóide",
+      "domain": "radiologic",
+      "group": "radiologic.boneMatrix",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_bonematrix_fibrous",
+      "label": "fibrosa",
+      "domain": "radiologic",
+      "group": "radiologic.boneMatrix",
+      "subgroups": null,
+      "status": "active",
+      "description": "Matriz óssea de padrão fibroso (ex.: displasia fibrosa), usada na tipificação fina de lesões ósseas. Distinto de rad_comp_fibrous, que descreve componente fibroso na composição geral da lesão, sem especificidade óssea.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_periosteal_solid",
+      "label": "sólida",
+      "domain": "radiologic",
+      "group": "radiologic.periostealReaction",
+      "subgroups": null,
+      "status": "active",
+      "description": "Reação periosteal sólida/contínua (camada única, sem lamelação), tipicamente associada a processos de crescimento lento. Distinto de rad_comp_solid, que descreve a composição geral da lesão, não o periósteo.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_periosteal_lamellated",
+      "label": "lamelada",
+      "domain": "radiologic",
+      "group": "radiologic.periostealReaction",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_periosteal_onionskin",
+      "label": "casca de cebola",
+      "domain": "radiologic",
+      "group": "radiologic.periostealReaction",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_periosteal_spiculated",
+      "label": "espiculada",
+      "domain": "radiologic",
+      "group": "radiologic.periostealReaction",
+      "subgroups": null,
+      "status": "active",
+      "description": "Reação periosteal com espículas perpendiculares à cortical óssea (padrão em \"raios de sol\"). Distinto de rad_margin_spiculated, que descreve o contorno/margem da lesão, não a reação do periósteo.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_periosteal_codman_triangle",
+      "label": "triângulo de Codman",
+      "domain": "radiologic",
+      "group": "radiologic.periostealReaction",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_aggr_nonaggressive",
+      "label": "não agressiva",
+      "domain": "radiologic",
+      "group": "radiologic.aggressiveness",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_aggr_indeterminate",
+      "label": "indeterminada",
+      "domain": "radiologic",
+      "group": "radiologic.aggressiveness",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_aggr_aggressive",
+      "label": "agressiva",
+      "domain": "radiologic",
+      "group": "radiologic.aggressiveness",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_calcifications",
+      "label": "calcificações",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": "Achado associado: o elemento está presente e associado à lesão/processo, mas não necessariamente caracteriza sua composição predominante (pode ser focal, periférico ou incidental). Ver o conceito equivalente em composição quando o mesmo elemento é parte estrutural relevante. (equivalente em composição: rad_comp_calcified, \"calcificado\").",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_central_scar",
+      "label": "cicatriz central",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_capsule",
+      "label": "cápsula",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_internal_septa",
+      "label": "septos internos",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_thick_septa",
+      "label": "septos espessos",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_fluid_fluid_levels",
+      "label": "níveis líquido-líquido",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_edema",
+      "label": "edema",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_atelectasis",
+      "label": "atelectasia",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_segmental_stenosis",
+      "label": "estenose segmentar",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_midline_shift",
+      "label": "desvio da linha média",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_soft_tissue_emphysema",
+      "label": "enfisema de partes moles",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_air_trapping",
+      "label": "aprisionamento aéreo",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_mass_effect",
+      "label": "efeito de massa",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_hemorrhage",
+      "label": "hemorragia",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": "Achado associado: o elemento está presente e associado à lesão/processo, mas não necessariamente caracteriza sua composição predominante (pode ser focal, periférico ou incidental). Ver o conceito equivalente em composição quando o mesmo elemento é parte estrutural relevante. (equivalente em composição: rad_comp_hemorrhagic, \"hemorrágico\").",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_necrosis",
+      "label": "necrose",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": "Achado associado: o elemento está presente e associado à lesão/processo, mas não necessariamente caracteriza sua composição predominante (pode ser focal, periférico ou incidental). Ver o conceito equivalente em composição quando o mesmo elemento é parte estrutural relevante. (equivalente em composição: rad_comp_necrotic, \"necrótico\").",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "etio_traumatic",
+      "label": "traumático",
+      "domain": "etiology",
+      "group": "etiology.primary",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "etio_infectious",
+      "label": "infeccioso",
+      "domain": "etiology",
+      "group": "etiology.primary",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "etio_inflammatory",
+      "label": "inflamatório",
+      "domain": "etiology",
+      "group": "etiology.primary",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "etio_neoplastic",
+      "label": "neoplásico",
+      "domain": "etiology",
+      "group": "etiology.primary",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "etio_vascular",
+      "label": "vascular",
+      "domain": "etiology",
+      "group": "etiology.primary",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "etio_congenital",
+      "label": "congênito",
+      "domain": "etiology",
+      "group": "etiology.primary",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "etio_degenerative",
+      "label": "degenerativo",
+      "domain": "etiology",
+      "group": "etiology.primary",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "etio_metabolic",
+      "label": "metabólico",
+      "domain": "etiology",
+      "group": "etiology.primary",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "etio_iatrogenic",
+      "label": "iatrogênico",
+      "domain": "etiology",
+      "group": "etiology.primary",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "etio_autoimmune",
+      "label": "autoimune",
+      "domain": "etiology",
+      "group": "etiology.primary",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "etio_ischemic",
+      "label": "isquêmico",
+      "domain": "etiology",
+      "group": "etiology.primary",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "etio_hemorrhagic",
+      "label": "hemorrágico",
+      "domain": "etiology",
+      "group": "etiology.primary",
+      "subgroups": null,
+      "status": "active",
+      "description": "Etiologia: processo cuja causa/natureza primária é hemorrágica (ex.: sangramento espontâneo ou traumático como evento causador). Distinto de rad_comp_hemorrhagic (hemorragia como componente estrutural da composição da lesão) e de rad_assoc_hemorrhage (hemorragia como achado radiológico associado, não necessariamente a causa primária do processo).",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "demo_age_neonatal",
+      "label": "neonatal",
+      "domain": "demographics",
+      "group": "demographics.ageGroup",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "demo_age_pediatric",
+      "label": "pediátrica",
+      "domain": "demographics",
+      "group": "demographics.ageGroup",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "demo_age_young_adult",
+      "label": "adulto jovem",
+      "domain": "demographics",
+      "group": "demographics.ageGroup",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "demo_age_adult",
+      "label": "adulto",
+      "domain": "demographics",
+      "group": "demographics.ageGroup",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "demo_age_elderly",
+      "label": "idoso",
+      "domain": "demographics",
+      "group": "demographics.ageGroup",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "demo_sex_male",
+      "label": "masculino",
+      "domain": "demographics",
+      "group": "demographics.sexPredominance",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "demo_sex_female",
+      "label": "feminino",
+      "domain": "demographics",
+      "group": "demographics.sexPredominance",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "demo_sex_none",
+      "label": "sem predomínio",
+      "domain": "demographics",
+      "group": "demographics.sexPredominance",
+      "subgroups": null,
+      "status": "active",
+      "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    }
+  ]
+}
