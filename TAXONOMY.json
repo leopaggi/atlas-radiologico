@@ -1,8 +1,9 @@
 {
   "metadata": {
     "schemaVersion": 1,
-    "taxonomyVersion": 1,
-    "status": "approved"
+    "taxonomyVersion": 2,
+    "status": "approved",
+    "releaseLabel": "1.1"
   },
   "groups": [
     {
@@ -367,6 +368,61 @@
         "*"
       ],
       "sortOrder": 330
+    },
+    {
+      "id": "radiologic.signalIntensityT2",
+      "label": "Sinal em T2 (RM)",
+      "domain": "radiologic",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 340
+    },
+    {
+      "id": "radiologic.signalIntensityT1",
+      "label": "Sinal em T1 (RM)",
+      "domain": "radiologic",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 350
+    },
+    {
+      "id": "radiologic.growthRate",
+      "label": "Velocidade de crescimento",
+      "domain": "radiologic",
+      "exclusive": true,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 360
+    },
+    {
+      "id": "radiologic.diffusion",
+      "label": "Difusão (DWI)",
+      "domain": "radiologic",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 370
+    },
+    {
+      "id": "radiologic.echogenicity",
+      "label": "Ecogenicidade (US)",
+      "domain": "radiologic",
+      "exclusive": false,
+      "allowMultipleInstances": false,
+      "applicableSections": [
+        "*"
+      ],
+      "sortOrder": 380
     }
   ],
   "concepts": [
@@ -3479,6 +3535,205 @@
       "subgroups": null,
       "status": "active",
       "description": null,
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_margin_irregular",
+      "label": "irregulares",
+      "domain": "radiologic",
+      "group": "radiologic.margins",
+      "subgroups": null,
+      "status": "active",
+      "description": "Contorno irregular/serrilhado da lesão, distinto de rad_margin_illdefined (onde não é possível delimitar o fim da lesão do tecido adjacente) — aqui a lesão É delimitável, mas com contorno não liso/não regular.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_signal_t2_hyper",
+      "label": "hipersinal em T2",
+      "domain": "radiologic",
+      "group": "radiologic.signalIntensityT2",
+      "subgroups": null,
+      "status": "active",
+      "description": "Intensidade de sinal em T2 (RM) relativamente elevada em relação ao tecido de referência apropriado — descreve o comportamento do sinal nesta sequência, não a composição estrutural da lesão (tecido sólido celular, área fibrótica ou líquido podem todos gerar hipersinal T2 por motivos diferentes). Ver radiologic.composition para o eixo de composição.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_signal_t2_hypo",
+      "label": "hipossinal em T2",
+      "domain": "radiologic",
+      "group": "radiologic.signalIntensityT2",
+      "subgroups": null,
+      "status": "active",
+      "description": "Intensidade de sinal em T2 (RM) relativamente baixa em relação ao tecido de referência apropriado — descreve o comportamento do sinal nesta sequência, não a composição estrutural da lesão. Ver radiologic.composition para o eixo de composição.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_signal_t1_hyper",
+      "label": "hipersinal em T1",
+      "domain": "radiologic",
+      "group": "radiologic.signalIntensityT1",
+      "subgroups": null,
+      "status": "active",
+      "description": "Intensidade de sinal em T1 (RM) relativamente elevada em relação ao tecido de referência apropriado — descreve o comportamento do sinal nesta sequência, não a composição estrutural da lesão (gordura, sangue subagudo e proteína podem todos gerar hipersinal T1 por motivos diferentes). Ver radiologic.composition para o eixo de composição.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_signal_t1_hypo",
+      "label": "hipossinal em T1",
+      "domain": "radiologic",
+      "group": "radiologic.signalIntensityT1",
+      "subgroups": null,
+      "status": "active",
+      "description": "Intensidade de sinal em T1 (RM) relativamente baixa em relação ao tecido de referência apropriado — descreve o comportamento do sinal nesta sequência, não a composição estrutural da lesão. Ver radiologic.composition para o eixo de composição.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_growthrate_slow",
+      "label": "lento",
+      "domain": "radiologic",
+      "group": "radiologic.growthRate",
+      "subgroups": null,
+      "status": "active",
+      "description": "Velocidade de crescimento da lesão ao longo do tempo (comparação entre exames) classificada como lenta — eixo distinto de radiologic.growthPattern, que descreve a FORMA do crescimento (ex.: infiltrativo, expansivo), não sua velocidade.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_growthrate_fast",
+      "label": "rápido",
+      "domain": "radiologic",
+      "group": "radiologic.growthRate",
+      "subgroups": null,
+      "status": "active",
+      "description": "Velocidade de crescimento da lesão ao longo do tempo (comparação entre exames) classificada como rápida — par de rad_growthrate_slow no mesmo eixo exclusivo.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_thick_wall",
+      "label": "parede espessa",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": "Espessamento da parede de uma estrutura cística/cavitária/ductal (ex.: abscesso, cisto, via aérea) — achado associado análogo a rad_assoc_thick_septa (septos espessos), mas referindo-se à parede externa da estrutura, não a septos internos.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_diffusion_restricted",
+      "label": "restrição à difusão",
+      "domain": "radiologic",
+      "group": "radiologic.diffusion",
+      "subgroups": null,
+      "status": "active",
+      "description": "Restrição à difusão de moléculas de água em RM (sinal elevado em DWI com queda de sinal correspondente no mapa ADC) — achado funcional de difusão, distinto da composição estrutural da lesão (um tecido sólido celular denso e um abscesso podem ambos restringir difusão por mecanismos diferentes). Grupo radiologic.diffusion desenhado para futura expansão (ex.: \"facilitada\"/\"mista\"), que NÃO são criados nesta rodada por falta de adjudicação explícita.",
+      "synonyms": [
+        "restrição de difusão"
+      ],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_effusion",
+      "label": "derrame associado",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": "Efusão líquida associada à lesão/processo (pleural, pericárdica, peritoneal, articular etc.) — achado associado transversal, mesmo padrão arquitetural de rad_assoc_edema: a cavidade/compartimento específico vem do contexto da lesão (seção/sítio), não do concept em si.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_assoc_focal_dilation",
+      "label": "dilatação focal",
+      "domain": "radiologic",
+      "group": "radiologic.associatedFindings",
+      "subgroups": null,
+      "status": "active",
+      "description": "Dilatação segmentar/focal de uma estrutura tubular/ductal/vascular (ducto, vaso, alça, sistema coletor) — achado associado oposto de rad_assoc_segmental_stenosis (que descreve diminuição de calibre); mesmo padrão arquitetural: a estrutura específica dilatada vem do contexto da lesão (seção/sítio), não do concept em si.",
+      "synonyms": [],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_echo_hypo",
+      "label": "hipoecogênico",
+      "domain": "radiologic",
+      "group": "radiologic.echogenicity",
+      "subgroups": null,
+      "status": "active",
+      "description": "Ecogenicidade ao ultrassom relativamente baixa em relação ao tecido de referência apropriado — eixo de ecogenicidade (US), distinto da composição estrutural da lesão. \"hiperecogênico\"/\"isoecogênico\" não foram adjudicados nesta rodada e não foram criados, para não completar a família automaticamente sem decisão humana explícita.",
+      "synonyms": [
+        "hipoecoico"
+      ],
+      "relations": {
+        "relatedTo": [],
+        "oftenAssociatedWith": [],
+        "differentialOf": []
+      }
+    },
+    {
+      "id": "rad_echo_anechoic",
+      "label": "anecoico",
+      "domain": "radiologic",
+      "group": "radiologic.echogenicity",
+      "subgroups": null,
+      "status": "active",
+      "description": "Ausência completa de ecos internos ao ultrassom (tipicamente conteúdo cístico simples/líquido puro) — ponto do mesmo eixo de ecogenicidade, mais extremo que hipoecogênico.",
       "synonyms": [],
       "relations": {
         "relatedTo": [],

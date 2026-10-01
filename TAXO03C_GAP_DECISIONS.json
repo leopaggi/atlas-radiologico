@@ -1,0 +1,1187 @@
+{
+  "metadata": {
+    "taxonomyVersionBase": 1,
+    "source": "TAXO-03B reconciled live catalog",
+    "status": "proposal",
+    "generatedAt": "2026-10-01T22:27:57.769Z",
+    "scope": "22 gaps vivos de prioridade HIGH (usage>=20) analisados individualmente + subconjunto de gaps MEDIUM com valor estrutural claro para a mesma v1.1 + caso especial degenerativo/Degenerativo (seção 9 do pedido). Os demais ~22 gaps medium e todos os 558 low ficam em backlog, não analisados em profundidade nesta rodada.",
+    "notes": [
+      "NADA foi aplicado: TAXONOMY.json, TAG_TO_TAXONOMY_MAP.json e index.html permanecem exatamente como estavam antes desta rodada.",
+      "proposedConcept.conceptId é PROVISÓRIO — só congela quando/se aprovado numa futura TAXONOMY v1.1.",
+      "category=\"MAP_EXISTING\" indica correção futura do TAG_TO_TAXONOMY_MAP.json (de unmapped para mapped/ambiguous), nunca do TAXONOMY.json.",
+      "category=\"NORMALIZE_TAG\" indica higiene de VOCABULÁRIO DE TAG (mesmo mecanismo da auditoria de tags/TAXO-tags), nunca uma mudança em TAXONOMY.json."
+    ]
+  },
+  "decisions": [
+    {
+      "tag": "bem circunscrita",
+      "usageCount": 217,
+      "priority": "high",
+      "topSections": [
+        "Musculoesquelético (33)",
+        "Abdômen Superior (29)",
+        "Neurorradiologia (26)",
+        "Cabeça e Pescoço (26)",
+        "Tórax (22)"
+      ],
+      "sampleLesions": [
+        "Meningioma do tubérculo selar — Região selar",
+        "Cisto de bolsa de Rathke — Região selar",
+        "Cisto aracnoide selar/suprasselar — Região selar",
+        "Metástase cerebral — Intra-axial (parênquima)",
+        "Cavernoma (malformação cavernosa) — Intra-axial (parênquima)"
+      ],
+      "existingConceptId": "rad_margin_circumscribed",
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "MAP_EXISTING",
+      "confidence": "high-confidence",
+      "reason": "\"bem circunscrita\" é a mesma noção de \"circunscritas\" (radiologic.margins) com intensificador (\"bem\") e concordância de número/gênero diferente — mesmo conceito radiológico (margem bem definida com provável pseudocápsula), não um achado distinto. Altíssimo valor de cobertura (217 usos) sem exigir novo concept.",
+      "futureTagMapAction": "Corrigir TAG_TO_TAXONOMY_MAP.json: mover de \"unmapped\" para \"mapped\" com conceptIds=[\"rad_margin_circumscribed\"]. Considerar adicionar \"bem circunscrita\"/\"bem circunscrito\" como synonym de rad_margin_circumscribed em TAXONOMY v1.1."
+    },
+    {
+      "tag": "margens irregulares",
+      "usageCount": 153,
+      "priority": "high",
+      "topSections": [
+        "Musculoesquelético (31)",
+        "Abdômen Superior (21)",
+        "Vascular (18)",
+        "Tórax (17)",
+        "Cabeça e Pescoço (13)"
+      ],
+      "sampleLesions": [
+        "Glioblastoma — Intra-axial (parênquima)",
+        "Pineoblastoma — Região pineal",
+        "Metástase craniana (calvária) — Crânio ósseo",
+        "Rabdomiossarcoma orbitário — Órbita",
+        "Metástase intraventricular — Ventrículos"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": {
+        "conceptId": "rad_margin_irregular",
+        "label": "irregulares",
+        "domain": "radiologic",
+        "group": "radiologic.margins",
+        "subgroups": [],
+        "synonyms": [],
+        "description": "Contorno irregular/serrilhado da lesão, distinto de \"mal definidas\" (onde não se consegue delimitar o fim da lesão) — aqui a lesão É delimitável, mas com contorno não liso/não regular."
+      },
+      "supportsDifferentialReasoning": true,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "ADD_CONCEPT",
+      "reason": "Margem irregular é um conceito radiológico real e distinto de \"mal definidas\"/\"espiculadas\"/\"lobuladas\" já existentes em radiologic.margins — não há sobreposição semântica segura com nenhum dos 4 já aprovados. Grupo já existe (radiologic.margins), só falta o concept. 153 usos, altíssimo valor para diferencial (achado clássico de malignidade)."
+    },
+    {
+      "tag": "idade pediátrica",
+      "usageCount": 96,
+      "priority": "high",
+      "topSections": [
+        "Neurorradiologia (21)",
+        "Musculoesquelético (21)",
+        "Tórax (20)",
+        "Abdômen Superior (16)",
+        "Cabeça e Pescoço (7)"
+      ],
+      "sampleLesions": [
+        "Craniofaringioma (adamantinomatoso) — Região selar",
+        "Pineoblastoma — Região pineal",
+        "Granuloma eosinofílico craniano — Crânio ósseo",
+        "Rabdomiossarcoma orbitário — Órbita",
+        "Ependimoma intraventricular — Ventrículos"
+      ],
+      "existingConceptId": "demo_age_pediatric",
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "MAP_EXISTING",
+      "reason": "\"idade pediátrica\" = \"pediátrica\" (demographics.ageGroup) com a palavra \"idade\" redundante. Mesmo conceito demográfico.",
+      "futureTagMapAction": "Mover para mapped=[\"demo_age_pediatric\"]; considerar synonym \"idade pediátrica\" em v1.1."
+    },
+    {
+      "tag": "dilatação focal",
+      "usageCount": 89,
+      "priority": "high",
+      "topSections": [
+        "Abdômen Superior (29)",
+        "Vascular (22)",
+        "Tórax (12)",
+        "Obstetrícia (9)",
+        "Medicina Fetal (7)"
+      ],
+      "sampleLesions": [
+        "Ectasia ductal (dilatação ductal secretora) — Mamilo e pele",
+        "Hidrossalpinge — Trompas de Falópio",
+        "Trombose da veia dorsal do pênis (doença de Mondor peniana) — Pênis",
+        "Varicocele — Cordão espermático",
+        "Aneurisma de aorta abdominal — Aorta"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": {
+        "conceptId": "rad_assoc_focal_dilation",
+        "label": "dilatação focal",
+        "domain": "radiologic",
+        "group": "radiologic.associatedFindings",
+        "subgroups": [],
+        "synonyms": [],
+        "description": "Dilatação segmentar/focal de uma estrutura tubular/ductal/vascular (ducto, vaso, alça), distinta de estenose segmentar já existente — aqui o calibre AUMENTA localmente, não diminui."
+      },
+      "supportsDifferentialReasoning": true,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "ADD_CONCEPT",
+      "reason": "Contexto real (ectasia ductal, hidrossalpinge, varicocele, aneurisma de aorta) confirma um padrão coerente: dilatação focal de estrutura tubular/vascular. Nenhum concept atual cobre isso — \"estenose segmentar\" é o oposto (diminuição de calibre). Grupo associatedFindings já tem o padrão de achado focal análogo."
+    },
+    {
+      "tag": "hipersinal T2",
+      "usageCount": 76,
+      "priority": "high",
+      "topSections": [
+        "Musculoesquelético (34)",
+        "Neurorradiologia (16)",
+        "Coluna Vertebral (9)",
+        "Cabeça e Pescoço (7)",
+        "Abdômen Superior (3)"
+      ],
+      "sampleLesions": [
+        "Astrocitoma difuso de baixo grau — Intra-axial (parênquima)",
+        "Oligodendroglioma — Intra-axial (parênquima)",
+        "Encefalite herpética — Intra-axial (parênquima)",
+        "Hemangioma cavernoso orbitário — Órbita",
+        "Espondilodiscite infecciosa — Corpo vertebral"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": {
+        "conceptId": "rad_signal_t2_hyper",
+        "label": "hipersinal em T2",
+        "domain": "radiologic",
+        "group": "radiologic.signalIntensityT2",
+        "subgroups": [],
+        "synonyms": [],
+        "description": "Intensidade de sinal em T2 (RM) mais alta que o tecido de referência. Eixo próprio de sinal T2, independente de composição/realce."
+      },
+      "supportsDifferentialReasoning": true,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "ADD_CONCEPT",
+      "newGroup": {
+        "id": "radiologic.signalIntensityT2",
+        "label": "Sinal em T2 (RM)",
+        "domain": "radiologic",
+        "exclusive": true,
+        "allowMultipleInstances": false,
+        "applicableSections": [
+          "*"
+        ]
+      },
+      "reason": "GAP ESTRUTURAL REAL: a taxonomia V1 não modela intensidade de sinal em RM (T1/T2) — um eixo semiológico fundamental em neurorradiologia/musculoesquelético, totalmente ausente hoje. \"hipersinal T2\"(76)+\"hipossinal T2\"(26, high)+\"hipersinal T1\"(14)+\"hipossinal T1\"(5, medium) formam uma família coerente que deveria entrar junto na v1.1, não um a um."
+    },
+    {
+      "tag": "emergência",
+      "usageCount": 73,
+      "priority": "high",
+      "topSections": [
+        "Abdômen Superior (22)",
+        "Neurorradiologia (10)",
+        "Cabeça e Pescoço (10)",
+        "Vascular (7)",
+        "Pelve Feminina (6)"
+      ],
+      "sampleLesions": [
+        "Torção isolada de trompa — Trompas de Falópio",
+        "Prostatite — Próstata",
+        "Fratura peniana (ruptura da túnica albugínea) — Pênis",
+        "Trombose de seio venoso cerebral — Carótidas, vertebrais e vasos intracranianos",
+        "Dissecção espontânea de artéria mesentérica superior — Artérias viscerais abdominais"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "METADATA_NOT_TAXONOMY",
+      "reason": "Contexto real (torção de trompa, fratura peniana, trombose de seio venoso, apendicite aguda) confirma: é um marcador de URGÊNCIA/TRIAGEM operacional (\"este caso é uma emergência\"), não um atributo de fenótipo clínico-radiológico da lesão. Fora do escopo da taxonomia clínico-radiológica desta V1 — não é etiologia, não é achado, não é demografia."
+    },
+    {
+      "tag": "malformação congênita",
+      "usageCount": 67,
+      "priority": "high",
+      "topSections": [
+        "Medicina Fetal (18)",
+        "Tórax (14)",
+        "Neurorradiologia (9)",
+        "Abdômen Superior (8)",
+        "Vascular (4)"
+      ],
+      "sampleLesions": [
+        "Cavernoma (malformação cavernosa) — Intra-axial (parênquima)",
+        "Lipoma intradural — Intradural",
+        "Meningocele sacral anterior — Sacro",
+        "Malformação mülleriana (útero bicorno/septado) — Útero",
+        "Cisto mesonéfrico cervical (remanescente de Wolff) — Colo uterino"
+      ],
+      "existingConceptId": "etio_congenital",
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "MAP_EXISTING",
+      "reason": "\"malformação congênita\" é a forma substantivada de \"congênito\" (etiology.primary). Mesmo conceito etiológico.",
+      "futureTagMapAction": "Mover para mapped=[\"etio_congenital\"]; considerar synonym \"malformação congênita\"/\"malformação\" em v1.1."
+    },
+    {
+      "tag": "trauma",
+      "usageCount": 62,
+      "priority": "high",
+      "topSections": [
+        "Musculoesquelético (34)",
+        "Tórax (7)",
+        "Abdômen Superior (6)",
+        "Pelve Masculina (5)",
+        "Vascular (4)"
+      ],
+      "sampleLesions": [
+        "Hematoma epidural — Extra-axial / meninges",
+        "Hematoma paravertebral — Partes moles paravertebrais",
+        "Fratura de costela com hematoma associado — Parede torácica",
+        "Hematocele — Testículo",
+        "Fratura peniana (ruptura da túnica albugínea) — Pênis"
+      ],
+      "existingConceptId": "etio_traumatic",
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "MAP_EXISTING",
+      "reason": "Contexto real (hematoma epidural, fratura de costela, hematocele, fratura peniana) confirma uso 100% etiológico/causal, não um \"contexto operacional\" solto. \"trauma\" é a forma substantivada de \"traumático\" (etio_traumatic) — mesmo conceito etiológico, nunca ambíguo nos exemplos revisados.",
+      "futureTagMapAction": "Mover para mapped=[\"etio_traumatic\"]; considerar synonym \"trauma\" em v1.1."
+    },
+    {
+      "tag": "RM",
+      "usageCount": 42,
+      "priority": "high",
+      "topSections": [
+        "Musculoesquelético (42)"
+      ],
+      "sampleLesions": [
+        "Lesão de Kim (labral posteroinferior oculta) — Ombro",
+        "Lesão GLAD (glenolabral articular disruption) — Ombro",
+        "Lesão ALPSA (avulsão labral com deslocamento medial do periósteo) — Ombro",
+        "Lesão HAGL (avulsão umeral do ligamento glenoumeral inferior) — Ombro",
+        "Impacto interno posterossuperior do ombro — Ombro"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "METADATA_NOT_TAXONOMY",
+      "reason": "Contexto real: 100% das lesões com esta tag são do Musculoesquelético (ombro) — \"RM\" é a sigla da modalidade de imagem (Ressonância Magnética), um metadado técnico de AQUISIÇÃO, não um atributo clínico-radiológico do fenótipo da lesão. Mesma categoria de \"US\"/\"TC\"/\"radiografia\"/\"dinâmico\" (ver medium)."
+    },
+    {
+      "tag": "aumento de volume",
+      "usageCount": 41,
+      "priority": "high",
+      "topSections": [
+        "Musculoesquelético (10)",
+        "Pelve Masculina (7)",
+        "Cabeça e Pescoço (7)",
+        "Abdômen Superior (6)",
+        "Tórax (4)"
+      ],
+      "sampleLesions": [
+        "Tamponamento cardíaco — Coração e pericárdio",
+        "Trombo em átrio esquerdo — Coração e pericárdio",
+        "Torção ovariana — Ovário",
+        "Torção isolada de trompa — Trompas de Falópio",
+        "Orquiepididimite aguda — Testículo"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "REVIEW_LATER",
+      "reason": "Contexto ambíguo entre achado de EXAME CLÍNICO (edema/aumento de volume de testículo em torção, por exemplo) e um possível eixo radiológico de \"size/enlargement\". Não há consenso claro de domain (clinical vs radiologic) nos exemplos revisados — decisão humana explícita necessária antes de propor um conceptId."
+    },
+    {
+      "tag": "crescimento lento",
+      "usageCount": 38,
+      "priority": "high",
+      "topSections": [
+        "Coluna Vertebral (7)",
+        "Musculoesquelético (7)",
+        "Tórax (5)",
+        "Abdômen Superior (5)",
+        "Neurorradiologia (4)"
+      ],
+      "sampleLesions": [
+        "Oligodendroglioma — Intra-axial (parênquima)",
+        "Hematoma subdural — Extra-axial / meninges",
+        "Pineocitoma — Região pineal",
+        "Doença degenerativa discal — Disco intervertebral",
+        "Vácuo discal — Disco intervertebral"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": {
+        "conceptId": "rad_growthrate_slow",
+        "label": "lento",
+        "domain": "radiologic",
+        "group": "radiologic.growthRate",
+        "subgroups": [],
+        "synonyms": [],
+        "description": "Velocidade de crescimento da lesão ao longo do tempo (comparação entre exames), eixo distinto de radiologic.growthPattern (que descreve a FORMA do crescimento, não sua velocidade)."
+      },
+      "supportsDifferentialReasoning": true,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "ADD_CONCEPT",
+      "newGroup": {
+        "id": "radiologic.growthRate",
+        "label": "Velocidade de crescimento",
+        "domain": "radiologic",
+        "exclusive": true,
+        "allowMultipleInstances": false,
+        "applicableSections": [
+          "*"
+        ]
+      },
+      "reason": "CONFIRMA decisão já registrada na TAXONOMIA_ATLAS_V1.md (seção 13, nota explícita): \"crescimento rápido\" foi deliberadamente deixado fora de associatedFindings por já ter um FUTURO group próprio previsto (\"radiologic.growthRate\"). Esta rodada confirma a necessidade real: \"crescimento lento\"(38, high) + \"crescimento rápido\"(11, medium) devem entrar juntos."
+    },
+    {
+      "tag": "heterogêneo",
+      "usageCount": 38,
+      "priority": "high",
+      "topSections": [
+        "Abdômen Superior (9)",
+        "Obstetrícia (6)",
+        "Pelve Feminina (5)",
+        "Pelve Masculina (5)",
+        "Musculoesquelético (5)"
+      ],
+      "sampleLesions": [
+        "Bócio mergulhante — Massa mediastinal",
+        "Ruptura extracapsular de prótese mamária — Prótese mamária",
+        "Siliconoma (granuloma de silicone) — Prótese mamária",
+        "Hematoma pós-cirúrgico — Mama operada",
+        "Pancreatite aguda — Pâncreas"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "REVIEW_LATER",
+      "reason": "Risco real de polissemia: pode significar heterogeneidade de REALCE (já existe rad_enh_heterogeneous) ou heterogeneidade geral de COMPOSIÇÃO (não modelada hoje). Contexto revisado (bócio, siliconoma, pancreatite) sugere o segundo sentido na maioria dos casos, mas não é seguro assumir sem revisão humana — decidir junto com \"homogêneo\" (par simétrico)."
+    },
+    {
+      "tag": "malignidade",
+      "usageCount": 36,
+      "priority": "high",
+      "topSections": [
+        "Abdômen Superior (8)",
+        "Cabeça e Pescoço (8)",
+        "Tórax (5)",
+        "Pelve Feminina (5)",
+        "Pelve Masculina (4)"
+      ],
+      "sampleLesions": [
+        "Metástase pulmonar (nódulo único) — Nódulo pulmonar",
+        "Condrossarcoma de parede torácica — Parede torácica",
+        "Metástase de parede torácica — Parede torácica",
+        "Linfoma anaplásico de grandes células associado a implante (BIA-ALCL) — Prótese mamária",
+        "Liposarcoma retroperitoneal — Retroperitônio"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "REVIEW_LATER",
+      "reason": "Risco de conflação entre \"aparência radiológica agressiva\" (já modelada em radiologic.aggressiveness) e \"malignidade clínico-patológica comprovada\" (conceito relacionado mas DISTINTO — uma lesão pode parecer agressiva sem ser maligna, e vice-versa). Contexto revisado é 100% de lesões efetivamente malignas, mas a tag pode estar sendo usada como atalho para \"é câncer\" mais do que como um achado radiológico — decisão humana necessária sobre criar eixo próprio vs. reaproveitar aggressiveness."
+    },
+    {
+      "tag": "parede espessa",
+      "usageCount": 35,
+      "priority": "high",
+      "topSections": [
+        "Abdômen Superior (13)",
+        "Tórax (6)",
+        "Pelve Masculina (5)",
+        "Pelve Feminina (4)",
+        "Mamas (3)"
+      ],
+      "sampleLesions": [
+        "Abscesso paravertebral — Partes moles paravertebrais",
+        "Abscesso pulmonar — Nódulo pulmonar",
+        "Mesotelioma pleural — Pleura",
+        "Empiema pleural — Pleura",
+        "Fibrotórax (espessamento pleural difuso pós-inflamatório) — Pleura"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": {
+        "conceptId": "rad_assoc_thick_wall",
+        "label": "parede espessa",
+        "domain": "radiologic",
+        "group": "radiologic.associatedFindings",
+        "subgroups": [],
+        "synonyms": [],
+        "description": "Espessamento da parede de uma estrutura cística/cavitária/ductal (abscesso, cisto, via aérea), análogo a \"septos espessos\" já existente, mas referindo-se à parede externa, não a septos internos."
+      },
+      "supportsDifferentialReasoning": true,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "ADD_CONCEPT",
+      "reason": "Mesmo padrão estrutural já aprovado para \"septos espessos\" (rad_assoc_thick_septa) — \"parede espessa\" é um achado real e distinto (abscesso, empiema, mesotelioma pleural no contexto revisado). 35 usos, grupo já existe, encaixe direto."
+    },
+    {
+      "tag": "restrição à difusão",
+      "usageCount": 30,
+      "priority": "high",
+      "topSections": [
+        "Neurorradiologia (12)",
+        "Pelve Feminina (6)",
+        "Cabeça e Pescoço (4)",
+        "Abdômen Superior (3)",
+        "Coluna Vertebral (2)"
+      ],
+      "sampleLesions": [
+        "Glioblastoma — Intra-axial (parênquima)",
+        "Abscesso cerebral — Intra-axial (parênquima)",
+        "Encefalite herpética — Intra-axial (parênquima)",
+        "Pineoblastoma — Região pineal",
+        "Abscesso epidural — Espaço epidural"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": {
+        "conceptId": "rad_diffusion_restricted",
+        "label": "restrição à difusão",
+        "domain": "radiologic",
+        "group": "radiologic.diffusion",
+        "subgroups": [],
+        "synonyms": [
+          "restrição de difusão"
+        ],
+        "description": "Restrição à difusão de água em RM (DWI/ADC baixo) — achado fundamental em neurorradiologia (abscesso, infarto agudo, muitos tumores celulares)."
+      },
+      "supportsDifferentialReasoning": true,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "ADD_CONCEPT",
+      "newGroup": {
+        "id": "radiologic.diffusion",
+        "label": "Difusão (DWI)",
+        "domain": "radiologic",
+        "exclusive": false,
+        "allowMultipleInstances": false,
+        "applicableSections": [
+          "*"
+        ]
+      },
+      "reason": "Achado clinicamente/radiologicamente FUNDAMENTAL (abscesso cerebral, glioblastoma, encefalite herpética no contexto revisado) mesmo com uso moderado (30) — qualifica pelo princípio 15 (\"fundamentais mesmo com uso menor\"). Sinônimo \"restrição de difusão\"(8, medium, mesma variação de preposição) deve entrar junto."
+    },
+    {
+      "tag": "derrame associado",
+      "usageCount": 29,
+      "priority": "high",
+      "topSections": [
+        "Tórax (9)",
+        "Musculoesquelético (6)",
+        "Abdômen Superior (4)",
+        "Vascular (3)",
+        "Pelve Feminina (3)"
+      ],
+      "sampleLesions": [
+        "Mesotelioma pleural — Pleura",
+        "Metástase pleural — Pleura",
+        "Empiema pleural — Pleura",
+        "Linfoma anaplásico de grandes células associado a implante (BIA-ALCL) — Prótese mamária",
+        "Carcinomatose peritoneal — Peritônio e Mesentério"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": {
+        "conceptId": "rad_assoc_effusion",
+        "label": "derrame associado",
+        "domain": "radiologic",
+        "group": "radiologic.associatedFindings",
+        "subgroups": [],
+        "synonyms": [],
+        "description": "Efusão líquida (pleural/peritoneal/pericárdica) associada à lesão/processo — achado associado frequente em malignidade pleural/peritoneal, não modelado ainda."
+      },
+      "supportsDifferentialReasoning": true,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "ADD_CONCEPT",
+      "reason": "Gap surpreendente: associatedFindings não tem nenhum concept de efusão/derrame hoje. Contexto revisado (mesotelioma, metástase pleural, empiema, carcinomatose peritoneal) é consistentemente achado associado clássico. 29 usos, encaixe direto no grupo já existente."
+    },
+    {
+      "tag": "realce",
+      "usageCount": 28,
+      "priority": "high",
+      "topSections": [
+        "Neurorradiologia (7)",
+        "Cabeça e Pescoço (7)",
+        "Pelve Feminina (5)",
+        "Pelve Masculina (4)",
+        "Musculoesquelético (2)"
+      ],
+      "sampleLesions": [
+        "Carcinoma vaginal — Vagina",
+        "Miosite infecciosa (piomiosite) — Músculos",
+        "Doença de Paget da mama — Mamilo e pele",
+        "Vesiculite seminal — Vesículas seminais",
+        "Neurite óptica — Vias ópticas"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "REVIEW_LATER",
+      "reason": "Tag genérica demais isoladamente (já sinalizada em TAG_AUDIT_GRUPOS_SEMANTICOS.json, grupo G7, como \"tag genérica convivendo com variantes qualificadas\") — qualquer um dos 6 concepts de radiologic.enhancementMorphology poderia estar implícito. Não é seguro inferir qual sem o contexto completo da lesão (que este snapshot não traz por tag). Decisão humana necessária: manter livre ou tratar como \"realce presente, tipo não especificado\" (eixo booleano separado)."
+    },
+    {
+      "tag": "hipossinal T2",
+      "usageCount": 26,
+      "priority": "high",
+      "topSections": [
+        "Pelve Feminina (9)",
+        "Musculoesquelético (7)",
+        "Pelve Masculina (3)",
+        "Coluna Vertebral (2)",
+        "Abdômen Superior (2)"
+      ],
+      "sampleLesions": [
+        "Cavernoma (malformação cavernosa) — Intra-axial (parênquima)",
+        "Hérnia de disco intervertebral — Disco intervertebral",
+        "Doença degenerativa discal — Disco intervertebral",
+        "Fibromatose da parede torácica (tumor desmoide) — Parede torácica",
+        "Fibrose cicatricial madura — Mama operada"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": {
+        "conceptId": "rad_signal_t2_hypo",
+        "label": "hipossinal em T2",
+        "domain": "radiologic",
+        "group": "radiologic.signalIntensityT2",
+        "subgroups": [],
+        "synonyms": [],
+        "description": "Intensidade de sinal em T2 (RM) mais baixa que o tecido de referência — par de rad_signal_t2_hyper no mesmo eixo exclusivo."
+      },
+      "supportsDifferentialReasoning": true,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "ADD_CONCEPT",
+      "reason": "Mesma família de \"hipersinal T2\" — devem ser aprovados juntos no mesmo group novo radiologic.signalIntensityT2 (exclusive=true: um ponto não pode ser simultaneamente hiper e hipossinal no mesmo eixo)."
+    },
+    {
+      "tag": "sólido-cístico",
+      "usageCount": 23,
+      "priority": "high",
+      "topSections": [
+        "Pelve Feminina (8)",
+        "Neurorradiologia (3)",
+        "Abdômen Superior (3)",
+        "Tórax (2)",
+        "Cabeça e Pescoço (2)"
+      ],
+      "sampleLesions": [
+        "Schwannoma vestibular — Extra-axial / meninges",
+        "Teratoma pineal — Região pineal",
+        "Cordoma sacral — Sacro",
+        "Schwannoma mediastinal (mediastino posterior) — Massa mediastinal",
+        "Tumor filoide — Nódulo mamário"
+      ],
+      "existingConceptId": "rad_comp_complex_cyst",
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "MAP_EXISTING",
+      "confidence": "high-confidence",
+      "reason": "Precedente DIRETO já decidido nesta sessão (TAXO-01, ajuste de composição): \"sólido-cístico\" como combinação arbitrária foi deliberadamente substituído por \"cisto complexo\" (rad_comp_complex_cyst) como categoria morfológica própria — documentado em TAXONOMIA_ATLAS_V1.md seção 2 e no TAXONOMY.json. A tag antiga é exatamente o termo que motivou a criação do concept atual.",
+      "futureTagMapAction": "Mover para mapped=[\"rad_comp_complex_cyst\"]; considerar \"sólido-cístico\" como synonym formal."
+    },
+    {
+      "tag": "espessamento nodular",
+      "usageCount": 22,
+      "priority": "high",
+      "topSections": [
+        "Abdômen Superior (9)",
+        "Tórax (6)",
+        "Pelve Feminina (2)",
+        "Cabeça e Pescoço (2)",
+        "Mamas (1)"
+      ],
+      "sampleLesions": [
+        "Mesotelioma pleural — Pleura",
+        "Metástase pleural — Pleura",
+        "Amiloidose traqueobrônquica — Vias aéreas",
+        "Linfoma anaplásico de grandes células associado a implante (BIA-ALCL) — Prótese mamária",
+        "Carcinomatose peritoneal — Peritônio e Mesentério"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "REVIEW_LATER",
+      "reason": "Provável achado real e específico (espessamento pleural/peritoneal NODULAR vs. liso — discriminador clássico de malignidade), mas há sobreposição conceitual com a proposta \"parede espessa\" desta mesma rodada — risco de criar 2 concepts redundantes (espessura + padrão nodular vs. um único eixo \"padrão de espessamento\"). Decisão humana necessária sobre modelagem (concept único com qualificador \"nodular\" vs. dois concepts independentes)."
+    },
+    {
+      "tag": "hipoecogênico",
+      "usageCount": 21,
+      "priority": "high",
+      "topSections": [
+        "Mamas (8)",
+        "Pelve Masculina (6)",
+        "Cabeça e Pescoço (2)",
+        "Neurorradiologia (1)",
+        "Pelve Feminina (1)"
+      ],
+      "sampleLesions": [
+        "Hipofisite linfocítica — Região selar",
+        "Fibroadenoma — Nódulo mamário",
+        "Carcinoma lobular invasivo — Nódulo mamário",
+        "Linfonodo intramamário — Nódulo mamário",
+        "Linfonodo axilar reativo — Axila"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": {
+        "conceptId": "rad_echo_hypo",
+        "label": "hipoecogênico",
+        "domain": "radiologic",
+        "group": "radiologic.echogenicity",
+        "subgroups": [],
+        "synonyms": [
+          "hipoecoico"
+        ],
+        "description": "Ecogenicidade ao ultrassom mais baixa que o tecido de referência. Eixo próprio de ecogenicidade (US), ausente na V1 atual."
+      },
+      "supportsDifferentialReasoning": true,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "ADD_CONCEPT",
+      "newGroup": {
+        "id": "radiologic.echogenicity",
+        "label": "Ecogenicidade (US)",
+        "domain": "radiologic",
+        "exclusive": true,
+        "allowMultipleInstances": false,
+        "applicableSections": [
+          "*"
+        ]
+      },
+      "reason": "Outro gap estrutural real: nenhum eixo de ecogenicidade ao ultrassom existe hoje. Família completa a desenhar junta: \"hipoecogênico\"(21,high) + \"hipoecoico\"(6,medium, mesmo conceito/sinônimo) + \"anecoico\"(11,medium — e também uma decisão humana explícita \"keep\" na auditoria de tags, reforçando que é vocabulário vivo relevante) + hiperecogênico/isoecogênico (não observados como tag de alto uso, mas necessários para o eixo ficar completo)."
+    },
+    {
+      "tag": "homogêneo",
+      "usageCount": 20,
+      "priority": "high",
+      "topSections": [
+        "Abdômen Superior (6)",
+        "Cabeça e Pescoço (5)",
+        "Tórax (3)",
+        "Pelve Feminina (2)",
+        "Musculoesquelético (2)"
+      ],
+      "sampleLesions": [
+        "Linfoma orbitário — Órbita",
+        "Linfoma axilar — Axila",
+        "Linfoma esplênico — Baço",
+        "Esplenose (implante esplênico ectópico) — Baço",
+        "Linfoma mesentérico — Peritônio e Mesentério"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "REVIEW_LATER",
+      "reason": "Par simétrico de \"heterogêneo\" — mesmo risco de polissemia (realce vs. composição geral). Decidir os dois juntos."
+    },
+    {
+      "tag": "margens mal definidas",
+      "usageCount": 12,
+      "priority": "medium",
+      "topSections": [
+        "Mamas (3)",
+        "Pelve Feminina (3)",
+        "Coluna Vertebral (2)",
+        "Abdômen Superior (1)",
+        "Pelve Masculina (1)"
+      ],
+      "sampleLesions": [
+        "Tumor de células gigantes sacral — Sacro",
+        "Doença de Paget do mamilo — Mamilo e pele",
+        "Carcinoma inflamatório da mama — Mamilo e pele",
+        "Siliconoma (granuloma de silicone) — Prótese mamária",
+        "Mesenterite esclerosante — Peritônio e Mesentério"
+      ],
+      "existingConceptId": "rad_margin_illdefined",
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "MAP_EXISTING",
+      "reason": "\"margens mal definidas\" = \"mal definidas\" (radiologic.margins) com a palavra \"margens\" redundante. Mesmo concept."
+    },
+    {
+      "tag": "bem delimitado",
+      "usageCount": 12,
+      "priority": "medium",
+      "topSections": [
+        "Cabeça e Pescoço (6)",
+        "Abdômen Superior (3)",
+        "Pelve Masculina (2)",
+        "Tórax (1)"
+      ],
+      "sampleLesions": [
+        "Lipoma de parede torácica — Parede torácica",
+        "Hemangioma esplênico — Baço",
+        "Cisto esplênico (epidermoide/pseudocisto) — Baço",
+        "Lipoma de cordão espermático — Cordão espermático",
+        "Schwannoma retroperitoneal — Retroperitônio"
+      ],
+      "existingConceptId": "rad_margin_circumscribed",
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "MAP_EXISTING",
+      "confidence": "medium-confidence",
+      "reason": "Mesma família de \"bem circunscrita\" (ver TAG_AUDIT_GRUPOS_SEMANTICOS.json grupo G2) — \"delimitado\" pode ter nuance própria (contorno nítido sem implicar cápsula) vs. \"circunscrita\" (com pseudocápsula). Mapeado provisoriamente ao mesmo concept por falta de um eixo de nuance separado na V1, mas a nuance deve ser revisada por humano antes de aplicar."
+    },
+    {
+      "tag": "lobulada",
+      "usageCount": 5,
+      "priority": "medium",
+      "topSections": [
+        "Neurorradiologia (1)",
+        "Tórax (1)",
+        "Mamas (1)",
+        "Pelve Feminina (1)",
+        "Cabeça e Pescoço (1)"
+      ],
+      "sampleLesions": [
+        "Papiloma de plexo coroide — Ventrículos",
+        "Carcinoma broncogênico — Nódulo pulmonar",
+        "Tumor filoide — Nódulo mamário",
+        "Disgerminoma — Ovário",
+        "Adenoma pleomórfico de parótida — Glândulas salivares"
+      ],
+      "existingConceptId": "rad_margin_lobulated",
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "MAP_EXISTING",
+      "reason": "\"lobulada\" (fem, singular) = \"lobuladas\" (radiologic.margins). Mesma concordância de gênero/número que o tier normalizedMatch já trata para outros casos; aqui ficou de fora por content extra não detectado automaticamente — mapeamento manual direto."
+    },
+    {
+      "tag": "hipersinal T1",
+      "usageCount": 14,
+      "priority": "medium",
+      "topSections": [
+        "Pelve Feminina (4)",
+        "Pelve Masculina (3)",
+        "Neurorradiologia (2)",
+        "Coluna Vertebral (2)",
+        "Tórax (1)"
+      ],
+      "sampleLesions": [
+        "Craniofaringioma (adamantinomatoso) — Região selar",
+        "Hemangioma vertebral — Corpo vertebral",
+        "Hematométrio — Útero",
+        "Endometrioma — Ovário",
+        "Endometriose vaginal — Vagina"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": {
+        "conceptId": "rad_signal_t1_hyper",
+        "label": "hipersinal em T1",
+        "domain": "radiologic",
+        "group": "radiologic.signalIntensityT1",
+        "subgroups": [],
+        "synonyms": [],
+        "description": "Intensidade de sinal em T1 (RM) mais alta que o tecido de referência — eixo próprio, irmão de radiologic.signalIntensityT2."
+      },
+      "supportsDifferentialReasoning": true,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "ADD_CONCEPT",
+      "newGroup": {
+        "id": "radiologic.signalIntensityT1",
+        "label": "Sinal em T1 (RM)",
+        "domain": "radiologic",
+        "exclusive": true,
+        "allowMultipleInstances": false,
+        "applicableSections": [
+          "*"
+        ]
+      },
+      "reason": "Completa a família de sinal em RM junto com hipersinal/hipossinal T2."
+    },
+    {
+      "tag": "hipossinal T1",
+      "usageCount": 5,
+      "priority": "medium",
+      "topSections": [
+        "Musculoesquelético (3)",
+        "Coluna Vertebral (1)",
+        "Neurorradiologia (1)"
+      ],
+      "sampleLesions": [
+        "Fratura por compressão osteoporótica — Corpo vertebral",
+        "Necrose avascular (osteonecrose) — Articulações",
+        "Neuroma de Morton — Tornozelo e Pé",
+        "Esclerose osmótica pontina — Tronco encefálico",
+        "Doença de Kienböck (osteonecrose do semilunar) — Punho e Mão"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": {
+        "conceptId": "rad_signal_t1_hypo",
+        "label": "hipossinal em T1",
+        "domain": "radiologic",
+        "group": "radiologic.signalIntensityT1",
+        "subgroups": [],
+        "synonyms": [],
+        "description": "Intensidade de sinal em T1 (RM) mais baixa que o tecido de referência."
+      },
+      "supportsDifferentialReasoning": true,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "ADD_CONCEPT",
+      "reason": "Completa a família de sinal em RM (eixo T1)."
+    },
+    {
+      "tag": "crescimento rápido",
+      "usageCount": 11,
+      "priority": "medium",
+      "topSections": [
+        "Musculoesquelético (3)",
+        "Abdômen Superior (2)",
+        "Pelve Feminina (2)",
+        "Neurorradiologia (1)",
+        "Cabeça e Pescoço (1)"
+      ],
+      "sampleLesions": [
+        "Apoplexia hipofisária — Região selar",
+        "Rabdomiossarcoma orbitário — Órbita",
+        "Tumor filoide — Nódulo mamário",
+        "Carcinoma adrenocortical — Suprarrenal",
+        "Metástase adrenal — Suprarrenal"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": {
+        "conceptId": "rad_growthrate_fast",
+        "label": "rápido",
+        "domain": "radiologic",
+        "group": "radiologic.growthRate",
+        "subgroups": [],
+        "synonyms": [],
+        "description": "Par de \"lento\" no mesmo eixo exclusivo radiologic.growthRate."
+      },
+      "supportsDifferentialReasoning": true,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "ADD_CONCEPT",
+      "reason": "Completa a família de velocidade de crescimento junto com \"crescimento lento\"."
+    },
+    {
+      "tag": "matriz condroide",
+      "usageCount": 11,
+      "priority": "medium",
+      "topSections": [
+        "Musculoesquelético (8)",
+        "Cabeça e Pescoço (2)",
+        "Tórax (1)"
+      ],
+      "sampleLesions": [
+        "Condrossarcoma de parede torácica — Parede torácica",
+        "Osteossarcoma — Osso",
+        "Condrossarcoma — Osso",
+        "Encondroma — Osso",
+        "Osteocondroma — Osso"
+      ],
+      "existingConceptId": "rad_bonematrix_chondroid",
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "MAP_EXISTING",
+      "reason": "\"matriz condroide\" = \"condroide\" (radiologic.boneMatrix) com a palavra \"matriz\" redundante (o próprio group já se chama \"Matriz óssea\"). Mesmo concept."
+    },
+    {
+      "tag": "restrição de difusão",
+      "usageCount": 8,
+      "priority": "medium",
+      "topSections": [
+        "Neurorradiologia (4)",
+        "Abdômen Superior (2)",
+        "Pelve Masculina (1)",
+        "Musculoesquelético (1)"
+      ],
+      "sampleLesions": [
+        "Abscesso hepático piogênico — Fígado",
+        "Pielonefrite / abscesso renal — Rim",
+        "Infarto de tronco encefálico — Tronco encefálico",
+        "Carcinoma ductal da próstata — Próstata",
+        "Abscesso de partes moles — Partes moles"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": true,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "ADD_CONCEPT",
+      "sameProposalAs": "rad_diffusion_restricted",
+      "reason": "Sinônimo textual de \"restrição à difusão\" (variação de preposição de/à, mesmo achado de RM) — mesma proposta de concept (rad_diffusion_restricted, já listado como synonym), não um concept novo separado."
+    },
+    {
+      "tag": "assimetria",
+      "usageCount": 6,
+      "priority": "medium",
+      "topSections": [
+        "Cabeça e Pescoço (3)",
+        "Musculoesquelético (2)",
+        "Tórax (1)"
+      ],
+      "sampleLesions": [
+        "Linfangite carcinomatosa pulmonar — Parênquima pulmonar",
+        "Paralisia de prega vocal — Laringe",
+        "Paralisia de corda vocal — Laringe",
+        "Síndrome de Grisel — Espaços cervicais",
+        "Síndrome do desfiladeiro torácico (compressão neurovascular) — Nervos periféricos"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "REVIEW_LATER",
+      "confidence": "medium-confidence",
+      "reason": "\"assimetria\" (substantivo) = mesma raiz de \"assimétrica\"(clinical.symmetry)/\"assimétrico\"(radiologic.symmetry) — ambíguo entre os dois domains, igual ao padrão já tratado para \"assimétrico\" isolado. NÃO precisa de novo concept — ao corrigir o mapa, a classificação correta é \"ambiguous\" com os 2 candidatos existentes, nunca \"mapped\" único; por isso fica em REVIEW_LATER (decisão de QUAL candidato/contexto cabe a humano) em vez de MAP_EXISTING (que pressupõe resolução única). Também é o TARGET vivo de 3 edits aplicados (assimetria de membros/laríngea/assimétrico) — qualquer decisão aqui afeta a interpretação retroativa desses 3 merges."
+    },
+    {
+      "tag": "benignidade",
+      "usageCount": 16,
+      "priority": "medium",
+      "topSections": [
+        "Cabeça e Pescoço (7)",
+        "Pelve Feminina (3)",
+        "Musculoesquelético (2)",
+        "Pelve Masculina (1)",
+        "Coluna Vertebral (1)"
+      ],
+      "sampleLesions": [
+        "Cistoadenoma seroso — Ovário",
+        "Cistoadenoma mucinoso — Ovário",
+        "Tumor adenomatoide do epidídimo — Epidídimo",
+        "Osteoma osteoide — Osso",
+        "Cisto de paratireoide — Paratireoide"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "REVIEW_LATER",
+      "reason": "Par de \"malignidade\" — mesmo risco de conflação aggressiveness-vs-prova-clínica. Decidir junto."
+    },
+    {
+      "tag": "benigna",
+      "usageCount": 6,
+      "priority": "medium",
+      "topSections": [
+        "Mamas (3)",
+        "Tórax (1)",
+        "Pelve Masculina (1)",
+        "Neurorradiologia (1)"
+      ],
+      "sampleLesions": [
+        "Lipoma de parede torácica — Parede torácica",
+        "Lipoma de cordão espermático — Cordão espermático",
+        "Calcificações cutâneas mamárias — Calcificações",
+        "Calcificações secretórias mamárias — Calcificações",
+        "Linfonodo intramamário/axilar ectópico benigno — Axila"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "REVIEW_LATER",
+      "reason": "Mesma família de \"benignidade\"/\"malignidade\" — decidir os três juntos."
+    },
+    {
+      "tag": "US",
+      "usageCount": 16,
+      "priority": "medium",
+      "topSections": [
+        "Musculoesquelético (16)"
+      ],
+      "sampleLesions": [
+        "Tendinopatia isolada do infraespinhal — Ombro",
+        "Bursite subacromial séptica — Ombro",
+        "Subluxação medial do tendão bicipital associada a ruptura do subescapular — Ombro",
+        "Tendinopatia do tríceps (sem ruptura) — Cotovelo",
+        "Neuropatia do nervo interósseo posterior (arcada de Frohse) — Cotovelo"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "METADATA_NOT_TAXONOMY",
+      "reason": "Sigla de modalidade (Ultrassom) — mesma categoria de \"RM\"."
+    },
+    {
+      "tag": "radiografia",
+      "usageCount": 11,
+      "priority": "medium",
+      "topSections": [
+        "Musculoesquelético (10)",
+        "Neurorradiologia (1)"
+      ],
+      "sampleLesions": [
+        "Sinal da vela (derrame articular do cotovelo) — Cotovelo",
+        "Osteoartrose do cotovelo com corpos livres múltiplos — Cotovelo",
+        "Rizartrose (artrose trapeziometacarpiana) — Punho e Mão",
+        "Deformidade em pescoço de cisne — Punho e Mão",
+        "Corpo livre intra-articular calcificado do quadril — Quadril"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "METADATA_NOT_TAXONOMY",
+      "reason": "Nome de modalidade (Raio-X) — mesma categoria de \"RM\"/\"US\"."
+    },
+    {
+      "tag": "dinâmico",
+      "usageCount": 5,
+      "priority": "medium",
+      "topSections": [
+        "Musculoesquelético (5)"
+      ],
+      "sampleLesions": [
+        "Subluxação/luxação dos tendões fibulares — Tornozelo e Pé",
+        "Ressalto do quadril (snapping hip syndrome) — Quadril",
+        "Subluxação/luxação do tendão da cabeça longa do bíceps — Ombro",
+        "Instabilidade dinâmica do nervo ulnar no cotovelo — Cotovelo",
+        "Síndrome do desfiladeiro torácico (compressão neurovascular) — Nervos periféricos"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "METADATA_NOT_TAXONOMY",
+      "reason": "Qualificador de PROTOCOLO de aquisição (\"estudo dinâmico\"), não um achado do fenótipo da lesão — mesma categoria de modalidade/técnica."
+    },
+    {
+      "tag": "hipoecoico",
+      "usageCount": 6,
+      "priority": "medium",
+      "topSections": [
+        "Musculoesquelético (6)"
+      ],
+      "sampleLesions": [
+        "Tenossinovite estenosante (dedo em gatilho) — Punho e Mão",
+        "Ruptura parcial do tendão do manguito rotador — Ombro",
+        "Disfunção/ruptura do tendão tibial posterior — Tornozelo e Pé",
+        "Sinovite reumatoide (achado ao USG com Doppler) — Articulações",
+        "Síndrome da banda iliotibial — Joelho"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": true,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "ADD_CONCEPT",
+      "sameProposalAs": "rad_echo_hypo",
+      "reason": "Sinônimo textual de \"hipoecogênico\" (variação ortográfica abreviada, mesmo achado de US) — mesma proposta de concept (rad_echo_hypo, já listado como synonym), não um concept novo separado."
+    },
+    {
+      "tag": "anecoico",
+      "usageCount": 11,
+      "priority": "medium",
+      "topSections": [
+        "Musculoesquelético (11)"
+      ],
+      "sampleLesions": [
+        "Cisto de Baker (cisto poplíteo) — Joelho",
+        "Bursite pré-patelar — Joelho",
+        "Derrame da bainha da longa porção do bíceps — Ombro",
+        "Bursite bicipitorradial — Cotovelo",
+        "Gânglio dorsal do punho (cisto escafolunar) — Punho e Mão"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": {
+        "conceptId": "rad_echo_anechoic",
+        "label": "anecoico",
+        "domain": "radiologic",
+        "group": "radiologic.echogenicity",
+        "subgroups": [],
+        "synonyms": [],
+        "description": "Ausência completa de ecos internos ao ultrassom (conteúdo cístico simples puro) — ponto do mesmo eixo de ecogenicidade."
+      },
+      "supportsDifferentialReasoning": true,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "ADD_CONCEPT",
+      "reason": "Completa a família de ecogenicidade. Nota: esta tag JÁ tem uma decisão humana explícita \"keep\" (manter como tag livre) na auditoria de tags — isso é uma decisão sobre VOCABULÁRIO DE TAG (eixo independente do mapeamento taxonômico, ver nota de transparência na entrega), não um veto à criação de um concept estruturado correspondente."
+    },
+    {
+      "tag": "inflamatório/infeccioso",
+      "usageCount": 5,
+      "priority": "medium",
+      "topSections": [
+        "Mamas (2)",
+        "Neurorradiologia (1)",
+        "Cabeça e Pescoço (1)",
+        "Pelve Feminina (1)"
+      ],
+      "sampleLesions": [
+        "Mastite infecciosa — Mamilo e pele",
+        "Encefalite de tronco encefálico — Tronco encefálico",
+        "Linfadenopatia axilar reacional — Axila",
+        "Linfadenite cervical reacional — Linfonodos cervicais",
+        "Cervicite — Colo uterino"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "NORMALIZE_TAG",
+      "reason": "Duplicata por ordem de palavras de \"infeccioso/inflamatório\" — já identificada e com sugestão de EDITAR na própria auditoria de tags original (TAG_AUDIT_GRUPOS_SEMANTICOS.json, grupo G1, confiança alta). Não é uma questão de TAXONOMY.json — é higiene de tag livre. Recomendação: normalizar para a forma canônica \"infeccioso/inflamatório\" numa futura rodada de aplicação de decisões de tag (mesmo mecanismo já usado para \"aterosclerótico\"→\"degenerativo\")."
+    },
+    {
+      "tag": "Degenerativo",
+      "usageCount": 1,
+      "priority": "low",
+      "topSections": [
+        "Musculoesquelético (1)"
+      ],
+      "sampleLesions": [
+        "Síndrome do impacto subacromial — Ombro"
+      ],
+      "existingConceptId": null,
+      "proposedConcept": null,
+      "supportsDifferentialReasoning": false,
+      "radiopaediaSourceSections": [],
+      "reviewStatus": "pending-human-approval",
+      "category": "NORMALIZE_TAG",
+      "confidence": "high-confidence",
+      "reason": "Duplicata de caixa de \"degenerativo\" (minúsculo) — mesmo significado, única diferença é a letra inicial maiúscula. \"degenerativo\" (3 usos) já é a forma mais usada E já é o TARGET vivo do edit aplicado \"aterosclerótico→degenerativo\", estabelecendo-a de fato como a forma canônica. Recomendação: normalizar \"Degenerativo\"(1 uso) → \"degenerativo\" numa futura rodada de aplicação de decisões de tag (mesmo mecanismo já usado para os 10 edits já aplicados) — NÃO corrigido automaticamente aqui.",
+      "futureTagMapAction": "Registrar decisão tag-audit: decision=\"edit\", target=\"degenerativo\" para a tag \"Degenerativo\". Mapeamento taxonômico (mapped -> etio_degenerative) já está correto para ambas as grafias hoje; a normalização é só de higiene de vocabulário de tag, não de taxonomia."
+    }
+  ]
+}

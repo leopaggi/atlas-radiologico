@@ -115,8 +115,8 @@ test('1. loadTaxonomy() resolve com o objeto devolvido pelo fetch (groups/concep
     return { ok: true, json: async () => REAL_TAXONOMY };
   });
   const t = await loader.loadTaxonomy();
-  assert.equal(t.groups.length, 33);
-  assert.equal(t.concepts.length, 194);
+  assert.equal(t.groups.length, 38);
+  assert.equal(t.concepts.length, 207);
   assert.equal(calls, 1);
 });
 
@@ -153,7 +153,7 @@ test('2b. fallback: erro de rede (fetch rejeita) também rejeita loadTaxonomy(),
   await assert.rejects(() => loader.loadTaxonomy(), /network down/);
   assert.equal(loader.getCache(), null);
   const t = await loader.loadTaxonomy(); // nova tentativa, depois da falha
-  assert.equal(t.concepts.length, 194);
+  assert.equal(t.concepts.length, 207);
   assert.equal(calls, 2, 'depois de uma falha, a próxima chamada tenta de novo (não fica travado em erro)');
 });
 
@@ -173,15 +173,15 @@ test('2d (estático). taxoMountPanel mostra erro amigável no catch e não propa
 // 3/4/5. ÍNDICES EM MEMÓRIA
 // ===========================================================================
 
-test('3. conceptById indexa todos os 194 concepts, cada um recuperável pelo próprio id', () => {
+test('3. conceptById indexa todos os 207 concepts, cada um recuperável pelo próprio id', () => {
   const idx = api.taxoBuildIndices(REAL_TAXONOMY);
-  assert.equal(idx.conceptById.size, 194);
+  assert.equal(idx.conceptById.size, 207);
   assert.equal(idx.conceptById.get('rad_enh_ring').label, 'realce anelar');
 });
 
-test('4. groupById indexa todos os 33 groups', () => {
+test('4. groupById indexa todos os 38 groups (v1.1, TAXO-03D)', () => {
   const idx = api.taxoBuildIndices(REAL_TAXONOMY);
-  assert.equal(idx.groupById.size, 33);
+  assert.equal(idx.groupById.size, 38);
   assert.equal(idx.groupById.get('radiologic.laterality').exclusive, true);
 });
 
@@ -195,7 +195,7 @@ test('5. conceptsByGroup agrupa corretamente (clinical.symptoms tem 59 concepts)
 test('conceptsByDomain agrupa corretamente (clinical/radiologic/etiology/demographics)', () => {
   const idx = api.taxoBuildIndices(REAL_TAXONOMY);
   assert.equal(idx.conceptsByDomain.get('clinical').length, 99);
-  assert.equal(idx.conceptsByDomain.get('radiologic').length, 75);
+  assert.equal(idx.conceptsByDomain.get('radiologic').length, 88, 'v1.1 adicionou 13 concepts radiológicos novos (75+13)');
   assert.equal(idx.conceptsByDomain.get('etiology').length, 12);
   assert.equal(idx.conceptsByDomain.get('demographics').length, 8);
 });
@@ -296,11 +296,11 @@ test('14. aba Grupos exibe "exclusive" de cada group (sim para laterality, não 
   assert.match(html2, /radiologic\.position[\s\S]*?exclusive: não/);
 });
 
-test('15. aba Grupos exibe "allowMultipleInstances" de cada group (todos "não" na V1)', () => {
+test('15. aba Grupos exibe "allowMultipleInstances" de cada group (todos "não" na V1/V1.1)', () => {
   const html2 = api.taxoRenderGroupsTab(REAL_TAXONOMY, REAL_INDICES);
   const matches = html2.match(/allowMultipleInstances: (sim|não)/g);
-  assert.equal(matches.length, 33);
-  assert.ok(matches.every(m => m === 'allowMultipleInstances: não'), 'default false em todos os groups da V1 (seção 6/9 do documento)');
+  assert.equal(matches.length, 38);
+  assert.ok(matches.every(m => m === 'allowMultipleInstances: não'), 'default false em todos os groups da V1/V1.1 (seção 6/9 do documento)');
 });
 
 // ===========================================================================
@@ -317,9 +317,22 @@ test('16. aba Relações lista os concepts com conflictsWith, incluindo clin_loc
 // 17. INTEGRITY AUDIT — PASS no TAXONOMY.json atual
 // ===========================================================================
 
-test('17. taxoRunIntegrityAudit() não encontra NENHUM problema na baseline aprovada atual', () => {
+test('17. taxoRunIntegrityAudit() não encontra NENHUM erro estrutural na baseline atual (TAXONOMY v1.1)', () => {
+  // TAXO-03D elevou TAXONOMY.json para v1.1 (taxonomyVersion=2, 38 groups,
+  // 207 concepts) SEM tocar index.html — a função extraída aqui ainda traz a
+  // baseline antiga (v1: taxonomyVersion=1/33/194) hardcoded como "aviso"
+  // (nível avisar, não erro), por instrução explícita de não alterar
+  // index.html nesta rodada. Por isso o teste passa a aceitar exatamente
+  // esses 3 avisos esperados, mas continua exigindo ZERO erros estruturais
+  // reais (duplicidade, referência inválida etc.).
   const issues = api.taxoRunIntegrityAudit(REAL_TAXONOMY);
-  assert.equal(JSON.stringify(issues), '[]', 'baseline aprovada deveria estar 100% íntegra: ' + JSON.stringify(issues));
+  const errors = issues.filter(i => i.level === 'erro');
+  const avisos = issues.filter(i => i.level === 'aviso');
+  assert.equal(errors.length, 0, 'não deveria haver nenhum erro estrutural real: ' + JSON.stringify(errors));
+  assert.equal(avisos.length, 3, 'esperado exatamente 3 avisos de baseline desatualizada (taxonomyVersion/groups/concepts): ' + JSON.stringify(avisos));
+  assert.ok(avisos.some(a => /taxonomyVersion/.test(a.message)));
+  assert.ok(avisos.some(a => /groups/.test(a.message)));
+  assert.ok(avisos.some(a => /concepts/.test(a.message)));
 });
 
 test('integrity audit PEGA um problema introduzido de propósito (conceptId duplicado)', () => {

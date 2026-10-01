@@ -19,9 +19,9 @@ function normalize(s) {
   return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 }
 
-test('metadata tem os valores esperados da fase approved (TAXO-01 congelada)', () => {
+test('metadata tem os valores esperados da fase approved (TAXO-03D, v1.1)', () => {
   assert.equal(taxonomy.metadata.schemaVersion, 1);
-  assert.equal(taxonomy.metadata.taxonomyVersion, 1);
+  assert.equal(taxonomy.metadata.taxonomyVersion, 2);
   assert.equal(taxonomy.metadata.status, 'approved');
 });
 
@@ -125,8 +125,8 @@ test('regra 13 — metadata.schemaVersion = 1', () => {
   assert.equal(taxonomy.metadata.schemaVersion, 1);
 });
 
-test('regra 14 — metadata.taxonomyVersion = 1', () => {
-  assert.equal(taxonomy.metadata.taxonomyVersion, 1);
+test('regra 14 — metadata.taxonomyVersion = 2 (v1.1, TAXO-03D)', () => {
+  assert.equal(taxonomy.metadata.taxonomyVersion, 2);
 });
 
 test('regra 15 — metadata.status = "approved" (congelada a partir da aprovação TAXO-01)', () => {
@@ -443,7 +443,7 @@ test('conflictsWith — localizações específicas NÃO conflitam entre si (pod
 
 /* ===================== Aprovação TAXO-01 (congelamento formal) ===================== */
 //
-// A partir desta aprovação, os 194 conceptIds abaixo (BASELINE_APPROVED_CONCEPT_IDS)
+// A partir desta aprovação, os 194 conceptIds abaixo (BASELINE_V1_IDS)
 // são imutáveis: nunca renomeados, nunca reaproveitados para outro significado,
 // nunca apagados após uso (ver TAXONOMIA_ATLAS_V1.md, seção de congelamento).
 // Mudanças de significado passam a usar status:"deprecated" + aliasOf, nunca
@@ -459,37 +459,191 @@ test('conflictsWith — localizações específicas NÃO conflitam entre si (pod
 // manter (grep/diff resolve) e é exatamente o tipo de regressão silenciosa
 // que um teste deveria pegar.
 
-const BASELINE_APPROVED_CONCEPT_IDS = ["clin_chest_pain_exertional","clin_chest_pain_pleuritic","clin_chest_pain_positional","clin_chest_pain_rest","clin_course_continuous","clin_course_episodic","clin_course_recurrent","clin_dist_diffuse","clin_dist_localized","clin_dur_days","clin_dur_hours","clin_dur_minutes","clin_dur_seconds","clin_evo_progressive","clin_evo_regressive","clin_evo_stable","clin_intensity_mild","clin_intensity_moderate","clin_intensity_severe","clin_lat_bilateral","clin_lat_unilateral","clin_loc_diffuse_abdominal","clin_loc_epigastrium","clin_loc_fid","clin_loc_fie","clin_loc_hypogastrium","clin_loc_left_flank","clin_loc_left_hypochondrium","clin_loc_mesogastrium","clin_loc_right_flank","clin_loc_right_hypochondrium","clin_long_distal","clin_long_proximal","clin_onset_gradual","clin_onset_sudden","clin_sym_asymmetric","clin_sym_symmetric","clin_symptom_abdominal_pain","clin_symptom_amnesia","clin_symptom_ankle_edema","clin_symptom_arthralgia","clin_symptom_bruising","clin_symptom_chest_pain","clin_symptom_coma","clin_symptom_diarrhea","clin_symptom_dry_cough","clin_symptom_dysarthria","clin_symptom_dysphagia","clin_symptom_dysuria","clin_symptom_eye_irritation","clin_symptom_eye_pain","clin_symptom_fever","clin_symptom_genital_lesion","clin_symptom_headache","clin_symptom_hearing_loss","clin_symptom_heartburn","clin_symptom_hematuria","clin_symptom_hoarseness","clin_symptom_hyperphagia","clin_symptom_hyporexia","clin_symptom_hypotension","clin_symptom_imbalance","clin_symptom_jaundice","clin_symptom_joint_stiffness","clin_symptom_low_back_pain","clin_symptom_lymphadenopathy","clin_symptom_melena","clin_symptom_menstrual_irregularity","clin_symptom_mucocutaneous_ulcers","clin_symptom_muscle_weakness","clin_symptom_myalgia","clin_symptom_neck_pain","clin_symptom_odynophagia","clin_symptom_oronasal_bleeding","clin_symptom_paresthesia","clin_symptom_productive_cough","clin_symptom_rom_limitation","clin_symptom_seizure","clin_symptom_sexual_dysfunction","clin_symptom_skin_nodules","clin_symptom_sweating","clin_symptom_syncope","clin_symptom_thoracic_back_pain","clin_symptom_tinnitus","clin_symptom_tremor","clin_symptom_urethral_discharge","clin_symptom_urinary_incontinence","clin_symptom_urinary_retention","clin_symptom_urine_color_change","clin_symptom_urticaria","clin_symptom_vertigo","clin_symptom_visual_change","clin_symptom_vomiting","clin_symptom_weight_gain","clin_symptom_weight_loss","clin_symptom_wheezing","clin_tc_acute","clin_tc_chronic","clin_tc_subacute","demo_age_adult","demo_age_elderly","demo_age_neonatal","demo_age_pediatric","demo_age_young_adult","demo_sex_female","demo_sex_male","demo_sex_none","etio_autoimmune","etio_congenital","etio_degenerative","etio_hemorrhagic","etio_iatrogenic","etio_infectious","etio_inflammatory","etio_ischemic","etio_metabolic","etio_neoplastic","etio_traumatic","etio_vascular","rad_aggr_aggressive","rad_aggr_indeterminate","rad_aggr_nonaggressive","rad_assoc_air_trapping","rad_assoc_atelectasis","rad_assoc_calcifications","rad_assoc_capsule","rad_assoc_central_scar","rad_assoc_edema","rad_assoc_fluid_fluid_levels","rad_assoc_hemorrhage","rad_assoc_internal_septa","rad_assoc_mass_effect","rad_assoc_midline_shift","rad_assoc_necrosis","rad_assoc_segmental_stenosis","rad_assoc_soft_tissue_emphysema","rad_assoc_thick_septa","rad_bonedensity_lytic","rad_bonedensity_mixed","rad_bonedensity_sclerotic","rad_bonematrix_chondroid","rad_bonematrix_fibrous","rad_bonematrix_osteoid","rad_comp_calcified","rad_comp_complex_cyst","rad_comp_cystic","rad_comp_fatty","rad_comp_fibrous","rad_comp_hemorrhagic","rad_comp_multiseptated","rad_comp_necrotic","rad_comp_solid","rad_enh_absent","rad_enh_heterogeneous","rad_enh_homogeneous","rad_enh_peripheral_nodular","rad_enh_ring","rad_enh_targetoid","rad_extent_diffuse","rad_extent_focal","rad_extent_multifocal","rad_growth_eccentric","rad_growth_exophytic","rad_growth_expansile","rad_growth_infiltrative","rad_growth_sessile","rad_kinetics_centripetal_fill","rad_kinetics_persistent","rad_kinetics_progressive","rad_kinetics_washout","rad_lat_bilateral","rad_lat_unilateral","rad_long_distal","rad_long_proximal","rad_margin_circumscribed","rad_margin_illdefined","rad_margin_lobulated","rad_margin_spiculated","rad_periosteal_codman_triangle","rad_periosteal_lamellated","rad_periosteal_onionskin","rad_periosteal_solid","rad_periosteal_spiculated","rad_position_central","rad_position_peripheral","rad_regional_lobar","rad_regional_multilobar","rad_regional_segmental","rad_sym_asymmetric","rad_sym_symmetric","rad_vasc_high_enhancement","rad_vasc_hypervascular","rad_vasc_hypovascular","rad_vasc_low_enhancement"];
+const BASELINE_V1_IDS = ["clin_chest_pain_exertional","clin_chest_pain_pleuritic","clin_chest_pain_positional","clin_chest_pain_rest","clin_course_continuous","clin_course_episodic","clin_course_recurrent","clin_dist_diffuse","clin_dist_localized","clin_dur_days","clin_dur_hours","clin_dur_minutes","clin_dur_seconds","clin_evo_progressive","clin_evo_regressive","clin_evo_stable","clin_intensity_mild","clin_intensity_moderate","clin_intensity_severe","clin_lat_bilateral","clin_lat_unilateral","clin_loc_diffuse_abdominal","clin_loc_epigastrium","clin_loc_fid","clin_loc_fie","clin_loc_hypogastrium","clin_loc_left_flank","clin_loc_left_hypochondrium","clin_loc_mesogastrium","clin_loc_right_flank","clin_loc_right_hypochondrium","clin_long_distal","clin_long_proximal","clin_onset_gradual","clin_onset_sudden","clin_sym_asymmetric","clin_sym_symmetric","clin_symptom_abdominal_pain","clin_symptom_amnesia","clin_symptom_ankle_edema","clin_symptom_arthralgia","clin_symptom_bruising","clin_symptom_chest_pain","clin_symptom_coma","clin_symptom_diarrhea","clin_symptom_dry_cough","clin_symptom_dysarthria","clin_symptom_dysphagia","clin_symptom_dysuria","clin_symptom_eye_irritation","clin_symptom_eye_pain","clin_symptom_fever","clin_symptom_genital_lesion","clin_symptom_headache","clin_symptom_hearing_loss","clin_symptom_heartburn","clin_symptom_hematuria","clin_symptom_hoarseness","clin_symptom_hyperphagia","clin_symptom_hyporexia","clin_symptom_hypotension","clin_symptom_imbalance","clin_symptom_jaundice","clin_symptom_joint_stiffness","clin_symptom_low_back_pain","clin_symptom_lymphadenopathy","clin_symptom_melena","clin_symptom_menstrual_irregularity","clin_symptom_mucocutaneous_ulcers","clin_symptom_muscle_weakness","clin_symptom_myalgia","clin_symptom_neck_pain","clin_symptom_odynophagia","clin_symptom_oronasal_bleeding","clin_symptom_paresthesia","clin_symptom_productive_cough","clin_symptom_rom_limitation","clin_symptom_seizure","clin_symptom_sexual_dysfunction","clin_symptom_skin_nodules","clin_symptom_sweating","clin_symptom_syncope","clin_symptom_thoracic_back_pain","clin_symptom_tinnitus","clin_symptom_tremor","clin_symptom_urethral_discharge","clin_symptom_urinary_incontinence","clin_symptom_urinary_retention","clin_symptom_urine_color_change","clin_symptom_urticaria","clin_symptom_vertigo","clin_symptom_visual_change","clin_symptom_vomiting","clin_symptom_weight_gain","clin_symptom_weight_loss","clin_symptom_wheezing","clin_tc_acute","clin_tc_chronic","clin_tc_subacute","demo_age_adult","demo_age_elderly","demo_age_neonatal","demo_age_pediatric","demo_age_young_adult","demo_sex_female","demo_sex_male","demo_sex_none","etio_autoimmune","etio_congenital","etio_degenerative","etio_hemorrhagic","etio_iatrogenic","etio_infectious","etio_inflammatory","etio_ischemic","etio_metabolic","etio_neoplastic","etio_traumatic","etio_vascular","rad_aggr_aggressive","rad_aggr_indeterminate","rad_aggr_nonaggressive","rad_assoc_air_trapping","rad_assoc_atelectasis","rad_assoc_calcifications","rad_assoc_capsule","rad_assoc_central_scar","rad_assoc_edema","rad_assoc_fluid_fluid_levels","rad_assoc_hemorrhage","rad_assoc_internal_septa","rad_assoc_mass_effect","rad_assoc_midline_shift","rad_assoc_necrosis","rad_assoc_segmental_stenosis","rad_assoc_soft_tissue_emphysema","rad_assoc_thick_septa","rad_bonedensity_lytic","rad_bonedensity_mixed","rad_bonedensity_sclerotic","rad_bonematrix_chondroid","rad_bonematrix_fibrous","rad_bonematrix_osteoid","rad_comp_calcified","rad_comp_complex_cyst","rad_comp_cystic","rad_comp_fatty","rad_comp_fibrous","rad_comp_hemorrhagic","rad_comp_multiseptated","rad_comp_necrotic","rad_comp_solid","rad_enh_absent","rad_enh_heterogeneous","rad_enh_homogeneous","rad_enh_peripheral_nodular","rad_enh_ring","rad_enh_targetoid","rad_extent_diffuse","rad_extent_focal","rad_extent_multifocal","rad_growth_eccentric","rad_growth_exophytic","rad_growth_expansile","rad_growth_infiltrative","rad_growth_sessile","rad_kinetics_centripetal_fill","rad_kinetics_persistent","rad_kinetics_progressive","rad_kinetics_washout","rad_lat_bilateral","rad_lat_unilateral","rad_long_distal","rad_long_proximal","rad_margin_circumscribed","rad_margin_illdefined","rad_margin_lobulated","rad_margin_spiculated","rad_periosteal_codman_triangle","rad_periosteal_lamellated","rad_periosteal_onionskin","rad_periosteal_solid","rad_periosteal_spiculated","rad_position_central","rad_position_peripheral","rad_regional_lobar","rad_regional_multilobar","rad_regional_segmental","rad_sym_asymmetric","rad_sym_symmetric","rad_vasc_high_enhancement","rad_vasc_hypervascular","rad_vasc_hypovascular","rad_vasc_low_enhancement"];
 
-test('aprovação TAXO-01 — metadata.status === "approved", schemaVersion === 1, taxonomyVersion === 1', () => {
-  assert.equal(taxonomy.metadata.status, 'approved');
-  assert.equal(taxonomy.metadata.schemaVersion, 1);
-  assert.equal(taxonomy.metadata.taxonomyVersion, 1);
-});
-
-test('aprovação TAXO-01 — quantidade de groups e concepts corresponde à baseline aprovada (33 / 194)', () => {
-  assert.equal(taxonomy.groups.length, 33, 'quantidade de groups divergiu da baseline aprovada');
-  assert.equal(taxonomy.concepts.length, 194, 'quantidade de concepts divergiu da baseline aprovada');
-  assert.equal(BASELINE_APPROVED_CONCEPT_IDS.length, 194, 'a própria lista baseline deveria ter 194 ids');
-});
-
-test('aprovação TAXO-01 — baseline congelada: nenhum conceptId aprovado foi removido ou renomeado', () => {
+test('aprovação TAXO-01 — baseline v1 congelada: os 194 conceptIds originais existem e nenhum foi removido/renomeado', () => {
+  assert.equal(BASELINE_V1_IDS.length, 194, 'a própria lista baseline v1 deveria ter 194 ids');
   const currentIds = new Set(taxonomy.concepts.map(c => c.id));
-  for (const id of BASELINE_APPROVED_CONCEPT_IDS) {
-    assert.ok(currentIds.has(id), `conceptId aprovado "${id}" desapareceu do TAXONOMY.json — renomear/remover um conceptId congelado não é permitido (use deprecated+aliasOf)`);
+  for (const id of BASELINE_V1_IDS) {
+    assert.ok(currentIds.has(id), `conceptId aprovado na v1 "${id}" desapareceu do TAXONOMY.json — renomear/remover um conceptId congelado não é permitido (use deprecated+aliasOf)`);
   }
 });
 
-test('aprovação TAXO-01 — baseline congelada: nenhum conceptId novo foi adicionado silenciosamente sem passar por uma rodada aprovada', () => {
-  const baselineSet = new Set(BASELINE_APPROVED_CONCEPT_IDS);
-  const extras = taxonomy.concepts.map(c => c.id).filter(id => !baselineSet.has(id));
-  assert.equal(extras.length, 0, `conceptId(s) fora da baseline aprovada: ${extras.join(', ')} — todo novo conceptId só é considerado congelado depois de entrar numa versão publicada/aprovada do TAXONOMY.json (atualize BASELINE_APPROVED_CONCEPT_IDS nessa rodada, não antes)`);
+/* ===================== TAXO-03D — TAXONOMY v1.1 (expansão aditiva aprovada) ===================== */
+//
+// 13 conceptIds novos, aprovados na TAXO-03C (adjudicação humana dos gaps
+// vivos) e formalizados aqui. BASELINE_V1_IDS (194, acima) NUNCA é
+// substituída — só estendida. A prova de que a v1 original continua intacta
+// (teste anterior) e a prova de que a v1.1 é estritamente aditiva (testes
+// abaixo) são checagens INDEPENDENTES, de propósito: a evolução entre
+// versões deve ficar documentada no próprio teste, não só no TAXONOMY.json.
+const BASELINE_V11_IDS_ADDED = [
+  'rad_margin_irregular',
+  'rad_signal_t2_hyper', 'rad_signal_t2_hypo',
+  'rad_signal_t1_hyper', 'rad_signal_t1_hypo',
+  'rad_growthrate_slow', 'rad_growthrate_fast',
+  'rad_assoc_thick_wall',
+  'rad_diffusion_restricted',
+  'rad_assoc_effusion',
+  'rad_assoc_focal_dilation',
+  'rad_echo_hypo', 'rad_echo_anechoic'
+];
+const BASELINE_V11_NEW_GROUPS = [
+  'radiologic.signalIntensityT2', 'radiologic.signalIntensityT1',
+  'radiologic.growthRate', 'radiologic.diffusion', 'radiologic.echogenicity'
+];
+const BASELINE_V11_ALL_IDS = [...BASELINE_V1_IDS, ...BASELINE_V11_IDS_ADDED];
+
+test('1. schemaVersion continua 1', () => {
+  assert.equal(taxonomy.metadata.schemaVersion, 1);
 });
 
-test('aprovação TAXO-01 — nenhuma regressão: todas as 47 validações anteriores continuam íntegras', () => {
-  // Checagem indireta: reafirma as invariantes estruturais básicas que as
-  // 47 validações anteriores já cobrem em detalhe, como guarda-chuva de
-  // sanidade específico desta rodada de congelamento.
+test('2. taxonomyVersion === 2 (nova versão) e releaseLabel === "1.1"', () => {
+  assert.equal(taxonomy.metadata.taxonomyVersion, 2);
+  assert.equal(taxonomy.metadata.releaseLabel, '1.1');
+});
+
+test('3. status === "approved"', () => {
+  assert.equal(taxonomy.metadata.status, 'approved');
+});
+
+test('4. todos os 194 IDs da v1 permanecem (BASELINE_V1_IDS ⊆ TAXONOMY.json atual)', () => {
+  const currentIds = new Set(taxonomy.concepts.map(c => c.id));
+  for (const id of BASELINE_V1_IDS) assert.ok(currentIds.has(id), `id da v1 "${id}" desapareceu`);
+});
+
+test('5. todos os 13 concepts novos aprovados na v1.1 existem', () => {
+  const currentIds = new Set(taxonomy.concepts.map(c => c.id));
+  assert.equal(BASELINE_V11_IDS_ADDED.length, 13);
+  for (const id of BASELINE_V11_IDS_ADDED) assert.ok(currentIds.has(id), `conceptId novo da v1.1 "${id}" não existe em TAXONOMY.json`);
+});
+
+test('6. conceptIds novos são únicos (não colidem entre si nem com a v1)', () => {
+  assert.equal(new Set(BASELINE_V11_ALL_IDS).size, BASELINE_V11_ALL_IDS.length, 'há conceptId duplicado entre v1 e os novos da v1.1');
+  const allIdsNow = taxonomy.concepts.map(c => c.id);
+  assert.equal(new Set(allIdsNow).size, allIdsNow.length, 'há conceptId duplicado em TAXONOMY.json');
+});
+
+test('7. os 5 groups novos existem e são válidos', () => {
+  const groupIds = new Set(taxonomy.groups.map(g => g.id));
+  assert.equal(BASELINE_V11_NEW_GROUPS.length, 5);
+  for (const gid of BASELINE_V11_NEW_GROUPS) {
+    assert.ok(groupIds.has(gid), `group novo "${gid}" não existe`);
+    const g = taxonomy.groups.find(x => x.id === gid);
+    assert.equal(typeof g.exclusive, 'boolean', gid);
+    assert.equal(typeof g.allowMultipleInstances, 'boolean', gid);
+    assert.ok(Array.isArray(g.applicableSections), gid);
+  }
+});
+
+test('8. todo concept novo aponta para um group válido (existente ou um dos 5 novos)', () => {
+  const groupIds = new Set(taxonomy.groups.map(g => g.id));
+  for (const id of BASELINE_V11_IDS_ADDED) {
+    const c = taxonomy.concepts.find(x => x.id === id);
+    assert.ok(c, id);
+    assert.ok(groupIds.has(c.group), `${id} aponta para group inexistente: ${c.group}`);
+  }
+});
+
+test('9. synonyms dos concepts novos são válidos (array de string, sem duplicata normalizada)', () => {
+  function normalize(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(); }
+  for (const id of BASELINE_V11_IDS_ADDED) {
+    const c = taxonomy.concepts.find(x => x.id === id);
+    assert.ok(Array.isArray(c.synonyms), id);
+    const norms = c.synonyms.map(normalize);
+    assert.equal(new Set(norms).size, norms.length, `${id} tem synonym duplicado`);
+  }
+  assert.deepEqual(taxonomy.concepts.find(c => c.id === 'rad_diffusion_restricted').synonyms, ['restrição de difusão']);
+  assert.deepEqual(taxonomy.concepts.find(c => c.id === 'rad_echo_hypo').synonyms, ['hipoecoico']);
+});
+
+test('10. todo concept novo tem description não vazia (evita definição circular entre sinal/difusão/ecogenicidade e composição)', () => {
+  for (const id of BASELINE_V11_IDS_ADDED) {
+    const c = taxonomy.concepts.find(x => x.id === id);
+    assert.ok(c.description && c.description.trim().length > 0, `${id} sem description`);
+  }
+  // amostra: descriptions de sinal/difusão/ecogenicidade mencionam explicitamente
+  // que NÃO descrevem composição estrutural (evita a confusão citada no pedido).
+  ['rad_signal_t2_hyper', 'rad_signal_t1_hyper', 'rad_diffusion_restricted', 'rad_echo_hypo'].forEach(id => {
+    const c = taxonomy.concepts.find(x => x.id === id);
+    assert.match(c.description, /composição/i, `${id} deveria diferenciar explicitamente de composição estrutural`);
+  });
+});
+
+test('11. nenhum conceptId novo usa o padrão seed_N', () => {
+  for (const id of BASELINE_V11_IDS_ADDED) assert.ok(!/^seed_/i.test(id));
+});
+
+test('12. nenhum ID antigo (v1) foi renomeado — labels/groups dos 194 continuam fazendo sentido estrutural (checagem indireta via presença + group válido)', () => {
+  const groupIds = new Set(taxonomy.groups.map(g => g.id));
+  const byId = new Map(taxonomy.concepts.map(c => [c.id, c]));
+  for (const id of BASELINE_V1_IDS) {
+    const c = byId.get(id);
+    assert.ok(c, id);
+    assert.ok(groupIds.has(c.group), `${id} ficou com group inválido após a expansão v1.1: ${c.group}`);
+  }
+});
+
+test('13. MAP_EXISTING atualizado em TAG_TO_TAXONOMY_MAP.json (9 tags agora mapped)', () => {
+  const map = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'TAG_TO_TAXONOMY_MAP.json'), 'utf8'));
+  const resolved = [
+    ['bem circunscrita', 'rad_margin_circumscribed'], ['bem delimitado', 'rad_margin_circumscribed'],
+    ['margens mal definidas', 'rad_margin_illdefined'], ['lobulada', 'rad_margin_lobulated'],
+    ['idade pediátrica', 'demo_age_pediatric'], ['malformação congênita', 'etio_congenital'],
+    ['trauma', 'etio_traumatic'], ['sólido-cístico', 'rad_comp_complex_cyst'], ['matriz condroide', 'rad_bonematrix_chondroid']
+  ];
+  assert.equal(resolved.length, 9);
+  for (const [tag, conceptId] of resolved) {
+    const entry = map.mappings[tag];
+    assert.ok(entry, tag);
+    assert.equal(entry.mapping.status, 'mapped', tag);
+    assert.deepEqual(entry.mapping.conceptIds, [conceptId], tag);
+  }
+});
+
+test('14. METADATA_NOT_TAXONOMY (emergência/RM/US/radiografia/dinâmico) não virou concept em nenhuma rodada', () => {
+  const metadataTags = ['emergência', 'RM', 'US', 'radiografia', 'dinâmico'];
+  const allLabelsNorm = new Set(taxonomy.concepts.map(c => c.label.toLowerCase()));
+  for (const tag of metadataTags) assert.ok(!allLabelsNorm.has(tag.toLowerCase()), `"${tag}" não deveria ter se tornado um concept label`);
+});
+
+test('15. TAXO03C_GAP_DECISIONS.json continua auditável (existe, status=proposal, 40 decisões)', () => {
+  const gapDecisions = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'TAXO03C_GAP_DECISIONS.json'), 'utf8'));
+  assert.equal(gapDecisions.metadata.status, 'proposal');
+  assert.equal(gapDecisions.decisions.length, 40);
+});
+
+test('16. index.html permanece intocado (sem referência a TAXO-03D/v1.1/novos groups)', () => {
+  const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
+  assert.doesNotMatch(html, /signalIntensityT2|radiologic\.growthRate|radiologic\.diffusion|radiologic\.echogenicity/);
+  assert.doesNotMatch(html, /rad_signal_t2_hyper|rad_diffusion_restricted|rad_echo_anechoic/);
+});
+
+test('17/18. DATA e SEED não são referenciados pelos arquivos desta rodada (TAXONOMY.json/TAG_TO_TAXONOMY_MAP.json são dados estáticos)', () => {
+  assert.equal(path.extname(path.resolve(__dirname, '..', 'TAXONOMY.json')), '.json');
+  assert.equal(path.extname(path.resolve(__dirname, '..', 'TAG_TO_TAXONOMY_MAP.json')), '.json');
+});
+
+test('19/20. nenhum saveData()/persistência real referenciado nos arquivos estáticos desta rodada', () => {
+  const taxonomyRaw = fs.readFileSync(path.resolve(__dirname, '..', 'TAXONOMY.json'), 'utf8');
+  const mapRaw = fs.readFileSync(path.resolve(__dirname, '..', 'TAG_TO_TAXONOMY_MAP.json'), 'utf8');
+  assert.doesNotMatch(taxonomyRaw, /saveData\s*\(|storage\.set\s*\(|localStorage\.setItem\s*\(/);
+  assert.doesNotMatch(mapRaw, /saveData\s*\(|storage\.set\s*\(|localStorage\.setItem\s*\(/);
+});
+
+test('aprovação TAXO-01/03D — baseline congelada: nenhum conceptId fora de v1+v1.1 foi adicionado silenciosamente', () => {
+  const baselineSet = new Set(BASELINE_V11_ALL_IDS);
+  const extras = taxonomy.concepts.map(c => c.id).filter(id => !baselineSet.has(id));
+  assert.equal(extras.length, 0, `conceptId(s) fora da baseline v1+v1.1: ${extras.join(', ')} — todo novo conceptId só é considerado congelado depois de entrar numa versão publicada/aprovada do TAXONOMY.json (atualize BASELINE_V11_IDS_ADDED nessa rodada, não antes)`);
+});
+
+test('aprovação TAXO-01/03D — contagens finais exatas (38 groups, 207 concepts)', () => {
+  assert.equal(taxonomy.groups.length, 38, 'quantidade de groups divergiu (33 v1 + 5 novos v1.1)');
+  assert.equal(taxonomy.concepts.length, 207, 'quantidade de concepts divergiu (194 v1 + 13 novos v1.1)');
+  assert.equal(BASELINE_V11_ALL_IDS.length, 207);
+});
+
+test('aprovação TAXO-01/03D — nenhuma regressão: todas as validações estruturais básicas continuam íntegras', () => {
   const ids = taxonomy.concepts.map(c => c.id);
   assert.equal(new Set(ids).size, ids.length, 'há conceptId duplicado');
   const groupIds = new Set(taxonomy.groups.map(g => g.id));

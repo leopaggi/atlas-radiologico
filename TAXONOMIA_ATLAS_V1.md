@@ -478,3 +478,52 @@ Nunca renomear o `id` antigo para o novo significado.
 A fonte de verdade da lista completa de `conceptId`s continua sendo `TAXONOMY.json` (e, como mecanismo de proteção, um snapshot da mesma lista em `tests/taxonomy-v1-structure.test.js` — `BASELINE_APPROVED_CONCEPT_IDS`); não duplicada aqui por ser redundante e por este documento não ser a fonte de dados.
 
 **Nenhuma integração runtime foi feita nesta aprovação:** `index.html` não lê `TAXONOMY.json`, nenhum `fetch` foi adicionado, `openForm` não foi alterado, nenhum migrador foi criado, e nenhuma lesão (`DATA`/Firestore/IndexedDB) passou a ter `attributes`. A aprovação é só do dicionário em si — a integração real começa em TAXO-02 em diante (seção 26), com checkpoint de backup obrigatório antes de qualquer gravação real.
+
+## 30. TAXO-03D — TAXONOMY v1.1 (expansão aditiva aprovada)
+
+**Motivação:** a reconciliação do dicionário aprovado (TAXO-01, 194 concepts) com o vocabulário vivo real de tags do catálogo publicado (TAXO-03/03B, 695 tags vivas) revelou gaps estruturais genuínos — eixos semiológicos inteiros ausentes da V1 (intensidade de sinal em RM, ecogenicidade ao ultrassom, velocidade de crescimento, difusão) e alguns achados radiológicos isolados sem concept correspondente, mesmo em tags de uso muito alto. A adjudicação humana desses gaps (TAXO-03C, ver `TAXO03C_GAP_DECISIONS.json`/`TAXO03C_GAP_REVIEW.md`) aprovou 13 concepts novos e 5 groups novos, formalizados aqui como v1.1.
+
+**Decisão semântica dos 2 concepts condicionais** (pré-flight desta rodada):
+- **`rad_assoc_focal_dilation` ("dilatação focal") — APROVADO.** Funciona como achado transversal independente de estrutura pelo mesmo padrão arquitetural já aprovado para `rad_assoc_segmental_stenosis` (seu oposto semântico): a identificação de QUAL estrutura está dilatada (ducto, vaso, alça, sistema coletor) vem do contexto da lesão (seção/sítio), nunca do concept em si. Contexto real revisado (ectasia ductal, hidrossalpinge, varicocele, aneurisma de aorta) confirma uso coerente, não excessivamente vago.
+- **`rad_assoc_effusion` ("derrame associado") — APROVADO.** Mesmo padrão arquitetural já aprovado para `rad_assoc_edema`: uma efusão líquida genérica é útil como achado associado transversal, com a cavidade específica (pleural/pericárdica/peritoneal/articular) vindo do contexto da lesão. Contexto real revisado (mesotelioma pleural, metástase pleural, empiema, carcinomatose peritoneal) é consistente, sem heterogeneidade semântica excessiva.
+
+**5 groups novos:**
+
+| Group | domain | exclusive | allowMultipleInstances | justificativa do `exclusive` |
+|---|---|---|---|---|
+| `radiologic.signalIntensityT2` | radiologic | `false` | `false` | uma lesão pode ter componentes espacialmente heterogêneos (parte hipersinal + parte hipossinal na mesma lesão) |
+| `radiologic.signalIntensityT1` | radiologic | `false` | `false` | mesma lógica do eixo T2 |
+| `radiologic.growthRate` | radiologic | `true` | `false` | velocidade de crescimento entre dois exames é uma avaliação única por lesão — não há "lento E rápido" simultâneos no mesmo intervalo comparado (diferente do sinal, que varia por componente espacial) |
+| `radiologic.diffusion` | radiologic | `false` | `false` | desenhado para futura expansão (ex.: "facilitada"/"mista", **não criados nesta rodada** por falta de adjudicação) e a difusão também pode variar por componente espacial da lesão |
+| `radiologic.echogenicity` | radiologic | `false` | `false` | lesões heterogêneas podem ter componentes de ecogenicidade distintos (ex.: cisto com debris = porção anecoica + porção hipoecogênica) |
+
+**13 concepts novos** (todos `domain: "radiologic"`, todos com `description` evitando definição circular — sinal/difusão/ecogenicidade são explicitamente distinguidos de composição estrutural em cada description):
+
+`rad_margin_irregular` (radiologic.margins) · `rad_signal_t2_hyper`/`rad_signal_t2_hypo` (radiologic.signalIntensityT2) · `rad_signal_t1_hyper`/`rad_signal_t1_hypo` (radiologic.signalIntensityT1) · `rad_growthrate_slow`/`rad_growthrate_fast` (radiologic.growthRate) · `rad_assoc_thick_wall` · `rad_diffusion_restricted` (synonym: "restrição de difusão") · `rad_assoc_effusion` · `rad_assoc_focal_dilation` · `rad_echo_hypo` (synonym: "hipoecoico") · `rad_echo_anechoic`.
+
+**Deliberadamente NÃO criados nesta rodada** (para não completar famílias automaticamente sem adjudicação humana explícita, por instrução direta): `rad_echo_hyper`/`rad_echo_iso` (hiperecogênico/isoecogênico), `rad_diffusion_facilitated`/`rad_diffusion_mixed` (difusão facilitada/mista).
+
+**`MAP_EXISTING` resolvidos em `TAG_TO_TAXONOMY_MAP.json`** (9 tags, de `unmapped` para `mapped` — nenhuma tag real de lesão foi alterada, só o status de mapeamento): `bem circunscrita`/`bem delimitado` → `rad_margin_circumscribed`; `margens mal definidas` → `rad_margin_illdefined`; `lobulada` → `rad_margin_lobulated`; `idade pediátrica` → `demo_age_pediatric`; `malformação congênita` → `etio_congenital`; `trauma` → `etio_traumatic`; `sólido-cístico` → `rad_comp_complex_cyst`; `matriz condroide` → `rad_bonematrix_chondroid`.
+
+**`METADATA_NOT_TAXONOMY`** (preservadas explicitamente FORA da taxonomia clínico-radiológica, nenhum concept criado): `emergência`, `RM`, `US`, `radiografia`, `dinâmico` — modalidade/técnica de aquisição ou triagem operacional, não fenótipo da lesão.
+
+**Concepts adiados** (categoria `REVIEW_LATER` na TAXO-03C, sem decisão nesta rodada): `aumento de volume`, `heterogêneo`/`homogêneo`, `malignidade`/`benignidade`/`benigna`, `realce`, `espessamento nodular`, `assimetria`. Nenhum deles entrou na v1.1 — continuam como gap vivo em `TAG_TO_TAXONOMY_MAP.json`.
+
+**Regra de congelamento:** os 13 `conceptId`s novos desta seção passam a estar **congelados** a partir desta aprovação, pelo mesmo mecanismo da seção 29 — nunca renomeados/reaproveitados/apagados, só `deprecated`+`aliasOf` se precisarem ser substituídos no futuro. Os 194 `conceptId`s da v1 (TAXO-01) permanecem intactos e congelados.
+
+**Versionamento:** `schemaVersion` permanece `1` (nenhuma mudança estrutural de schema, só conteúdo aditivo); `taxonomyVersion` passa de `1` para **`2`**; novo campo `metadata.releaseLabel = "1.1"` registra o rótulo humano da versão, sem transformar `taxonomyVersion` em string. `status` permanece `approved`.
+
+**TAXONOMY v1.1 ainda NÃO está integrada a `attributes` reais de nenhuma lesão** — nenhuma mutação em `DATA`/Firestore/IndexedDB, nenhum migrador, `openForm` e o importador Radiopaedia permanecem intocados. A integração real (gravação de `attributes` em lesões) é uma fase futura própria, com checkpoint de backup externo obrigatório imediatamente antes da primeira gravação real.
+
+### Manifesto v1.1
+
+| Campo | Valor |
+|---|---|
+| `schemaVersion` | 1 |
+| `taxonomyVersion` | 2 |
+| `releaseLabel` | `"1.1"` |
+| `status` | `approved` |
+| `groups` | 38 (33 da v1 + 5 novos) |
+| `concepts` | 207 (194 da v1 + 13 novos) |
+| Testes | ver `tests/taxonomy-v1-structure.test.js` |
+| Data | 2026-10-01 |
