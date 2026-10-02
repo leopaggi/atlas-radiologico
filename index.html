@@ -20964,13 +20964,33 @@ function externalSuggestionHtml(suggestion){
     + `<div class="field"><label>Nome da lesão no Atlas</label>`
     + `<input id="external-name-input" value="${esc(s.name || '')}" placeholder="nome em português"></div>`
     + (s.needsReview ? '<div style="font-size:12px;color:var(--amber,#b45309);">⚠️ Sem tradução segura — revisar o nome antes de criar.</div>' : '')
-    + `<div class="field"><label>Tags sugeridas (separadas por vírgula)</label>`
+    + `<div class="field"><label>TAGS RADIOLÓGICAS SUGERIDAS (separadas por vírgula)</label>`
     + `<input id="external-tags-input" value="${esc(tags)}" placeholder="tag1, tag2"></div>`
     + `<div class="field"><label>Descrição sugerida</label>`
     + `<textarea id="external-desc-input" rows="3" placeholder="ponto de partida, não texto definitivo">${esc(s.description || '')}</textarea></div>`
     + `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 8px 0;">`
     + `<button type="button" class="btn btn-ghost" id="external-ai-btn">✨ Revisar com IA</button>`
-    + aiLine + `</div>`;
+    + aiLine + `</div>`
+    + externalClinicalSuggestionHtml();
+}
+
+// CLINICAL TAGS V1 — bloco SEPARADO das tags radiológicas acima (nunca no
+// mesmo array/campo). Reaproveita os MESMOS estilos de chip já usados em
+// openForm (.chip-input-wrap/.removable-tag.clinical-chip/.suggest-chip-smart/
+// .clinical-smart-empty) — zero CSS novo. Puramente estático aqui: o
+// conteúdo (sugestões detectadas + chips confirmados) é preenchido depois,
+// em runtime, por openExternalImportModal (precisa de TAXONOMY.json, que só
+// chega via loadTaxonomy() assíncrono).
+function externalClinicalSuggestionHtml(){
+  return `<div class="detail-links-label">TAGS CLÍNICAS SUGERIDAS (separado das tags radiológicas acima)</div>`
+    + `<div class="chip-input-wrap" id="external-clinical-chip-wrap">`
+    + `<input id="external-clinical-tag-input" placeholder="digite e pressione Enter… (ou escolha abaixo)">`
+    + `</div>`
+    + `<div class="suggest-smart-wrap" id="external-clinical-smart-wrap">`
+    + `<div class="suggest-group-label">SUGESTÕES CLÍNICAS DETECTADAS</div>`
+    + `<div class="suggest-row-inner" id="external-clinical-smart-row"></div>`
+    + `<div class="clinical-smart-empty" id="external-clinical-smart-empty" hidden>Nenhuma sugestão clínica detectada.</div>`
+    + `</div>`;
 }
 
 // Duas opções (regra 1): vincular a lesão existente OU criar nova lesão.
@@ -21283,6 +21303,66 @@ function openExternalImportModal(draft){
   track('#external-desc-input', 'description');
   const aiBtn = ov.querySelector('#external-ai-btn');
   if (aiBtn) aiBtn.onclick = () => openExternalAiInstructionModal(ov, draft, suggestion);
+
+  // CLINICAL TAGS V1 — sugestão clínica do import, SEPARADA das tags
+  // radiológicas acima (array próprio, nunca persistido junto). Reaproveita
+  // suggestClinicalTagsForLesion (mesmo motor de openForm, zero duplicação).
+  // Fonte do texto analisado nesta etapa: presentation do caso (prioridade 1,
+  // único texto clínico real do payload do Radiopaedia) + nome sugerido/
+  // título original (prioridade 2) — ainda não há seção/sítio (só existem
+  // depois, no formulário). Nunca autoaceita: só o clique em um chip grava em
+  // clinicalTagsDraft; só isso segue pra "Criar nova lesão" → openExternalDraft.
+  let clinicalTagsDraft = [];
+  let externalClinicalTaxonomy = null;
+  const clinicalChipWrap = ov.querySelector('#external-clinical-chip-wrap');
+  const clinicalTagInputEl = ov.querySelector('#external-clinical-tag-input');
+  function renderExternalClinicalChips(){
+    if (!clinicalChipWrap || !clinicalTagInputEl) return;
+    clinicalChipWrap.querySelectorAll('.removable-tag').forEach(n => n.remove());
+    clinicalTagsDraft.forEach(t => {
+      const c = document.createElement('span');
+      c.className = 'removable-tag clinical-chip';
+      c.innerHTML = `${t}<button type="button">✕</button>`;
+      c.querySelector('button').onclick = () => { clinicalTagsDraft = clinicalTagsDraft.filter(x => x !== t); renderExternalClinicalChips(); renderExternalClinicalSmartSuggestions(); };
+      clinicalChipWrap.insertBefore(c, clinicalTagInputEl);
+    });
+  }
+  function addExternalClinicalTag(t){
+    t = t.trim();
+    if (t && !clinicalTagsDraft.includes(t)) { clinicalTagsDraft.push(t); renderExternalClinicalChips(); renderExternalClinicalSmartSuggestions(); }
+    if (clinicalTagInputEl) clinicalTagInputEl.value = '';
+  }
+  if (clinicalTagInputEl) clinicalTagInputEl.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ',') { ev.preventDefault(); addExternalClinicalTag(clinicalTagInputEl.value); }
+    else if (ev.key === 'Backspace' && clinicalTagInputEl.value === '' && clinicalTagsDraft.length) { clinicalTagsDraft.pop(); renderExternalClinicalChips(); renderExternalClinicalSmartSuggestions(); }
+  });
+  function renderExternalClinicalSmartSuggestions(){
+    const row = ov.querySelector('#external-clinical-smart-row');
+    const emptyEl = ov.querySelector('#external-clinical-smart-empty');
+    if (!row) return;
+    if (!externalClinicalTaxonomy) { row.innerHTML = ''; if (emptyEl) emptyEl.hidden = true; return; }
+    const nameNowEl = ov.querySelector('#external-name-input');
+    const draftEntry = {
+      name: (nameNowEl && nameNowEl.value) || suggestion.name || draft.title || '',
+      s: '', site: '',
+      notes: (draft && typeof draft.presentation === 'string') ? draft.presentation : '',
+      clinicalTags: clinicalTagsDraft
+    };
+    const suggestions = suggestClinicalTagsForLesion(draftEntry, externalClinicalTaxonomy);
+    row.innerHTML = '';
+    if (!suggestions.length) { if (emptyEl) emptyEl.hidden = false; return; }
+    if (emptyEl) emptyEl.hidden = true;
+    suggestions.forEach(t => {
+      const s = document.createElement('span');
+      s.className = 'suggest-chip suggest-chip-smart'; s.textContent = '+ ' + t;
+      s.onclick = () => addExternalClinicalTag(t);
+      row.appendChild(s);
+    });
+  }
+  renderExternalClinicalChips();
+  if (ov.querySelector('#external-name-input')) ov.querySelector('#external-name-input').addEventListener('input', renderExternalClinicalSmartSuggestions);
+  loadTaxonomy().then(t => { externalClinicalTaxonomy = t; renderExternalClinicalSmartSuggestions(); }).catch(() => { /* TAXONOMY indisponível: seção clínica do import continua usável via chip manual */ });
+
   document.getElementById('external-create-btn').onclick = () => {
     const createBtn = document.getElementById('external-create-btn');
     if (createBtn && createBtn.dataset.busy === '1') return; // duplo-clique não abre 2 drafts
@@ -21293,6 +21373,7 @@ function openExternalImportModal(draft){
     live.originalTitle = suggestion.originalTitle;
     live.nameSource = suggestion.nameSource;
     live.needsReview = suggestion.needsReview;
+    live.clinicalTags = clinicalTagsDraft.slice(); // CLINICAL TAGS V1 — só o que foi confirmado por clique
     pendingExternalCase = null; closeOverlay(); openExternalDraft(draft, live);
   };
   document.getElementById('external-cancel-btn').onclick = () => { pendingExternalCase = null; closeOverlay(); };
@@ -21341,6 +21422,28 @@ function openExternalDraft(draft, suggestion){
         } catch (e) { /* sem KeyboardEvent: usuário digita manualmente */ }
       });
       tagInput.value = '';
+    }
+    // CLINICAL TAGS V1 — mesma mecânica acima, mas no input CLÍNICO
+    // (f-clinical-tag-input -> addClinicalTag -> entry.clinicalTags), nunca
+    // misturado com `tags`. Só o que o usuário já confirmou (clique no chip)
+    // no modal de import chega aqui — sug.clinicalTags nunca vem de uma
+    // sugestão não clicada (openExternalImportModal só preenche esse array
+    // em cliques explícitos).
+    const clinicalTagInput = document.getElementById('f-clinical-tag-input');
+    if (clinicalTagInput && Array.isArray(sug.clinicalTags) && sug.clinicalTags.length) {
+      sug.clinicalTags.forEach(t => {
+        if (typeof t !== 'string' || !t.trim()) return;
+        clinicalTagInput.value = t.trim();
+        try {
+          clinicalTagInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        } catch (e) { /* sem KeyboardEvent: usuário adiciona manualmente */ }
+      });
+      clinicalTagInput.value = '';
+      // já tem algo confirmado — expande a seção pra aparecer de cara, em
+      // vez do usuário precisar descobrir que "Apresentação clínica" tem algo.
+      const clinicalToggleBtn = document.getElementById('clinical-toggle');
+      const clinicalBodyEl = document.getElementById('clinical-body');
+      if (clinicalToggleBtn && clinicalBodyEl && clinicalBodyEl.hidden) clinicalToggleBtn.click();
     }
     const modal = document.querySelector('.lesion-form-overlay .modal');
     if (modal) {

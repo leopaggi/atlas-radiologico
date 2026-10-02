@@ -110,6 +110,7 @@ function loadPure() {
     extractFunction(html, 'applySuggestionEdit'),
     extractFunction(html, 'externalMatchesHtml'),
     extractFunction(html, 'externalSuggestionHtml'),
+    extractFunction(html, 'externalClinicalSuggestionHtml'), // CLINICAL TAGS V1
     extractFunction(html, 'externalModeTabsHtml'),
     extractFunction(html, 'findExternalImportCandidatesForLink'),
     extractFunction(html, 'externalLinkCandidateRowHtml'),
