@@ -1,0 +1,44 @@
+{
+  "generatedAt": "2026-10-02T03:22:11.159Z",
+  "migrationType": "initial-attributes-taxonomic-migration",
+  "status": "completed",
+  "atlasCommitAtExecution": "676ab5a7e1599ef7e086b257dd7d9ce591cc80fe",
+  "baseline": {
+    "lesionCount": 1210,
+    "canonicalDataSha256": "bfc9cf1c69cc7d0d80688f5e360a8dabc29e5f1ae447ed3106afa47abe71e99d",
+    "hashMethod": "canonical (chaves de objeto ordenadas recursivamente, SHA-256) — ver TAXO04C4_BROWSER_MIGRATION_SCRIPT.js"
+  },
+  "preAttributesCheckpoint": {
+    "externalBackupFile": "ATLAS_FULL_BACKUP_PRE_ATTRIBUTES_2026-10-01_22-26-09.json",
+    "internalSnapshotId": "snap_muqazoek_offohj",
+    "internalSnapshotReason": "antes de aplicar migração de atributos taxonômicos",
+    "note": "Checkpoint original (TAXO-04C0/C0B), registrado em TAXO04C0_SAFETY_CHECKPOINT.json — preservado como está, não alterado nesta rodada."
+  },
+  "immediatePrePersistenceSnapshot": {
+    "id": "snap_muqebhrc_3kqie6",
+    "reason": "imediatamente antes de persistir migração de atributos taxonômicos",
+    "createdAt": "2026-10-02T03:20:51.624Z",
+    "lesionCount": 1210,
+    "validated": true
+  },
+  "result": {
+    "eligibleLesions": 625,
+    "modifiedLesions": 625,
+    "newAttributeItems": 1131,
+    "duplicatesAvoided": 0,
+    "reviewRequiredTouched": 0,
+    "noStructuredMappingTouched": 0,
+    "persistence": "local + cloud confirmed",
+    "lastWriteRefusedReason": null,
+    "postWrite": {
+      "totalLesionsAfter": 1210,
+      "itemIdsUnique": true,
+      "placeholderLeak": false
+    }
+  },
+  "source": {
+    "applyPlan": "TAXO04C2_APPLY_PLAN.json",
+    "browserScript": "TAXO04C4_BROWSER_MIGRATION_SCRIPT.js",
+    "executor": "tools/taxonomy-attributes-apply-executor.js (simulação que validou a lógica antes da execução real no navegador)"
+  }
+}
