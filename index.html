@@ -341,6 +341,10 @@ body{
 .card-tags{display:flex;flex-wrap:wrap;gap:4px;}
 .mini-tag{background:var(--tag-bg);color:var(--muted);font-size:10.5px;padding:2px 7px;border-radius:9px;}
 .mini-tag.match{background:var(--tag-bg-active);color:var(--teal);}
+/* CLINICAL TAGS V1 — mesmo estilo "chamativo" de .mini-tag.match, só com a
+   cor âmbar (já usada em avisos) pra distinguir discretamente da tag
+   radiológica, sem bloco/card separado. */
+.mini-tag.clinical{background:var(--amber-dim);color:var(--amber);}
 .card-linkrow{margin-top:8px;color:var(--teal);opacity:.75;font-size:11px;}
 .card-classrow{margin-top:6px;color:var(--amber);opacity:.9;font-size:11px;}
 .card-altrow{margin-top:4px;color:var(--teal);opacity:.85;font-size:10.5px;}
@@ -406,6 +410,9 @@ body{
   display:flex;align-items:center;gap:6px;
 }
 .removable-tag button{background:none;border:none;color:var(--teal);cursor:pointer;font-size:13px;padding:0;line-height:1;}
+/* CLINICAL TAGS V1 — mesmo chip removível das tags radiológicas, cor âmbar. */
+.removable-tag.clinical-chip{background:var(--amber-dim);color:var(--amber);}
+.removable-tag.clinical-chip button{color:var(--amber);}
 .link-row{
   display:flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--line);
   border-radius:var(--radius);padding:7px 10px;margin-bottom:6px;font-size:12.5px;
@@ -501,6 +508,7 @@ body{
 }
 .suggest-chip:hover{color:var(--teal);border-color:var(--teal-dim);}
 .suggest-smart-wrap{margin-top:8px;}
+.clinical-smart-empty{color:var(--muted-2);font-size:11.5px;padding:2px 0 4px 0;}
 .suggest-chip-smart{border-style:solid;border-color:var(--teal-dim);color:var(--teal);background:var(--tag-bg-active);}
 .suggest-chip-smart:hover{border-color:var(--teal);}
 
@@ -14931,7 +14939,7 @@ function openDetail(id, opts){
       <div class="detail-title-row"><h2 data-review-warning-host="${escAttr(e.id)}">${e.name}${lesionReviewWarningHtml(e.id)}</h2><span class="inc-badge" style="background:${incColor(e.inc||2)}22;color:${incColor(e.inc||2)};border-color:${incColor(e.inc||2)}55;">${incLabel(e.inc||2)}</span></div>
       <div class="detail-meta">${e.s} · ${e.site}</div>
       ${Array.isArray(e.altPlacements) && e.altPlacements.length ? `<div class="detail-altplacements">↔ Encontrada também em: ${e.altPlacements.map(p=>`<b>${p.s} › ${p.site}</b>`).join(', ')}</div>` : ''}
-      <div class="detail-tags">${e.tags.map(t=>`<span class="mini-tag match">${t}</span>`).join('')}</div>
+      <div class="detail-tags">${e.tags.map(t=>`<span class="mini-tag match">${t}</span>`).join('')}${Array.isArray(e.clinicalTags)&&e.clinicalTags.length?e.clinicalTags.map(t=>`<span class="mini-tag clinical">${t}</span>`).join(''):''}</div>
       <div class="detail-notes">${(e.notes||'sem anotações ainda.').replace(/</g,'&lt;')}</div>
       ${e.classification && CLASSIFICATION_SYSTEMS[e.classification] ? renderClassificationBox(e.classification) : ''}
       ${links.length?`<div class="detail-links">
@@ -15160,6 +15168,24 @@ function openForm(id, opts){
       </div>
 
       <div class="field">
+        <button type="button" class="btn btn-ghost" id="clinical-toggle" aria-expanded="false" style="width:100%;text-align:left;margin-bottom:0;">▸ Apresentação clínica</button>
+        <div id="clinical-body" hidden style="margin-top:8px;">
+          <div class="chip-input-wrap" id="chip-wrap-clinical">
+            <input id="f-clinical-tag-input" placeholder="digite e pressione Enter… (ou escolha abaixo)">
+          </div>
+          <div class="suggest-smart-wrap" id="suggest-clinical-smart-wrap">
+            <div class="suggest-group-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <span>SUGESTÕES CLÍNICAS DETECTADAS</span>
+              <button type="button" class="btn btn-ghost" id="clinical-analyze-btn" style="height:24px;padding:0 8px;font-size:11px;margin-bottom:0;flex-shrink:0;">🔎 Analisar descrição</button>
+            </div>
+            <div class="suggest-row-inner" id="suggest-clinical-smart-row"></div>
+            <div class="clinical-smart-empty" id="suggest-clinical-smart-empty" hidden>Nenhuma sugestão clínica detectada na descrição atual.</div>
+          </div>
+          <div class="suggest-row" id="clinical-suggest-row"></div>
+        </div>
+      </div>
+
+      <div class="field">
         <label>Nome da lesão</label>
         <input id="f-name" value="${existing?existing.name.replace(/"/g,'&quot;'):''}" placeholder="ex: Endometrioma">
       </div>
@@ -15317,6 +15343,10 @@ function openForm(id, opts){
   }
 
   let tags = existing ? [...existing.tags] : [];
+  // CLINICAL TAGS V1 — campo opcional e independente de `tags`, mesmo formato
+  // (array de strings) e mesmo mecanismo de chips; ausência/vazio continuam
+  // válidos (lesões antigas nunca são migradas/preenchidas automaticamente).
+  let clinicalTags = existing && Array.isArray(existing.clinicalTags) ? [...existing.clinicalTags] : [];
   let links = existing ? [...ensureLinks(existing)] : [];
   // Casos clínicos exemplo: só VISUALIZAR/REMOVER aqui (vincular acontece
   // pelo importador). Draft até o Salvar, igual a altPlacements/links.
@@ -15687,6 +15717,129 @@ function openForm(id, opts){
     suggestToggleBtn.textContent = (open ? '▾ ' : '▸ ') + 'Tags avançadas';
     suggestToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
   };
+
+  // CLINICAL TAGS V1 — mesma mecânica de chips de `tags`, mas isolada
+  // (clinicalTags nunca se mistura com `tags`); vocabulário do browser vem
+  // EXCLUSIVAMENTE de TAXONOMY.json (domain==='clinical'), carregado de forma
+  // assíncrona e best-effort — se o fetch falhar, a seção continua funcional
+  // (chips manuais + Enter) só sem o browse por grupo.
+  const chipWrapClinical = document.getElementById('chip-wrap-clinical');
+  const clinicalTagInput = document.getElementById('f-clinical-tag-input');
+  let clinicalTaxonomyData = null;
+  const clinicalToggleBtn = document.getElementById('clinical-toggle');
+  function paintClinicalToggle(){
+    const b = document.getElementById('clinical-body');
+    if(!clinicalToggleBtn || !b) return;
+    const open = !b.hidden;
+    clinicalToggleBtn.textContent = clinicalToggleLabel(clinicalTags.length, open);
+    clinicalToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  if(clinicalToggleBtn) clinicalToggleBtn.onclick = ()=>{
+    const b = document.getElementById('clinical-body');
+    if(!b) return;
+    b.hidden = !b.hidden;
+    paintClinicalToggle();
+  };
+  function renderClinicalChips(){
+    chipWrapClinical.querySelectorAll('.removable-tag').forEach(n=>n.remove());
+    clinicalTags.forEach(t=>{
+      const c = document.createElement('span');
+      c.className='removable-tag clinical-chip';
+      c.innerHTML = `${t}<button type="button">✕</button>`;
+      c.querySelector('button').onclick = ()=>{ clinicalTags = clinicalTags.filter(x=>x!==t); renderClinicalChips(); renderClinicalVocabulary(); renderClinicalSmartSuggestions(); };
+      chipWrapClinical.insertBefore(c, clinicalTagInput);
+    });
+    if(typeof paintClinicalToggle==='function') paintClinicalToggle();
+  }
+  function addClinicalTag(t){
+    t = t.trim();
+    if(t && !clinicalTags.includes(t)){ clinicalTags.push(t); renderClinicalChips(); renderClinicalVocabulary(); renderClinicalSmartSuggestions(); }
+    clinicalTagInput.value='';
+  }
+  clinicalTagInput.addEventListener('keydown', (ev)=>{
+    if(ev.key==='Enter' || ev.key===','){ ev.preventDefault(); addClinicalTag(clinicalTagInput.value); }
+    else if(ev.key==='Backspace' && clinicalTagInput.value==='' && clinicalTags.length){ clinicalTags.pop(); renderClinicalChips(); renderClinicalVocabulary(); renderClinicalSmartSuggestions(); }
+  });
+  // Browser de vocabulário agrupado pelos grupos REAIS de TAXONOMY.json
+  // (domain==='clinical') — nenhuma taxonomia paralela inventada aqui.
+  function renderClinicalVocabulary(){
+    const row = document.getElementById('clinical-suggest-row');
+    if(!row) return;
+    row.innerHTML = '';
+    const taxonomy = clinicalTaxonomyData;
+    if(!taxonomy) return;
+    const idx = taxoBuildIndices(taxonomy);
+    const groups = (taxonomy.groups || []).filter(g=>g && g.domain==='clinical').sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
+    groups.forEach(g=>{
+      const concepts = (idx.conceptsByGroup.get(g.id) || []).filter(c=>c && typeof c.label==='string' && !clinicalTags.includes(c.label));
+      if(!concepts.length) return;
+      const groupLabel = document.createElement('div');
+      groupLabel.className = 'suggest-group-label';
+      groupLabel.textContent = g.label;
+      row.appendChild(groupLabel);
+      const groupRow = document.createElement('div');
+      groupRow.className = 'suggest-row-inner';
+      concepts.forEach(c=>{
+        const s = document.createElement('span');
+        s.className='suggest-chip'; s.textContent='+ '+c.label;
+        s.onclick = ()=> addClinicalTag(c.label);
+        groupRow.appendChild(s);
+      });
+      row.appendChild(groupRow);
+    });
+  }
+  // Sugestões clínicas automáticas — lrev correção de UX: funciona tanto em
+  // lesão NOVA quanto em EDIÇÃO (sem a restrição "só nova" que existia antes);
+  // recalcula no blur, com debounce curto a cada tecla (scheduleClinicalAnalyze
+  // abaixo) e também via o botão manual "Analisar descrição". Nunca adiciona
+  // sozinha — clique explícito chama addClinicalTag(), igual ao resto. Pura/
+  // read-only: suggestClinicalTagsForLesion() não muta nada. Quando não há
+  // nenhuma sugestão, mostra uma mensagem (nunca esconde a seção em silêncio).
+  function renderClinicalSmartSuggestions(){
+    const row = document.getElementById('suggest-clinical-smart-row');
+    const emptyEl = document.getElementById('suggest-clinical-smart-empty');
+    if(!row) return;
+    if(!clinicalTaxonomyData){ row.innerHTML = ''; if(emptyEl) emptyEl.hidden = true; return; }
+    const draftEntry = {
+      name: (document.getElementById('f-name')||{}).value || '',
+      s: (document.getElementById('f-section')||{}).value || '',
+      site: (document.getElementById('f-site')||{}).value || '',
+      notes: (document.getElementById('f-notes')||{}).value || '',
+      clinicalTags
+    };
+    const suggestions = suggestClinicalTagsForLesion(draftEntry, clinicalTaxonomyData);
+    row.innerHTML = '';
+    if(!suggestions.length){ if(emptyEl) emptyEl.hidden = false; return; }
+    if(emptyEl) emptyEl.hidden = true;
+    suggestions.forEach(t=>{
+      const s = document.createElement('span');
+      s.className = 'suggest-chip suggest-chip-smart'; s.textContent = '+ ' + t;
+      s.onclick = () => addClinicalTag(t);
+      row.appendChild(s);
+    });
+  }
+  renderClinicalChips(); renderClinicalVocabulary(); renderClinicalSmartSuggestions();
+  // Debounce curto (300ms): digitar não dispara uma reanálise a cada tecla,
+  // só depois de uma pequena pausa — e o blur/botão continuam recalculando
+  // na hora, sem esperar o timer.
+  let clinicalAnalyzeTimer = null;
+  function scheduleClinicalAnalyze(){
+    if(clinicalAnalyzeTimer) clearTimeout(clinicalAnalyzeTimer);
+    clinicalAnalyzeTimer = setTimeout(()=>{ clinicalAnalyzeTimer = null; renderClinicalSmartSuggestions(); }, 300);
+  }
+  ['f-name', 'f-section', 'f-site', 'f-notes'].forEach(fid => {
+    const el = document.getElementById(fid);
+    if(!el) return;
+    el.addEventListener('blur', renderClinicalSmartSuggestions);
+    el.addEventListener('input', scheduleClinicalAnalyze);
+  });
+  const clinicalAnalyzeBtn = document.getElementById('clinical-analyze-btn');
+  if(clinicalAnalyzeBtn) clinicalAnalyzeBtn.onclick = ()=>{
+    if(clinicalAnalyzeTimer){ clearTimeout(clinicalAnalyzeTimer); clinicalAnalyzeTimer = null; }
+    renderClinicalSmartSuggestions();
+  };
+  loadTaxonomy().then(t=>{ clinicalTaxonomyData = t; renderClinicalVocabulary(); renderClinicalSmartSuggestions(); }).catch(()=>{ /* TAXONOMY indisponível: seção clínica continua usável via chip manual */ });
+  paintClinicalToggle();
 
   /* --- imagens: Cloudinary por padrão quando configurado; local continua como fallback compatível --- */
   let pendingImgs = [];       // [{label,data,source,...}]
@@ -16163,6 +16316,7 @@ function openForm(id, opts){
       if(clinicalCasesDraft.length) t.clinicalCases = JSON.parse(JSON.stringify(clinicalCasesDraft)); else delete t.clinicalCases;
       if(radiologicSignsDraft.length) t.radiologicSigns = JSON.parse(JSON.stringify(radiologicSignsDraft)); else delete t.radiologicSigns; // 093
       if(classificationSchemesDraft.length) t.classificationSchemes = JSON.parse(JSON.stringify(classificationSchemesDraft)); else delete t.classificationSchemes; // 093
+      if(clinicalTags.length) t.clinicalTags = JSON.parse(JSON.stringify(clinicalTags)); else delete t.clinicalTags; // CLINICAL TAGS V1
     } else if(DATA.some(x=>x && x.id===entryId)){
       // Rede de segurança anti-mesmo-id (auditoria 2026-09-21): se o id já
       // está no acervo (ex.: submit duplicado que escapou da trava), atualiza
@@ -16170,11 +16324,13 @@ function openForm(id, opts){
       const target = DATA.find(x=>x && x.id===entryId);
       target.name=name; target.s=sec; target.site=site; target.tags=tags; target.img=img; target.notes=notes; target.links=links; target.enTerm=enTerm; target.inc=inc; target.localImg=localImgFlag; target.images=remoteImgs; target.classification=classification; target._userUpdatedAt=Date.now();
       if(altPlacementsDraft.length) target.altPlacements = JSON.parse(JSON.stringify(altPlacementsDraft)); else delete target.altPlacements;
+      if(clinicalTags.length) target.clinicalTags = JSON.parse(JSON.stringify(clinicalTags)); else delete target.clinicalTags; // CLINICAL TAGS V1
       applyDidacticDraftsToNewEntry(target, clinicalCasesDraft, radiologicSignsDraft, classificationSchemesDraft); // 093
       toast('Registro existente atualizado (id já estava no acervo — nada duplicado).');
     } else {
       const newEntry = {id:entryId, name, s:sec, site, tags, img, notes, links, enTerm, inc, localImg:localImgFlag, images:remoteImgs, classification, _userUpdatedAt:Date.now()};
       if(altPlacementsDraft.length) newEntry.altPlacements = JSON.parse(JSON.stringify(altPlacementsDraft));
+      if(clinicalTags.length) newEntry.clinicalTags = JSON.parse(JSON.stringify(clinicalTags)); // CLINICAL TAGS V1
       applyDidacticDraftsToNewEntry(newEntry, clinicalCasesDraft, radiologicSignsDraft, classificationSchemesDraft); // 093: só o que o usuário adicionou
       DATA.push(newEntry);
     }
@@ -20571,6 +20727,68 @@ function suggestTagsForLesion(entry, catalog){
   return out;
 }
 
+// Normalização morfológica controlada (gênero masc/fem): só pra um rótulo
+// ADJETIVO de UMA palavra terminado em "o" (ex.: "agudo" -> "aguda"), nunca
+// um fuzzy genérico comparando palavras quaisquer entre si — o risco fica
+// contido ao próprio rótulo de CADA conceito (não vira "qualquer palavra
+// terminada em o combina com qualquer palavra terminada em a" no texto
+// livre). lrev — caso real: "dor abdominal AGUDA" não batia com o conceito
+// "agudo" (clin_tc_acute) por pura flexão de gênero.
+function clinicalAdjectiveGenderVariant(label){
+  if (typeof label !== 'string') return null;
+  const norm = label.trim();
+  if (!/^[a-zà-úA-ZÀ-Ú]+o$/.test(norm)) return null; // só 1 palavra, só letras, termina em "o"
+  return norm.slice(0, -1) + 'a';
+}
+// Abreviações médicas clássicas e inequívocas para o rótulo EXATO já
+// existente na TAXONOMY (ex.: "fossa ilíaca direita" -> concept "FID") — não
+// altera TAXONOMY.json; é um alias controlado só no código, mesmo padrão de
+// EXTERNAL_IMPORT_TRANSLATIONS do importador. Lista deliberadamente pequena;
+// expandir só com casos reais confirmados, nunca um dicionário genérico.
+const CLINICAL_CONCEPT_ALIASES = {
+  clin_loc_fid: ['fossa ilíaca direita'],
+  clin_loc_fie: ['fossa ilíaca esquerda']
+};
+
+// CLINICAL TAGS V1 — sugestão de TAGS CLÍNICAS a partir do mesmo texto já
+// digitado (nome/seção/sítio/notas), mas com vocabulário vindo EXCLUSIVAMENTE
+// dos conceitos domain==='clinical' de TAXONOMY.json (rótulo + sinônimos +
+// variante de gênero/alias controlado acima), nunca do catálogo DATA. É uma
+// função SEPARADA de suggestTagsForLesion — o contrato daquela (vocabulário =
+// tags já usadas no catálogo) não muda em nada. Mesma técnica/limitações do
+// motor radiológico (tokenização simples, sem detecção de negação —
+// paridade com suggestTagsForLesion, que também não tem), pura,
+// determinística, nunca muta entry/taxonomy, nunca persiste, nunca sugere um
+// clinicalTag duplicado ou já presente na lesão. Funciona tanto pra lesão
+// nova quanto em edição — quem decide quando chamar é o formulário.
+const SUGGEST_CLINICAL_TAGS_MAX = 10;
+function suggestClinicalTagsForLesion(entry, taxonomy){
+  const out = [];
+  if (!taxonomy || !Array.isArray(taxonomy.concepts)) return out;
+  const existingNormalized = new Set((Array.isArray(entry && entry.clinicalTags) ? entry.clinicalTags : []).map(normalizeExternalTitle));
+  const textParts = [entry && entry.name, entry && entry.s, entry && entry.site, entry && entry.notes].filter(t => typeof t === 'string' && t.trim());
+  const hay = new Set(tokenizeExternalTitle(textParts.join(' ')));
+  if (!hay.size) return out; // sem nenhum texto ainda — nada a sugerir
+  const seen = new Set();
+  for (const c of taxonomy.concepts) {
+    if (out.length >= SUGGEST_CLINICAL_TAGS_MAX) break;
+    if (!c || c.domain !== 'clinical' || typeof c.label !== 'string' || !c.label.trim()) continue;
+    const normLabel = normalizeExternalTitle(c.label);
+    if (!normLabel || seen.has(normLabel) || existingNormalized.has(normLabel)) continue;
+    const genderVariant = clinicalAdjectiveGenderVariant(c.label);
+    const candidates = [c.label]
+      .concat(Array.isArray(c.synonyms) ? c.synonyms : [])
+      .concat(genderVariant ? [genderVariant] : [])
+      .concat(CLINICAL_CONCEPT_ALIASES[c.id] || []);
+    const matched = candidates.some(cand => {
+      const need = tokenizeExternalTitle(cand);
+      return need.length && need.every(t => hay.has(t));
+    });
+    if (matched) { seen.add(normLabel); out.push(c.label); }
+  }
+  return out;
+}
+
 // Tags conservadoras em PT: nome confiável + contexto forte + modalidade
 // (mapa fechado) + reaproveitamento de tag canônica (nada novo inventado).
 function suggestExternalTags(draft, nameSug, catalog, matches){
@@ -21403,6 +21621,15 @@ function altToggleLabel(count, open){
   const base = (Number(count) || 0) > 0
     ? `Localização adicional (${count})`
     : 'Localização adicional (opcional)';
+  return (open ? '▾ ' : '▸ ') + base;
+}
+
+// CLINICAL TAGS V1 — mesmo padrão de altToggleLabel: mostra a contagem mesmo
+// com a seção recolhida, pra não esconder que a lesão já tem tags clínicas.
+function clinicalToggleLabel(count, open){
+  const base = (Number(count) || 0) > 0
+    ? `Apresentação clínica (${count})`
+    : 'Apresentação clínica';
   return (open ? '▾ ' : '▸ ') + base;
 }
 

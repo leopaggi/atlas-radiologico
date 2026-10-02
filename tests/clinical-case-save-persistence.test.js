@@ -194,6 +194,7 @@ async function driveLesionSave({ existing, pendingImgs, imgsChangedInitial, clin
     existing, DATA: [existing], formEntryId: existing.id,
     pendingImgs, get imgsChanged() { return imgsChanged; }, set imgsChanged(v) { imgsChanged = v; },
     tags: existing.tags || [], links: existing.links || [], altPlacementsDraft: existing.altPlacements || [],
+    clinicalTags: existing.clinicalTags || [], // CLINICAL TAGS V1 — nova variável livre do handler real
     clinicalCasesDraft, radiologicSignsDraft: [], classificationSchemesDraft: [],
     formImageMetaBaseline: new Map(), formImagesOpenList: [],
     toast: (m) => toasts.push(m),
