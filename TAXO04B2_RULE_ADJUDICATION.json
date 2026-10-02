@@ -1,0 +1,176 @@
+{
+  "metadata": {
+    "status": "proposal",
+    "taxonomyVersion": 2,
+    "taxonomyReleaseLabel": "1.1",
+    "generatedAt": "2026-10-02T00:26:35.786Z",
+    "note": "Adjudicacao humana/tecnica das regras de migracao (TAXO-04B2). Documento de decisao, nao aplica nenhuma mudanca em DATA, SEED, TAG_TO_TAXONOMY_MAP.json ou TAXONOMY.json nesta rodada. Decisoes aqui registradas como \"approve\" ficam pendentes de aplicacao em uma microetapa futura explicita.",
+    "inputs": {
+      "taxo04bDryRun": "TAXO04B_MIGRATION_DRY_RUN.json",
+      "liveSnapshot": "TAXO03_LIVE_TAG_SNAPSHOT.json",
+      "tagMap": "TAG_TO_TAXONOMY_MAP.json (lido, nao alterado)",
+      "taxonomy": "TAXONOMY.json (lido, nao alterado)"
+    }
+  },
+  "contextualResolvers": [
+    {
+      "ruleId": "resolve-solid-composition-v1",
+      "decision": "approve",
+      "reason": "Regra deterministica: so resolve \"solido\" para rad_comp_solid quando nenhuma outra tag ja resolvida da mesma lesao tem concept nos groups radiologic.boneDensity/boneMatrix/periostealReaction. Nao depende de nome de diagnostico nem de palavra-chave textual. Fallback seguro: na presenca de qualquer sinal osseo/periosteal, mantem ambiguo (nunca resolve \"no escuro\"). Auditoria completa das 39 ocorrencias originais nao encontrou nenhum falso positivo entre as 37 resolvidas. As 2 recusas (seed_563, seed_568) sao corretas em si mesmas - decorrem de um problema separado no mapeamento de \"espiculada\" (ver mappingIssues), nao de um defeito da regra. Testes cobrem caso positivo, caso negativo (contexto osseo real) e guarda de conjunto de candidatos inesperado.",
+      "criteriaChecked": {
+        "deterministic": true,
+        "semanticallyCoherent": true,
+        "dependsOnDiagnosisName": false,
+        "safeFallback": true,
+        "forcesBoneOrPeriostealContext": false,
+        "testsCoverPositiveAndNegative": true,
+        "falsePositivesFoundInAudit": 0
+      },
+      "affectedCount": 39,
+      "resolvedCount": 37,
+      "remainingCount": 2,
+      "remainingLesionIds": [
+        "seed_563",
+        "seed_568"
+      ],
+      "remainingRootCause": "mappingIssue:espiculada (ver mappingIssues[0]) - nao e falha da regra, e o comportamento conservador correto dado o sinal de entrada atual.",
+      "frozenBaselineEligible": true
+    }
+  ],
+  "globalMappingProposals": [
+    {
+      "tag": "vascular",
+      "kind": "promotion-review-to-mapped",
+      "decision": "approve",
+      "currentStatus": "review",
+      "conceptId": "etio_vascular",
+      "usages": 20,
+      "consistency": "20/20",
+      "reason": "Todas as 20 ocorrencias sao processos de etiologia vascular (infarto, trombose, aneurisma, dissecao, pseudoaneurisma, peliose hepatica), nenhuma descreve vascularizacao/comportamento de realce de uma massa. Secoes predominantemente \"Vascular\", \"Neurorradiologia\" (infarto/dissecao/aneurisma) e \"Abdomen Superior\" (infarto/trombose/peliose) - todas consistentes com etiologia, nao com qualificador de realce.",
+      "confidence": "high"
+    },
+    {
+      "tag": "focal",
+      "kind": "promotion-review-to-mapped",
+      "decision": "approve",
+      "currentStatus": "review",
+      "conceptId": "rad_extent_focal",
+      "usages": 4,
+      "consistency": "4/4",
+      "reason": "As 4 ocorrencias descrevem extensao/distribuicao da lesao (infarto focal vs difuso, nodulo pulmonar focal, microadenoma focal, metastase esplenica focal) - nenhuma se refere a \"dilatacao focal\" (tag distinta, ja mapeada) ou a outro sentido de \"foco\".",
+      "confidence": "high"
+    },
+    {
+      "tag": "central",
+      "kind": "promotion-review-to-mapped",
+      "decision": "approve",
+      "currentStatus": "review",
+      "conceptId": "rad_position_central",
+      "usages": 3,
+      "consistency": "3/3",
+      "reason": "As 3 ocorrencias descrevem posicao/distribuicao central vs periferica (carcinoma pulmonar central classico - espinocelular e pequenas celulas - e bronquiectasias centrais na ABPA, achado classico descrito na literatura como \"central\"). Nenhuma se refere a sistema nervoso central, calcificacao central ou necrose central.",
+      "confidence": "high"
+    },
+    {
+      "tag": "crônico",
+      "kind": "promotion-review-to-mapped",
+      "decision": "approve",
+      "currentStatus": "review",
+      "conceptId": "clin_tc_chronic",
+      "usages": 1,
+      "consistency": "1/1",
+      "reason": "Unica ocorrencia (artropatia do manguito rotador / cuff tear arthropathy) e semanticamente inequivoca: representa temporalidade clinica cronica de um processo degenerativo. Decisao semantica, nao estatistica.",
+      "confidence": "low (N=1 - confianca limitada por baixa frequencia, mesmo com semantica inequivoca)"
+    },
+    {
+      "tag": "espiculada",
+      "kind": "correction",
+      "decision": "approve",
+      "reason": "As 4 ocorrencias reais sao descritores de margem espiculada de massa/nodulo (pulmonar e mamario), nunca reacao periosteal ossea; o mapeamento atual bateu no concept errado por correspondencia textual exata (singular) em vez de leitura semantica. Ver evidence para o detalhamento por lesao.",
+      "currentConceptId": "rad_periosteal_spiculated",
+      "proposedConceptId": "rad_margin_spiculated",
+      "usages": 4,
+      "consistency": "4/4 (0 contextos osseos/periosteais; 4 contextos de margem de massa/nodulo)",
+      "evidence": [
+        "seed_78 Carcinoma broncogenico (Torax/Nodulo pulmonar) - tags coexistentes: restricao a difusao, margens irregulares, lobulada",
+        "seed_510 Carcinoma tubular da mama (Mamas/Nodulo mamario) - tags coexistentes: margens irregulares",
+        "seed_563 Adenocarcinoma pulmonar (Torax/Parenquima pulmonar) - tags coexistentes: solido, subsolido",
+        "seed_568 Carcinoma ductal invasivo/NST (Mamas/Nodulo mamario) - tags coexistentes: solido, hipoecogenico, margens irregulares, sombra acustica posterior",
+        "3 das 4 lesoes tambem carregam a tag \"margens irregulares\" na mesma familia semantica (radiologic.margins), reforcando a leitura de margem",
+        "0 das 4 lesoes tem qualquer outro sinal osseo/periosteal (nenhuma e lesao ossea)",
+        "rad_margin_spiculated (label \"espiculadas\", plural) e rad_periosteal_spiculated (label \"espiculada\", singular) ja existem na TAXONOMY v1 com descriptions que se referenciam mutuamente exatamente para evitar esta confusao - o tag vivo \"espiculada\" (singular) bate exatamente no label de rad_periosteal_spiculated por correspondencia textual exata, nao por leitura semantica"
+      ],
+      "risk": "baixo - amostra pequena (N=4) mas 100% consistente; ambos os concepts de destino ja existem na baseline aprovada; nenhuma criacao de concept necessaria; correcao e puramente de reatribuicao de mapping",
+      "taxonomyGapCandidate": null,
+      "confidence": "high (apesar de N=4)"
+    }
+  ],
+  "manualAmbiguities": [
+    {
+      "tag": "calcificações",
+      "occurrences": 75,
+      "decision": "keep-manual",
+      "reason": "Uso real misto confirmado na auditoria da TAXO-04B; nenhum sinal contextual estrutural e determinista encontrado que nao dependa de inferir o diagnostico."
+    },
+    {
+      "tag": "hemorrágico",
+      "occurrences": 69,
+      "decision": "keep-manual",
+      "reason": "Mesma conclusao - uso misto, sem sinal contextual seguro."
+    },
+    {
+      "tag": "difuso",
+      "occurrences": 46,
+      "decision": "keep-manual",
+      "reason": "Mesma conclusao."
+    },
+    {
+      "tag": "bilateral",
+      "occurrences": 44,
+      "decision": "keep-manual",
+      "reason": "Os proprios dados fonte carregam hedging (ex.: mesma lesao com \"bilateral\" e \"bilateral possivel\" simultaneamente) - sinal de entrada inerentemente ambiguo."
+    },
+    {
+      "tag": "necrótico",
+      "occurrences": 22,
+      "decision": "keep-manual",
+      "reason": "Mesma conclusao de calcificacoes/hemorragico/difuso."
+    }
+  ],
+  "exclusiveGroupConflicts": [
+    {
+      "groupId": "radiologic.boneDensity",
+      "conceptIds": [
+        "rad_bonedensity_lytic",
+        "rad_bonedensity_sclerotic"
+      ],
+      "sourceTags": [
+        "lítica",
+        "esclerótica"
+      ],
+      "decision": "manual-review-required",
+      "reason": "Mantida a decisao da TAXO-04B: nenhuma regra automatica para \"misto\" - 3/7 lesoes carregam \"multifocal\" (focos independentes legitimos), e separar as demais exigiria conhecimento clinico de diagnostico, proibido como base de regra.",
+      "lesionIds": [
+        "seed_44",
+        "seed_283",
+        "seed_46",
+        "seed_560",
+        "seed_578",
+        "seed_1088",
+        "seed_577"
+      ]
+    }
+  ],
+  "mappingIssues": [
+    {
+      "tag": "espiculada",
+      "issueType": "likely-incorrect-mapping",
+      "currentConceptId": "rad_periosteal_spiculated",
+      "currentConfidence": "high (indevida)",
+      "proposedConceptId": "rad_margin_spiculated",
+      "usages": 4,
+      "summary": "Tag mapeada com status \"mapped\"/confianca \"high\" para rad_periosteal_spiculated por correspondencia textual exata de label singular, mas as 4 ocorrencias reais sao todas descritores de margem de massa/nodulo (pulmonar ou mamario), nunca reacao periosteal ossea. Ver globalMappingProposals para a correcao proposta - NAO aplicada nesta rodada.",
+      "affectsResolver": "resolve-solid-composition-v1 (explica as 2 recusas remanescentes, seed_563 e seed_568)"
+    }
+  ]
+}
