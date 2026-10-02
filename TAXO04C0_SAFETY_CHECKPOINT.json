@@ -14,9 +14,13 @@
     "restoreSimulationPassed": true
   },
   "internalSnapshot": {
-    "created": false,
-    "id": null,
-    "validated": false
+    "created": true,
+    "id": "snap_muqazoek_offohj",
+    "validated": true,
+    "createdAt": "2026-10-02T01:47:41.516Z",
+    "reason": "antes de aplicar migração de atributos taxonômicos",
+    "lesionCount": 1210,
+    "snapshotVersion": 2
   },
   "validation": {
     "jsonValid": true,
