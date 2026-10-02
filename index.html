@@ -500,6 +500,9 @@ body{
   padding:3px 8px;border-radius:10px;cursor:pointer;
 }
 .suggest-chip:hover{color:var(--teal);border-color:var(--teal-dim);}
+.suggest-smart-wrap{margin-top:8px;}
+.suggest-chip-smart{border-style:solid;border-color:var(--teal-dim);color:var(--teal);background:var(--tag-bg-active);}
+.suggest-chip-smart:hover{border-color:var(--teal);}
 
 /* ---------- Construtor de quadro de imagens ---------- */
 .collage-modal{max-width:980px;}
@@ -740,6 +743,18 @@ body{
   white-space:pre-wrap;overflow-wrap:anywhere;
   max-height:calc(5 * 1.4em + 16px);overflow-y:auto;overflow-x:hidden;
 }
+/* lrev_muqw07yj_w2yirw — contexto clínico na margem SUPERIOR do lightbox
+   maximizado, mesma proporção visual de .lightbox-desc (abaixo). Reaproveita
+   clinicalCaseImageBandHtml() (.detail-img-clinical-band/-pac), só
+   repintado para o tema escuro da overlay. */
+.lightbox-clinical-host{width:100%;box-sizing:border-box;flex:0 0 auto;cursor:auto;margin-bottom:10px;}
+.lightbox-clinical-host[hidden]{display:none;}
+.lightbox-clinical-host .detail-img-clinical-band{
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:10px;
+  padding:8px 18px;color:#f2f4f6;font-size:14px;line-height:1.4;
+}
+.lightbox-clinical-host .detail-img-clinical-pac{color:#f2f4f6;}
+.lightbox-clinical-host .clinical-case-presentation{color:#f2f4f6;}
 .lightbox-close{
   position:absolute;top:16px;right:20px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);
   color:#fff;width:36px;height:36px;border-radius:50%;font-size:16px;cursor:pointer;
@@ -753,6 +768,16 @@ body{
   display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;
 }
 .detail-img-label.expanded{-webkit-line-clamp:unset;display:block;overflow:visible;}
+/* lrev_muqw07yj_w2yirw — faixa de resumo clínico. Decisão revisada: NUNCA
+   na galeria normal do detalhe — só dentro do lightbox maximizado (ver
+   .lightbox-clinical-host mais abaixo, perto de .lightbox-desc). Estas duas
+   classes são a base visual reaproveitada por clinicalCaseImageBandHtml();
+   o host do lightbox as sobrescreve para o tema escuro da overlay. */
+.detail-img-clinical-band{
+  font-size:12px;color:var(--text);text-align:left;padding:5px 7px;line-height:1.4;
+  background:var(--panel-2);border-bottom:1px solid var(--line);
+}
+.detail-img-clinical-pac{font-weight:600;color:var(--muted);margin-bottom:1px;}
 .detail-notes{color:var(--muted);font-size:13.5px;white-space:pre-wrap;line-height:1.6;}
 .detail-meta{color:var(--muted-2);font-size:12px;font-family:'IBM Plex Mono',monospace;margin-bottom:14px;}
 .detail-altplacements{color:var(--teal);font-size:12px;margin:-8px 0 14px 0;opacity:.9;}
@@ -772,6 +797,12 @@ body{
 .detail-link{display:block;color:var(--teal);font-size:13px;text-decoration:none;margin-bottom:6px;}
 .detail-link:hover{text-decoration:underline;}
 .detail-review{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);}
+/* TAXO-04 FASE 2 — fila de revisão de attributes (somente leitura). */
+.review-queue-filters{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0;align-items:center;}
+.review-queue-filters input[type=search],.review-queue-filters select{background:var(--panel);border:1px solid var(--line);color:var(--text);padding:5px 8px;border-radius:6px;font-size:12px;font-family:inherit;}
+.review-queue-filters label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:4px;}
+.review-queue-total{font-size:12px;color:var(--muted-2);margin-bottom:8px;}
+.review-queue-row{text-align:left;}
 .review-btn-row{display:flex;gap:8px;flex-wrap:wrap;}
 .review-set-btn{
   border:1.5px solid;background:none;border-radius:8px;padding:7px 12px;font-size:12.5px;
@@ -1905,6 +1936,7 @@ body{
         <button class="foot-btn" id="btn-classification-audit" title="Compara a classificação de cada lesão com o SEED pela identidade (seção+sítio+nome) e aponta as inválidas; corrigir exige confirmação e cria snapshot">📋 auditar classificações<br><span class="foot-btn-sub">aponta classificações inválidas — não altera nada até você confirmar</span></button>
         <button class="foot-btn" id="btn-tag-audit" title="Painel interativo para revisar as tags do catálogo (manter/editar/eliminar/revisar). Usa o DATA atual em runtime para contagens e lesões; não altera nenhuma tag — só registra suas decisões localmente">🏷️ auditoria de tags<br><span class="foot-btn-sub">revisão interativa — decisões ficam salvas no navegador, nada é aplicado aqui</span></button>
         <button class="foot-btn" id="btn-taxonomy-panel" title="Carrega TAXONOMY.json (dicionário clínico-radiológico aprovado na TAXO-01) e permite explorar grupos/conceitos/sinônimos/relações. Somente leitura: não cria attributes em nenhuma lesão, não altera DATA/SEED/Firestore/IndexedDB/localStorage">🧬 Taxonomia clínico-radiológica<br><span class="foot-btn-sub">painel somente leitura do dicionário aprovado — nenhuma lesão é alterada aqui</span></button>
+        <button class="foot-btn" id="btn-review-queue-panel" title="Carrega TAXO04_REVIEW_QUEUE.json (267 lesões que ficaram em review-required na migração de attributes, TAXO-04) e permite filtrar/explorar. Somente leitura: não cria/altera attributes, não altera DATA/SEED/Firestore/IndexedDB/localStorage">🗂 Revisão de atributos<br><span class="foot-btn-sub">fila somente leitura das lesões em review-required — nenhum attribute é criado aqui</span></button>
       </div>
     </div>
   </div>
@@ -13612,6 +13644,7 @@ function openTaxonomyPanel(){
   );
 }
 
+
 async function openTagAuditModal(){
   const { ov, close } = tagAuditMakeOverlay(
     '<div class="modal tag-audit-modal">'
@@ -13834,6 +13867,121 @@ async function openTagAuditModal(){
 
   loadingEl.hidden = true; bodyEl.hidden = false;
   render();
+}
+
+/* ---------- TAXO-04 FASE 2 — fila de revisão de attributes (somente leitura) ----------
+   Fonte: TAXO04_REVIEW_QUEUE.json, artefato compacto e estático contendo só as
+   lesões migrationStatus==="review-required" do dry-run final (TAXO-04C1).
+   Nunca escreve nada — não cria/altera attributes, não altera DATA/SEED/
+   Firestore/IndexedDB/localStorage. Mesmo padrão de loadTaxonomy()/cache. */
+let REVIEW_QUEUE_CACHE = null;
+let REVIEW_QUEUE_LOAD_PROMISE = null;
+const REVIEW_QUEUE_CACHE_BUST = 1;
+function loadReviewQueue(){
+  if(REVIEW_QUEUE_CACHE) return Promise.resolve(REVIEW_QUEUE_CACHE);
+  if(REVIEW_QUEUE_LOAD_PROMISE) return REVIEW_QUEUE_LOAD_PROMISE;
+  REVIEW_QUEUE_LOAD_PROMISE = fetch('TAXO04_REVIEW_QUEUE.json?v=' + REVIEW_QUEUE_CACHE_BUST)
+    .then(res => { if(!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+    .then(json => {
+      if(!json || !Array.isArray(json.lesions)) throw new Error('TAXO04_REVIEW_QUEUE.json com formato inesperado (lesions ausente)');
+      REVIEW_QUEUE_CACHE = json;
+      return json;
+    })
+    .catch(err => { REVIEW_QUEUE_LOAD_PROMISE = null; throw err; });
+  return REVIEW_QUEUE_LOAD_PROMISE;
+}
+
+function reviewQueueApplyFilters(lesions, filters){
+  let out = lesions;
+  if(filters.ambiguityOnly) out = out.filter(l => Array.isArray(l.ambiguities) && l.ambiguities.length > 0);
+  if(filters.conflictOnly) out = out.filter(l => Array.isArray(l.conflicts) && l.conflicts.length > 0);
+  if(filters.tag){ const q = filters.tag.toLowerCase(); out = out.filter(l => (l.tags || []).some(t => String(t).toLowerCase().indexOf(q) !== -1)); }
+  if(filters.section) out = out.filter(l => l.section === filters.section);
+  if(filters.site){ const q = filters.site.toLowerCase(); out = out.filter(l => String(l.site || '').toLowerCase().indexOf(q) !== -1); }
+  if(filters.conceptId){
+    const q = filters.conceptId.toLowerCase();
+    out = out.filter(l =>
+      (l.proposedAttributes || []).some(p => String(p.conceptId || '').toLowerCase().indexOf(q) !== -1) ||
+      (l.ambiguities || []).some(a => (a.candidateConceptIds || []).some(cid => String(cid).toLowerCase().indexOf(q) !== -1))
+    );
+  }
+  return out;
+}
+
+function reviewQueueRowHtml(l){
+  const tagsHtml = (l.tags || []).map(t => '<span class="mini-tag">' + escAttr(t) + '</span>').join('');
+  const proposedHtml = (l.proposedAttributes || []).map(p => '<span class="mini-tag match">' + escAttr(p.conceptId) + '</span>').join('');
+  const ambigHtml = (l.ambiguities || []).map(a => '<div>⚠ ' + escAttr(a.tag) + ' → ' + (a.candidateConceptIds || []).map(escAttr).join(' / ') + '</div>').join('');
+  const reviewTagsHtml = (l.reviewTags || []).map(r => '<span class="mini-tag">' + escAttr(r.tag) + '</span>').join('');
+  const conflictsHtml = (l.conflicts || []).map(c => '<div>⛔ ' + escAttr(c.type) + (c.groupId ? ' (' + escAttr(c.groupId) + ')' : '') + '</div>').join('');
+  return '<div class="cls-audit-row review-queue-row" data-review-queue-lesion="' + escAttr(l.id) + '">'
+    + '<div><b>' + escAttr(l.name) + '</b> <span style="color:var(--muted-2);font-size:11px;">' + escAttr(l.section) + ' / ' + escAttr(l.site) + '</span></div>'
+    + '<div style="margin-top:4px;">' + tagsHtml + '</div>'
+    + (proposedHtml ? '<div style="margin-top:4px;"><span style="color:var(--muted-2);font-size:10.5px;">propostos:</span> ' + proposedHtml + '</div>' : '')
+    + (ambigHtml ? '<div style="margin-top:4px;color:var(--amber);font-size:11.5px;">' + ambigHtml + '</div>' : '')
+    + (reviewTagsHtml ? '<div style="margin-top:4px;"><span style="color:var(--muted-2);font-size:10.5px;">review:</span> ' + reviewTagsHtml + '</div>' : '')
+    + (conflictsHtml ? '<div style="margin-top:4px;color:var(--red);font-size:11.5px;">' + conflictsHtml + '</div>' : '')
+    + '<button class="btn btn-ghost review-queue-open-btn" data-review-queue-open="' + escAttr(l.id) + '" style="margin-top:6px;font-size:11px;padding:4px 10px;">abrir lesão</button>'
+    + '</div>';
+}
+
+async function reviewQueueMountPanel(ov){
+  const body = ov.querySelector('#review-queue-body');
+  let queue;
+  try{
+    queue = await loadReviewQueue();
+  }catch(err){
+    body.innerHTML = '<div class="taxo-error-box">⚠ Não foi possível carregar TAXO04_REVIEW_QUEUE.json.<br><span style="color:var(--muted-2);font-size:11.5px;">' + escAttr(String((err && err.message) || err)) + '</span><br><br>O restante do Atlas continua funcionando normalmente.</div>';
+    return;
+  }
+
+  const state = { ambiguityOnly: false, conflictOnly: false, tag: '', section: '', site: '', conceptId: '' };
+  const sections = [...new Set(queue.lesions.map(l => l.section))].sort((a, b) => String(a).localeCompare(String(b), 'pt'));
+
+  function render(){
+    const filtered = reviewQueueApplyFilters(queue.lesions, state);
+    body.innerHTML =
+      '<div class="review-queue-filters">'
+      + '<label><input type="checkbox" id="rq-f-ambig"' + (state.ambiguityOnly ? ' checked' : '') + '> só com ambiguidade</label>'
+      + '<label><input type="checkbox" id="rq-f-conflict"' + (state.conflictOnly ? ' checked' : '') + '> só com conflito</label>'
+      + '<input type="search" id="rq-f-tag" placeholder="filtrar por tag…" value="' + escAttr(state.tag) + '">'
+      + '<select id="rq-f-section"><option value="">todas as seções</option>' + sections.map(s => '<option value="' + escAttr(s) + '"' + (state.section === s ? ' selected' : '') + '>' + escAttr(s) + '</option>').join('') + '</select>'
+      + '<input type="search" id="rq-f-site" placeholder="filtrar por sítio…" value="' + escAttr(state.site) + '">'
+      + '<input type="search" id="rq-f-concept" placeholder="conceptId proposto…" value="' + escAttr(state.conceptId) + '">'
+      + '</div>'
+      + '<div class="review-queue-total">Mostrando <b>' + filtered.length + '</b> de <b>' + queue.lesions.length + '</b> lesões em revisão.</div>'
+      + '<div class="audit-list">' + (filtered.length ? filtered.map(reviewQueueRowHtml).join('') : '<div class="sync-audit-note">Nenhuma lesão corresponde aos filtros.</div>') + '</div>';
+
+    body.querySelector('#rq-f-ambig').onchange = e => { state.ambiguityOnly = e.target.checked; render(); };
+    body.querySelector('#rq-f-conflict').onchange = e => { state.conflictOnly = e.target.checked; render(); };
+    body.querySelector('#rq-f-tag').oninput = e => { state.tag = e.target.value; render(); };
+    body.querySelector('#rq-f-section').onchange = e => { state.section = e.target.value; render(); };
+    body.querySelector('#rq-f-site').oninput = e => { state.site = e.target.value; render(); };
+    body.querySelector('#rq-f-concept').oninput = e => { state.conceptId = e.target.value; render(); };
+    body.querySelectorAll('[data-review-queue-open]').forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.getAttribute('data-review-queue-open');
+        const exists = Array.isArray(DATA) && DATA.some(e => e.id === id);
+        if(exists) openDetail(id);
+        else toast('Lesão não encontrada no catálogo atual (pode ter sido removida/fundida desde o dry-run).');
+      };
+    });
+  }
+  render();
+}
+
+function openReviewQueuePanel(){
+  tagAuditMakeOverlay(
+    '<div class="modal taxo-modal"><h2>🗂 Revisão de atributos</h2>'
+    + '<div class="modal-sub">Fila somente leitura das lesões que ficaram em review-required na migração de attributes (TAXO-04). Nenhuma ação aqui altera DATA, tags, attributes, Firestore, IndexedDB ou localStorage.</div>'
+    + '<div id="review-queue-body"><div class="taxo-error-box">Carregando fila de revisão…</div></div>'
+    + '<div class="modal-actions"><span></span><button class="btn btn-ghost" id="rq-close">fechar</button></div>'
+    + '</div>',
+    (ov, close) => {
+      ov.querySelector('#rq-close').onclick = close;
+      reviewQueueMountPanel(ov);
+    }
+  );
 }
 
 async function loadData(){
@@ -14817,7 +14965,11 @@ function openDetail(id, opts){
       const cur = DATA.find(x=>x.id===id) || e;
       gal.innerHTML=all.map((img,i)=>`<div class="detail-img-item"><img src="${img.data}" data-idx="${i}">${img.label?`<div class="detail-img-label">${esc(img.label)}</div>`:''}${imageLinkButtonHtml(didacticListsOfEntry(cur), img, `data-link-idx="${i}"`)}</div>`).join('');
       gal.querySelectorAll('img').forEach(imgEl=>{
-        imgEl.addEventListener('click', ()=>{ const idx=+imgEl.dataset.idx; const it=all[idx]; openImageLightbox(it.data, it.label, all, idx); });
+        // lrev_muqw07yj_w2yirw — contexto clínico SÓ no lightbox maximizado,
+        // nunca na galeria normal do detalhe (decisão revisada). O resolver
+        // reaproveita clinicalCaseLinkedToImage (093d), nunca duplica a
+        // lógica de vínculo/ambiguidade.
+        imgEl.addEventListener('click', ()=>{ const idx=+imgEl.dataset.idx; const it=all[idx]; openImageLightbox(it.data, it.label, all, idx, null, (item)=>clinicalCaseLinkedToImage(cur, item)); });
       });
       // Expandir/recolher é só apresentação (classe CSS) — nunca muta
       // img.label/DATA; o texto completo já está no DOM o tempo todo.
@@ -15001,6 +15153,10 @@ function openForm(id, opts){
           <input id="f-tag-input" placeholder="digite e pressione Enter…">
         </div>
         <div class="suggest-row" id="suggest-row" hidden></div>
+        <div class="suggest-smart-wrap" id="suggest-smart-wrap" hidden>
+          <div class="suggest-group-label">Sugestões automáticas (nome/seção/sítio/notas)</div>
+          <div class="suggest-row-inner" id="suggest-smart-row"></div>
+        </div>
       </div>
 
       <div class="field">
@@ -15452,18 +15608,18 @@ function openForm(id, opts){
       const c = document.createElement('span');
       c.className='removable-tag';
       c.innerHTML = `${t}<button type="button">✕</button>`;
-      c.querySelector('button').onclick = ()=>{ tags = tags.filter(x=>x!==t); renderChips(); renderSuggest(); };
+      c.querySelector('button').onclick = ()=>{ tags = tags.filter(x=>x!==t); renderChips(); renderSuggest(); renderSmartSuggestions(); };
       chipWrap.insertBefore(c, tagInput);
     });
   }
   function addTag(t){
     t = t.trim();
-    if(t && !tags.includes(t)){ tags.push(t); renderChips(); renderSuggest(); }
+    if(t && !tags.includes(t)){ tags.push(t); renderChips(); renderSuggest(); renderSmartSuggestions(); }
     tagInput.value='';
   }
   tagInput.addEventListener('keydown', (ev)=>{
     if(ev.key==='Enter' || ev.key===','){ ev.preventDefault(); addTag(tagInput.value); }
-    else if(ev.key==='Backspace' && tagInput.value==='' && tags.length){ tags.pop(); renderChips(); renderSuggest(); }
+    else if(ev.key==='Backspace' && tagInput.value==='' && tags.length){ tags.pop(); renderChips(); renderSuggest(); renderSmartSuggestions(); }
   });
   function renderSuggest(){
     const row = document.getElementById('suggest-row');
@@ -15486,7 +15642,40 @@ function openForm(id, opts){
       row.appendChild(groupRow);
     });
   }
-  renderChips(); renderSuggest();
+  // TAXO-05 — sugestão de tags a partir do CONTEÚDO já digitado (nome/
+  // seção/sítio/notas), só para lesão NOVA (nunca em edição — uma lesão já
+  // catalogada não precisa de sugestão automática). Recalcula no blur dos
+  // campos-fonte; nunca adiciona nada sozinha — só clique explícito chama
+  // addTag(), o mesmo caminho manual de sempre. Nenhuma escrita/persistência
+  // aqui: suggestTagsForLesion() é pura e só lê DATA (nunca muta).
+  function renderSmartSuggestions(){
+    const wrap = document.getElementById('suggest-smart-wrap');
+    const row = document.getElementById('suggest-smart-row');
+    if(!wrap || !row) return;
+    if(existing){ wrap.hidden = true; return; } // só para lesão nova
+    const draftEntry = {
+      name: (document.getElementById('f-name')||{}).value || '',
+      s: (document.getElementById('f-section')||{}).value || '',
+      site: (document.getElementById('f-site')||{}).value || '',
+      notes: (document.getElementById('f-notes')||{}).value || '',
+      tags
+    };
+    const suggestions = suggestTagsForLesion(draftEntry, DATA);
+    row.innerHTML = '';
+    if(!suggestions.length){ wrap.hidden = true; return; }
+    wrap.hidden = false;
+    suggestions.forEach(t=>{
+      const s = document.createElement('span');
+      s.className = 'suggest-chip suggest-chip-smart'; s.textContent = '+ ' + t;
+      s.onclick = () => addTag(t);
+      row.appendChild(s);
+    });
+  }
+  renderChips(); renderSuggest(); renderSmartSuggestions();
+  ['f-name', 'f-section', 'f-site', 'f-notes'].forEach(fid => {
+    const el = document.getElementById(fid);
+    if(el) el.addEventListener('blur', renderSmartSuggestions);
+  });
   // Tags avançadas (sugestões por grupo) começam recolhidas; as tags atuais
   // (chip-wrap) ficam sempre visíveis. Só alterna `hidden`, sem tocar dados.
   const suggestToggleBtn = document.getElementById('suggest-toggle');
@@ -18256,6 +18445,7 @@ document.getElementById('btn-audit-images').onclick = openImageAuditModal;
 document.getElementById('btn-classification-audit').onclick = openClassificationAuditModal;
 document.getElementById('btn-tag-audit').onclick = openTagAuditModal;
 document.getElementById('btn-taxonomy-panel').onclick = openTaxonomyPanel; // TAXO-02, somente leitura
+document.getElementById('btn-review-queue-panel').onclick = openReviewQueuePanel; // TAXO-04 FASE 2, somente leitura
 document.getElementById('btn-clinical-merges-091c').onclick = openClinicalMergesModal091c; // PROTEÇÃO 091c
 document.getElementById('btn-sync-to-cloud').onclick = openSyncDeviceToCloudModal;
 document.getElementById('btn-sync-from-cloud').onclick = openUpdateFromCloudModal;
@@ -18594,15 +18784,31 @@ function lightboxPrevIndex(idx, total){ return total > 0 ? (idx - 1 + total) % t
 // navImages/startIndex/onNavigate são OPCIONAIS: sem eles (ou com 0/1 imagem), o
 // lightbox continua exatamente como antes — sem setas, sem contador, sem
 // teclado de navegação (só ESC, como sempre).
-function openImageLightbox(src, description, navImages, startIndex, onNavigate){
+// resolveClinicalCase (lrev_muqw07yj_w2yirw) é OPCIONAL e mínimo por
+// desenho: recebe o item de navegação atual (o mesmo objeto de `navImages`)
+// e devolve o clinicalCase já resolvido (ou null) — o lightbox NUNCA
+// resolve vínculo/ambiguidade sozinho, só chama essa função e renderiza
+// com clinicalCaseImageBandHtml (mesmo helper, reaproveitado). Call sites
+// que não passam este argumento continuam exatamente como antes, sem
+// nenhuma faixa clínica.
+function openImageLightbox(src, description, navImages, startIndex, onNavigate, resolveClinicalCase){
   const navList = lightboxNavList(navImages);
   const hasNav = navList.length > 1;
   let navIdx = (hasNav && Number.isInteger(startIndex) && startIndex >= 0 && startIndex < navList.length) ? startIndex : 0;
   const ov = document.createElement('div');
   ov.className = 'overlay lightbox-overlay';
   const desc = String(description||'').trim();
+  function clinicalBandFor(item){
+    if (typeof resolveClinicalCase !== 'function' || !item) return '';
+    try {
+      const c = resolveClinicalCase(item);
+      return typeof clinicalCaseImageBandHtml === 'function' ? clinicalCaseImageBandHtml(c) : '';
+    } catch (err) { console.warn('Falha ao resolver contexto clínico do lightbox.', err); return ''; }
+  }
+  const initialBand = clinicalBandFor(navList[navIdx]);
   const navBtnStyle = 'position:absolute;top:50%;transform:translateY(-50%);z-index:5;width:38px;height:38px;border-radius:50%;border:none;background:rgba(6,10,14,.6);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;';
   ov.innerHTML = `<div class="lightbox-content">
+      <div class="lightbox-clinical-host" ${initialBand ? '' : 'hidden'}>${initialBand}</div>
       <div class="lightbox-stage" style="position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:40vh;max-height:70vh;">
         <img src="${src}" class="lightbox-img" draggable="false">
         ${hasNav ? `<button type="button" class="lightbox-nav-prev" aria-label="Imagem anterior" style="${navBtnStyle}left:8px;">‹</button>
@@ -18657,9 +18863,19 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate){
     if(descEl){ descEl.hidden = !newDesc; descEl.textContent = newDesc; }
     const counterEl = lbFind('.lightbox-nav-counter');
     if(counterEl) counterEl.textContent = (navIdx + 1) + ' / ' + navList.length;
+    // lrev_muqw07yj_w2yirw — contexto clínico re-resolvido POR IMAGEM a cada
+    // navegação (nunca fica "preso" na imagem com que o lightbox abriu).
+    const clinicalHost = lbFind('.lightbox-clinical-host');
+    if(clinicalHost){
+      const bandHtml = clinicalBandFor(item);
+      clinicalHost.innerHTML = bandHtml;
+      clinicalHost.hidden = !bandHtml;
+      if(bandHtml && typeof wireClinicalCasePresentations === 'function') wireClinicalCasePresentations(clinicalHost);
+    }
     if(typeof onNavigate === 'function') onNavigate(navIdx);
     zbReset();
   }
+  if(initialBand && typeof wireClinicalCasePresentations === 'function') wireClinicalCasePresentations(ov);
   if(hasNav){
     const prevBtn = lbFind('.lightbox-nav-prev');
     const nextBtn = lbFind('.lightbox-nav-next');
@@ -20327,6 +20543,32 @@ function canonicalTagVocabulary(catalog){
     });
   });
   return map;
+}
+
+// TAXO-05 — sugestão de tags GENÉRICA para qualquer lesão (nova ou em
+// edição), reaproveitando a mesma técnica já aprovada/em produção para
+// importação do Radiopaedia (canonicalTagVocabulary + tokenizeExternalTitle,
+// ver suggestExternalTags acima) — nunca inventa um tag fora do vocabulário
+// já usado no catálogo (DATA), nunca sugere um tag que a lesão já tem, nunca
+// muta `entry`/`catalog`, nunca persiste nada. Determinístico: a mesma
+// entrada sempre produz a mesma saída. A entrada aceita tanto uma lesão real
+// quanto um rascunho do formulário ({name, s, site, notes, tags}).
+const SUGGEST_TAGS_MAX = 10;
+function suggestTagsForLesion(entry, catalog){
+  const data = Array.isArray(catalog) ? catalog : [];
+  const vocab = canonicalTagVocabulary(data);
+  const existingNormalized = new Set((Array.isArray(entry && entry.tags) ? entry.tags : []).map(normalizeExternalTitle));
+  const textParts = [entry && entry.name, entry && entry.s, entry && entry.site, entry && entry.notes].filter(t => typeof t === 'string' && t.trim());
+  const hay = new Set(tokenizeExternalTitle(textParts.join(' ')));
+  const out = [];
+  if (!hay.size) return out; // sem nenhum texto ainda — nada a sugerir
+  vocab.forEach((spelling, normKey) => {
+    if (out.length >= SUGGEST_TAGS_MAX) return;
+    if (existingNormalized.has(normKey)) return; // já é tag da lesão — nunca sugere de novo
+    const need = tokenizeExternalTitle(spelling);
+    if (need.length && need.every(t => hay.has(t))) out.push(spelling);
+  });
+  return out;
 }
 
 // Tags conservadoras em PT: nome confiável + contexto forte + modalidade
@@ -22672,6 +22914,46 @@ function wireClinicalCasePresentations(root){
     el.onclick = toggle;
     el.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); } };
   });
+}
+
+/* ---------- lrev_muqw07yj_w2yirw — resumo clínico na MARGEM SUPERIOR da
+   imagem (descrição da imagem continua na margem inferior, inalterada).
+   Reaproveita a MESMA resolução imagem->caso já usada e testada no Quiz
+   (093d, getQuizClinicalCaseForImage): 1 caso vinculado -> ele; 2+ sem
+   escolha explícita -> NENHUM (nunca mistura pacientes). Só que aqui,
+   diferente do Quiz, um vínculo ambíguo gera um console.warn explícito (o
+   Quiz fica silencioso de propósito; aqui, fora do fluxo de estudo, vale a
+   pena avisar). Puramente leitura: nunca cria/edita/exclui clinicalCases,
+   imageRefs ou images; nunca chama saveData(); nunca grava nada. */
+function clinicalCaseLinkedToImage(entry, image){
+  if (typeof getQuizClinicalCaseForImage !== 'function') return null;
+  const resolved = getQuizClinicalCaseForImage(entry, image);
+  if (resolved) return resolved;
+  if (typeof getClinicalCasesForImage === 'function') {
+    const candidates = getClinicalCasesForImage(entry, image);
+    if (candidates.length > 1) {
+      console.warn('Imagem com mais de um caso clínico vinculado sem escolha explícita ("Contexto do Quiz para esta imagem") — nenhum resumo clínico exibido, para nunca misturar pacientes diferentes. Lesão: "' + (entry && entry.name) + '".');
+    }
+  }
+  return null;
+}
+// Faixa compacta: linha 1 = idade · sexo; linha 2 = história clínica
+// (presentation), clampada com o MESMO componente já usado no card do caso
+// clínico (clinicalCasePresentationHtml/wireClinicalCasePresentations) —
+// mesma proporção visual, nada reinventado. Campo ausente = omitido. Sem
+// nenhum dado útil (nem idade/sexo, nem presentation) = '' (nunca uma faixa
+// vazia). Nunca infere/inventa — só lê patientAge/patientSex/presentation
+// exatamente como já existem em clinicalCases[].
+function clinicalCaseImageBandHtml(clinicalCase){
+  if (!clinicalCase || typeof clinicalCase !== 'object') return '';
+  const age = clinicalCase.patientAge ? (/^\d{1,3}$/.test(clinicalCase.patientAge) ? clinicalCase.patientAge + ' anos' : clinicalCase.patientAge) : '';
+  const pac = [age, clinicalCase.patientSex || ''].filter(Boolean).join(' · ');
+  const presentationHtml = clinicalCasePresentationHtml(clinicalCase.presentation);
+  if (!pac && !presentationHtml) return '';
+  return '<div class="detail-img-clinical-band">'
+    + (pac ? '<div class="detail-img-clinical-pac">' + escAttr(pac) + '</div>' : '')
+    + presentationHtml
+    + '</div>';
 }
 /* ---------- Edição (formulário da lesão): lista por área + editor por item.
    Tudo é DRAFT até o Salvar do formulário (mesmo padrão de links/
