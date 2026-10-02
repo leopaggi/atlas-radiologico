@@ -9712,7 +9712,8 @@ const SAFETY_SNAPSHOT_RISK_REASONS = [
   'antes de corrigir classificações inválidas',
   'antes de migrar sítio de lesão',
   'antes da fusão clínica controlada de duplicatas aprovadas', // PROTEÇÃO 091c
-  'antes de aplicar decisões de auditoria de tags'
+  'antes de aplicar decisões de auditoria de tags',
+  'antes de aplicar migração de atributos taxonômicos' // TAXO-04C0B — reservado para a futura 1ª escrita real de attributes, ainda não chamado nesta rodada
 ];
 function isRiskSnapshotReason(reason){ return SAFETY_SNAPSHOT_RISK_REASONS.includes(reason); }
 

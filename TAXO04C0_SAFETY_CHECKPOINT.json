@@ -1,0 +1,36 @@
+{
+  "generatedAt": "2026-10-02T01:31:57.936Z",
+  "checkpointType": "pre-attributes",
+  "atlasCommit": "78e23f27461f3e508821535a34f57ef0fb3b0774",
+  "taxonomyVersion": 2,
+  "taxonomyReleaseLabel": "1.1",
+  "lesionCount": 1210,
+  "externalBackup": {
+    "file": "ATLAS_FULL_BACKUP_PRE_ATTRIBUTES_2026-10-01_22-26-09.json",
+    "dataSha256": "f752b7381404cc4339eb4114213321c102737f53e0ef9ca389639b5667ab8541",
+    "fileSha256": "3d180146b8a1a007eedaf8b45b54f5386099d3cce1e30b9653a396011c5451b5",
+    "validated": true,
+    "validatedBy": "tools/validate-pre-attributes-backup.js",
+    "restoreSimulationPassed": true
+  },
+  "internalSnapshot": {
+    "created": false,
+    "id": null,
+    "validated": false
+  },
+  "validation": {
+    "jsonValid": true,
+    "idsUnique": true,
+    "allIdsPresent": true,
+    "countMatches": true,
+    "dataHashMatches": true,
+    "fileHashMatches": true,
+    "restoreSimulationPassed": true
+  },
+  "notes": [
+    "Este backup (1210 lesões) foi gerado DEPOIS do dry-run TAXO-04A/04B/04B2/04B3, que rodou sobre uma fixture de 1208 lesões reconstruída de TAXO03_LIVE_TAG_SNAPSHOT.json. Existem 2 lesões novas em relação àquele dry-run.",
+    "Os números 625 auto-ready / 267 review-required / 316 no-structured-mapping são baseline histórica sobre 1208 lesões e NÃO autorizam aplicação sobre as 1210 lesões deste backup.",
+    "Antes de qualquer apply real, é requisito bloqueante rodar um novo dry-run (TAXO-04C1) sobre as 1210 lesões deste backup validado.",
+    "internalSnapshot ainda não foi criado nesta rodada (TAXO-04C0B) — aguardando autorização explícita do usuário."
+  ]
+}
