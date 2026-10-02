@@ -201,8 +201,16 @@ test('13. integração real: seed_365 (2 imagens, 2 casos) resolve 1:1 sem ambig
 
 /* ===================== descrição inferior continua intacta ===================== */
 
-test('14. a descrição inferior (.detail-img-label) continua renderizada exatamente como antes', () => {
-  assert.ok(html.includes('img.label?`<div class="detail-img-label">${esc(img.label)}</div>`'));
+// lrev — UX "simplificar miniaturas na visão panorâmica": decisão posterior
+// e deliberada removeu a descrição (.detail-img-label) de BAIXO da miniatura
+// nesta view (ela só mostra a imagem agora). Não é regressão: o dado
+// (img.label) e a descrição continuam disponíveis no lightbox (os testes
+// desta mesma suíte acima, ex. "anos" em clinicalCaseImageBandHtml) e no
+// editor (tests/image-description.test.js) — só não aparecem mais embaixo
+// da miniatura da galeria panorâmica.
+test('14. a descrição inferior (.detail-img-label) foi removida da galeria panorâmica de propósito (UX), mas continua no lightbox/editor', () => {
+  const openDetailSrc = extractFunction('openDetail');
+  assert.ok(!openDetailSrc.includes('detail-img-label'), 'a galeria panorâmica não deveria mais ter a caixa de descrição');
 });
 
 test('15. attributes/tags não são afetados — nenhuma referência a attributes/tags na região da faixa clínica', () => {

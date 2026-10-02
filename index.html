@@ -14971,37 +14971,19 @@ function openDetail(id, opts){
       const all=imgs.length?imgs:(e.img?[{data:e.img,label:''}]:[]);
       const renderDetailGallery = ()=>{
       const cur = DATA.find(x=>x.id===id) || e;
-      gal.innerHTML=all.map((img,i)=>`<div class="detail-img-item"><img src="${img.data}" data-idx="${i}">${img.label?`<div class="detail-img-label">${esc(img.label)}</div>`:''}${imageLinkButtonHtml(didacticListsOfEntry(cur), img, `data-link-idx="${i}"`)}</div>`).join('');
+      // UX — miniaturas da visão panorâmica mostram SOMENTE a imagem (sem
+      // legenda/descrição nem o botão "🔗 Vincular a…" por baixo). Nada de
+      // dado é removido: img.label/imageRefs/clinicalCases continuam
+      // intactos e disponíveis no lightbox (clique na imagem) e no editor
+      // (openForm), que têm sua própria renderização/botão de vínculo
+      // independentes desta galeria.
+      gal.innerHTML=all.map((img,i)=>`<div class="detail-img-item"><img src="${img.data}" data-idx="${i}"></div>`).join('');
       gal.querySelectorAll('img').forEach(imgEl=>{
         // lrev_muqw07yj_w2yirw — contexto clínico SÓ no lightbox maximizado,
         // nunca na galeria normal do detalhe (decisão revisada). O resolver
         // reaproveita clinicalCaseLinkedToImage (093d), nunca duplica a
         // lógica de vínculo/ambiguidade.
         imgEl.addEventListener('click', ()=>{ const idx=+imgEl.dataset.idx; const it=all[idx]; openImageLightbox(it.data, it.label, all, idx, null, (item)=>clinicalCaseLinkedToImage(cur, item)); });
-      });
-      // Expandir/recolher é só apresentação (classe CSS) — nunca muta
-      // img.label/DATA; o texto completo já está no DOM o tempo todo.
-      gal.querySelectorAll('.detail-img-label').forEach(labelEl=>{
-        labelEl.addEventListener('click', ()=> labelEl.classList.toggle('expanded'));
-      });
-      // PROTEÇÃO 093b — 🔗 Vincular a… : grava só os vínculos (imageRefs)
-      // na própria lesão, por clique; a imagem fica onde está (galeria).
-      gal.querySelectorAll('[data-link-idx]').forEach(btn=>{
-        btn.addEventListener('click', (ev)=>{
-          ev.stopPropagation();
-          const img = all[+btn.getAttribute('data-link-idx')];
-          const target = DATA.find(x=>x.id===id);
-          if(!target || !img) return;
-          openImageLinkPicker({ image: img, lists: didacticListsOfEntry(target), onApply: async (res)=>{
-            const t2 = DATA.find(x=>x.id===id);
-            if(!t2 || !commitDidacticLinkChanges(t2, res)) return;
-            await saveData();
-            const host = ov.querySelector('.didactic-detail-host');
-            if(host){ host.innerHTML = clinicalCasesSectionHtml(t2) + radiologicSignsSectionHtml(t2) + classificationSchemesSectionHtml(t2); wireClinicalCasesToggle(ov, t2); wireDidacticImages(host); }
-            renderDetailGallery();
-            toast('Vínculo salvo — a imagem continua na galeria da lesão.');
-          }});
-        });
       });
       };
       renderDetailGallery();

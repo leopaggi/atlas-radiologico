@@ -240,7 +240,10 @@ test('093b 17-18: "Vincular ao último caso clínico" (só por clique); nada vin
     assert.doesNotMatch(extractFunction(html, fn), /linkImageRef|linkImageToLatestClinicalCase|applyImageLinkSelection|migrateLegacyDidacticImages/, fn + ' não vincula/migra sozinho');
   }
   const outside = html.replace(MODULE, '');
-  assert.equal((outside.match(/openImageLinkPicker\(\{/g) || []).length, 2, 'só os 2 botões 🔗 (galeria do detalhe e do formulário)');
+  // lrev — simplificação das miniaturas na visão panorâmica: a galeria do
+  // detalhe (renderDetailGallery) não mostra mais o botão 🔗 (só a imagem);
+  // o vínculo continua funcional e só existe agora no editor (formulário).
+  assert.equal((outside.match(/openImageLinkPicker\(\{/g) || []).length, 1, 'só o botão 🔗 do formulário (editor) — a galeria do detalhe agora mostra só a imagem');
 });
 
 // ------------------------------------------------------------ SYNC

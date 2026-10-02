@@ -144,13 +144,19 @@ test('QUADRO: a descrição geral continua um <textarea> sem limite artificial, 
 // 5) DETALHE DA LESÃO — já mostrava a descrição; troca de escaping + lightbox
 // ===========================================================================
 
-test('DETALHE: usa esc() (escapa & também) em vez do replace manual só de "<"', () => {
-  assert.match(openDetailFn.body, /\$\{img\.label\?`<div class="detail-img-label">\$\{esc\(img\.label\)\}<\/div>`:''\}/);
-  assert.doesNotMatch(openDetailFn.body, /img\.label\.replace\(\/</);
+// lrev — UX "simplificar miniaturas na visão panorâmica": a galeria do
+// detalhe (renderDetailGallery, dentro de openDetail) passou a mostrar
+// SOMENTE a imagem — a caixa de descrição (.detail-img-label) saiu dessa
+// view (com ou sem label). O dado (img.label) e o escaping com esc() nunca
+// deixaram de existir — continuam no lightbox (abaixo) e no editor (acima),
+// só não aparecem mais sob a miniatura da visão panorâmica.
+test('DETALHE: a galeria panorâmica não mostra mais a caixa de descrição (.detail-img-label), com ou sem label', () => {
+  assert.doesNotMatch(openDetailFn.body, /detail-img-label/, 'a miniatura da visão panorâmica deve mostrar só a imagem');
 });
 
-test('DETALHE: continua sem mostrar caixa quando não há descrição', () => {
-  assert.match(openDetailFn.body, /img\.label\?`<div class="detail-img-label">/, 'só renderiza a div quando há label');
+test('DETALHE: o template da miniatura panorâmica é só a <img> (sem legenda nem botão de vínculo por baixo)', () => {
+  assert.match(openDetailFn.body, /gal\.innerHTML=all\.map\(\(img,i\)=>`<div class="detail-img-item"><img src="\$\{img\.data\}" data-idx="\$\{i\}"><\/div>`\)\.join\(''\);/);
+  assert.doesNotMatch(openDetailFn.body, /imageLinkButtonHtml\(didacticListsOfEntry\(cur\)/, 'o botão 🔗 Vincular não deveria mais aparecer nesta galeria');
 });
 
 test('DETALHE: clicar na imagem no grid abre o lightbox já com a descrição (sem gate — não é contexto de quiz)', () => {
@@ -301,27 +307,16 @@ test('SYNC: label continua um campo comum do objeto de imagem — viaja por spre
 //    no lightbox e no Quiz pós-resposta. NADA de lógica/gate foi tocado.
 // ===========================================================================
 
-test('DETALHE/CLAMP: a apresentação limita a 2 linhas via CSS puro (line-clamp) — o DOM continua com o texto INTEIRO', () => {
-  const rule = html.match(/\.detail-img-label\{([^}]*)\}/);
-  assert.ok(rule, 'regra .detail-img-label não encontrada');
-  assert.match(rule[1], /-webkit-line-clamp:\s*2/, 'precisa clampar visualmente em 2 linhas por padrão');
-  assert.match(rule[1], /overflow:\s*hidden/);
-  const expandedRule = html.match(/\.detail-img-label\.expanded\{([^}]*)\}/);
-  assert.ok(expandedRule, 'regra .detail-img-label.expanded não encontrada');
-  assert.match(expandedRule[1], /-webkit-line-clamp:\s*unset/, 'expandido precisa remover o clamp');
-  // A renderização em si (esc(img.label)) não muda — continua sendo o
-  // texto completo escapado; o clamp é 100% apresentação (CSS), nunca corta
-  // a string.
-  assert.match(openDetailFn.body, /\$\{esc\(img\.label\)\}/, 'o markup continua recebendo o label INTEIRO, sem slice/substring');
-  assert.doesNotMatch(openDetailFn.body, /img\.label\.slice\(|img\.label\.substring\(|img\.label\.substr\(/, 'nenhum truncamento de dado — só CSS');
-});
-
-test('DETALHE/CLAMP: clicar na descrição alterna .expanded (puro toggle de classe — nunca muta img.label/DATA)', () => {
-  assert.match(openDetailFn.body, /labelEl\.addEventListener\('click', \(\)=> labelEl\.classList\.toggle\('expanded'\)\);/);
-  // Garante que esse handler NÃO grava nada em DATA/img/saveData — é só UI.
-  const wireMatch = openDetailFn.body.match(/gal\.querySelectorAll\('\.detail-img-label'\)\.forEach\(labelEl=>\{([\s\S]*?)\}\);/);
-  assert.ok(wireMatch, 'wiring do toggle de expandir/recolher não encontrado');
-  assert.doesNotMatch(wireMatch[1], /\.label\s*=|saveData\(|DATA\[|img\.label\s*=/, 'expandir/recolher não pode alterar dado nenhum');
+// lrev — o clamp/expandir de 2 linhas descrito abaixo existia SÓ na galeria
+// panorâmica do detalhe, removida junto com a caixa de descrição (ver teste
+// acima). A regra CSS (.detail-img-label/.detail-img-label.expanded) foi
+// deixada no arquivo (não usada por nenhum template agora) para não ampliar
+// o diff além do necessário; o que importa pra este teste é que a função
+// openDetail não tem MAIS nenhum wiring de clamp/expand (nada pra alternar
+// numa caixa que não existe mais nessa view).
+test('DETALHE/CLAMP: a galeria panorâmica não tem mais wiring de clamp/expand (a caixa que ele controlava não existe mais aqui)', () => {
+  assert.doesNotMatch(openDetailFn.body, /classList\.toggle\('expanded'\)/, 'sem caixa de descrição nesta view, não há o que expandir/recolher');
+  assert.doesNotMatch(openDetailFn.body, /detail-img-label/);
 });
 
 test('DETALHE/CLAMP (dinâmico): a classe alterna entre presente/ausente a cada clique (expande e recolhe)', () => {
