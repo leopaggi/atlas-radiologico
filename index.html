@@ -20683,6 +20683,67 @@ function canonicalTagVocabulary(catalog){
   return map;
 }
 
+// CORREÇÃO DE QUALIDADE — SUGESTÃO DE TAGS COM DIFERENCIAIS: o piloto de
+// revisão de descrições (padrão típico + diferenciais principais +
+// pontos-chave) mostrou que suggestTagsForLesion/suggestClinicalTagsForLesion
+// tokenizavam as notas INTEIRAS — então um achado citado só pra dizer "isso
+// NÃO é esta lesão, é o diferencial X" virava candidato a tag DA lesão
+// (ex.: "Colecistite aguda" sugeria "crônico"/"focal" só porque esses termos
+// apareciam na frase do diferencial "vesícula em porcelana"/"adenomiomatose").
+// extractPrimaryLesionText() remove as frases rotuladas como diferencial
+// ANTES de qualquer sugestão — tanto o formato já usado no catálogo
+// ("Diferenciais-chave: ...") quanto blocos com heading própria (PADRÃO
+// TÍPICO / DIFERENCIAIS PRINCIPAIS / PONTOS-CHAVE, com ou sem acento/maiús-
+// culas). Se nenhum rótulo reconhecido existir no texto, devolve as notas
+// EXATAMENTE como vieram (compatibilidade total com notas antigas sem essa
+// estrutura — nenhuma mudança de comportamento pra elas).
+const DIFFERENTIAL_BLOCK_HEADING = /(?:^|\n)[ \t]*Diferencia(?:l|is)(?:\s+principa(?:l|is))?[ \t]*\n([\s\S]*?)(?=\n[ \t]*(?:Pontos?[\s-]chave|Padr[ãa]o(?:\s+t[íi]pico)?)[ \t]*(?:\n|$)|$)/gi;
+const DIFFERENTIAL_LABEL_SENTENCE = /(?:^|(?<=[.!?]\s)|(?<=\n))[ \t]*Diferencia(?:l|is)(?:-chave)?(?:\s+principa(?:l|is))?(?:\s+com\s+[^:\n]{1,120})?[ \t]*:[^.!?\n]*[.!?]?/gi;
+// Marcador comparativo INLINE (sem o rótulo "Diferencial(is)...:" por
+// extenso, mas com a mesma função — contrastar com outro diagnóstico dentro
+// da própria frase do padrão típico, ex.: "...o que diferencia de isquemia
+// aguda."). Lista pequena e fechada, nunca um fuzzy genérico; remove do
+// marcador até o fim da frase.
+const DIFFERENTIAL_INLINE_MARKER = /\b(?:o que diferencia de|diferente de|em vez de|ao contrário de|a favor de)\b[^.!?\n]*[.!?]?/gi;
+function extractPrimaryLesionText(notes){
+  const original = String(notes == null ? '' : notes);
+  let text = original;
+  let changed = false;
+  if (DIFFERENTIAL_BLOCK_HEADING.test(text)) {
+    DIFFERENTIAL_BLOCK_HEADING.lastIndex = 0;
+    text = text.replace(DIFFERENTIAL_BLOCK_HEADING, ' ');
+    changed = true;
+  }
+  if (DIFFERENTIAL_LABEL_SENTENCE.test(text)) {
+    DIFFERENTIAL_LABEL_SENTENCE.lastIndex = 0;
+    text = text.replace(DIFFERENTIAL_LABEL_SENTENCE, ' ');
+    changed = true;
+  }
+  if (DIFFERENTIAL_INLINE_MARKER.test(text)) {
+    DIFFERENTIAL_INLINE_MARKER.lastIndex = 0;
+    text = text.replace(DIFFERENTIAL_INLINE_MARKER, ' ');
+    changed = true;
+  }
+  if (!changed) return original;
+  return text.replace(/\s+/g, ' ').trim();
+}
+// Proteção de negação (reforçada a partir do mesmo piloto — ex.: "Malrotação
+// intestinal" sugeria "sinal do C" só porque o padrão típico diz "SEM o C
+// duodenal normal"): remove o trecho entre o marcador de negação e a próxima
+// pontuação/fim da frase, pra um achado só citado como AUSENTE não entrar
+// como candidato. Cobre os marcadores mais comuns do português clínico do
+// Atlas; nunca reinterpreta a frase, só apaga o texto entre o marcador e a
+// próxima vírgula/ponto/fim — sem fuzzy genérico.
+const NEGATION_MARKER = /\b(?:sem|n[ãa]o|nem|ausência de|ausencia de|negativo para)\b[^,;:.!?\n]*/gi;
+function stripNegatedClauses(text){
+  return String(text == null ? '' : text).replace(NEGATION_MARKER, ' ').replace(/\s+/g, ' ').trim();
+}
+// Composição usada pelos dois motores de sugestão abaixo: primeiro remove
+// os diferenciais, depois remove cláusulas negadas do que restou.
+function primaryLesionTextForSuggestions(notes){
+  return stripNegatedClauses(extractPrimaryLesionText(notes));
+}
+
 // TAXO-05 — sugestão de tags GENÉRICA para qualquer lesão (nova ou em
 // edição), reaproveitando a mesma técnica já aprovada/em produção para
 // importação do Radiopaedia (canonicalTagVocabulary + tokenizeExternalTitle,
@@ -20690,13 +20751,15 @@ function canonicalTagVocabulary(catalog){
 // já usado no catálogo (DATA), nunca sugere um tag que a lesão já tem, nunca
 // muta `entry`/`catalog`, nunca persiste nada. Determinístico: a mesma
 // entrada sempre produz a mesma saída. A entrada aceita tanto uma lesão real
-// quanto um rascunho do formulário ({name, s, site, notes, tags}).
+// quanto um rascunho do formulário ({name, s, site, notes, tags}). O texto
+// das notas passa por primaryLesionTextForSuggestions() antes de tokenizar —
+// diferenciais e cláusulas negadas nunca geram candidato a tag.
 const SUGGEST_TAGS_MAX = 10;
 function suggestTagsForLesion(entry, catalog){
   const data = Array.isArray(catalog) ? catalog : [];
   const vocab = canonicalTagVocabulary(data);
   const existingNormalized = new Set((Array.isArray(entry && entry.tags) ? entry.tags : []).map(normalizeExternalTitle));
-  const textParts = [entry && entry.name, entry && entry.s, entry && entry.site, entry && entry.notes].filter(t => typeof t === 'string' && t.trim());
+  const textParts = [entry && entry.name, entry && entry.s, entry && entry.site, primaryLesionTextForSuggestions(entry && entry.notes)].filter(t => typeof t === 'string' && t.trim());
   const hay = new Set(tokenizeExternalTitle(textParts.join(' ')));
   const out = [];
   if (!hay.size) return out; // sem nenhum texto ainda — nada a sugerir
@@ -20738,8 +20801,9 @@ const CLINICAL_CONCEPT_ALIASES = {
 // variante de gênero/alias controlado acima), nunca do catálogo DATA. É uma
 // função SEPARADA de suggestTagsForLesion — o contrato daquela (vocabulário =
 // tags já usadas no catálogo) não muda em nada. Mesma técnica/limitações do
-// motor radiológico (tokenização simples, sem detecção de negação —
-// paridade com suggestTagsForLesion, que também não tem), pura,
+// motor radiológico (tokenização simples; negação/diferenciais filtrados por
+// primaryLesionTextForSuggestions() — ver comentário acima de
+// extractPrimaryLesionText), pura,
 // determinística, nunca muta entry/taxonomy, nunca persiste, nunca sugere um
 // clinicalTag duplicado ou já presente na lesão. Funciona tanto pra lesão
 // nova quanto em edição — quem decide quando chamar é o formulário.
@@ -20748,7 +20812,7 @@ function suggestClinicalTagsForLesion(entry, taxonomy){
   const out = [];
   if (!taxonomy || !Array.isArray(taxonomy.concepts)) return out;
   const existingNormalized = new Set((Array.isArray(entry && entry.clinicalTags) ? entry.clinicalTags : []).map(normalizeExternalTitle));
-  const textParts = [entry && entry.name, entry && entry.s, entry && entry.site, entry && entry.notes].filter(t => typeof t === 'string' && t.trim());
+  const textParts = [entry && entry.name, entry && entry.s, entry && entry.site, primaryLesionTextForSuggestions(entry && entry.notes)].filter(t => typeof t === 'string' && t.trim());
   const hay = new Set(tokenizeExternalTitle(textParts.join(' ')));
   if (!hay.size) return out; // sem nenhum texto ainda — nada a sugerir
   const seen = new Set();

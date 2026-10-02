@@ -128,6 +128,15 @@ test('8. HTML: duas áreas claramente separadas — TAGS RADIOLÓGICAS SUGERIDAS
 
 /* ===================== 2. MOTOR DE SUGESTÃO — mesmas garantias do openForm ===================== */
 
+// Linha inteira (não só até o 1º ";") — alguns consts são regex literais com
+// ";" DENTRO da classe de caracteres (ex.: NEGATION_MARKER), o que faria um
+// "indexOf/match não-greedy até o 1º ;" cortar no meio da própria regex.
+function extractConstFullLine(name) {
+  const m = new RegExp(`^const ${name} = .*;$`, 'm').exec(html);
+  assert.ok(m, `const ${name} nao encontrada`);
+  return m[0];
+}
+
 const DEPS = ['normalizeExternalTitle', 'tokenizeExternalTitle'];
 const depsSrc = DEPS.map(n => extractFunction(n)).join('\n');
 const stopwordsSrc = (() => { const m = /const EXTERNAL_IMPORT_STOPWORDS\s*=.*?;/.exec(html); assert.ok(m); return m[0]; })();
@@ -135,11 +144,23 @@ const genderVariantSrc = extractFunction('clinicalAdjectiveGenderVariant');
 const aliasesSrc = (() => { const m = /const CLINICAL_CONCEPT_ALIASES = \{[\s\S]*?\n\};/.exec(html); assert.ok(m); return m[0]; })();
 const maxConstSrc = (() => { const m = /const SUGGEST_CLINICAL_TAGS_MAX\s*=\s*\d+;/.exec(html); assert.ok(m); return m[0]; })();
 const sugSrc = extractFunction('suggestClinicalTagsForLesion');
+// CORREÇÃO DE QUALIDADE (filtro de diferenciais) — suggestClinicalTagsForLesion
+// agora passa as notas por primaryLesionTextForSuggestions antes de tokenizar.
+const diffBlockSrc = extractConstFullLine('DIFFERENTIAL_BLOCK_HEADING');
+const diffSentenceSrc = extractConstFullLine('DIFFERENTIAL_LABEL_SENTENCE');
+const diffInlineSrc = extractConstFullLine('DIFFERENTIAL_INLINE_MARKER');
+const extractPrimarySrc = extractFunction('extractPrimaryLesionText');
+const negationMarkerSrc = extractConstFullLine('NEGATION_MARKER');
+const stripNegatedSrc = extractFunction('stripNegatedClauses');
+const primaryForSuggestionsSrc = extractFunction('primaryLesionTextForSuggestions');
 
 function loadClinicalSuggestEngine() {
   const ctx = vm.createContext({ console });
   vm.runInContext(
-    stopwordsSrc + '\n' + depsSrc + '\n' + genderVariantSrc + '\n' + aliasesSrc + '\n' + maxConstSrc + '\n' + sugSrc + '\n' +
+    stopwordsSrc + '\n' + depsSrc + '\n' +
+    diffBlockSrc + '\n' + diffSentenceSrc + '\n' + diffInlineSrc + '\n' + extractPrimarySrc + '\n' +
+    negationMarkerSrc + '\n' + stripNegatedSrc + '\n' + primaryForSuggestionsSrc + '\n' +
+    genderVariantSrc + '\n' + aliasesSrc + '\n' + maxConstSrc + '\n' + sugSrc + '\n' +
     'this.__suggest = suggestClinicalTagsForLesion;',
     ctx
   );

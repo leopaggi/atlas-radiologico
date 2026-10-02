@@ -49,10 +49,12 @@ function extractFunction(name, src) {
   return source.slice(declaration.index, openingBrace) + extractBlock(source, openingBrace);
 }
 function extractConst(name) {
-  const decl = new RegExp('\\bconst\\s+' + name + '\\s*=').exec(html);
-  assert.ok(decl, `const ${name} nao encontrada`);
-  const semi = html.indexOf(';', decl.index);
-  return html.slice(decl.index, semi + 1);
+  // Linha inteira (não só até o 1º ";") — alguns consts são regex literais
+  // com ";" DENTRO da classe de caracteres (ex.: NEGATION_MARKER), o que
+  // faria indexOf(';', ...) cortar no meio da própria regex.
+  const m = new RegExp(`^const ${name} = .*;$`, 'm').exec(html);
+  assert.ok(m, `const ${name} nao encontrada`);
+  return m[0];
 }
 function stripJsComments(src) {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^\S\n])\/\/[^\n]*/gm, '$1');
@@ -68,6 +70,15 @@ const aliasesSrc = (() => { const m = /const CLINICAL_CONCEPT_ALIASES = \{[\s\S]
 const sugSrc = extractFunction('suggestClinicalTagsForLesion');
 const radSrc = extractFunction('suggestTagsForLesion');
 const canonVocabSrc = extractFunction('canonicalTagVocabulary');
+// CORREÇÃO DE QUALIDADE (filtro de diferenciais) — ambos os motores agora
+// passam as notas por primaryLesionTextForSuggestions antes de tokenizar.
+const diffBlockSrc = extractConst('DIFFERENTIAL_BLOCK_HEADING');
+const diffSentenceSrc = extractConst('DIFFERENTIAL_LABEL_SENTENCE');
+const diffInlineSrc = extractConst('DIFFERENTIAL_INLINE_MARKER');
+const extractPrimarySrc = extractFunction('extractPrimaryLesionText');
+const negationMarkerSrc = extractConst('NEGATION_MARKER');
+const stripNegatedSrc = extractFunction('stripNegatedClauses');
+const primaryForSuggestionsSrc = extractFunction('primaryLesionTextForSuggestions');
 const maxConstSrc = (() => {
   const decl = /const SUGGEST_CLINICAL_TAGS_MAX\s*=\s*\d+;/.exec(html);
   assert.ok(decl);
@@ -82,7 +93,10 @@ const radMaxConstSrc = (() => {
 function loadApi() {
   const ctx = vm.createContext({ console });
   vm.runInContext(
-    stopwordsSrc + '\n' + depsSrc + '\n' + genderVariantSrc + '\n' + aliasesSrc + '\n' + maxConstSrc + '\n' + sugSrc + '\n' +
+    stopwordsSrc + '\n' + depsSrc + '\n' +
+    diffBlockSrc + '\n' + diffSentenceSrc + '\n' + diffInlineSrc + '\n' + extractPrimarySrc + '\n' +
+    negationMarkerSrc + '\n' + stripNegatedSrc + '\n' + primaryForSuggestionsSrc + '\n' +
+    genderVariantSrc + '\n' + aliasesSrc + '\n' + maxConstSrc + '\n' + sugSrc + '\n' +
     radMaxConstSrc + '\n' + canonVocabSrc + '\n' + radSrc + '\n' +
     'this.__api = { suggestClinicalTagsForLesion, suggestTagsForLesion };',
     ctx
@@ -471,7 +485,10 @@ const taxoBuildIndicesSrc = extractFunction('taxoBuildIndices');
 const taxoNormalizeTextSrc = extractFunction('taxoNormalizeText');
 const standaloneCtx = vm.createContext({ console });
 vm.runInContext(
-  stopwordsSrc + '\n' + depsSrc + '\n' + genderVariantSrc + '\n' + aliasesSrc + '\n' + maxConstSrc + '\n' + sugSrc + '\n' +
+  stopwordsSrc + '\n' + depsSrc + '\n' +
+  diffBlockSrc + '\n' + diffSentenceSrc + '\n' + diffInlineSrc + '\n' + extractPrimarySrc + '\n' +
+  negationMarkerSrc + '\n' + stripNegatedSrc + '\n' + primaryForSuggestionsSrc + '\n' +
+  genderVariantSrc + '\n' + aliasesSrc + '\n' + maxConstSrc + '\n' + sugSrc + '\n' +
   taxoNormalizeTextSrc + '\n' + taxoBuildIndicesSrc + '\n' +
   'this.__api2 = { suggestClinicalTagsForLesion, taxoBuildIndices };',
   standaloneCtx

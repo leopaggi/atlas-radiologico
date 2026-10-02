@@ -45,10 +45,12 @@ function extractFunction(name) {
   return html.slice(declaration.index, openingBrace) + extractBlock(html, openingBrace);
 }
 function extractConst(name) {
-  const declaration = new RegExp(`\\bconst\\s+${name}\\s*=`).exec(html);
-  assert.ok(declaration, `Constante ${name} nao encontrada`);
-  const semi = html.indexOf(';', declaration.index);
-  return html.slice(declaration.index, semi + 1);
+  // Linha inteira (não só até o 1º ";") — alguns consts são regex literais
+  // com ";" DENTRO da classe de caracteres (ex.: NEGATION_MARKER), o que
+  // faria indexOf(';', ...) cortar no meio da própria regex.
+  const m = new RegExp(`^const ${name} = .*;$`, 'm').exec(html);
+  assert.ok(m, `Constante ${name} nao encontrada`);
+  return m[0];
 }
 function stripJsComments(src) {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^\S\n])\/\/[^\n]*/gm, '$1');
@@ -60,6 +62,13 @@ function loadApi() {
     extractFunction('normalizeExternalTitle'),
     extractFunction('tokenizeExternalTitle'),
     extractFunction('canonicalTagVocabulary'),
+    extractConst('DIFFERENTIAL_BLOCK_HEADING'),
+    extractConst('DIFFERENTIAL_LABEL_SENTENCE'),
+    extractConst('DIFFERENTIAL_INLINE_MARKER'),
+    extractFunction('extractPrimaryLesionText'),
+    extractConst('NEGATION_MARKER'),
+    extractFunction('stripNegatedClauses'),
+    extractFunction('primaryLesionTextForSuggestions'),
     extractConst('SUGGEST_TAGS_MAX'),
     extractFunction('suggestTagsForLesion')
   ].join('\n');
