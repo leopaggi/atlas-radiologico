@@ -14,9 +14,11 @@
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
+const { execFileSync } = require('node:child_process');
 
 const INDEX_PATH = path.resolve(__dirname, '..', 'index.html');
 const html = fs.readFileSync(INDEX_PATH, 'utf8');
@@ -203,3 +205,54 @@ test('20. notesDifferentialsHtml nunca retorna Markdown nem grava HTML — é s�
   assert.doesNotMatch(HELPER_SRC, /\*\*|##\s/, 'não introduz sintaxe Markdown');
   assert.doesNotMatch(HELPER_SRC, /\.notes\s*=/, 'nunca escreve de volta em notes');
 });
+
+/* ===================== 4. contraste do nome do diagnóstico ===================== */
+
+test('21. CSS: só o <strong> DENTRO de .notes-differential-item ganha a cor de maior contraste (reaproveita var(--text), nenhuma cor nova)', () => {
+  const rule = /\.notes-differential-item strong\{([^}]*)\}/.exec(html);
+  assert.ok(rule, 'regra .notes-differential-item strong{} precisa existir');
+  assert.match(rule[1], /color:var\(--text\)/, 'reaproveita o token de texto principal do tema, nenhuma cor hardcoded nova');
+  assert.doesNotMatch(rule[1], /#fff|#ffffff|white/i, 'não deveria hardcodar branco quando já existe var(--text) pra isso');
+});
+
+test('22. o seletor é escopado — não muda a cor do rótulo "Diferenciais-chave:" (que fica FORA de .notes-differential-item)', () => {
+  // o <strong>${marker}</strong> é devolvido ANTES e FORA de itemsHtml —
+  // nunca fica dentro de nenhum <div class="notes-differential-item">,
+  // por isso o seletor ".notes-differential-item strong" nunca o alcança.
+  assert.match(HELPER_SRC, /<strong>\$\{esc\(marker\)\}<\/strong>\$\{itemsHtml\}/, 'o <strong> do rótulo é irmão dos itens, não descendente de nenhum deles');
+});
+
+test('23. comportamento real (Chrome headless): o nome do diagnóstico computa a cor de --text; a explicação entre parênteses NÃO recebe essa cor', () => {
+  const chrome = findChrome();
+  if (!chrome) { console.warn('Chrome não encontrado — pulando verificação visual real.'); return; }
+  const api = loadApi();
+  const out = api.notesDifferentialsHtml('Diferenciais-chave: Meningioma (extra-axial, realce intenso).');
+  const cssBlock = [
+    /\.detail-notes\{[^}]*\}/.exec(html)[0],
+    /\.notes-differential-item\{[^}]*\}/.exec(html)[0],
+    /\.notes-differential-item strong\{[^}]*\}/.exec(html)[0]
+  ].join('\n').replace(/var\(--text\)/g, '#E7EEF2').replace(/var\(--muted\)/g, '#8CA0AC');
+  const page = `<!doctype html><html><head><meta charset="utf-8"><style>${cssBlock}</style></head>` +
+    `<body><div class="detail-notes" id="out">${out}</div>` +
+    `<script>const el=document.querySelector('.notes-differential-item strong');` +
+    `const parent=el.closest('.notes-differential-item');` +
+    `document.title='STRONG:'+getComputedStyle(el).color+'|ITEM:'+getComputedStyle(parent).color;` +
+    `</script></body></html>`;
+  const tmpFile = path.join(os.tmpdir(), 'atlas-notes-diff-contrast-check.html');
+  fs.writeFileSync(tmpFile, page, 'utf8');
+  const dump = execFileSync(chrome, ['--headless=new', '--disable-gpu', '--no-sandbox', '--virtual-time-budget=2000', '--dump-dom', 'file:///' + tmpFile.replace(/\\/g, '/')], { encoding: 'utf8' });
+  fs.unlinkSync(tmpFile);
+  const titleMatch = /<title>(.*?)<\/title>/.exec(dump);
+  assert.ok(titleMatch, 'devtools dump precisa conter o <title> com as cores computadas');
+  const [, strongColor, itemColor] = /STRONG:(.*?)\|ITEM:(.*?)$/.exec(titleMatch[1]);
+  assert.equal(strongColor, 'rgb(231, 238, 242)', 'nome do diagnóstico computa exatamente --text (#E7EEF2)');
+  assert.notEqual(itemColor, strongColor, 'a explicação (cor do próprio item/container) continua numa cor diferente, mais discreta');
+  assert.equal(itemColor, 'rgb(140, 160, 172)', 'a explicação continua herdando --muted (#8CA0AC), sem cor nova');
+});
+function findChrome() {
+  const candidates = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+  ];
+  return candidates.find(p => fs.existsSync(p)) || null;
+}
