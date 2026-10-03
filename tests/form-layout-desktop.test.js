@@ -110,7 +110,9 @@ test('8. cards de imagem não quebram (grid lado a lado)', () => {
   const src = formSrc();
   assert.match(src, /class="img-gallery" id="img-gallery"/);
   assert.match(src, /repeat\(auto-fill,minmax\(260px,1fr\)\)/, '2-3 colunas no desktop');
-  assert.match(src, /img-gallery-preset-groups/);
+  // UX — painel grande de sequências/modalidade virou um seletor compacto
+  // (reaproveita collageSeqSelectHtml do construtor de quadro).
+  assert.match(src, /img-gallery-seq-wrap/);
   assert.match(src, /id="img-add-url"/);
 });
 
@@ -118,10 +120,12 @@ test('9. expansores continuam funcionando (recolhidos recentemente)', () => {
   const src = formSrc();
   assert.match(src, /id="f-alt-toggle"/);
   assert.match(src, /id="suggest-toggle"/);
-  assert.match(src, /img-gallery-presets-toggle/);
   assert.match(src, /altToggleLabel\(/);
-  assert.match(src, /expandedPresetGroups/);
   assert.match(src, /renderSuggest\(\)/);
+  // sequências/modalidade não tem mais toggle (sempre visível); o picker
+  // compacto continua presente no mesmo lugar.
+  assert.match(src, /img-gallery-seq-picker/);
+  assert.doesNotMatch(src, /img-gallery-presets-toggle/);
 });
 
 test('11. footer existe no DOM com os dois botões (regressão: abertura do body)', () => {

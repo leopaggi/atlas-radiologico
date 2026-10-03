@@ -81,11 +81,19 @@ test('2. características da imagem (tags atuais) sempre visíveis', () => {
   assert.doesNotMatch(win, /hidden/, 'chip-wrap não está em bloco hidden');
 });
 
-test('3. sequências/modalidade começam recolhidas', () => {
+// UX — o painel grande de sequências/modalidade (toggle + grupos fixos)
+// virou um seletor compacto (reaproveita collageSeqSelectHtml do construtor
+// de quadro) que fica SEMPRE visível — não tem mais estado recolhido/
+// expandido pra esse campo especificamente (chips removíveis + 1 picker).
+test('3. sequências/modalidade: painel grande antigo não existe mais; seletor compacto fica sempre visível (sem toggle)', () => {
   const src = formSrc();
-  assert.match(src, /img-gallery-presets-toggle/);
-  assert.match(src, /aria-expanded="false"[^>]*>▸ Sequências \/ modalidade/);
-  assert.match(src, /<div class="img-gallery-preset-groups" hidden>/);
+  assert.doesNotMatch(src, /img-gallery-presets-toggle/);
+  assert.doesNotMatch(src, /Sequências \/ modalidade/);
+  assert.doesNotMatch(src, /img-gallery-preset-groups/);
+  assert.match(src, /class="img-gallery-seq-wrap"/);
+  const wrapIdx = src.indexOf('img-gallery-seq-wrap');
+  const win = src.slice(Math.max(0, wrapIdx - 400), wrapIdx);
+  assert.doesNotMatch(win, /hidden/, 'o seletor compacto não está dentro de um bloco hidden');
 });
 
 test('4. tags avançadas começam recolhidas (sugestões por grupo)', () => {
@@ -107,10 +115,14 @@ test('5. localização adicional começa recolhida, com contador', () => {
 
 test('6. expandir/recolher alterna hidden + rótulo ▸/▾ (sem tocar dados)', () => {
   const src = formSrc();
+  // UX — o toggle de sequências/modalidade foi removido (painel agora
+  // sempre visível); os toggles restantes (tags avançadas, localização
+  // adicional, contexto clínico por imagem, apresentação clínica) continuam
+  // com a mesma mecânica de sempre.
   const toggles = src.match(/\.hidden = !\w+\.hidden/g) || [];
-  assert.ok(toggles.length >= 3, 'três toggles flipam hidden, achados: ' + toggles.length);
+  assert.ok(toggles.length >= 2, 'toggles restantes flipam hidden, achados: ' + toggles.length);
   assert.match(src, /aria-expanded/);
-  const paintIdx = src.indexOf('const paintPresetToggle');
+  const paintIdx = src.indexOf('function paintClinicalToggle');
   assert.notEqual(paintIdx, -1);
   const paintWin = src.slice(paintIdx, paintIdx + 700);
   assert.match(paintWin, /\.hidden/, 'toggle lê hidden');
@@ -122,8 +134,11 @@ test('6. expandir/recolher alterna hidden + rótulo ▸/▾ (sem tocar dados)', 
 test('7. valores selecionados preservados (chips/labels/intactos)', () => {
   const src = formSrc();
   assert.match(src, /pendingImgs\[idx\]\.label = ev\.target\.value/, 'digitar descrição grava no draft');
-  assert.match(src, /parts\.join\(' · '\)/, 'chips de sequência compõem o label');
-  assert.match(src, /expandedPresetGroups\.has\(img\)/, 'expandido sobrevive ao re-render');
+  assert.match(src, /parts\.join\(' · '\)/, 'remover chip de sequência recompõe o label');
+  // UX — sem estado de expandido/recolhido pra sequências (sempre visível);
+  // os chips já presentes são recalculados a cada render diretamente do
+  // próprio img.label (nunca de um estado paralelo que pudesse ficar stale).
+  assert.match(src, /IMAGE_SEQUENCE_PRESETS\.filter\(p=>currentSeqParts\.includes\(p\)\)/, 'chips vêm sempre do label atual, não de estado separado');
 });
 
 test('8. salvar e reabrir mantém os dados (fluxo de save intocado)', () => {

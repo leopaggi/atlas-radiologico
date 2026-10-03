@@ -465,6 +465,21 @@ body{
 }
 .img-gallery-preset-chip:hover{color:var(--text);border-color:var(--muted-2);}
 .img-gallery-preset-chip.active{background:var(--tag-bg-active);border-color:var(--teal);color:var(--teal);}
+/* UX — seletor compacto de sequência/modalidade (substitui o painel grande
+   de chips fixo: só os já selecionados + um picker pra adicionar mais). */
+.img-gallery-seq-wrap{display:flex;flex-direction:column;gap:5px;margin:6px 0;}
+.img-gallery-seq-chips{display:flex;flex-wrap:wrap;gap:4px;}
+.img-gallery-seq-chips:empty{display:none;}
+.removable-tag.img-gallery-seq-chip{font-size:10.5px;padding:2px 6px 2px 8px;}
+.img-gallery-seq-picker{display:flex;gap:4px;align-items:center;flex-wrap:wrap;}
+.img-gallery-seq-picker select,.img-gallery-seq-picker input{
+  background:var(--panel);border:1px solid var(--line);color:var(--text);
+  font-size:11px;padding:4px 6px;border-radius:4px;font-family:inherit;
+}
+.img-gallery-seq-picker select{cursor:pointer;}
+.img-gallery-seq-picker input{flex:1;min-width:120px;}
+.img-gallery-seq-picker input[hidden]{display:none;}
+.img-gallery-seq-custom-add{height:auto;padding:4px 8px;font-size:11px;}
 .img-gallery-remove{
   position:absolute;top:2px;right:2px;background:rgba(0,0,0,.65);color:#fff;border:none;
   width:18px;height:18px;border-radius:50%;font-size:11px;cursor:pointer;line-height:1;
@@ -15829,10 +15844,10 @@ function openForm(id, opts){
   // estável). Só o que estava aqui e sumiu da galeria vira remoção explícita;
   // o que chegou de outro PC depois é unido no Save, nunca tombstonado.
   let formImagesOpenList = [];
-  // Seletores de sequência/modalidade começam recolhidos por imagem; o
-  // WeakSet preserva o estado expandido entre re-renders (mesmo objeto).
-  // Preview, descrição, tags da imagem e ações ficam sempre visíveis.
-  const expandedPresetGroups = new WeakSet();
+  // Preview, descrição, sequência/modalidade e ações ficam sempre visíveis
+  // (picker compacto, sem painel colapsável). Contexto clínico continua
+  // recolhido por padrão; o WeakSet preserva o estado expandido entre
+  // re-renders (mesmo objeto).
   const expandedClinicalBoxes = new WeakSet(); // PROTEÇÃO 088
   let replaceTargetIdx = null; // se definido, o próximo upload/URL SUBSTITUI esse índice em vez de adicionar
   let imgsChanged = false;
@@ -15840,12 +15855,6 @@ function openForm(id, opts){
   const imgFileInput = document.getElementById('img-file-input');
   const imgBox = document.getElementById('img-upload-box');
   const cloudStatus = document.getElementById('img-cloud-status');
-
-  const IMG_PRESET_GROUPS = [
-    { title: 'RM', items: ["RM T1","RM T2","RM T1 c/ contraste","RM T2 FLAIR","RM Difusão (DWI)","RM ADC","AngioRM"] },
-    { title: 'TC', items: ["TC sem contraste","TC c/ contraste","AngioTC"] },
-    { title: 'RX / MMG / US', items: ["RX","MMG","US","Doppler"] },
-  ];
 
   function renderCloudStatus(msg, kind){
     if(msg){ cloudStatus.textContent=msg; cloudStatus.className='img-cloud-status '+(kind||''); return; }
@@ -15869,8 +15878,10 @@ function openForm(id, opts){
         <span class="img-source-badge">${sourceLabel}</span>
         <img src="${img.data}" class="img-gallery-thumb" title="clique pra ampliar">
         <textarea class="img-gallery-label" rows="3" placeholder="descrição da imagem/quadro (sequências curtas como &quot;axial T2, CC, MLO&quot; ou um texto mais longo)">${esc(img.label||'')}</textarea>
-        <button type="button" class="btn btn-ghost img-gallery-presets-toggle" aria-expanded="false" style="width:100%;text-align:left;margin:6px 0 0;">▸ Sequências / modalidade</button>
-        <div class="img-gallery-preset-groups" hidden></div>
+        <div class="img-gallery-seq-wrap">
+          <div class="img-gallery-seq-chips"></div>
+          <div class="img-gallery-seq-picker">${collageSeqSelectHtml('', IMAGE_SEQUENCE_PRESETS)}<button type="button" class="btn btn-ghost img-gallery-seq-custom-add" hidden>+ adicionar</button></div>
+        </div>
         <button type="button" class="btn btn-ghost img-clinical-toggle" aria-expanded="false" style="width:100%;text-align:left;margin:6px 0 0;">▸ Contexto clínico / dados do paciente</button>
         <div class="img-clinical-box" hidden>
           <div class="img-clinical-hint">Informação pré-diagnóstica: aparece no Quiz ANTES da resposta. Não escreva o diagnóstico aqui (a descrição da imagem continua no campo acima).</div>
@@ -15936,45 +15947,55 @@ function openForm(id, opts){
       });
       const labelInput = item.querySelector('.img-gallery-label');
       labelInput.addEventListener('input', (ev)=>{ pendingImgs[idx].label = ev.target.value; imgsChanged = true; });
-      const groupsWrap = item.querySelector('.img-gallery-preset-groups');
-      const presetToggle = item.querySelector('.img-gallery-presets-toggle');
-      const paintPresetToggle = ()=>{
-        const open = !groupsWrap.hidden;
-        presetToggle.textContent = (open ? '▾ ' : '▸ ') + 'Sequências / modalidade';
-        presetToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-      };
-      presetToggle.onclick = ()=>{
-        groupsWrap.hidden = !groupsWrap.hidden;
-        if(!groupsWrap.hidden) expandedPresetGroups.add(img); else expandedPresetGroups.delete(img);
-        paintPresetToggle();
-      };
-      if(expandedPresetGroups.has(img)) groupsWrap.hidden = false;
-      paintPresetToggle();
-      IMG_PRESET_GROUPS.forEach(group=>{
-        const groupDiv = document.createElement('div');
-        groupDiv.className = 'img-gallery-modality';
-        groupDiv.innerHTML = `<div class="img-gallery-modality-title">${group.title}</div><div class="img-gallery-presets"></div>`;
-        const row = groupDiv.querySelector('.img-gallery-presets');
-        group.items.forEach(preset=>{
-          const chip = document.createElement('button');
-          chip.type = 'button';
-          const currentParts = (img.label||'').split('·').map(s=>s.trim()).filter(Boolean);
-          const isActive = currentParts.includes(preset);
-          chip.className = 'img-gallery-preset-chip' + (isActive ? ' active' : '');
-          chip.textContent = preset;
-          chip.title = 'clique pra adicionar/remover esta sequência da legenda (sem apagar as outras)';
-          chip.onclick = ()=>{
-            const parts = (pendingImgs[idx].label||'').split('·').map(s=>s.trim()).filter(Boolean);
-            const at = parts.indexOf(preset);
-            if(at>=0) parts.splice(at,1); else parts.push(preset);
-            pendingImgs[idx].label = parts.join(' · ');
-            imgsChanged = true;
-            renderImgGallery();
-          };
-          row.appendChild(chip);
+      // UX — seletor compacto de sequência/modalidade (reaproveita
+      // collageSeqSelectHtml/IMAGE_SEQUENCE_PRESETS/addSequenceToImageLabel,
+      // o MESMO componente e vocabulário já usados no construtor de quadro —
+      // nenhuma lista paralela). Continua gravando em img.label, partes
+      // separadas por " · ", exatamente como o painel grande antigo: só
+      // mudou a apresentação (chips removíveis + um picker, em vez do
+      // painel fixo com todos os grupos sempre montados).
+      const seqChipsWrap = item.querySelector('.img-gallery-seq-chips');
+      const seqPicker = item.querySelector('.img-gallery-seq-picker');
+      const seqSelect = seqPicker.querySelector('.collage-seq-select');
+      const seqCustomInput = seqPicker.querySelector('.collage-seq-custom');
+      const seqCustomAddBtn = seqPicker.querySelector('.img-gallery-seq-custom-add');
+      const currentSeqParts = (img.label||'').split('·').map(s=>s.trim()).filter(Boolean);
+      seqChipsWrap.innerHTML = IMAGE_SEQUENCE_PRESETS.filter(p=>currentSeqParts.includes(p)).map(p=>
+        `<span class="removable-tag img-gallery-seq-chip">${esc(p)}<button type="button" data-seq="${escAttr(p)}">✕</button></span>`
+      ).join('');
+      seqChipsWrap.querySelectorAll('[data-seq]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const preset = btn.getAttribute('data-seq');
+          const parts = (pendingImgs[idx].label||'').split('·').map(s=>s.trim()).filter(Boolean);
+          const at = parts.indexOf(preset);
+          if(at>=0) parts.splice(at,1);
+          pendingImgs[idx].label = parts.join(' · ');
+          imgsChanged = true;
+          renderImgGallery();
         });
-        groupsWrap.appendChild(groupDiv);
       });
+      const addSeqToLabel = (v)=>{
+        const next = addSequenceToImageLabel(pendingImgs[idx].label, v);
+        if(next !== (pendingImgs[idx].label||'')){ pendingImgs[idx].label = next; imgsChanged = true; }
+        renderImgGallery();
+      };
+      seqSelect.addEventListener('change', (ev)=>{
+        const v = ev.target.value;
+        if(v === CUSTOM_SEQUENCE_OPTION){
+          seqCustomInput.hidden = false;
+          seqCustomAddBtn.hidden = false;
+          seqCustomInput.focus();
+        } else if(v){
+          addSeqToLabel(v); // já re-renderiza a galeria inteira (picker volta ao estado inicial)
+        }
+      });
+      const addCustomSeqFromPicker = ()=>{
+        const v = normalizeCustomSequence(seqCustomInput.value);
+        if(!v){ toast('Digite a sequência (ex.: PD FAT SAT).'); return; }
+        addSeqToLabel(v);
+      };
+      seqCustomAddBtn.addEventListener('click', addCustomSeqFromPicker);
+      seqCustomInput.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter'){ ev.preventDefault(); addCustomSeqFromPicker(); } });
       // PROTEÇÃO 088 — contexto clínico por imagem (lido/escrito via .value,
       // nunca via HTML). Recolhido por padrão (● no botão quando preenchido).
       const clinicalBox = item.querySelector('.img-clinical-box');
@@ -16016,23 +16037,6 @@ function openForm(id, opts){
         expandedClinicalBoxes.add(img);
         renderImgGallery();
       };
-      // PROTEÇÃO 087 — sequência livre: acrescenta o texto EXATO (trim) como
-      // mais uma parte da legenda, igual aos chips (sem apagar as outras).
-      const customDiv = document.createElement('div');
-      customDiv.className = 'img-gallery-modality';
-      customDiv.innerHTML = `<div class="img-gallery-modality-title">Outra / personalizada</div><div class="img-gallery-custom-seq"><input type="text" class="img-gallery-custom-seq-input" maxlength="80" placeholder="ex.: PD FAT SAT, T2 Dixon, DWI b1000" aria-label="sequência personalizada"><button type="button" class="img-gallery-preset-chip img-gallery-custom-seq-add">+ adicionar</button></div>`;
-      const customInput = customDiv.querySelector('.img-gallery-custom-seq-input');
-      const addCustomSeq = ()=>{
-        const v = normalizeCustomSequence(customInput.value);
-        if(!v){ toast('Digite a sequência (ex.: PD FAT SAT).'); return; }
-        const next = addSequenceToImageLabel(pendingImgs[idx].label, v);
-        if(next !== (pendingImgs[idx].label||'')){ pendingImgs[idx].label = next; imgsChanged = true; }
-        expandedPresetGroups.add(img);
-        renderImgGallery();
-      };
-      customDiv.querySelector('.img-gallery-custom-seq-add').onclick = addCustomSeq;
-      customInput.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter'){ ev.preventDefault(); addCustomSeq(); } });
-      groupsWrap.appendChild(customDiv);
       item.querySelector('.img-gallery-remove').addEventListener('click', ()=>{
         const removed = pendingImgs.splice(idx,1)[0];
         if(removed && removed.source==='pending') revokeObjectUrl(removed._objectUrl);
@@ -16430,6 +16434,10 @@ function openForm(id, opts){
    O texto é salvo EXATAMENTE como digitado — só trim externo; nunca é
    convertido para uma opção pré-definida ("PD FAT SAT" nunca vira "PD"). */
 const CUSTOM_SEQUENCE_OPTION = '__custom__';
+// Lista canônica única de sequências/modalidade — reaproveitada pelo
+// construtor de quadro (panels[].seq) E pelo seletor compacto do editor de
+// imagem (parte de img.label). Uma só fonte; nenhuma lista paralela.
+const IMAGE_SEQUENCE_PRESETS = ['RX','MMG','U.S','TC C-','TC C+','RM T1','RM T2','RM T1 +','RM FLAIR','RM DIFUSAO','RM ADC','RM SWI','ANGIORM'];
 function normalizeCustomSequence(v){
   return String(v == null ? '' : v).trim();
 }
@@ -16499,7 +16507,7 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
     ? collageInitialDesc(existingLabel, items.map(x=>x.seq))
     : '';
   let finalBlob=null; let finalUrl='';
-  const seqs=['RX','MMG','U.S','TC C-','TC C+','RM T1','RM T2','RM T1 +','RM FLAIR','RM DIFUSAO','RM ADC','RM SWI','ANGIORM'];
+  const seqs=IMAGE_SEQUENCE_PRESETS;
   const list=cov.querySelector('#collage-list'), drop=cov.querySelector('#collage-drop'), input=cov.querySelector('#collage-files');
   drop.focus();
   const cleanup=()=>{ if(finalUrl) URL.revokeObjectURL(finalUrl); cov.remove(); };

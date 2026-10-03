@@ -33,7 +33,10 @@ vm.runInContext("const CUSTOM_SEQUENCE_OPTION = '__custom__';\n" +
   ['escAttr', 'esc', 'normalizeCustomSequence', 'addSequenceToImageLabel', 'collageSeqSelectHtml', 'resolveCollageLabel', 'collageInitialDesc']
     .map((n) => extractFunction(html, n)).join('\n'), ctx);
 
-const PRESETS = JSON.parse(/const seqs=(\[[^\]]*\]);/.exec(html)[1].replace(/'/g, '"'));
+// UX — lista canônica movida para o topo (IMAGE_SEQUENCE_PRESETS), uma só
+// fonte reaproveitada pelo quadro E pelo seletor compacto do editor; openCollageBuilder
+// agora só referencia `const seqs=IMAGE_SEQUENCE_PRESETS;`.
+const PRESETS = JSON.parse(/^const IMAGE_SEQUENCE_PRESETS = (\[[^\]]*\]);$/m.exec(html)[1].replace(/'/g, '"'));
 const EXAMPLES = ['T2 FAT SAT', 'PD FAT SAT', 'STIR', 'T1 pós-contraste FAT SAT', 'PD axial com supressão de gordura', 'DWI b1000', 'T2 Dixon'];
 
 // Parse mínimo do HTML do seletor do quadro.
@@ -44,9 +47,13 @@ function parseSelect(markup) {
   return { selected: selected ? selected[1] : '', inputValue: input[1].replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'), inputHidden: /\bhidden\b/.test(input[2]) };
 }
 
-test('087: campo real — opções rápidas originais intactas (editor e quadro)', () => {
-  assert.match(html, /\{ title: 'RM', items: \["RM T1","RM T2","RM T1 c\/ contraste","RM T2 FLAIR","RM Difusão \(DWI\)","RM ADC","AngioRM"\] \}/);
+test('087: campo real — a lista canônica de sequências/modalidade continua a mesma (agora só numa fonte)', () => {
   assert.deepEqual(PRESETS, ['RX', 'MMG', 'U.S', 'TC C-', 'TC C+', 'RM T1', 'RM T2', 'RM T1 +', 'RM FLAIR', 'RM DIFUSAO', 'RM ADC', 'RM SWI', 'ANGIORM']);
+  // UX — seletor compacto: nenhuma lista paralela (IMG_PRESET_GROUPS, com
+  // grupos/rótulos diferentes dos reais, foi removida; editor e quadro
+  // compartilham a MESMA constante IMAGE_SEQUENCE_PRESETS).
+  assert.doesNotMatch(html, /IMG_PRESET_GROUPS/);
+  assert.match(html, /const seqs=IMAGE_SEQUENCE_PRESETS;/, 'openCollageBuilder referencia a mesma fonte');
 });
 
 test('087 QUADRO: opção pré-definida continua funcionando (selecionada, campo livre oculto)', () => {
@@ -131,15 +138,30 @@ test('087 EDITOR: combinado com opções rápidas — sem duplicar, sem apagar a
   assert.deepEqual(parseSelect(ctx.collageSeqSelectHtml('SWI minIP', PRESETS)).selected, '__custom__');
 });
 
-test('087 EDITOR: fiação — linha "Outra / personalizada" com campo + botão; Enter não submete o formulário', () => {
+// UX — o painel grande de chips (toggle "▸ Sequências / modalidade" +
+// IMG_PRESET_GROUPS sempre montado) foi substituído por um seletor
+// compacto (reaproveita collageSeqSelectHtml/IMAGE_SEQUENCE_PRESETS, o
+// MESMO componente do construtor de quadro) + chips removíveis só das
+// sequências já presentes em img.label. Continua gravando no MESMO campo,
+// com a MESMA regra de dedup (addSequenceToImageLabel nunca duplica).
+test('087 EDITOR: painel grande antigo (toggle + IMG_PRESET_GROUPS) não existe mais', () => {
   const src = html.slice(html.indexOf('function renderImgGallery(){'), html.indexOf("item.querySelector('.img-gallery-remove')"));
-  assert.match(src, /Outra \/ personalizada/);
-  assert.match(src, /class="img-gallery-custom-seq-input"/);
+  assert.doesNotMatch(src, /img-gallery-presets-toggle/);
+  assert.doesNotMatch(src, /img-gallery-preset-groups/);
+  assert.doesNotMatch(src, /Sequências \/ modalidade/);
+  assert.doesNotMatch(src, /IMG_PRESET_GROUPS/);
+});
+
+test('087 EDITOR: fiação do seletor compacto — reaproveita collageSeqSelectHtml/IMAGE_SEQUENCE_PRESETS, chips removíveis, "Outra/personalizada" com campo + botão, Enter não submete', () => {
+  const src = html.slice(html.indexOf('function renderImgGallery(){'), html.indexOf("item.querySelector('.img-gallery-remove')"));
+  assert.match(src, /\$\{collageSeqSelectHtml\('', IMAGE_SEQUENCE_PRESETS\)\}/, 'reaproveita o MESMO componente do quadro, não uma reimplementação');
+  assert.match(src, /class="btn btn-ghost img-gallery-seq-custom-add"/);
   assert.match(src, /const next = addSequenceToImageLabel\(pendingImgs\[idx\]\.label, v\);/);
-  assert.match(src, /if\(ev\.key==='Enter'\)\{ ev\.preventDefault\(\); addCustomSeq\(\); \}/);
+  assert.match(src, /if\(ev\.key==='Enter'\)\{ ev\.preventDefault\(\); addCustomSeqFromPicker\(\); \}/);
   assert.match(src, /if\(!v\)\{ toast\(/, 'vazio avisa e não grava');
-  // o chip padrão continua exatamente como antes
-  assert.match(src, /if\(at>=0\) parts\.splice\(at,1\); else parts\.push\(preset\);/);
+  // chip removível continua a MESMA lógica de parts (sem duplicar/apagar outras)
+  assert.match(src, /if\(at>=0\) parts\.splice\(at,1\);/);
+  assert.match(src, /IMAGE_SEQUENCE_PRESETS\.filter\(p=>currentSeqParts\.includes\(p\)\)/, 'chips mostram só as sequências já presentes na legenda');
 });
 
 test('087: reabrir a edição mostra o valor (a legenda é carregada como está do registro)', () => {
