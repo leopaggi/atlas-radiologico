@@ -802,6 +802,7 @@ body{
 }
 .detail-img-clinical-pac{font-weight:600;color:var(--muted);margin-bottom:1px;}
 .detail-notes{color:var(--muted);font-size:13.5px;white-space:pre-wrap;line-height:1.6;}
+.notes-differential-item{display:block;margin-top:3px;}
 .detail-meta{color:var(--muted-2);font-size:12px;font-family:'IBM Plex Mono',monospace;margin-bottom:14px;}
 .detail-altplacements{color:var(--teal);font-size:12px;margin:-8px 0 14px 0;opacity:.9;}
 .detail-altplacements b{font-weight:600;}
@@ -5163,6 +5164,57 @@ function hasCloudinaryConfig(){ const c=getCloudinaryConfig(); return !!(c.cloud
 function escAttr(v){ return String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 /* alias global — o painel de progresso/quiz reformado usa esc() para escapar texto exibido */
 function esc(v){ return escAttr(v); }
+/* lrev — realce visual do bloco "Diferenciais-chave:" dentro de `notes`
+   (convenção de texto livre já usada em ~2200 lesões: "Padrão: ...\n
+   Diferenciais-chave: item1 (explicação); item2 (explicação); ..."). SÓ
+   apresentação — nunca toca o texto armazenado, nunca salva HTML/Markdown.
+   Escapa TUDO primeiro via esc() e só então decide onde entram <strong>/
+   <div>; nenhum HTML vindo dos dados é interpretado (o conteúdo malicioso
+   sai como texto escapado, nunca como marcação). Fora da seção
+   "Diferenciais-chave:" (inclusive "Padrão:"), o texto sai exatamente como
+   sempre saía — nunca faz split ingênuo da notes inteira por ";". Helper
+   único, reaproveitado em todo lugar que mostra `notes` (detalhe da lesão e
+   Quiz pós-resposta — o lightbox mostra só a legenda da IMAGEM, nunca
+   `notes` da lesão, então não se aplica ali). */
+// Divide por ";" respeitando profundidade de parênteses — um ";" DENTRO da
+// explicação de um item (ex.: "Item (causa A; causa B)") nunca quebra esse
+// item em dois; só ";" fora de qualquer parêntese separa itens de verdade.
+function splitDifferentialItems(section){
+  const items = [];
+  let depth = 0, current = '';
+  for(const ch of section){
+    if(ch === '(') depth += 1;
+    else if(ch === ')') depth = Math.max(0, depth - 1);
+    if(ch === ';' && depth === 0){ items.push(current); current = ''; continue; }
+    current += ch;
+  }
+  if(current.trim()) items.push(current);
+  return items.map(s=>s.trim()).filter(Boolean);
+}
+function notesDifferentialsHtml(notes){
+  const raw = String(notes || '');
+  const marker = 'Diferenciais-chave:';
+  const idx = raw.indexOf(marker);
+  if(idx === -1) return esc(raw);
+  const before = raw.slice(0, idx);
+  const afterMarker = idx + marker.length;
+  // a seção vai até a próxima linha em branco ou até o fim do texto —
+  // nunca tenta adivinhar limite semântico além disso.
+  const blank = raw.slice(afterMarker).search(/\n\s*\n/);
+  const sectionEnd = blank === -1 ? raw.length : afterMarker + blank;
+  const section = raw.slice(afterMarker, sectionEnd).trim();
+  const after = raw.slice(sectionEnd);
+  const items = splitDifferentialItems(section);
+  if(!items.length) return esc(raw);
+  const itemsHtml = items.map(item=>{
+    const parenIdx = item.indexOf('(');
+    const name = parenIdx===-1 ? '' : item.slice(0, parenIdx).trim();
+    if(!name) return `<div class="notes-differential-item">${esc(item)}</div>`;
+    const rest = item.slice(parenIdx);
+    return `<div class="notes-differential-item"><strong>${esc(name)}</strong> ${esc(rest)}</div>`;
+  }).join('');
+  return `${esc(before)}<strong>${esc(marker)}</strong>${itemsHtml}${esc(after)}`;
+}
 function safeCloudTagPart(v){
   return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80);
@@ -14974,7 +15026,7 @@ function openDetail(id, opts){
       <div class="detail-meta">${e.s} · ${e.site}</div>
       ${Array.isArray(e.altPlacements) && e.altPlacements.length ? `<div class="detail-altplacements">↔ Encontrada também em: ${e.altPlacements.map(p=>`<b>${p.s} › ${p.site}</b>`).join(', ')}</div>` : ''}
       <div class="detail-tags">${e.tags.map(t=>`<span class="mini-tag match">${t}</span>`).join('')}${Array.isArray(e.clinicalTags)&&e.clinicalTags.length?e.clinicalTags.map(t=>`<span class="mini-tag clinical">${t}</span>`).join(''):''}</div>
-      <div class="detail-notes">${(e.notes||'sem anotações ainda.').replace(/</g,'&lt;')}</div>
+      <div class="detail-notes">${e.notes ? notesDifferentialsHtml(e.notes) : 'sem anotações ainda.'}</div>
       ${e.classification && CLASSIFICATION_SYSTEMS[e.classification] ? renderClassificationBox(e.classification) : ''}
       ${links.length?`<div class="detail-links">
         <div class="detail-links-label">VER IMAGENS / CASOS</div>
@@ -20210,7 +20262,7 @@ function renderQuizCardIntegrated(host){
   // reiniciar a questão.
   function renderDetail(){
     const links=ensureLinks(e);
-    return `<div class="quiz-answer-detail"><b>${esc(e.name)}</b><div class="quiz-points">${(e.tags||[]).slice(0,8).map(t=>`<span class="quiz-point">${esc(t)}</span>`).join('')}</div>${e.notes?`<div class="detail-notes">${esc(e.notes)}</div>`:''}${links.length?`<a class="detail-link" href="${links[0].url}" target="_blank" rel="noopener">↗ referência / imagens</a>`:''}${lesionDidacticQuizHtml(e)}</div>`; // 093: sinais/classificações SÓ aqui (pós-resposta)
+    return `<div class="quiz-answer-detail"><b>${esc(e.name)}</b><div class="quiz-points">${(e.tags||[]).slice(0,8).map(t=>`<span class="quiz-point">${esc(t)}</span>`).join('')}</div>${e.notes?`<div class="detail-notes">${notesDifferentialsHtml(e.notes)}</div>`:''}${links.length?`<a class="detail-link" href="${links[0].url}" target="_blank" rel="noopener">↗ referência / imagens</a>`:''}${lesionDidacticQuizHtml(e)}</div>`; // 093: sinais/classificações SÓ aqui (pós-resposta)
   }
   const GRADE_LABELS={easy:'🟢 Fácil',medium:'🔵 Média',hard:'🟠 Difícil',again:'⚪ Não sei'};
   function applyGrade(g){
