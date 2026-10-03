@@ -17540,6 +17540,7 @@ function openPendingReviewsModal(){
       <div class="modal-sub">pedidos de revisão aguardando uma solução — mais recentes primeiro</div>
       <div class="modal-actions" style="justify-content:flex-start;">
         <button type="button" class="btn btn-ghost" id="pending-reviews-new">+ Nova pendência</button>
+        <button type="button" class="btn btn-ghost" id="pending-reviews-triage">🔎 Triagem proativa</button>
         <button type="button" class="btn btn-primary" id="pending-reviews-batch-ai">🤖 Analisar pendências com IA</button>
       </div>
       <div class="review-center-list" id="pending-reviews-list"></div>
@@ -17589,12 +17590,227 @@ function openPendingReviewsModal(){
   };
   renderList();
   const batchBtn = ov.querySelector('#pending-reviews-batch-ai');
-  ov.querySelector('#pending-reviews-new').onclick = ()=> openNewReviewRequestModal(()=>{ renderList(); if(batchBtn) batchBtn.hidden = getBatchEligibleReviews().length===0; }); // PROTEÇÃO 091
+  const afterQueueChange = ()=>{ renderList(); if(batchBtn) batchBtn.hidden = getBatchEligibleReviews().length===0; };
+  ov.querySelector('#pending-reviews-new').onclick = ()=> openNewReviewRequestModal(afterQueueChange); // PROTEÇÃO 091
+  const triageBtn = ov.querySelector('#pending-reviews-triage');
+  if(triageBtn) triageBtn.onclick = ()=> openProactiveTriageModal(afterQueueChange);
   if(batchBtn){
     batchBtn.hidden = getBatchEligibleReviews().length===0;
     batchBtn.onclick = ()=> openReviewAiBatchModal(renderList);
   }
   ov.querySelector('#pending-reviews-close').onclick = ()=>{ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); };
+}
+
+/* ============================================================
+   TRIAGEM PROATIVA DE CONTEÚDO (read-only) — candidatas a revisão
+   ------------------------------------------------------------
+   Fila de revisão manual zerada -> próxima frente é revisão PROATIVA de
+   conteúdo. Esta seção só IDENTIFICA lacunas objetivas e explicáveis em
+   DATA; nunca altera nada sozinha. Critérios deliberadamente objetivos
+   (contagens, presença/ausência, convenções já usadas no Atlas) — nenhuma
+   IA embutida decide "qualidade" aqui; o score é só pra ORDENAR a fila,
+   nunca uma nota de qualidade. Quando o usuário escolhe um lote na UI
+   (openProactiveTriageModal), cada lesão selecionada entra na MESMA fila
+   de sempre via createLesionReview() — dali em diante é a infraestrutura
+   de revisão manual já existente (pacote/buildReviewAiPacket, lote/
+   openReviewAiBatchModal, importar solução, aplicar) que assume, sem
+   nenhuma duplicação.
+   Critérios do pedido original DELIBERADAMENTE DEIXADOS DE FORA por não
+   terem um sinal objetivo confiável no schema atual hoje (evita heurística
+   inventada/não sustentada): "tags genéricas demais" (sem vocabulário
+   curado de termos genéricos no projeto), "conteúdo importado sem
+   lapidação" (nenhum marcador confiável de proveniência "não lapidada"),
+   "termos inconsistentes" (exigiria julgamento linguístico, não um
+   critério objetivo).
+   ============================================================ */
+const TRIAGE_MIN_TAGS = 3;                   // abaixo disso (e > 0): tags insuficientes
+const TRIAGE_MIN_NOTES_CHARS = 80;           // abaixo disso (e > 0): notes curtas
+const TRIAGE_MIN_NOTES_REMAINDER_TOKENS = 3; // tokens de notes fora do nome da lesão: abaixo disso = "só repete o nome"
+const TRIAGE_RICH_IMAGES_MIN = 3;            // "imagens ricas": pelo menos N imagens
+const TRIAGE_REASON_LABELS = {
+  notes_empty: 'descrição ausente',
+  notes_too_short: 'descrição muito curta',
+  notes_repeats_name_only: 'descrição praticamente só repete o nome da lesão',
+  notes_missing_differentials: 'descrição sem diferenciais (nenhuma menção a "diferencial")',
+  tags_empty: 'nenhuma tag',
+  tags_insufficient: 'poucas tags',
+  enterm_empty: 'termo em inglês vazio',
+  enterm_equals_name: 'termo em inglês igual ao nome em português',
+  classification_missing_applicable: 'sem classificação oficial, mas o contexto sugere uma',
+  clinical_tags_missing_with_context: 'tem caso clínico didático vinculado, mas nenhuma tag clínica',
+  rich_images_weak_notes: 'várias imagens, mas descrição fraca'
+};
+// Pontos técnicos por motivo — SÓ para ordenar a fila (nunca é "nota de
+// qualidade"); pesos simples e documentados, sem IA.
+const TRIAGE_REASON_WEIGHTS = {
+  notes_empty: 5, notes_too_short: 3, notes_repeats_name_only: 3,
+  notes_missing_differentials: 2, tags_empty: 3, tags_insufficient: 1,
+  enterm_empty: 2, enterm_equals_name: 1, classification_missing_applicable: 2,
+  clinical_tags_missing_with_context: 2, rich_images_weak_notes: 2
+};
+function triageReasonLabel(code){ return TRIAGE_REASON_LABELS[code] || code; }
+function triageNormalize(s){
+  return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+}
+/* Lacunas de notes: vazia / curta / "só repete o nome" / sem diferenciais.
+   Reaproveita tokenizeExternalTitle (mesma tokenização pura já usada pelo
+   importador externo) pra medir o que resta em notes depois de remover as
+   palavras do próprio nome da lesão — nenhuma lista nova de stopwords. */
+function triageNotesReasons(e){
+  const reasons = [];
+  const notes = String((e && e.notes) || '').trim();
+  if(!notes){ reasons.push('notes_empty'); return reasons; }
+  if(notes.length < TRIAGE_MIN_NOTES_CHARS) reasons.push('notes_too_short');
+  const nameTokens = new Set(tokenizeExternalTitle(e && e.name));
+  const remainder = tokenizeExternalTitle(notes).filter(t=>!nameTokens.has(t));
+  if(remainder.length < TRIAGE_MIN_NOTES_REMAINDER_TOKENS) reasons.push('notes_repeats_name_only');
+  if(notes.length >= TRIAGE_MIN_NOTES_CHARS && !/diferencia/i.test(notes)) reasons.push('notes_missing_differentials');
+  return reasons;
+}
+function triageTagsReasons(e){
+  const tags = Array.isArray(e && e.tags) ? e.tags : [];
+  if(tags.length===0) return ['tags_empty'];
+  if(tags.length < TRIAGE_MIN_TAGS) return ['tags_insufficient'];
+  return [];
+}
+function triageEnTermReasons(e){
+  const term = String((e && e.enTerm) || '').trim();
+  if(!term) return ['enterm_empty'];
+  if(triageNormalize(term) === triageNormalize(e && e.name)) return ['enterm_equals_name'];
+  return [];
+}
+/* Reaproveita CLASSIFICATION_CONTEXT_RULES/classifyClassificationCompatibility
+   (mesma regra do auditor de classificações existente, buildClassificationAudit)
+   só invertida: o alvo aqui é "sem classification, mas algum sistema bate
+   com o contexto (seção+nome)" — nunca duplica o regex/seções de lá. */
+function triageClassificationReasons(e){
+  if(e && e.classification) return [];
+  const systems = Object.keys(CLASSIFICATION_CONTEXT_RULES);
+  for(const sys of systems){
+    if(classifyClassificationCompatibility(sys, e) === 'compatible') return ['classification_missing_applicable'];
+  }
+  return [];
+}
+function triageClinicalTagsReasons(e){
+  const hasClinicalContext = Array.isArray(e && e.clinicalCases) && e.clinicalCases.length > 0;
+  const hasClinicalTags = Array.isArray(e && e.clinicalTags) && e.clinicalTags.length > 0;
+  return (hasClinicalContext && !hasClinicalTags) ? ['clinical_tags_missing_with_context'] : [];
+}
+function triageRichImagesWeakNotesReasons(e, notesReasons){
+  const imgCount = Array.isArray(e && e.images) ? e.images.length : 0;
+  const weakNotes = notesReasons.indexOf('notes_empty')>=0 || notesReasons.indexOf('notes_too_short')>=0;
+  return (imgCount >= TRIAGE_RICH_IMAGES_MIN && weakNotes) ? ['rich_images_weak_notes'] : [];
+}
+/* Função pura central: devolve { reasons:[...códigos], score } para UMA
+   lesão. Nunca lê revisões ativas (isso é responsabilidade do scan, que
+   decide se a lesão deve ou não aparecer na fila) e nunca altera `e`. */
+function evaluateLesionForTriage(e){
+  if(!e || !e.id) return { reasons: [], score: 0 };
+  const notesReasons = triageNotesReasons(e);
+  const reasons = [
+    ...notesReasons,
+    ...triageTagsReasons(e),
+    ...triageEnTermReasons(e),
+    ...triageClassificationReasons(e),
+    ...triageClinicalTagsReasons(e),
+    ...triageRichImagesWeakNotesReasons(e, notesReasons)
+  ];
+  const score = reasons.reduce((sum, r)=> sum + (TRIAGE_REASON_WEIGHTS[r] || 1), 0);
+  return { reasons, score };
+}
+/* Varre o catálogo e devolve candidatas ordenadas (maior score primeiro;
+   empate -> nome). EXCLUI lesões com revisão ativa (hasActiveLesionReview)
+   — nunca sugere uma lesão que já está sendo revisada. 100% read-only:
+   não grava nada em LESION_REVISIONS nem em DATA. */
+function scanCatalogForTriage(catalog){
+  const list = Array.isArray(catalog) ? catalog : [];
+  const out = [];
+  for(const e of list){
+    if(!e || !e.id) continue;
+    if(typeof hasActiveLesionReview==='function' && hasActiveLesionReview(e.id)) continue;
+    const { reasons, score } = evaluateLesionForTriage(e);
+    if(!reasons.length) continue;
+    out.push({ id: e.id, name: e.name || e.id, section: e.s || '', site: e.site || '', reasons, score });
+  }
+  out.sort((a,b)=> b.score - a.score || String(a.name).localeCompare(String(b.name), 'pt-BR'));
+  return out;
+}
+/* Cria, em LESION_REVISIONS, um pedido de revisão (scope 'lesion') pra CADA
+   lesão do lote — reaproveitando createLesionReview() tal como ele já é
+   chamado pela UI manual (PROTEÇÃO 091: "chamada EXCLUSIVAMENTE pela UI").
+   Texto puro (requestText); nunca é proposedChanges, nunca autoriza nada —
+   vira um pedido 'pending' comum, que já entra na fila/lote existente sem
+   nenhum código novo ali. Revalida hasActiveLesionReview no momento da
+   criação (defesa extra contra uma lista de candidatas desatualizada). */
+function createTriageReviewBatch(candidates){
+  const list = Array.isArray(candidates) ? candidates : [];
+  const created = [], skipped = [];
+  for(const c of list){
+    if(!c || !c.id){ skipped.push({ id: c && c.id, reason: 'invalid_candidate' }); continue; }
+    if(typeof hasActiveLesionReview==='function' && hasActiveLesionReview(c.id)){ skipped.push({ id: c.id, reason: 'already_in_review' }); continue; }
+    const reasonsText = (Array.isArray(c.reasons) ? c.reasons : []).map(triageReasonLabel).join('; ');
+    const requestText = 'Revisão proativa de conteúdo (lacunas identificadas automaticamente): ' + reasonsText + '.';
+    const res = createLesionReview(c.id, requestText);
+    if(res.created) created.push(res.review.id); else skipped.push({ id: c.id, reason: res.reason });
+  }
+  return { created, skipped };
+}
+/* UI — lista candidatas com motivos, seleção múltipla, e um único botão que
+   cria os pedidos de revisão do lote escolhido. Mesmo padrão visual do
+   resto do Centro de Revisões (.review-center-modal/.review-batch-row/
+   .mini-tag) — nenhuma classe CSS nova. Nada é criado até o clique em
+   "criar pedidos de revisão". */
+function openProactiveTriageModal(onCreated){
+  const candidates = scanCatalogForTriage(DATA);
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  // PROTEÇÃO 091 (mesmo padrão de openReviewAiBatchModal): este modal é
+  // aberto DE DENTRO do Centro de Revisões (já uma .overlay) — fechar com
+  // closeOverlay() removeria as duas de uma vez. Fecha só a si mesmo.
+  const close = ()=>{ ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
+  ov.onclick = e=>{ if(e.target===ov) close(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) close(); };
+  document.addEventListener('keydown', closeOnEsc);
+  ov.innerHTML = `
+    <div class="modal review-center-modal review-batch-modal">
+      <h2>🔎 Triagem proativa de conteúdo</h2>
+      <div class="modal-sub">${candidates.length} candidata(s) com lacunas objetivas — nada é alterado aqui; só cria pedidos de revisão pra quem você selecionar.</div>
+      ${candidates.length ? `<div class="review-batch-toolbar">
+        <label class="review-batch-selectall"><input type="checkbox" id="triage-select-all"> Selecionar todas (<span id="triage-selected-count">0</span>)</label>
+      </div>
+      <div class="review-center-list" id="triage-list"></div>` : '<div class="review-center-empty">Nenhuma lacuna objetiva encontrada no momento.</div>'}
+      <div class="modal-actions" style="justify-content:space-between;">
+        <button type="button" class="btn btn-primary" id="triage-create" ${candidates.length?'':'disabled'}>criar pedidos de revisão para selecionadas</button>
+        <button type="button" class="btn btn-ghost" id="triage-close">fechar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#triage-close').onclick = close;
+  const listEl = ov.querySelector('#triage-list');
+  if(listEl){
+    listEl.innerHTML = candidates.map(c=>`<label class="review-batch-row">
+      <input type="checkbox" class="triage-check" data-id="${escAttr(c.id)}">
+      <span class="review-batch-row-main"><b>${esc(c.name)}</b><span>${esc([c.section,c.site].filter(Boolean).join(' · '))}</span>
+        <em>${c.reasons.map(r=>'<span class="mini-tag">'+esc(triageReasonLabel(r))+'</span>').join(' ')}</em>
+      </span>
+    </label>`).join('');
+  }
+  const boxes = ()=> Array.from(ov.querySelectorAll('.triage-check'));
+  const selected = ()=> boxes().filter(b=>b.checked).map(b=>b.dataset.id);
+  const updateCount = ()=>{ const el = ov.querySelector('#triage-selected-count'); if(el) el.textContent = String(selected().length); };
+  const selectAll = ov.querySelector('#triage-select-all');
+  if(selectAll) selectAll.onchange = (e)=>{ boxes().forEach(b=>{ b.checked = e.target.checked; }); updateCount(); };
+  if(listEl) listEl.onchange = (e)=>{ if(e.target && e.target.classList.contains('triage-check')) updateCount(); };
+  const createBtn = ov.querySelector('#triage-create');
+  if(createBtn) createBtn.onclick = ()=>{
+    const ids = selected();
+    if(ids.length===0){ toast('Selecione ao menos uma candidata.'); return; }
+    const chosen = candidates.filter(c=> ids.indexOf(c.id)>=0);
+    const { created, skipped } = createTriageReviewBatch(chosen);
+    toast(created.length ? (created.length + ' pedido(s) de revisão criado(s) — use "🤖 Analisar pendências com IA" pra gerar o lote.') : ('Nenhum pedido criado (' + ((skipped[0] && skipped[0].reason) || 'erro') + ').'));
+    close();
+    if(typeof onCreated==='function') onCreated();
+  };
 }
 
 /* PROTEÇÃO 091 — "+ Nova pendência": Atlas/solicitação geral (padrão) ou
