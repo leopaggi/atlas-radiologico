@@ -208,11 +208,14 @@ test('20. notesDifferentialsHtml nunca retorna Markdown nem grava HTML — é s�
 
 /* ===================== 4. contraste do nome do diagnóstico ===================== */
 
-test('21. CSS: só o <strong> DENTRO de .notes-differential-item ganha a cor de maior contraste (reaproveita var(--text), nenhuma cor nova)', () => {
+test('21. CSS: só o <strong> DENTRO de .notes-differential-item ganha branco puro + negrito', () => {
+  // lrev — var(--text) (#E7EEF2) não teve contraste suficiente na prática;
+  // branco puro (#fff) explicitamente pedido no lugar do token do tema.
   const rule = /\.notes-differential-item strong\{([^}]*)\}/.exec(html);
   assert.ok(rule, 'regra .notes-differential-item strong{} precisa existir');
-  assert.match(rule[1], /color:var\(--text\)/, 'reaproveita o token de texto principal do tema, nenhuma cor hardcoded nova');
-  assert.doesNotMatch(rule[1], /#fff|#ffffff|white/i, 'não deveria hardcodar branco quando já existe var(--text) pra isso');
+  assert.match(rule[1], /color:#fff\b/, 'branco puro, não o token var(--text)');
+  assert.match(rule[1], /font-weight:700/);
+  assert.doesNotMatch(rule[1], /var\(--text\)/, 'não deveria mais usar o token — contraste insuficiente na prática');
 });
 
 test('22. o seletor é escopado — não muda a cor do rótulo "Diferenciais-chave:" (que fica FORA de .notes-differential-item)', () => {
@@ -222,7 +225,7 @@ test('22. o seletor é escopado — não muda a cor do rótulo "Diferenciais-cha
   assert.match(HELPER_SRC, /<strong>\$\{esc\(marker\)\}<\/strong>\$\{itemsHtml\}/, 'o <strong> do rótulo é irmão dos itens, não descendente de nenhum deles');
 });
 
-test('23. comportamento real (Chrome headless): o nome do diagnóstico computa a cor de --text; a explicação entre parênteses NÃO recebe essa cor', () => {
+test('23. comportamento real (Chrome headless): o nome do diagnóstico computa branco puro (#fff); a explicação entre parênteses NÃO recebe essa cor', () => {
   const chrome = findChrome();
   if (!chrome) { console.warn('Chrome não encontrado — pulando verificação visual real.'); return; }
   const api = loadApi();
@@ -231,7 +234,7 @@ test('23. comportamento real (Chrome headless): o nome do diagnóstico computa a
     /\.detail-notes\{[^}]*\}/.exec(html)[0],
     /\.notes-differential-item\{[^}]*\}/.exec(html)[0],
     /\.notes-differential-item strong\{[^}]*\}/.exec(html)[0]
-  ].join('\n').replace(/var\(--text\)/g, '#E7EEF2').replace(/var\(--muted\)/g, '#8CA0AC');
+  ].join('\n').replace(/var\(--muted\)/g, '#8CA0AC');
   const page = `<!doctype html><html><head><meta charset="utf-8"><style>${cssBlock}</style></head>` +
     `<body><div class="detail-notes" id="out">${out}</div>` +
     `<script>const el=document.querySelector('.notes-differential-item strong');` +
@@ -245,7 +248,7 @@ test('23. comportamento real (Chrome headless): o nome do diagnóstico computa a
   const titleMatch = /<title>(.*?)<\/title>/.exec(dump);
   assert.ok(titleMatch, 'devtools dump precisa conter o <title> com as cores computadas');
   const [, strongColor, itemColor] = /STRONG:(.*?)\|ITEM:(.*?)$/.exec(titleMatch[1]);
-  assert.equal(strongColor, 'rgb(231, 238, 242)', 'nome do diagnóstico computa exatamente --text (#E7EEF2)');
+  assert.equal(strongColor, 'rgb(255, 255, 255)', 'nome do diagnóstico computa branco puro (#fff)');
   assert.notEqual(itemColor, strongColor, 'a explicação (cor do próprio item/container) continua numa cor diferente, mais discreta');
   assert.equal(itemColor, 'rgb(140, 160, 172)', 'a explicação continua herdando --muted (#8CA0AC), sem cor nova');
 });
