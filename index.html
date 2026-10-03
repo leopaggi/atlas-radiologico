@@ -15905,7 +15905,14 @@ function openForm(id, opts){
           <button type="button" class="img-gallery-remove" title="remover este quadro do Atlas">✕</button>
         </div>
       `;
-      item.querySelector('.img-gallery-thumb').addEventListener('click', ()=> openImageLightbox(img.data, img.label, pendingImgs, idx));
+      // lrev — contexto clínico no lightbox aberto PELO EDITOR (antes só
+      // aparecia vindo da visão panorâmica/openDetail): mesmo resolver
+      // (clinicalCaseLinkedToImage, 093d), nada reimplementado — só passado
+      // aqui também. Usa clinicalCasesDraft (o estado atual da tela, com
+      // qualquer vínculo já feito nesta edição, antes de Salvar), nunca
+      // existing.clinicalCases direto (que ficaria desatualizado se o
+      // usuário acabou de vincular/desvincular um caso sem salvar ainda).
+      item.querySelector('.img-gallery-thumb').addEventListener('click', ()=> openImageLightbox(img.data, img.label, pendingImgs, idx, null, (image)=>clinicalCaseLinkedToImage({ name: (existing && existing.name) || '', clinicalCases: clinicalCasesDraft }, image)));
       // PROTEÇÃO 093b — 🔗 Vincular a… (draft até o Salvar, como o resto).
       const formLinkBtn = item.querySelector('[data-form-link]');
       if(formLinkBtn) formLinkBtn.addEventListener('click', ()=> openImageLinkPicker({

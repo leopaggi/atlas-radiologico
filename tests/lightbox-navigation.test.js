@@ -203,7 +203,10 @@ test('15. openDetail passa SÓ as imagens da própria lesão (`all`) como conjun
 
 test('15. openForm passa SÓ pendingImgs (galeria da própria lesão em edição) como conjunto de navegação', () => {
   const src = extractFunction(html, 'openForm').source;
-  assert.match(src, /openImageLightbox\(img\.data, img\.label, pendingImgs, idx\)/);
+  // lrev — o editor passou a resolver contexto clínico também (mesma
+  // paridade do openDetail/visão panorâmica); navList continua sendo
+  // SÓ pendingImgs, inalterado — só o 5º/6º argumento foram adicionados.
+  assert.match(src, /openImageLightbox\(img\.data, img\.label, pendingImgs, idx, null, \(image\)=>clinicalCaseLinkedToImage\(/);
 });
 
 test('15. Quiz compartilha a coleção; modal de imagem e auditoria técnica continuam sem navegação', () => {

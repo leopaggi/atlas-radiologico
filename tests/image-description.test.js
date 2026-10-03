@@ -100,8 +100,9 @@ test('EDITOR: o textarea não tem limite artificial de tamanho (sem maxlength) e
 test('EDITOR: clicar na miniatura abre o lightbox já passando a legenda/descrição atual', () => {
   // Ajuste 22/09/2026 (navegação do lightbox): a chamada ganhou pendingImgs/idx
   // (conjunto de navegação = só as imagens desta lesão), mas continua passando
-  // img.data/img.label do mesmo jeito.
-  assert.match(openFormFn.body, /openImageLightbox\(img\.data, img\.label, pendingImgs, idx\)/);
+  // img.data/img.label do mesmo jeito. lrev — ganhou também o resolver de
+  // contexto clínico (5º/6º argumento), paridade com openDetail.
+  assert.match(openFormFn.body, /openImageLightbox\(img\.data, img\.label, pendingImgs, idx, null, \(image\)=>clinicalCaseLinkedToImage\(/);
 });
 
 test('EDITOR: chips de sequência continuam funcionando sobre o mesmo campo (sem duplicar lógica)', () => {

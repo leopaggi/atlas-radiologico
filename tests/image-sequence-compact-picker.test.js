@@ -295,7 +295,10 @@ test('11. zero chamada a saveData/Firestore/localStorage na região do seletor (
   assert.ok(!/localStorage\.(setItem|removeItem)/.test(region));
 });
 
-test('12. lightbox/Quiz não foram tocados (openImageLightbox continua chamado com os mesmos argumentos)', () => {
-  assert.match(renderImgGallerySrc, /openImageLightbox\(img\.data, img\.label, pendingImgs, idx\)/);
+test('12. lightbox/Quiz não foram tocados pelo seletor de sequência (openImageLightbox continua recebendo img.data/img.label/pendingImgs/idx)', () => {
+  // lrev — a chamada ganhou o resolver de contexto clínico numa rodada
+  // separada (paridade com openDetail); aqui só confirmamos que o SELETOR
+  // DE SEQUÊNCIA não alterou esses 4 argumentos nem a chamada em si.
+  assert.match(renderImgGallerySrc, /openImageLightbox\(img\.data, img\.label, pendingImgs, idx, /);
   assert.doesNotMatch(html.slice(html.indexOf('function openImageLightbox(')), /IMAGE_SEQUENCE_PRESETS|collage-seq-select/, 'lightbox não referencia nada do seletor de sequência');
 });
