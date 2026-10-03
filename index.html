@@ -5266,10 +5266,14 @@ function renderClassificationBox(key){
   const rows = sys.categories.map(c=>
     `<div class="class-row"><span class="class-code">${c.code}</span><div class="class-body"><span class="class-label">${c.label}</span><span class="class-desc">${c.desc}</span></div></div>`
   ).join('');
-  return `<div class="detail-classification">
+  // UX — recolhida por padrão (não polui o detalhe); mesmo <details>
+  // compacto já usado por radiologicSignsSectionHtml/classificationSchemesSectionHtml
+  // (.didactic-block). Conteúdo interno (label + tabela) inalterado.
+  return `<details class="didactic-block">
+    <summary>${sys.name}</summary>
     <div class="detail-links-label">CLASSIFICAÇÃO OFICIAL — ${sys.name}</div>
     <div class="class-table">${rows}</div>
-  </div>`;
+  </details>`;
 }
 
 /* níveis de incidência relativa (dentro do próprio sítio), usados para ordenar
