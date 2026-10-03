@@ -128,13 +128,15 @@ test('7. updateCount é a ÚNICA função que escreve nos contadores — mesmo h
 
 const FN_NAMES = [
   'triageReasonLabel', 'triageNormalize', 'triageNotesReasons', 'triageTagsReasons', 'triageEnTermReasons',
-  'triageClassificationReasons', 'triageClinicalTagsReasons', 'triageRichImagesWeakNotesReasons',
+  'triageClassificationApplicable', 'triageClassificationReasons', 'triageClinicalTagsReasons', 'triageRichImagesWeakNotesReasons',
   'evaluateLesionForTriage', 'scanCatalogForTriage', 'createTriageReviewBatch',
   'tokenizeExternalTitle', 'normalizeExternalTitle', 'classifyClassificationCompatibility',
   'hasActiveLesionReview', 'reviewScope', 'createLesionReview', 'genLesionReviewId', 'pushLesionReviewHistory'
 ];
 const CONST_NAMES = [
   'TRIAGE_MIN_TAGS', 'TRIAGE_MIN_NOTES_CHARS', 'TRIAGE_MIN_NOTES_REMAINDER_TOKENS', 'TRIAGE_RICH_IMAGES_MIN',
+  'TRIAGE_MIN_NOTES_CHARS_FOR_DIFFERENTIALS', 'TRIAGE_CLASSIFICATION_TRAUMA_SYSTEMS', 'TRIAGE_CLASSIFICATION_TRAUMA_HINT',
+  'TRIAGE_CLASSIFICATION_BENIGN_EXCLUSIONS',
   'TRIAGE_REASON_LABELS', 'TRIAGE_REASON_WEIGHTS', 'EXTERNAL_IMPORT_STOPWORDS', 'CLASSIFICATION_CONTEXT_RULES',
   'ACTIVE_LESION_REVIEW_STATUSES'
 ];

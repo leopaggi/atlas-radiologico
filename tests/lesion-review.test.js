@@ -984,9 +984,9 @@ test('IA (pacote): pending gera um pacote estruturado com reviewId/lesionId/camp
   assert.equal(built.packet.lesionName, lesion.name);
   assert.equal(built.packet.requestText, 'otimizar diagnósticos diferenciais');
   assert.deepEqual(JSON.parse(JSON.stringify(built.packet.currentFields)), {
-    name: lesion.name, notes: lesion.notes, classification: null, tags: lesion.tags, enTerm: lesion.enTerm
+    name: lesion.name, notes: lesion.notes, classification: null, tags: lesion.tags, enTerm: lesion.enTerm, clinicalTags: []
   });
-  assert.deepEqual(JSON.parse(JSON.stringify(built.packet.allowedFields)), ['name', 'notes', 'classification', 'tags', 'enTerm']);
+  assert.deepEqual(JSON.parse(JSON.stringify(built.packet.allowedFields)), ['name', 'notes', 'classification', 'tags', 'enTerm', 'clinicalTags']);
   assert.ok(built.packet.forbiddenFields.includes('images'));
   assert.ok(built.packet.forbiddenFields.includes('lesionId'));
 });
@@ -1012,7 +1012,7 @@ test('IA (pacote): buildReviewAiPrompt explica a ponte e manda devolver só o JS
   assert.equal(built.ok, true);
   assert.match(built.text, /PONTE MANUAL/);
   assert.match(built.text, /NÃO aplique nada/);
-  assert.match(built.text, /proposedChanges aceita SOMENTE: name, notes, classification, tags, enTerm/);
+  assert.match(built.text, /proposedChanges aceita SOMENTE: name, notes, classification, tags, enTerm, clinicalTags/);
   assert.match(built.text, new RegExp('"reviewId":"' + review.id + '"'));
 });
 
@@ -1079,6 +1079,115 @@ test('IA (importar) + MANTER: approveAppliedReviewSolution -> accepted e encerra
   assert.ok(res.review.attempts[res.review.attempts.length - 1].approvedAt, 'registra acceptedAt na tentativa');
   assert.equal(ctx.countPendingLesionReviews(), 0);
   assert.equal(ctx.countReadyLesionSolutions(), 0);
+});
+
+/* ===========================================================================
+   clinicalTags no contrato de revisão (CLINICAL TAGS V1 já existia e
+   persistia normalmente — só NÃO entrava na allowlist da IA. Mesmo
+   mecanismo genérico de sempre: validateProposedChanges/
+   authorizeAndApplyReviewSolution/rollbackAppliedReviewSolution não têm
+   nenhum código por campo — por isso aplicar/desfazer/registrar tentativa
+   "só funcionam" sem nenhuma mudança adicional além da allowlist+validação.)
+   =========================================================================== */
+
+test('clinicalTags: entra no pacote da IA (currentFields) refletindo o valor real da lesão', () => {
+  const lesion = makeLesion({ clinicalTags: ['dor no punho', 'trauma', 'paciente pediátrico'] });
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'revisar tags clínicas');
+  const built = ctx.buildReviewAiPacket(review.id);
+  assert.equal(built.ok, true);
+  assert.deepEqual(serialize(built.packet.currentFields.clinicalTags), ['dor no punho', 'trauma', 'paciente pediátrico']);
+  assert.ok(built.packet.allowedFields.includes('clinicalTags'));
+});
+
+test('clinicalTags: pode ser PROPOSTA e aplicada provisoriamente, exatamente como tags', () => {
+  const lesion = makeLesion({ clinicalTags: [] });
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'adicionar contexto clínico');
+  const json = JSON.stringify({ reviewId: review.id, summary: 'a', reasoning: 'b', proposedChanges: { clinicalTags: ['dor no punho', 'trauma'] } });
+  const res = ctx.importReviewAiSolution(review.id, json);
+  assert.equal(res.ok, true);
+  assert.equal(res.applied, true);
+  assert.equal(res.review.status, 'applied_pending_validation');
+  assert.deepEqual(serialize(ctx.DATA[0].clinicalTags), ['dor no punho', 'trauma'], 'a proposta provisória já está em DATA');
+  assert.equal(ctx.DATA[0].name, lesion.name, 'nenhum outro campo foi tocado');
+});
+
+test('clinicalTags: ROLLBACK restaura exatamente o valor anterior (mesmo snapshot genérico de sempre)', () => {
+  const lesion = makeLesion({ clinicalTags: ['tag original'] });
+  const original = JSON.parse(JSON.stringify(lesion));
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId: review.id, summary: 'a', reasoning: 'b', proposedChanges: { clinicalTags: ['tag nova'] } }));
+  assert.deepEqual(serialize(ctx.DATA[0].clinicalTags), ['tag nova']);
+  const res = ctx.rollbackAppliedReviewSolution(review.id, 'não serviu');
+  assert.equal(res.ok, true);
+  assert.deepEqual(serialize(ctx.DATA[0]), original, 'rollback restaura clinicalTags junto com o resto da lesão');
+  assert.deepEqual(serialize(ctx.DATA[0].clinicalTags), ['tag original']);
+});
+
+test('clinicalTags: aparece em previousAttempts (buildReviewAiAttempts) como qualquer outro campo de proposedChanges', () => {
+  const ctx = buildTestContext({ data: [makeLesion({ clinicalTags: [] })] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId: review.id, summary: 'resumo', reasoning: 'motivo', proposedChanges: { clinicalTags: ['febre'] } }));
+  // Novo pacote só é aceito com a revisão de volta a pending/rejected — por
+  // isso desfaz antes (mesmo fluxo real de uma 2ª tentativa).
+  ctx.rollbackAppliedReviewSolution(review.id, 'tag errada');
+  const built = ctx.buildReviewAiPacket(review.id);
+  assert.equal(built.ok, true);
+  const attempts = serialize(built.packet.previousAttempts);
+  assert.equal(attempts.length, 1);
+  assert.deepEqual(attempts[0].proposedChanges.clinicalTags, ['febre']);
+});
+
+test('clinicalTags: tipo inválido (não-array) é REJEITADO, mesma validação de `tags`', () => {
+  const ctx = buildTestContext({ data: [makeLesion()] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  const before = JSON.stringify(ctx.DATA);
+  const res = ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId: review.id, summary: 'a', reasoning: 'b', proposedChanges: { clinicalTags: 'não é array' } }));
+  assert.equal(res.ok, false);
+  assert.equal(JSON.stringify(ctx.DATA), before, 'DATA intocada quando o tipo é inválido');
+  assert.equal(review.status, 'pending');
+});
+
+test('clinicalTags: campos REALMENTE proibidos continuam bloqueados mesmo depois de clinicalTags entrar na allowlist', () => {
+  const ctx = buildTestContext({ data: [makeLesion()] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  const res = ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId: review.id, summary: 'a', reasoning: 'b', proposedChanges: { clinicalTags: ['ok'], images: [] } }));
+  assert.equal(res.ok, false, 'um campo proibido no meio da proposta bloqueia a proposta inteira, como sempre');
+  assert.equal(res.detail, 'forbidden_field:images');
+  assert.equal(review.status, 'pending');
+});
+
+test('clinicalTags: respostas ANTIGAS (sem clinicalTags) continuam aceitas normalmente — compatibilidade retroativa', () => {
+  const ctx = buildTestContext({ data: [makeLesion({ clinicalTags: ['preexistente'] })] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  // uma IA "antiga" que nunca soube de clinicalTags continua funcionando — proposedChanges sem o campo.
+  const res = ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId: review.id, summary: 'a', reasoning: 'b', proposedChanges: { notes: 'novo texto' } }));
+  assert.equal(res.ok, true);
+  assert.equal(ctx.DATA[0].notes, 'novo texto');
+  assert.deepEqual(serialize(ctx.DATA[0].clinicalTags), ['preexistente'], 'clinicalTags preexistente não é tocado quando a proposta não o menciona');
+});
+
+test('clinicalTags: fluxo de LOTE continua funcionando (apply via proposedChanges.clinicalTags num item do batch)', () => {
+  const ctx = buildTestContext({ data: [makeLesion({ clinicalTags: [] })] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  const doc = JSON.stringify({ results: [{ reviewId: review.id, result: 'apply', summary: 'a', reasoning: 'b', proposedChanges: { clinicalTags: ['dor abdominal'] } }] });
+  const res = ctx.importReviewAiBatch(doc);
+  assert.equal(res.ok, true);
+  assert.equal(res.summary.applied, 1);
+  assert.deepEqual(serialize(ctx.DATA[0].clinicalTags), ['dor abdominal']);
+});
+
+test('clinicalTags: preparar o pacote NUNCA grava nada em DATA (zero persistência automática)', () => {
+  const lesion = makeLesion({ clinicalTags: ['tag'] });
+  const ctx = buildTestContext({ data: [lesion] });
+  const before = JSON.stringify(ctx.DATA);
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.buildReviewAiPacket(review.id);
+  ctx.buildReviewAiPrompt(review.id);
+  assert.equal(JSON.stringify(ctx.DATA), before, 'ler/montar o pacote nunca altera DATA');
+  assert.equal(ctx.saveDataCalls.length, 0, 'nenhuma chamada a saveData() só de preparar o pacote');
 });
 
 test('IA (importar): rejected (após desfazer) permite NOVA tentativa com novo snapshot', () => {
@@ -1397,7 +1506,7 @@ test('LOTE: pacote com várias revisões contém reviewId/lesionId/requestText/c
   const p1 = built.packet.reviews.find(p => p.reviewId === a.id);
   assert.equal(p1.lesionId, 'seed_1');
   assert.equal(p1.requestText, 'pedido A');
-  assert.deepEqual(serialize(p1.allowedFields), ['name', 'notes', 'classification', 'tags', 'enTerm']);
+  assert.deepEqual(serialize(p1.allowedFields), ['name', 'notes', 'classification', 'tags', 'enTerm', 'clinicalTags']);
   assert.equal(p1.images[0].publicId, 'atlas-radiologico/x');
   assert.equal(p1.images[0].data, undefined, 'sem blob/binário');
 });

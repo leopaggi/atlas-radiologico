@@ -6544,7 +6544,7 @@ function getReviewHistory(reviewId){
    imagem, localização anatômica principal ou operações destrutivas
    (excluir lesão, fundir lesões, mover/apagar imagem, Cloudinary,
    Firebase). Essas continuam exigindo edição manual pelo formulário. */
-const LESION_REVIEW_EDITABLE_FIELDS = ['name', 'notes', 'classification', 'tags', 'enTerm'];
+const LESION_REVIEW_EDITABLE_FIELDS = ['name', 'notes', 'classification', 'tags', 'enTerm', 'clinicalTags'];
 
 /* Validação estrutural de proposedChanges — NUNCA executa código arbitrário,
    só aceita um objeto simples {campo: novoValor} restrito à allowlist acima,
@@ -6564,6 +6564,13 @@ function validateProposedChanges(proposedChanges){
     if(key==='tags'){
       if(!Array.isArray(value) || !value.every(t=>typeof t==='string' && t.trim())) return { valid:false, reason:'invalid_tags' };
       changes.tags = value.map(t=>t.trim());
+    } else if(key==='clinicalTags'){
+      // CLINICAL TAGS V1 — mesma validação de `tags` (array de strings não
+      // vazias, trim); campo próprio e já persistido/sincronizado, só agora
+      // habilitado nesta allowlist (antes a triagem acusava a ausência mas a
+      // IA não podia propor nada pra corrigir).
+      if(!Array.isArray(value) || !value.every(t=>typeof t==='string' && t.trim())) return { valid:false, reason:'invalid_clinicalTags' };
+      changes.clinicalTags = value.map(t=>t.trim());
     } else if(key==='classification'){
       if(value!==null && typeof value!=='string') return { valid:false, reason:'invalid_classification' };
       changes.classification = value;
@@ -6967,7 +6974,7 @@ function applyReviewAiSuggestedPlacement(reviewId, siteOverride){
    (accepted) ou Desfazer (rollback). A IA nunca cria revisão, nunca
    marca accepted, nunca desfaz, nunca mexe em imagens/ownership.
    ============================================================ */
-const REVIEW_AI_ALLOWED_FIELDS = ['name','notes','classification','tags','enTerm'];
+const REVIEW_AI_ALLOWED_FIELDS = ['name','notes','classification','tags','enTerm','clinicalTags'];
 const REVIEW_AI_FORBIDDEN_FIELDS = ['id','lesionId','lesionName','images','img','localImg','links','s','site','altPlacements','_userUpdatedAt','REVIEW','SRS','LESION_REVISIONS','sessionLog','sectionOrder','siteOrder'];
 // Só pending/rejected podem receber proposta. proposed já tem uma (não duplica);
 // applied_pending_validation/accepted/cancelled ficam bloqueados.
@@ -7023,7 +7030,8 @@ function buildReviewAiPacket(reviewId){
         notes: lesion ? (lesion.notes||'') : '',
         classification: lesion ? (lesion.classification||null) : null,
         tags: lesion ? (Array.isArray(lesion.tags)?[...lesion.tags]:[]) : [],
-        enTerm: lesion ? (lesion.enTerm||'') : ''
+        enTerm: lesion ? (lesion.enTerm||'') : '',
+        clinicalTags: lesion ? (Array.isArray(lesion.clinicalTags)?[...lesion.clinicalTags]:[]) : []
       },
       images,
       previousAttempts: attempts,
@@ -7071,11 +7079,17 @@ function buildReviewAiPrompt(reviewId){
     'Sua tarefa: propor uma correção SOMENTE para os campos permitidos. NÃO aplique nada, NÃO crie revisão, NÃO altere ownership de imagens, NÃO mexa em imagens/IDs/progresso.',
     '',
     'Retorne SOMENTE um JSON válido (sem texto fora dele), neste formato:',
-    '{"reviewId":"'+p.reviewId+'","summary":"...","reasoning":"...","proposedChanges":{"name":"...","notes":"...","classification":"...","tags":["..."],"enTerm":"..."}}',
+    '{"reviewId":"'+p.reviewId+'","summary":"...","reasoning":"...","proposedChanges":{"name":"...","notes":"...","classification":"...","tags":["..."],"enTerm":"...","clinicalTags":["..."]}}',
     '',
     'proposedChanges aceita SOMENTE: ' + REVIEW_AI_ALLOWED_FIELDS.join(', ') + '.',
     'Inclua apenas os campos que realmente precisam mudar.',
-    'NÃO inclua: ' + REVIEW_AI_FORBIDDEN_FIELDS.join(', ') + '.'
+    'NÃO inclua: ' + REVIEW_AI_FORBIDDEN_FIELDS.join(', ') + '.',
+    '',
+    'Diretrizes de conteúdo (use o que for pertinente — não exija tudo de toda lesão):',
+    '- "notes": descrição radiológica + achados discriminativos. Quando fizer sentido citar diferenciais, siga o estilo já usado no Atlas: um parágrafo "Padrão: ..." seguido de "Diferenciais-chave: ..." (os pontos que distinguem cada diferencial podem ficar dentro da própria frase de "Diferenciais-chave"). Não é obrigatório ter diferenciais — várias entidades não precisam.',
+    '- "clinicalTags": achados/contexto CLÍNICO (ex.: sintoma, mecanismo de trauma, faixa etária) — nunca repita ali os achados radiológicos de "tags".',
+    '- "classification": só proponha quando existir um sistema oficial REALMENTE aplicável a esta entidade específica (não só por causa da região anatômica).',
+    '- Se nada acima tiver melhoria real, devolva "proposedChanges": {} (equivalente a no_change) em vez de inventar conteúdo.'
   ];
   const hasPrevious = Array.isArray(p.previousAttempts) && p.previousAttempts.length > 0;
   if(hasPrevious){
@@ -7332,10 +7346,11 @@ function buildReviewAiBatchPrompt(reviewIds){
     '- Para revisões com tentativas anteriores (previousAttempts), use OBRIGATORIAMENTE o feedback humano (humanFeedback/latestHumanFeedback). Não repita uma solução já recusada (rejected/rolledback) sem corrigir o motivo indicado.',
     '- Se a correção exigir ADICIONAR a lesão a outra seção/localização, use result "manual_action_required" com manualAction.type "additional_section_placement" e suggestedPlacement {section, site} usando SOMENTE seções/sítios da lista abaixo.',
     '- Itens com "scope":"global" são PENDÊNCIAS GERAIS do Atlas (sem lesão alvo): use result "analysis" (análise/plano em summary+reasoning), "manual_action_required" ou "no_change"; NUNCA "apply", nunca proposedChanges, nunca invente lesionId.',
+    '- Diretrizes de conteúdo (use o que for pertinente — não exija tudo de toda lesão): "notes" é descrição + achados discriminativos, e diferenciais (quando fizerem sentido) seguem o estilo já usado no Atlas ("Padrão: ..." + "Diferenciais-chave: ..."); "clinicalTags" é contexto CLÍNICO (nunca repita ali os achados radiológicos de "tags"); "classification" só quando um sistema oficial REALMENTE se aplicar a esta entidade, não só pela região anatômica. Sem melhoria real em nenhum campo, use "no_change".',
     '- Responda SOMENTE com JSON válido, sem nenhum texto fora dele.',
     '',
     'Formato exato:',
-    '{"results":[{"reviewId":"...","result":"apply","summary":"...","reasoning":"...","proposedChanges":{"notes":"...","tags":["..."]}},{"reviewId":"...","result":"manual_action_required","summary":"...","reasoning":"...","manualAction":{"type":"additional_section_placement","description":"...","suggestedPlacement":{"section":"Neurorradiologia","site":null}},"proposedChanges":{}},{"reviewId":"...","result":"no_change","summary":"...","reasoning":"...","proposedChanges":{}}]}',
+    '{"results":[{"reviewId":"...","result":"apply","summary":"...","reasoning":"...","proposedChanges":{"notes":"...","tags":["..."],"clinicalTags":["..."]}},{"reviewId":"...","result":"manual_action_required","summary":"...","reasoning":"...","manualAction":{"type":"additional_section_placement","description":"...","suggestedPlacement":{"section":"Neurorradiologia","site":null}},"proposedChanges":{}},{"reviewId":"...","result":"no_change","summary":"...","reasoning":"...","proposedChanges":{}}]}',
     '',
     '=== SEÇÕES E SÍTIOS VÁLIDOS (para suggestedPlacement) ===',
     JSON.stringify(reviewAiPlacementCatalog()),
@@ -16804,7 +16819,7 @@ const REVIEW_HISTORY_ACTION_LABELS = {
   manually_resolved:'Concluída manualmente pelo usuário' // PROTEÇÃO 091f
 };
 
-const LESION_REVIEW_FIELD_LABELS = { name:'nome', notes:'descrição', classification:'classificação', tags:'tags', enTerm:'termo em inglês' };
+const LESION_REVIEW_FIELD_LABELS = { name:'nome', notes:'descrição', classification:'classificação', tags:'tags', enTerm:'termo em inglês', clinicalTags:'tags clínicas' };
 function formatLesionReviewFieldValue(v){
   if(v===null || v===undefined) return '—';
   if(Array.isArray(v)) return v.length ? v.join(', ') : '—';
@@ -17627,11 +17642,16 @@ const TRIAGE_MIN_TAGS = 3;                   // abaixo disso (e > 0): tags insuf
 const TRIAGE_MIN_NOTES_CHARS = 80;           // abaixo disso (e > 0): notes curtas
 const TRIAGE_MIN_NOTES_REMAINDER_TOKENS = 3; // tokens de notes fora do nome da lesão: abaixo disso = "só repete o nome"
 const TRIAGE_RICH_IMAGES_MIN = 3;            // "imagens ricas": pelo menos N imagens
+// lrev — heurística de diferenciais tornada CONSERVADORA: a ausência da
+// palavra "diferencial" sozinha NÃO é prova de deficiência (várias entidades
+// não precisam de diferencial algum). Só sinaliza em notes já bem longa
+// (3x o limiar de "muito curta") — um indício fraco, não uma afirmação.
+const TRIAGE_MIN_NOTES_CHARS_FOR_DIFFERENTIALS = TRIAGE_MIN_NOTES_CHARS * 3;
 const TRIAGE_REASON_LABELS = {
   notes_empty: 'descrição ausente',
   notes_too_short: 'descrição muito curta',
   notes_repeats_name_only: 'descrição praticamente só repete o nome da lesão',
-  notes_missing_differentials: 'descrição sem diferenciais (nenhuma menção a "diferencial")',
+  notes_missing_differentials: 'descrição longa sem nenhuma menção a diferencial — avaliar se é pertinente',
   tags_empty: 'nenhuma tag',
   tags_insufficient: 'poucas tags',
   enterm_empty: 'termo em inglês vazio',
@@ -17664,7 +17684,7 @@ function triageNotesReasons(e){
   const nameTokens = new Set(tokenizeExternalTitle(e && e.name));
   const remainder = tokenizeExternalTitle(notes).filter(t=>!nameTokens.has(t));
   if(remainder.length < TRIAGE_MIN_NOTES_REMAINDER_TOKENS) reasons.push('notes_repeats_name_only');
-  if(notes.length >= TRIAGE_MIN_NOTES_CHARS && !/diferencia/i.test(notes)) reasons.push('notes_missing_differentials');
+  if(notes.length >= TRIAGE_MIN_NOTES_CHARS_FOR_DIFFERENTIALS && !/diferencia/i.test(notes)) reasons.push('notes_missing_differentials');
   return reasons;
 }
 function triageTagsReasons(e){
@@ -17679,15 +17699,41 @@ function triageEnTermReasons(e){
   if(triageNormalize(term) === triageNormalize(e && e.name)) return ['enterm_equals_name'];
   return [];
 }
+/* lrev — camada CONSERVADORA adicional sobre CLASSIFICATION_CONTEXT_RULES,
+   só para a TRIAGEM sugerir "falta uma classificação aplicável". NUNCA
+   altera a regra/constante compartilhada (a mesma usada por
+   buildClassificationAudit, que audita uma classificação JÁ atribuída —
+   um padrão bem mais permissivo e correto pra aquele outro propósito).
+   "compatible" (seção + palavra-chave anatômica) é NECESSÁRIO mas NÃO
+   SUFICIENTE pra concluir que o sistema se aplica à ENTIDADE específica —
+   dois falsos-positivos documentados e corrigidos aqui:
+   1) AAST (American Association for the Surgery of Trauma) só existe pra
+      TRAUMA — nunca pra achado incidental/tumoral/cístico — mas o regex de
+      CLASSIFICATION_CONTEXT_RULES não exige nenhuma palavra de trauma.
+   2) Entidades claramente benignas e já bem caracterizadas (ex.: hemangioma
+      hepático) NUNCA recebem LI-RADS, mesmo batendo seção+palavra "hepát". */
+const TRIAGE_CLASSIFICATION_TRAUMA_SYSTEMS = ['AAST_KIDNEY', 'AAST_LIVER', 'AAST_SPLEEN'];
+const TRIAGE_CLASSIFICATION_TRAUMA_HINT = /trauma|lacera[cç][aã]o|contus[aã]o|ferimento|les[aã]o traum[aá]tica/i;
+const TRIAGE_CLASSIFICATION_BENIGN_EXCLUSIONS = {
+  LIRADS: /hemangioma|cisto|quisto|esteatose|f[ií]gado gorduroso|lipoma/i
+};
+function triageClassificationApplicable(sys, e){
+  const hay = String((e && e.site) || '') + ' ' + String((e && e.name) || '');
+  if(TRIAGE_CLASSIFICATION_TRAUMA_SYSTEMS.includes(sys) && !TRIAGE_CLASSIFICATION_TRAUMA_HINT.test(hay)) return false;
+  const exclusion = TRIAGE_CLASSIFICATION_BENIGN_EXCLUSIONS[sys];
+  if(exclusion && exclusion.test(hay)) return false;
+  return true;
+}
 /* Reaproveita CLASSIFICATION_CONTEXT_RULES/classifyClassificationCompatibility
    (mesma regra do auditor de classificações existente, buildClassificationAudit)
    só invertida: o alvo aqui é "sem classification, mas algum sistema bate
-   com o contexto (seção+nome)" — nunca duplica o regex/seções de lá. */
+   com o contexto (seção+nome) E é realmente aplicável à entidade" — nunca
+   duplica o regex/seções de lá, só acrescenta o filtro conservador acima. */
 function triageClassificationReasons(e){
   if(e && e.classification) return [];
   const systems = Object.keys(CLASSIFICATION_CONTEXT_RULES);
   for(const sys of systems){
-    if(classifyClassificationCompatibility(sys, e) === 'compatible') return ['classification_missing_applicable'];
+    if(classifyClassificationCompatibility(sys, e) === 'compatible' && triageClassificationApplicable(sys, e)) return ['classification_missing_applicable'];
   }
   return [];
 }

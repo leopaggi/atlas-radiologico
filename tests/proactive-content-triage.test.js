@@ -65,13 +65,15 @@ function extractConst(source, name) {
 
 const FN_NAMES = [
   'triageReasonLabel', 'triageNormalize', 'triageNotesReasons', 'triageTagsReasons', 'triageEnTermReasons',
-  'triageClassificationReasons', 'triageClinicalTagsReasons', 'triageRichImagesWeakNotesReasons',
+  'triageClassificationApplicable', 'triageClassificationReasons', 'triageClinicalTagsReasons', 'triageRichImagesWeakNotesReasons',
   'evaluateLesionForTriage', 'scanCatalogForTriage', 'createTriageReviewBatch',
   'tokenizeExternalTitle', 'normalizeExternalTitle', 'classifyClassificationCompatibility',
   'hasActiveLesionReview', 'reviewScope', 'createLesionReview', 'genLesionReviewId', 'pushLesionReviewHistory'
 ];
 const CONST_NAMES = [
   'TRIAGE_MIN_TAGS', 'TRIAGE_MIN_NOTES_CHARS', 'TRIAGE_MIN_NOTES_REMAINDER_TOKENS', 'TRIAGE_RICH_IMAGES_MIN',
+  'TRIAGE_MIN_NOTES_CHARS_FOR_DIFFERENTIALS', 'TRIAGE_CLASSIFICATION_TRAUMA_SYSTEMS', 'TRIAGE_CLASSIFICATION_TRAUMA_HINT',
+  'TRIAGE_CLASSIFICATION_BENIGN_EXCLUSIONS',
   'TRIAGE_REASON_LABELS', 'TRIAGE_REASON_WEIGHTS', 'EXTERNAL_IMPORT_STOPWORDS', 'CLASSIFICATION_CONTEXT_RULES',
   'ACTIVE_LESION_REVIEW_STATUSES'
 ];
@@ -95,7 +97,7 @@ function buildCtx(opts) {
   // `function` vira) — precisa de uma ponte explícita pros testes lerem
   // TRIAGE_REASON_WEIGHTS/TRIAGE_REASON_LABELS/ACTIVE_LESION_REVIEW_STATUSES
   // de fora. Mesmo padrão de "this.__api = {...}" já usado noutras suítes.
-  vm.runInContext(src + '\nthis.__consts = { TRIAGE_REASON_LABELS, TRIAGE_REASON_WEIGHTS, ACTIVE_LESION_REVIEW_STATUSES };', ctx, { filename: 'proactive-content-triage.js' });
+  vm.runInContext(src + '\nthis.__consts = { TRIAGE_REASON_LABELS, TRIAGE_REASON_WEIGHTS, ACTIVE_LESION_REVIEW_STATUSES, TRIAGE_MIN_NOTES_CHARS, TRIAGE_MIN_NOTES_CHARS_FOR_DIFFERENTIALS };', ctx, { filename: 'proactive-content-triage.js' });
   return ctx;
 }
 function lesion(overrides) {
@@ -126,9 +128,16 @@ test('3. notes_repeats_name_only: quase só repete o nome da lesão (tokens fora
   assert.ok(reasons.includes('notes_repeats_name_only'));
 });
 
-test('4. notes_missing_differentials: notes longa o bastante mas sem menção a "diferencial"', () => {
+test('4. notes_missing_differentials: heurística CONSERVADORA — só dispara em notes bem longa (3x o limiar de "curta"), nunca pela mera ausência da palavra', () => {
   const ctx = buildCtx({});
-  const longNoDiff = 'Lesão nodular bem definida, homogênea, com realce progressivo centrípeto característico em fase tardia após contraste, sem lavagem, compatível com diagnóstico típico.';
+  // lrev — moderadamente longa (passaria do limiar ANTIGO de 80 chars) sem
+  // menção a diferencial: NÃO dispara mais — a ausência da palavra sozinha
+  // não é prova de deficiência (nem toda entidade precisa de diferencial).
+  const moderateNoDiff = 'Lesão nodular bem definida, homogênea, com realce discreto e progressivo após a administração do meio de contraste.';
+  assert.ok(moderateNoDiff.length > ctx.__consts.TRIAGE_MIN_NOTES_CHARS, 'passaria do limiar antigo de "curta"');
+  assert.ok(!ctx.triageNotesReasons(lesion({ notes: moderateNoDiff })).includes('notes_missing_differentials'), 'notes moderadamente longa sem "diferencial" não é mais motivo isolado');
+  const longNoDiff = 'Lesão nodular bem definida, homogênea, com realce progressivo centrípeto característico em fase tardia após contraste, sem lavagem, compatível com diagnóstico típico, sem sinais de invasão ou comportamento agressivo, achados estáveis em todo o acompanhamento por imagem disponível até o momento.';
+  assert.ok(longNoDiff.length >= ctx.__consts.TRIAGE_MIN_NOTES_CHARS_FOR_DIFFERENTIALS, 'fixture precisa passar do novo limiar conservador (3x)');
   const reasons = ctx.triageNotesReasons(lesion({ notes: longNoDiff }));
   assert.ok(reasons.includes('notes_missing_differentials'));
   const withDiff = longNoDiff + ' Diferenciais-chave: metástase hipervascular e adenoma.';
@@ -160,6 +169,29 @@ test('7. classification_missing_applicable: reaproveita CLASSIFICATION_CONTEXT_R
   // contexto sem nenhum sistema batendo -> nada.
   const generic = lesion({ id: 'l3', name: 'Lesão inespecífica', s: 'Tórax', site: 'Mediastino' });
   assert.deepEqual(plain(ctx.triageClassificationReasons(generic)), []);
+});
+
+test('7b. classification_missing_applicable é CONSERVADOR — exclusão de entidade benigna conhecida (hemangioma hepático nunca é LI-RADS)', () => {
+  const ctx = buildCtx({});
+  // lrev — este é o falso-positivo real corrigido: antes, "hepático" no
+  // nome batia LIRADS (seção+palavra-chave) mesmo sendo um hemangioma, que
+  // NUNCA recebe LI-RADS (sistema de risco de CHC, não de achado benigno).
+  const hemangioma = lesion({ id: 'l4', name: 'Hemangioma hepático', s: 'Abdômen Superior', site: 'Fígado' });
+  assert.deepEqual(plain(ctx.triageClassificationReasons(hemangioma)), [], 'nunca sugere LI-RADS pra hemangioma, mesmo batendo seção+palavra-chave');
+  // mesma seção/palavra, mas SEM a exclusão (não é um hemangioma) -> continua sinalizando normalmente.
+  const nodule = lesion({ id: 'l5', name: 'Nódulo hepático em paciente cirrótico', s: 'Abdômen Superior', site: 'Fígado' });
+  assert.deepEqual(plain(ctx.triageClassificationReasons(nodule)), ['classification_missing_applicable']);
+});
+
+test('7c. classification_missing_applicable é CONSERVADOR — AAST (trauma) exige contexto de trauma explícito, nunca só a região anatômica', () => {
+  const ctx = buildCtx({});
+  // lrev — antes, QUALQUER lesão esplênica/renal/hepática batia AAST_* só
+  // pela região; AAST (American Association for the Surgery of Trauma) só
+  // existe pra grading de TRAUMA — nunca pra achado incidental/tumoral.
+  const incidental = lesion({ id: 'l6', name: 'Cisto esplênico simples', s: 'Abdômen Superior', site: 'Baço' });
+  assert.deepEqual(plain(ctx.triageClassificationReasons(incidental)), [], 'cisto esplênico incidental nunca sugere AAST');
+  const trauma = lesion({ id: 'l7', name: 'Laceração esplênica por trauma abdominal fechado', s: 'Abdômen Superior', site: 'Baço' });
+  assert.deepEqual(plain(ctx.triageClassificationReasons(trauma)), ['classification_missing_applicable'], 'com contexto de trauma explícito, continua sinalizando AAST normalmente');
 });
 
 test('8. clinical_tags_missing_with_context: caso clínico didático vinculado, mas sem clinicalTags', () => {
