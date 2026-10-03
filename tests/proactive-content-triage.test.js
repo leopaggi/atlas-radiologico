@@ -73,7 +73,7 @@ const FN_NAMES = [
 const CONST_NAMES = [
   'TRIAGE_MIN_TAGS', 'TRIAGE_MIN_NOTES_CHARS', 'TRIAGE_MIN_NOTES_REMAINDER_TOKENS', 'TRIAGE_RICH_IMAGES_MIN',
   'TRIAGE_MIN_NOTES_CHARS_FOR_DIFFERENTIALS', 'TRIAGE_CLASSIFICATION_TRAUMA_SYSTEMS', 'TRIAGE_CLASSIFICATION_TRAUMA_HINT',
-  'TRIAGE_CLASSIFICATION_BENIGN_EXCLUSIONS',
+  'TRIAGE_CLASSIFICATION_BENIGN_EXCLUSIONS', 'TRIAGE_CLASSIFICATION_REQUIRED_HINTS',
   'TRIAGE_REASON_LABELS', 'TRIAGE_REASON_WEIGHTS', 'EXTERNAL_IMPORT_STOPWORDS', 'CLASSIFICATION_CONTEXT_RULES',
   'ACTIVE_LESION_REVIEW_STATUSES'
 ];
@@ -192,6 +192,38 @@ test('7c. classification_missing_applicable é CONSERVADOR — AAST (trauma) exi
   assert.deepEqual(plain(ctx.triageClassificationReasons(incidental)), [], 'cisto esplênico incidental nunca sugere AAST');
   const trauma = lesion({ id: 'l7', name: 'Laceração esplênica por trauma abdominal fechado', s: 'Abdômen Superior', site: 'Baço' });
   assert.deepEqual(plain(ctx.triageClassificationReasons(trauma)), ['classification_missing_applicable'], 'com contexto de trauma explícito, continua sinalizando AAST normalmente');
+});
+
+test('7d. classification_missing_applicable é CONSERVADOR — C-RADS exige contexto colônico/colonográfico real, nunca só a palavra "apêndice"', () => {
+  const ctx = buildCtx({});
+  // lrev — caso real reportado: "Apendicite aguda" batia C-RADS (regra
+  // compartilhada inclui ap[eê]ndic pra cobrir achado apendicular VISTO em
+  // colonografia) mesmo sem nenhum contexto de colonografia/cólon.
+  const apendicite = lesion({ id: 'l8', name: 'Apendicite aguda', s: 'Abdômen Superior', site: 'Intestino / cólon' });
+  assert.deepEqual(plain(ctx.triageClassificationReasons(apendicite)), [], 'apendicite aguda nunca sugere C-RADS');
+  assert.equal(ctx.triageClassificationApplicable('CRADS', apendicite), false);
+  // contexto colônico real -> continua sinalizando C-RADS normalmente.
+  const polipo = lesion({ id: 'l9', name: 'Pólipo colônico', s: 'Abdômen Superior', site: 'Intestino / cólon' });
+  assert.deepEqual(plain(ctx.triageClassificationReasons(polipo)), ['classification_missing_applicable'], 'contexto colônico real continua sugerindo C-RADS');
+  assert.equal(ctx.triageClassificationApplicable('CRADS', polipo), true);
+});
+
+test('7e. classification_missing_applicable é CONSERVADOR — Bosniak exige contexto RENAL real, nunca só a substring "cisto"', () => {
+  const ctx = buildCtx({});
+  // lrev — caso real reportado: "Pseudocisto pancreático" batia Bosniak só
+  // pela substring "cisto"; Bosniak é EXCLUSIVO de cisto renal.
+  const pseudocisto = lesion({ id: 'l10', name: 'Pseudocisto pancreático', s: 'Abdômen Superior', site: 'Pâncreas' });
+  assert.deepEqual(plain(ctx.triageClassificationReasons(pseudocisto)), [], 'pseudocisto pancreático nunca sugere Bosniak');
+  assert.equal(ctx.triageClassificationApplicable('BOSNIAK', pseudocisto), false);
+  // contexto renal real -> continua sinalizando Bosniak normalmente.
+  const renal = lesion({ id: 'l11', name: 'Cisto renal complexo', s: 'Abdômen Superior', site: 'Rim' });
+  assert.deepEqual(plain(ctx.triageClassificationReasons(renal)), ['classification_missing_applicable'], 'contexto renal real continua sugerindo Bosniak');
+  assert.equal(ctx.triageClassificationApplicable('BOSNIAK', renal), true);
+  // outros órgãos/sítios com "cisto"/"cístic" nunca sugerem Bosniak — testado
+  // direto na função (o pipeline completo pode legitimamente sugerir OUTRO
+  // sistema, ex. O-RADS pra cisto ovariano — isso não é um bug a corrigir).
+  assert.equal(ctx.triageClassificationApplicable('BOSNIAK', { name: 'Cisto ovariano', site: 'Ovário' }), false);
+  assert.equal(ctx.triageClassificationApplicable('BOSNIAK', { name: 'Cisto hepático', site: 'Fígado' }), false);
 });
 
 test('8. clinical_tags_missing_with_context: caso clínico didático vinculado, mas sem clinicalTags', () => {

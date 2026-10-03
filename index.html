@@ -17706,22 +17706,45 @@ function triageEnTermReasons(e){
    um padrão bem mais permissivo e correto pra aquele outro propósito).
    "compatible" (seção + palavra-chave anatômica) é NECESSÁRIO mas NÃO
    SUFICIENTE pra concluir que o sistema se aplica à ENTIDADE específica —
-   dois falsos-positivos documentados e corrigidos aqui:
+   falsos-positivos documentados e corrigidos aqui:
    1) AAST (American Association for the Surgery of Trauma) só existe pra
       TRAUMA — nunca pra achado incidental/tumoral/cístico — mas o regex de
       CLASSIFICATION_CONTEXT_RULES não exige nenhuma palavra de trauma.
    2) Entidades claramente benignas e já bem caracterizadas (ex.: hemangioma
-      hepático) NUNCA recebem LI-RADS, mesmo batendo seção+palavra "hepát". */
+      hepático) NUNCA recebem LI-RADS, mesmo batendo seção+palavra "hepát".
+   3) C-RADS (colonografia) batia só pela palavra "apêndic(e/ite/ular)" —
+      a regra de CLASSIFICATION_CONTEXT_RULES inclui `ap[eê]ndic` pra cobrir
+      achados APENDICULARES vistos EM colonografia, mas isso faz "Apendicite
+      aguda" (nada a ver com colonografia) bater também. Exige contexto
+      colônico/colonográfico real.
+   4) Bosniak (SÓ cistos RENAIS) batia em qualquer "cisto"/"cístico" na
+      seção Abdômen Superior — "Pseudocisto pancreático" ou "Cisto
+      hepático" bateriam só pela substring "cisto". Exige contexto renal
+      real (rim/renal). */
 const TRIAGE_CLASSIFICATION_TRAUMA_SYSTEMS = ['AAST_KIDNEY', 'AAST_LIVER', 'AAST_SPLEEN'];
 const TRIAGE_CLASSIFICATION_TRAUMA_HINT = /trauma|lacera[cç][aã]o|contus[aã]o|ferimento|les[aã]o traum[aá]tica/i;
 const TRIAGE_CLASSIFICATION_BENIGN_EXCLUSIONS = {
   LIRADS: /hemangioma|cisto|quisto|esteatose|f[ií]gado gorduroso|lipoma/i
+};
+// Exige um indício POSITIVO adicional, mais estrito que o regex anatômico
+// de CLASSIFICATION_CONTEXT_RULES — só pra sistemas cujo regex compartilhado
+// é sabidamente largo demais pra uso na triagem (apendicite via C-RADS;
+// qualquer cisto abdominal via Bosniak). Nunca se aplica aos demais sistemas.
+const TRIAGE_CLASSIFICATION_REQUIRED_HINTS = {
+  CRADS: /col[oóô]n|colorretal|intestin|colonoscop|colonografia|divert[ií]c/i,
+  BOSNIAK: /\brim\b|renal/i
 };
 function triageClassificationApplicable(sys, e){
   const hay = String((e && e.site) || '') + ' ' + String((e && e.name) || '');
   if(TRIAGE_CLASSIFICATION_TRAUMA_SYSTEMS.includes(sys) && !TRIAGE_CLASSIFICATION_TRAUMA_HINT.test(hay)) return false;
   const exclusion = TRIAGE_CLASSIFICATION_BENIGN_EXCLUSIONS[sys];
   if(exclusion && exclusion.test(hay)) return false;
+  // O indício exigido é checado só no NOME — nunca no sítio. O sítio é um
+  // balde anatômico largo (ex.: "Intestino / cólon" agrupa apendicite
+  // também; "Rim" é o sítio de QUALQUER lesão renal) — testar contra ele
+  // anularia o filtro pra qualquer lesão cujo sítio já contenha a palavra.
+  const required = TRIAGE_CLASSIFICATION_REQUIRED_HINTS[sys];
+  if(required && !required.test(String((e && e.name) || ''))) return false;
   return true;
 }
 /* Reaproveita CLASSIFICATION_CONTEXT_RULES/classifyClassificationCompatibility
