@@ -17763,7 +17763,12 @@ function createTriageReviewBatch(candidates){
 function openProactiveTriageModal(onCreated){
   const candidates = scanCatalogForTriage(DATA);
   const ov = document.createElement('div');
-  ov.className = 'overlay';
+  // UX — lista pode ter centenas de candidatas; precisa de rodapé fixo
+  // (contagem + ações) sempre visível, sem rolar junto com a lista. Mesmo
+  // padrão já usado por .lesion-form-overlay (modal = flex column com altura
+  // máxima; corpo rolável próprio; .modal-actions sticky no rodapé) — só
+  // escopado pra esta overlay (.triage-overlay), nenhuma regra global tocada.
+  ov.className = 'overlay triage-overlay';
   // PROTEÇÃO 091 (mesmo padrão de openReviewAiBatchModal): este modal é
   // aberto DE DENTRO do Centro de Revisões (já uma .overlay) — fechar com
   // closeOverlay() removeria as duas de uma vez. Fecha só a si mesmo.
@@ -17772,16 +17777,29 @@ function openProactiveTriageModal(onCreated){
   const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) close(); };
   document.addEventListener('keydown', closeOnEsc);
   ov.innerHTML = `
+    <style>
+      .triage-overlay .modal{display:flex;flex-direction:column;max-height:85vh;overflow:hidden;}
+      .triage-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;}
+      .triage-overlay .modal-actions{position:sticky;bottom:0;flex:0 0 auto;background:var(--panel);z-index:5;border-top:1px solid var(--line);padding-top:12px;margin-top:14px;}
+      .triage-footer-count{color:var(--muted);font-size:12.5px;white-space:nowrap;}
+      .triage-footer-buttons{display:flex;gap:10px;}
+      @media(max-width:480px){ .triage-overlay .modal-actions{flex-direction:column;align-items:stretch;} .triage-footer-buttons{justify-content:flex-end;} }
+    </style>
     <div class="modal review-center-modal review-batch-modal">
       <h2>🔎 Triagem proativa de conteúdo</h2>
-      <div class="modal-sub">${candidates.length} candidata(s) com lacunas objetivas — nada é alterado aqui; só cria pedidos de revisão pra quem você selecionar.</div>
-      ${candidates.length ? `<div class="review-batch-toolbar">
-        <label class="review-batch-selectall"><input type="checkbox" id="triage-select-all"> Selecionar todas (<span id="triage-selected-count">0</span>)</label>
+      <div class="triage-body">
+        <div class="modal-sub">${candidates.length} candidata(s) com lacunas objetivas — nada é alterado aqui; só cria pedidos de revisão pra quem você selecionar.</div>
+        ${candidates.length ? `<div class="review-batch-toolbar">
+          <label class="review-batch-selectall"><input type="checkbox" id="triage-select-all"> Selecionar todas (<span id="triage-selected-count">0</span>)</label>
+        </div>
+        <div class="review-center-list" id="triage-list"></div>` : '<div class="review-center-empty">Nenhuma lacuna objetiva encontrada no momento.</div>'}
       </div>
-      <div class="review-center-list" id="triage-list"></div>` : '<div class="review-center-empty">Nenhuma lacuna objetiva encontrada no momento.</div>'}
       <div class="modal-actions" style="justify-content:space-between;">
-        <button type="button" class="btn btn-primary" id="triage-create" ${candidates.length?'':'disabled'}>criar pedidos de revisão para selecionadas</button>
-        <button type="button" class="btn btn-ghost" id="triage-close">fechar</button>
+        <span class="triage-footer-count" id="triage-footer-count">0 selecionada(s)</span>
+        <div class="triage-footer-buttons">
+          <button type="button" class="btn btn-primary" id="triage-create" ${candidates.length?'':'disabled'}>criar pedidos de revisão para selecionadas</button>
+          <button type="button" class="btn btn-ghost" id="triage-close">fechar</button>
+        </div>
       </div>
     </div>`;
   document.body.appendChild(ov);
@@ -17797,7 +17815,16 @@ function openProactiveTriageModal(onCreated){
   }
   const boxes = ()=> Array.from(ov.querySelectorAll('.triage-check'));
   const selected = ()=> boxes().filter(b=>b.checked).map(b=>b.dataset.id);
-  const updateCount = ()=>{ const el = ov.querySelector('#triage-selected-count'); if(el) el.textContent = String(selected().length); };
+  // Um único updateCount — escreve nos DOIS lugares (toolbar da lista +
+  // rodapé fixo); nenhum handler novo/duplicado, só mais um alvo de texto.
+  const updateCount = ()=>{
+    const n = selected().length;
+    const toolbarEl = ov.querySelector('#triage-selected-count');
+    if(toolbarEl) toolbarEl.textContent = String(n);
+    const footerEl = ov.querySelector('#triage-footer-count');
+    if(footerEl) footerEl.textContent = n + (n===1 ? ' selecionada' : ' selecionadas');
+  };
+  updateCount();
   const selectAll = ov.querySelector('#triage-select-all');
   if(selectAll) selectAll.onchange = (e)=>{ boxes().forEach(b=>{ b.checked = e.target.checked; }); updateCount(); };
   if(listEl) listEl.onchange = (e)=>{ if(e.target && e.target.classList.contains('triage-check')) updateCount(); };
