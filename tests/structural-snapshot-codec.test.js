@@ -359,9 +359,11 @@ test('3C-18 flag OFF continua comportamento legado (inline, sem Firestore)', asy
 
 test('3C-19 nenhuma migração automática', () => {
   assert.ok(html.includes('let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false'), 'flag nasce OFF');
-  for (const pair of [['buildSnapshotMigrationPlan(', 1], ['copySnapshotMigrationItem(', 1], ['verifySnapshotMigrationItem(', 1], ['compactSnapshotMigrationPlan(', 1]]) {
+  // build tem 2 ocorrências: definição + rebuild live no apply manual (5B).
+  for (const pair of [['copySnapshotMigrationItem(', 1], ['verifySnapshotMigrationItem(', 1], ['compactSnapshotMigrationPlan(', 1]]) {
     assert.equal(html.split(pair[0]).length - 1, pair[1], pair[0] + ' só tem a definição');
   }
+  assert.equal(html.split('buildSnapshotMigrationPlan(').length - 1, 2, 'build: definição + rebuild do apply');
 });
 
 test('3C-20 nenhum call site produtivo faz .set de snapshot lógico cru', () => {

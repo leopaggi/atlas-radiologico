@@ -26479,6 +26479,175 @@ async function compactSnapshotMigrationPlan(plan, verifyResults, opts){
   }
   return { ok:true, compactedCount: results.length, results };
 }
+/* Fase 5B — projeção para comparar fonte × clone compactado IGNORANDO só os
+   campos autorizados (snapshots inline removidos + markers externos).
+   Pura (nunca muta a entrada): se canonicalJsonString(projeção(fonte)) ===
+   canonicalJsonString(projeção(clone)), nenhuma outra diferença estrutural
+   existe. */
+function projectLesionRevisionsWithoutSnapshots(revs){
+  const stripEx = (ex)=>{
+    if(!ex || typeof ex!=='object' || Array.isArray(ex)) return ex;
+    const c = Object.assign({}, ex);
+    delete c.beforeSnapshot; delete c.afterSnapshot; delete c.snapshotStorage; delete c.snapshotRef;
+    if(c.tombstone && typeof c.tombstone==='object' && !Array.isArray(c.tombstone)){
+      const t = Object.assign({}, c.tombstone);
+      delete t.previousSnapshot; delete t.snapshotStorage; delete t.snapshotRef;
+      c.tombstone = t;
+    }
+    return c;
+  };
+  const stripAtt = (a)=>{
+    if(!a || typeof a!=='object' || Array.isArray(a)) return a;
+    const c = Object.assign({}, a);
+    delete c.beforeSnapshot; delete c.snapshotStorage; delete c.snapshotRef;
+    return c;
+  };
+  const out = {};
+  for(const rid of Object.keys(revs || {})){
+    const r = revs[rid];
+    if(!r || typeof r!=='object' || Array.isArray(r)){ out[rid] = r; continue; }
+    const c = Object.assign({}, r);
+    if(c.structuralExecution) c.structuralExecution = stripEx(c.structuralExecution);
+    if(Array.isArray(c.attempts)) c.attempts = c.attempts.map(stripAtt);
+    out[rid] = c;
+  }
+  return out;
+}
+/* Fase 5B — COMPACTAÇÃO REAL (único ponto de escrita da compactação; nunca
+   chamada automaticamente — sem call site em boot/save/sync; só via ação
+   manual futura). Pipeline: gates de fonte/plano/flag → VERIFY remoto NOVO
+   item a item → PREPARE em clone → VALIDATE do clone → APPLY por troca única
+   da referência → PERSIST uma vez (com read-back) → sync normal (debounced,
+   via saveLesionRevisions). Com dryRunOnly:true, executa tudo até a
+   validação e retorna as estatísticas SEM trocar nem persistir. */
+async function applySnapshotMigrationCompaction(opts){
+  opts = opts || {};
+  const fail = (reason, extra)=>{
+    try{ console.error('[Atlas] compactação abortada:', reason, (extra && (extra.snapshotId || extra.detail)) || ''); }catch(_e){}
+    return Object.assign({ ok:false, reason }, extra || {});
+  };
+  if(typeof STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED !== 'boolean' || STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED !== false)
+    return fail('flag_must_be_off');
+  const exp = opts.expected || {};
+  if(typeof exp.sourceFingerprint !== 'string' || typeof exp.sourceBytes !== 'number'
+    || typeof exp.total !== 'number' || typeof exp.structural !== 'number'
+    || typeof exp.attempts !== 'number' || typeof exp.tombstones !== 'number')
+    return fail('missing_expectations');
+  const liveStr = JSON.stringify(LESION_REVISIONS);
+  if(computeDeterministicFingerprint(LESION_REVISIONS) !== exp.sourceFingerprint)
+    return fail('source_fingerprint_mismatch');
+  if(liveStr.length !== exp.sourceBytes)
+    return fail('source_bytes_mismatch');
+  const plan = buildSnapshotMigrationPlan();
+  const nStructural = plan.items.filter(i=>i.kind==='structural_execution').length;
+  const nAttempts = plan.items.filter(i=>i.kind==='review_attempt').length;
+  if(plan.totalCount !== exp.total || nStructural !== exp.structural || nAttempts !== exp.attempts)
+    return fail('plan_count_mismatch', { detail:{ total:plan.totalCount, structural:nStructural, attempts:nAttempts } });
+  const seenIds = new Set();
+  for(const snapshotId of plan.items.map(i=>i.snapshotId)){
+    if(typeof snapshotId !== 'string' || !snapshotId || seenIds.has(snapshotId))
+      return fail('plan_count_mismatch', { detail:{ reason:'duplicate_or_missing_snapshot_id', snapshotId } });
+    seenIds.add(snapshotId);
+  }
+  // VERIFY remoto NOVO, imediatamente antes de qualquer mutação: para cada
+  // item, read-back real + decode + fingerprint + metadata + conteúdo.
+  for(const item of plan.items){
+    const live = buildAtlasSnapshotRecord({ kind:item.kind, reviewId:item.reviewId,
+      executionId: item.kind==='structural_execution'?item.executionId:undefined,
+      attemptId: item.kind==='review_attempt'?item.attemptId:undefined,
+      beforeSnapshot:item.beforeSnapshot, afterSnapshot:item.afterSnapshot });
+    if(!live.ok) return fail('remote_snapshot_unavailable', { snapshotId:item.snapshotId, detail:live.reason });
+    const remote = await getSnapshotFromFirestore(item.snapshotId);
+    if(!remote.ok) return fail('remote_snapshot_unavailable', { snapshotId:item.snapshotId, detail:remote.reason });
+    if(remote.record.fingerprint !== live.record.fingerprint)
+      return fail('remote_snapshot_conflict', { snapshotId:item.snapshotId });
+    const rm = remote.record;
+    if(rm.snapshotId !== item.snapshotId || rm.kind !== item.kind || (rm.reviewId||null) !== (item.reviewId||null)
+      || (item.kind==='structural_execution' ? (rm.executionId !== item.executionId) : (rm.attemptId !== item.attemptId)))
+      return fail('remote_metadata_mismatch', { snapshotId:item.snapshotId });
+    if(canonicalJsonString(rm.beforeSnapshot) !== canonicalJsonString(live.record.beforeSnapshot)
+      || canonicalJsonString(rm.afterSnapshot === undefined ? null : rm.afterSnapshot) !== canonicalJsonString(live.record.afterSnapshot))
+      return fail('remote_content_mismatch', { snapshotId:item.snapshotId });
+  }
+  // PREPARE em clone (nunca no objeto real).
+  const clone = JSON.parse(liveStr);
+  const refs = [];
+  let cStructural = 0, cAttempts = 0, cTombstones = 0;
+  for(const rid of Object.keys(clone)){
+    const r = clone[rid];
+    if(!r || typeof r!=='object') continue;
+    const ex = r.structuralExecution;
+    if(ex && (ex.beforeSnapshot || ex.afterSnapshot) && ex.executionId && seenIds.has(ex.executionId)){
+      delete ex.beforeSnapshot; delete ex.afterSnapshot;
+      ex.snapshotStorage = 'external'; ex.snapshotRef = ex.executionId;
+      if(ex.tombstone && ex.tombstone.previousSnapshot){
+        delete ex.tombstone.previousSnapshot;
+        ex.tombstone.snapshotStorage = 'external'; ex.tombstone.snapshotRef = ex.executionId;
+        cTombstones++;
+      }
+      cStructural++; refs.push(ex.executionId);
+    }
+    (Array.isArray(r.attempts) ? r.attempts : []).forEach(a=>{
+      if(a && a.beforeSnapshot && a.id && seenIds.has(a.id)){
+        delete a.beforeSnapshot;
+        a.snapshotStorage = 'external'; a.snapshotRef = a.id;
+        cAttempts++; refs.push(a.id);
+      }
+    });
+  }
+  // VALIDATE do clone.
+  const targetBytes = JSON.stringify(clone).length;
+  const failClone = (reason, extra)=> fail(reason, Object.assign({ structuralCount:cStructural, attemptCount:cAttempts, tombstoneCount:cTombstones }, extra || {}));
+  if(cStructural !== exp.structural || cAttempts !== exp.attempts || cTombstones !== exp.tombstones)
+    return failClone('clone_validation_failed', { detail:{ structural:cStructural, attempts:cAttempts, tombstones:cTombstones } });
+  if(refs.length !== exp.total || new Set(refs).size !== exp.total || refs.some(id=>!seenIds.has(id)))
+    return failClone('clone_validation_failed', { detail:{ reason:'refs_not_unique_or_outside_verified_set' } });
+  let remExec = 0, remAtt = 0, remTomb = 0;
+  Object.values(clone).forEach(r=>{
+    const ex = r && r.structuralExecution;
+    if(ex && (ex.beforeSnapshot || ex.afterSnapshot)) remExec++;
+    if(ex && ex.tombstone && ex.tombstone.previousSnapshot) remTomb++;
+    (r && Array.isArray(r.attempts) ? r.attempts : []).forEach(a=>{ if(a && a.beforeSnapshot) remAtt++; });
+  });
+  if(remExec !== 0 || remAtt !== 0 || remTomb !== 0)
+    return failClone('clone_validation_failed', { detail:{ remainingInline:{ exec:remExec, att:remAtt, tomb:remTomb } } });
+  if(canonicalJsonString(projectLesionRevisionsWithoutSnapshots(LESION_REVISIONS)) !== canonicalJsonString(projectLesionRevisionsWithoutSnapshots(clone)))
+    return failClone('clone_validation_failed', { detail:{ reason:'non_snapshot_fields_changed' } });
+  if(Object.keys(LESION_REVISIONS).length !== Object.keys(clone).length)
+    return failClone('clone_validation_failed', { detail:{ reason:'revision_count_changed' } });
+  if(typeof exp.targetBytes === 'number' && targetBytes !== exp.targetBytes)
+    return failClone('target_bytes_mismatch', { detail:{ targetBytes } });
+  const startedAt = new Date().toISOString();
+  const report = { migrationId:'compact_' + Date.now(), startedAt, completedAt:null,
+    sourceFingerprintBefore:exp.sourceFingerprint, sourceBytesBefore:exp.sourceBytes,
+    verifiedRemoteCount:plan.totalCount, structuralCount:cStructural, attemptCount:cAttempts, tombstoneCount:cTombstones,
+    targetBytes, reductionBytes:exp.sourceBytes - targetBytes,
+    reductionPct:Number((((exp.sourceBytes - targetBytes) / exp.sourceBytes) * 100).toFixed(2)),
+    persistedLocal:false, syncRequested:false };
+  if(opts.dryRunOnly === true)
+    return Object.assign({ ok:true, status:'validated_dry_run', dryRun:true }, report);
+  // APPLY all-or-none: troca única da referência, com backup em memória.
+  const backupInline = LESION_REVISIONS;
+  LESION_REVISIONS = clone;
+  try{
+    await saveLesionRevisions();
+    // Confirma o resultado real (read-back): sem catch silencioso — qualquer
+    // divergência restaura o original e retorna erro explícito.
+    const reread = await storage.get(LESION_REVISIONS_KEY, false);
+    if(!reread || canonicalJsonString(JSON.parse(reread.value)) !== canonicalJsonString(LESION_REVISIONS))
+      throw new Error('persist_verification_mismatch');
+  }catch(e){
+    LESION_REVISIONS = backupInline;
+    return fail('persist_failed', { detail:String((e && e.message) || e) });
+  }
+  // Sync normal: saveLesionRevisions() já marcou dirty + agendou o push
+  // debounced; DATA não mudou, então saveData() não é necessário. A
+  // transação publica o main compactado; os snapshots já existem (no-op
+  // idempotente por fingerprint) e divergência aborta sem sobrescrever.
+  const done = Object.assign({}, report, { ok:true, status:'compacted', persistedLocal:true, syncRequested:true });
+  done.completedAt = new Date().toISOString();
+  return done;
+}
 function structuralPlanPreviewHtml(v){
   // Prévia 100% a partir do plano VALIDADO + snapshot (nunca do DATA mutável
   // posterior): o que o usuário vê é exatamente o que foi validado.

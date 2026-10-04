@@ -358,7 +358,10 @@ test('3B-19 nenhum .catch(()=>{}) em persistência de snapshot', () => {
 
 test('3B-20 nenhuma migração automática, nenhum dado real tocado, flag OFF', () => {
   assert.ok(html.includes('let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false'), 'flag nasce OFF');
-  assert.equal(html.split('buildSnapshotMigrationPlan(').length - 1, 1, 'build só tem a definição');
+  // build tem 2 ocorrências: definição + rebuild live DENTRO do apply manual
+  // (5B, explícito, nunca boot/save/sync) — demais fns só a definição.
+  assert.equal(html.split('buildSnapshotMigrationPlan(').length - 1, 2, 'build: definição + rebuild do apply');
+  assert.match(fn('applySnapshotMigrationCompaction'), /buildSnapshotMigrationPlan\(\)/, 'o segundo uso mora no apply manual');
   assert.equal(html.split('copySnapshotMigrationItem(').length - 1, 1, 'copy só tem a definição');
   assert.equal(html.split('verifySnapshotMigrationItem(').length - 1, 1, 'verify só tem a definição');
   assert.equal(html.split('compactSnapshotMigrationPlan(').length - 1, 1, 'compact só tem a definição');
