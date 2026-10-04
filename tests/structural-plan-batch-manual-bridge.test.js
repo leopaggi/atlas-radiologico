@@ -51,6 +51,7 @@ const names = ['normalizeExternalTitle', 'normalizeRadiopaediaCaseTitle', 'token
   'reviewAcceptsAiProposal', 'flagManualActionRequired', 'reviewAiManualActionReason',
   'validateReviewAiPlacement', 'reviewAiKnownSections',
   'bridgeManualActionToStructuralPlan', 'importReviewAiSolution', 'rejectStructuralPlan',
+  'reviewRequestFlaggedMissingDifferentials', 'reviewAiAddressedDifferentialsGap',
   'getEffectiveStructuralStatus', 'getManualActionSolutions',
   'structuralPlanCardDecideHtml', 'structuralPlanPreviewHtml', 'structuralPlanStatusRowHtml',
   'mergeLesionRevisions',
@@ -61,6 +62,7 @@ const mapping = html.slice(html.indexOf('const STRUCTURAL_REVIEW_CANDIDATE_NAMES
 const planTypes = html.slice(html.indexOf('const STRUCTURAL_PLAN_TYPES = '), html.indexOf('function structuralPlanError('));
 const bridgeTypes = html.slice(html.indexOf('const STRUCTURAL_BRIDGE_ACTION_TYPES = '), html.indexOf('function bridgeManualActionToStructuralPlan('));
 const manualRe = html.slice(html.indexOf('const REVIEW_AI_MANUAL_ACTION_RE = '), html.indexOf('function reviewAiManualActionReason('));
+const diffGapRe = html.slice(html.indexOf('const TRIAGE_DIFFERENTIALS_GAP_MARKER_RE = '), html.indexOf('function reviewAiAddressedDifferentialsGap('));
 const batchResultsLine = html.split('\n').find((l) => l.trim().startsWith('const REVIEW_AI_BATCH_RESULTS = '));
 assert.ok(batchResultsLine, 'REVIEW_AI_BATCH_RESULTS ausente');
 const batchResultsConst = batchResultsLine.split('//')[0];
@@ -97,7 +99,7 @@ function ctxFixture() {
     updateReviewCenterBadges: () => { calls.badges++; },
     toast: () => {}, console });
   ctx.calls = calls;
-  vm.runInContext(consts + '\n' + mapping + '\n' + planTypes + '\n' + bridgeTypes + '\n' + manualRe + '\n' + batchResultsConst + '\n' + names.map(fn).join('\n'), ctx, { filename: 'batch-bridge-test.js' });
+  vm.runInContext(consts + '\n' + mapping + '\n' + planTypes + '\n' + bridgeTypes + '\n' + manualRe + '\n' + diffGapRe + '\n' + batchResultsConst + '\n' + names.map(fn).join('\n'), ctx, { filename: 'batch-bridge-test.js' });
   return ctx;
 }
 const planOf = (ctx, id) => ctx.LESION_REVISIONS[id].structuralPlan;

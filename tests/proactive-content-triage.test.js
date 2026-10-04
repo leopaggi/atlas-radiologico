@@ -226,6 +226,64 @@ test('7e. classification_missing_applicable é CONSERVADOR — Bosniak exige con
   assert.equal(ctx.triageClassificationApplicable('BOSNIAK', { name: 'Cisto hepático', site: 'Fígado' }), false);
 });
 
+test('F. erro grave corrigido: Mielolipoma ADRENAL nunca sugere Bosniak (substring "renal" dentro de "adrenal", sem \\b, era o bug)', () => {
+  const ctx = buildCtx({});
+  const mielolipoma = lesion({ id: 'l12', name: 'Mielolipoma adrenal', s: 'Abdômen Superior', site: 'Suprarrenal' });
+  assert.equal(ctx.triageClassificationApplicable('BOSNIAK', mielolipoma), false, 'adrenal NUNCA é renal — "renal" só conta como palavra inteira agora');
+  assert.deepEqual(plain(ctx.triageClassificationReasons(mielolipoma)), [], 'nenhum sistema deveria ser sugerido pra mielolipoma adrenal');
+  // contexto renal real continua funcionando (não quebrei o caso positivo).
+  assert.equal(ctx.triageClassificationApplicable('BOSNIAK', { name: 'Massa renal complexa', site: 'Rim' }), true);
+});
+
+test('D/G. classificação ESPECÍFICA DA ENTIDADE: Doença de Kienböck -> Lichtman é reconhecida como aplicável', () => {
+  const ctx = buildCtx({});
+  const kienbock = lesion({ id: 'l13', name: 'Doença de Kienböck (osteonecrose do semilunar)', s: 'Musculoesquelético', site: 'Punho e Mão' });
+  assert.deepEqual(plain(ctx.triageClassificationReasons(kienbock)), ['classification_missing_applicable']);
+  assert.equal(ctx.triageClassificationApplicable('KIENBOCK_LICHTMAN', kienbock), true);
+  // já tem classification -> nunca sugere de novo (mesmo comportamento de sempre).
+  assert.deepEqual(plain(ctx.triageClassificationReasons(Object.assign({}, kienbock, { classification: 'KIENBOCK_LICHTMAN' }))), []);
+});
+
+test('H. classificação ESPECÍFICA DA ENTIDADE: DDQ -> Graf é reconhecida como aplicável', () => {
+  const ctx = buildCtx({});
+  const ddq = lesion({ id: 'l14', name: 'Displasia do desenvolvimento do quadril', s: 'Musculoesquelético', site: 'Quadril' });
+  assert.deepEqual(plain(ctx.triageClassificationReasons(ddq)), ['classification_missing_applicable']);
+  assert.equal(ctx.triageClassificationApplicable('DDQ_GRAF', ddq), true);
+  // sigla também funciona.
+  const ddqSigla = lesion({ id: 'l15', name: 'DDQ bilateral', s: 'Musculoesquelético', site: 'Quadril' });
+  assert.equal(ctx.triageClassificationApplicable('DDQ_GRAF', ddqSigla), true);
+});
+
+test('E. classificação ESPECÍFICA: ENSAT (carcinoma adrenocortical) e Maceira (Müller-Weiss) reconhecidas; mielolipoma (E) continua corretamente SEM nenhuma', () => {
+  const ctx = buildCtx({});
+  const carcinoma = lesion({ id: 'l16', name: 'Carcinoma adrenocortical', s: 'Abdômen Superior', site: 'Suprarrenal' });
+  assert.deepEqual(plain(ctx.triageClassificationReasons(carcinoma)), ['classification_missing_applicable']);
+  assert.equal(ctx.triageClassificationApplicable('ADRENAL_ENSAT', carcinoma), true);
+  const mullerWeiss = lesion({ id: 'l17', name: 'Síndrome de Müller-Weiss', s: 'Musculoesquelético', site: 'Tornozelo e Pé' });
+  assert.deepEqual(plain(ctx.triageClassificationReasons(mullerWeiss)), ['classification_missing_applicable']);
+  assert.equal(ctx.triageClassificationApplicable('MULLER_WEISS_MACEIRA', mullerWeiss), true);
+});
+
+test('aliases: Kienbock sem trema, DDQ por extenso com "evolutiva", Muller Weiss com espaço (sem trema/hífen) -> todos reconhecidos', () => {
+  const ctx = buildCtx({});
+  const kienbockAscii = lesion({ id: 'l18', name: 'Osteonecrose de Kienbock', s: 'Musculoesquelético', site: 'Punho e Mão' });
+  assert.equal(ctx.triageClassificationApplicable('KIENBOCK_LICHTMAN', kienbockAscii), true, 'Kienbock sem trema (ö->o) deve ser reconhecido');
+  const ddqEvolutiva = lesion({ id: 'l19', name: 'Displasia evolutiva do quadril', s: 'Musculoesquelético', site: 'Quadril' });
+  assert.equal(ctx.triageClassificationApplicable('DDQ_GRAF', ddqEvolutiva), true, 'variante "evolutiva do quadril" deve ser reconhecida');
+  const mullerWeissSpace = lesion({ id: 'l20', name: 'Sequela de Muller Weiss', s: 'Musculoesquelético', site: 'Tornozelo e Pé' });
+  assert.equal(ctx.triageClassificationApplicable('MULLER_WEISS_MACEIRA', mullerWeissSpace), true, 'Muller Weiss com espaço (sem trema/hífen) deve ser reconhecido');
+});
+
+test('8/9. triageClassificationReasons é PURAMENTE detecção: nunca escreve em e.classification, e o valor aplicado continua vindo só da proposta (humana/IA) como texto livre', () => {
+  const ctx = buildCtx({});
+  const kienbock = lesion({ id: 'l21', name: 'Doença de Kienböck', s: 'Musculoesquelético', site: 'Punho e Mão', classification: null });
+  const before = JSON.stringify(kienbock);
+  ctx.triageClassificationReasons(kienbock);
+  ctx.triageClassificationApplicable('KIENBOCK_LICHTMAN', kienbock);
+  assert.equal(JSON.stringify(kienbock), before, 'detectar que KIENBOCK_LICHTMAN é aplicável NUNCA grava a string interna em e.classification — é só um sinal para a triagem/prompt, não uma escrita em DATA');
+  assert.equal(kienbock.classification, null, 'classification continua null até que uma proposta humana/IA de texto livre a defina, via pipeline genérico de sempre');
+});
+
 test('8. clinical_tags_missing_with_context: caso clínico didático vinculado, mas sem clinicalTags', () => {
   const ctx = buildCtx({});
   const withCase = lesion({ clinicalCases: [{ id: 'c1', title: 'Caso 1' }], clinicalTags: [] });

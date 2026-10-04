@@ -7139,9 +7139,9 @@ function buildReviewAiPrompt(reviewId){
     'NÃO inclua: ' + REVIEW_AI_FORBIDDEN_FIELDS.join(', ') + '.',
     '',
     'Diretrizes de conteúdo (use o que for pertinente — não exija tudo de toda lesão):',
-    '- "notes": descrição radiológica + achados discriminativos. Quando fizer sentido citar diferenciais, siga o estilo já usado no Atlas: um parágrafo "Padrão: ..." seguido de "Diferenciais-chave: ..." (os pontos que distinguem cada diferencial podem ficar dentro da própria frase de "Diferenciais-chave"). Não é obrigatório ter diferenciais — várias entidades não precisam.',
-    '- "clinicalTags": achados/contexto CLÍNICO (ex.: sintoma, mecanismo de trauma, faixa etária) — nunca repita ali os achados radiológicos de "tags".',
-    '- "classification": só proponha quando existir um sistema oficial REALMENTE aplicável a esta entidade específica (não só por causa da região anatômica).',
+    '- "notes": descrição radiológica + achados discriminativos. SE esta revisão foi aberta por "sem nenhuma menção a diferencial" (veja requestText), você é OBRIGADO a tomar uma destas duas decisões — nunca ignorar a lacuna em silêncio: (A) acrescentar um bloco real no estilo já usado no Atlas — "Padrão: ..." seguido de "Diferenciais-chave: diagnóstico 1 (critério discriminativo); diagnóstico 2 (critério discriminativo); ..." — com 2 a 4 diferenciais radiologicamente pertinentes, cada um com pelo menos um critério prático que o distingue (nunca sinônimos da própria entidade, nunca achados genéricos só pra preencher, nunca confundir manifestação associada com diagnóstico diferencial); OU (B) se diferenciais genuinamente não agregam valor a esta entidade específica, NÃO invente nenhum e diga isso explicitamente em "reasoning". Fora desse caso específico, diferenciais continuam opcionais; se já existirem bons diferenciais, não reescreva só por estilo.',
+    '- "clinicalTags": contexto CLÍNICO verdadeiro (sintoma, faixa etária, mecanismo de trauma, fator de risco, contexto sindrômico) — nunca repita ali os achados radiológicos de "tags".',
+    '- "classification": verifique se existe um sistema oficial ESPECÍFICO pra esta entidade exata (ex.: Lichtman para doença de Kienböck, Graf para displasia do desenvolvimento do quadril, ENSAT para carcinoma adrenocortical) — nunca proponha um sistema só porque a lesão está na mesma região anatômica de outro sistema conhecido (ex.: mielolipoma adrenal NÃO é Bosniak, mesmo perto do rim).',
     '- Se nada acima tiver melhoria real, devolva "proposedChanges": {} (equivalente a no_change) em vez de inventar conteúdo.'
   ];
   const hasPrevious = Array.isArray(p.previousAttempts) && p.previousAttempts.length > 0;
@@ -7174,6 +7174,66 @@ function reviewAiManualActionReason(requestText, summary, reasoning){
     if(m) return m[1].toLowerCase();
   }
   return null;
+}
+/* PROTEÇÃO [lrev] — reforço da lacuna "sem diferenciais" da triagem proativa.
+   Antes, a triagem SABIA detectar "notes_missing_differentials" mas a
+   resposta da IA não era obrigada a resolvê-la: podia melhorar outro campo
+   (ou nada) e simplesmente ignorar o motivo do pedido em silêncio — nenhum
+   código verificava se a lacuna apontada foi de fato endereçada.
+   Agora, quando requestText contém esse motivo exato (gerado por
+   createTriageReviewBatch a partir de TRIAGE_REASON_LABELS.notes_missing_
+   differentials), a resposta só é aceita se tomar uma das duas decisões
+   exigidas: (A) acrescentar um "Diferenciais-chave:" real (com conteúdo,
+   não vazio) em notes, ou (B) uma DECISÃO EXPLÍCITA em summary/reasoning
+   de que diferenciais não agregam valor a esta entidade. Ignorar a lacuna
+   (nem A nem B) é rejeitado ANTES de qualquer mudança em DATA — força nova
+   tentativa. */
+const TRIAGE_DIFFERENTIALS_GAP_MARKER_RE = /sem nenhuma men[cç][aã]o a diferencial/i;
+function reviewRequestFlaggedMissingDifferentials(requestText){
+  return TRIAGE_DIFFERENTIALS_GAP_MARKER_RE.test(String(requestText||''));
+}
+/* lrev — decisão B ENDURECIDA: a mera ocorrência lexical de "diferencial"
+   não basta mais (permissivo demais — aceitava "não foi possível analisar
+   os diferenciais" ou "descrição permanece sem diferencial", que são
+   omissões, não decisões). Exige, na MESMA frase que menciona
+   "diferencial": ou (i) uma palavra de JUÍZO DE VALOR/PERTINÊNCIA
+   (agregam/pertinentes/necessários/relevante/beneficia) acompanhada de
+   negação ("não"/"nunca") — ex. "diferenciais não agregam valor", "não há
+   diferencial relevante a acrescentar", "não é necessário acrescentar
+   diferenciais" —, ou (ii) uma palavra autonegativa própria
+   (dispensável/desnecessário/irrelevante), que já carrega a negação sem
+   precisar de "não" explícito — MAS só conta se ela mesma não estiver
+   negada antes, na mesma frase ("não são desnecessários"/"não é
+   irrelevante" é DUPLA NEGAÇÃO = diz que os diferenciais SÃO necessários/
+   relevantes, o oposto de uma decisão de omitir, então reprova). Todo
+   limite usa \b: "relevante" não deve casar dentro de "irrelevante", nem
+   "necessári" dentro de "desnecessário" — sem isso as duas palavras
+   contaminavam o julgamento uma da outra. Frases como "não avaliado"/
+   "não foi possível"/"sem diferencial"/"ausência de diferencial"/"são
+   relevantes" (sem negação) NÃO contêm nenhuma palavra de valor válida —
+   continuam reprovadas. Dividido por frase (nunca pelo texto inteiro) pra
+   não deixar "não" de uma frase e "diferencial" de outra, sem relação
+   nenhuma, aprovarem por coincidência. */
+const TRIAGE_DIFFERENTIALS_DECISION_NEGATION_RE = /\bn[ãa]o\b|\bnunca\b/i;
+const TRIAGE_DIFFERENTIALS_DECISION_VALUE_RE = /\bagreg\w*|\bpertinent\w*|\bnecess[áa]ri\w*|\brelevante\w*|\bbenefici\w*/i;
+const TRIAGE_DIFFERENTIALS_DECISION_SELFNEGATING_RE = /\b(?:desnecess[áa]ri\w*|dispens[áa]ve\w*|irrelevante\w*)\b/i;
+function reviewAiExplicitlyDeclinesDifferentials(text){
+  const sentences = String(text||'').split(/[.!?\n]+/);
+  return sentences.some(s=>{
+    if(!/diferencia/i.test(s)) return false;
+    const selfNeg = s.match(TRIAGE_DIFFERENTIALS_DECISION_SELFNEGATING_RE);
+    if(selfNeg){
+      const before = s.slice(0, selfNeg.index);
+      if(!TRIAGE_DIFFERENTIALS_DECISION_NEGATION_RE.test(before)) return true; // "seria desnecessário"/"é dispensável" — sem negação dupla
+      // negado antes ("não são desnecessários"/"não é irrelevante") -> dupla negação, cai pro teste normal abaixo
+    }
+    return TRIAGE_DIFFERENTIALS_DECISION_NEGATION_RE.test(s) && TRIAGE_DIFFERENTIALS_DECISION_VALUE_RE.test(s);
+  });
+}
+function reviewAiAddressedDifferentialsGap(proposedChanges, summary, reasoning){
+  const notesChange = (proposedChanges && typeof proposedChanges.notes==='string') ? proposedChanges.notes : '';
+  if(/diferenciais-chave:\s*\S/i.test(notesChange)) return true; // decisão A (bloco com conteúdo real, não vazio)
+  return reviewAiExplicitlyDeclinesDifferentials(String(summary||'') + '\n' + String(reasoning||'')); // decisão B (negação explícita)
 }
 // Importa o JSON devolvido pela IA: valida tudo ANTES de qualquer mudança.
 // Aceita 3 resultados válidos:
@@ -7257,6 +7317,11 @@ function importReviewAiSolution(reviewId, rawText){
   const summary = String(parsed.summary||'').trim();
   const reasoning = String(parsed.reasoning||'').trim();
   const solutionText = [summary, reasoning].filter(Boolean).join('\n\n') || 'Proposta importada da IA.';
+  // PROTEÇÃO [lrev] — lacuna "sem diferenciais" (se foi o motivo do pedido)
+  // precisa ser resolvida ou justificada; nunca ignorada em silêncio.
+  if(reviewRequestFlaggedMissingDifferentials(review.requestText) && !reviewAiAddressedDifferentialsGap(rawChanges, summary, reasoning)){
+    return { ok:false, reason:'differentials_gap_not_addressed' };
+  }
   // 2/3) Nenhum campo aplicável — não altera nada.
   if(keys.length===0){
     const manual = (parsed.manualAction && typeof parsed.manualAction==='object') ? parsed.manualAction : null;
@@ -7399,7 +7464,7 @@ function buildReviewAiBatchPrompt(reviewIds){
     '- Para revisões com tentativas anteriores (previousAttempts), use OBRIGATORIAMENTE o feedback humano (humanFeedback/latestHumanFeedback). Não repita uma solução já recusada (rejected/rolledback) sem corrigir o motivo indicado.',
     '- Se a correção exigir ADICIONAR a lesão a outra seção/localização, use result "manual_action_required" com manualAction.type "additional_section_placement" e suggestedPlacement {section, site} usando SOMENTE seções/sítios da lista abaixo.',
     '- Itens com "scope":"global" são PENDÊNCIAS GERAIS do Atlas (sem lesão alvo): use result "analysis" (análise/plano em summary+reasoning), "manual_action_required" ou "no_change"; NUNCA "apply", nunca proposedChanges, nunca invente lesionId.',
-    '- Diretrizes de conteúdo (use o que for pertinente — não exija tudo de toda lesão): "notes" é descrição + achados discriminativos, e diferenciais (quando fizerem sentido) seguem o estilo já usado no Atlas ("Padrão: ..." + "Diferenciais-chave: ..."); "clinicalTags" é contexto CLÍNICO (nunca repita ali os achados radiológicos de "tags"); "classification" só quando um sistema oficial REALMENTE se aplicar a esta entidade, não só pela região anatômica. Sem melhoria real em nenhum campo, use "no_change".',
+    '- Diretrizes de conteúdo (use o que for pertinente — não exija tudo de toda lesão): "notes" é descrição + achados discriminativos. SE a revisão foi aberta por "sem nenhuma menção a diferencial" (requestText), você é OBRIGADO a (A) acrescentar "Diferenciais-chave: diagnóstico 1 (critério discriminativo); ..." com 2-4 diferenciais pertinentes e um critério prático cada (nunca sinônimo da própria entidade, nunca genérico só pra preencher) OU (B) justificar explicitamente em "reasoning" por que diferenciais não agregam — nunca ignorar a lacuna. "clinicalTags" é contexto CLÍNICO verdadeiro (sintoma, idade, trauma, fator de risco) — nunca repita achados radiológicos de "tags". "classification": só um sistema ESPECÍFICO pra esta entidade exata (ex.: Lichtman/Kienböck, Graf/DDQ, ENSAT/carcinoma adrenocortical) — nunca só pela região anatômica (ex.: mielolipoma adrenal NÃO é Bosniak). Sem melhoria real em nenhum campo, use "no_change".',
     '- Responda SOMENTE com JSON válido, sem nenhum texto fora dele.',
     '',
     'Formato exato:',
@@ -7435,6 +7500,13 @@ function processReviewAiBatchItem(raw, seen){
   const summary = String(raw.summary||'').trim();
   const reasoning = String(raw.reasoning||'').trim();
   const solutionText = [summary, reasoning].filter(Boolean).join('\n\n') || 'Análise importada da IA (lote).';
+  // PROTEÇÃO [lrev] — mesmo gate do fluxo individual (importReviewAiSolution):
+  // lacuna "sem diferenciais" precisa ser resolvida ou justificada, nunca
+  // ignorada em silêncio — independente do result escolhido no lote.
+  const rawChangesForGapCheck = (raw.proposedChanges && typeof raw.proposedChanges==='object' && !Array.isArray(raw.proposedChanges)) ? raw.proposedChanges : {};
+  if(reviewRequestFlaggedMissingDifferentials(review.requestText) && !reviewAiAddressedDifferentialsGap(rawChangesForGapCheck, summary, reasoning)){
+    return { reviewId, status:'failed', reason:'differentials_gap_not_addressed' };
+  }
   if(result==='manual_action_required'){
     const manual = (raw.manualAction && typeof raw.manualAction==='object') ? raw.manualAction : {};
     const actionType = String(manual.type||'').trim() || null;
@@ -12379,7 +12451,16 @@ const CLASSIFICATION_CONTEXT_RULES = {
   ASPECTS:     { sections:['Neurorradiologia'], match:/avc|isqu[eê]mic|acidente vascular/ },
   AAST_KIDNEY: { sections:['Abdômen Superior'], match:/rim|renal/ },
   AAST_LIVER:  { sections:['Abdômen Superior'], match:/f[ií]gado|hep[aá]t/ },
-  AAST_SPLEEN: { sections:['Abdômen Superior'], match:/ba[cç]o|espl[eê]nic|espl[eé]nic/ }
+  AAST_SPLEEN: { sections:['Abdômen Superior'], match:/ba[cç]o|espl[eê]nic|espl[eé]nic/ },
+  // lrev — sistemas ESPECÍFICOS DA ENTIDADE (não do órgão): o match já é o
+  // próprio nome da doença, então nenhum deles precisa de exclusão/indício
+  // extra em TRIAGE_CLASSIFICATION_* (diferente dos *RADS/AAST acima, cujo
+  // match é uma palavra-chave anatômica larga). Adições puramente novas —
+  // nenhuma linha acima foi alterada.
+  KIENBOCK_LICHTMAN:    { sections:['Musculoesquelético'], match:/kienb[oö]ck/i },
+  DDQ_GRAF:             { sections:['Musculoesquelético'], match:/displasia (do desenvolvimento |evolutiva )?do quadril|\bddq\b/i },
+  ADRENAL_ENSAT:        { sections:['Abdômen Superior'], match:/carcinoma adrenocortical/i },
+  MULLER_WEISS_MACEIRA: { sections:['Musculoesquelético'], match:/m[uü]ller[\s-]?weiss/i }
 };
 /* 'compatible' | 'incompatible' | 'unknown'. Conservador: só marca
    'incompatible' quando a seção é claramente de OUTRO sistema E não há palavra
@@ -17773,7 +17854,11 @@ function triageEnTermReasons(e){
    4) Bosniak (SÓ cistos RENAIS) batia em qualquer "cisto"/"cístico" na
       seção Abdômen Superior — "Pseudocisto pancreático" ou "Cisto
       hepático" bateriam só pela substring "cisto". Exige contexto renal
-      real (rim/renal). */
+      real (rim/renal).
+   5) lrev — o indício "renal" do item 4, sem \b, ainda batia por SUBSTRING
+      dentro de "adrenal" ("ad-RENAL-"): "Mielolipoma adrenal" (erro grave
+      já detectado) sinalizava Bosniak mesmo sendo uma lesão adrenal, não
+      renal. Corrigido com fronteira de palavra (\brenal\b). */
 const TRIAGE_CLASSIFICATION_TRAUMA_SYSTEMS = ['AAST_KIDNEY', 'AAST_LIVER', 'AAST_SPLEEN'];
 const TRIAGE_CLASSIFICATION_TRAUMA_HINT = /trauma|lacera[cç][aã]o|contus[aã]o|ferimento|les[aã]o traum[aá]tica/i;
 const TRIAGE_CLASSIFICATION_BENIGN_EXCLUSIONS = {
@@ -17785,7 +17870,7 @@ const TRIAGE_CLASSIFICATION_BENIGN_EXCLUSIONS = {
 // qualquer cisto abdominal via Bosniak). Nunca se aplica aos demais sistemas.
 const TRIAGE_CLASSIFICATION_REQUIRED_HINTS = {
   CRADS: /col[oóô]n|colorretal|intestin|colonoscop|colonografia|divert[ií]c/i,
-  BOSNIAK: /\brim\b|renal/i
+  BOSNIAK: /\brim\b|\brenal\b/i
 };
 function triageClassificationApplicable(sys, e){
   const hay = String((e && e.site) || '') + ' ' + String((e && e.name) || '');

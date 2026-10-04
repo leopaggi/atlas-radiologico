@@ -1190,6 +1190,190 @@ test('clinicalTags: preparar o pacote NUNCA grava nada em DATA (zero persistênc
   assert.equal(ctx.saveDataCalls.length, 0, 'nenhuma chamada a saveData() só de preparar o pacote');
 });
 
+/* ===========================================================================
+   LACUNA "sem diferenciais" — a resposta da IA agora é OBRIGADA a resolvê-la
+   (acrescentar um "Diferenciais-chave:" real) ou justificá-la explicitamente
+   em summary/reasoning; nunca mais pode ignorá-la em silêncio. requestText
+   usa o texto EXATO que createTriageReviewBatch gera a partir de
+   TRIAGE_REASON_LABELS.notes_missing_differentials (proactive-content-
+   triage.test.js já prova esse texto; aqui só reaproveitamos a string real).
+   =========================================================================== */
+const DIFFERENTIALS_GAP_REQUEST_TEXT = 'Revisão proativa de conteúdo (lacunas identificadas automaticamente): descrição longa sem nenhuma menção a diferencial — avaliar se é pertinente.';
+
+test('A. lacuna de diferenciais + diferenciais pertinentes propostos -> ACEITA e aplica o bloco "Diferenciais-chave:"', () => {
+  const ctx = buildTestContext({ data: [makeLesion()] });
+  const { review } = ctx.createLesionReview('seed_1', DIFFERENTIALS_GAP_REQUEST_TEXT);
+  const json = JSON.stringify({
+    reviewId: review.id, summary: 'Acrescentados diferenciais.', reasoning: 'Entidade se beneficia de diferenciais.',
+    proposedChanges: { notes: 'Padrão: achado típico.\nDiferenciais-chave: diagnóstico A (critério 1); diagnóstico B (critério 2).' }
+  });
+  const res = ctx.importReviewAiSolution(review.id, json);
+  assert.equal(res.ok, true);
+  assert.equal(res.applied, true);
+  assert.match(ctx.DATA[0].notes, /Diferenciais-chave:/);
+});
+
+test('B. lacuna de diferenciais + entidade que NÃO precisa, mas reasoning justifica -> ACEITA sem inventar bloco', () => {
+  const ctx = buildTestContext({ data: [makeLesion()] });
+  const { review } = ctx.createLesionReview('seed_1', DIFFERENTIALS_GAP_REQUEST_TEXT);
+  const json = JSON.stringify({
+    reviewId: review.id, summary: 'Nenhuma mudança necessária.',
+    reasoning: 'Esta entidade é suficientemente característica; diferenciais não agregariam valor real aqui.',
+    proposedChanges: {}
+  });
+  const res = ctx.importReviewAiSolution(review.id, json);
+  assert.equal(res.ok, true, 'justificativa explícita em reasoning satisfaz a decisão B, mesmo sem bloco');
+  assert.equal(res.outcome, 'no_applicable_changes');
+  assert.equal(ctx.DATA[0].notes, makeLesion().notes, 'notes não foi tocada — nenhum diferencial inventado');
+});
+
+test('B2. lacuna de diferenciais SEM bloco e SEM justificativa (reasoning não menciona diferencial) -> REJEITADA (lacuna ignorada em silêncio)', () => {
+  const ctx = buildTestContext({ data: [makeLesion()] });
+  const { review } = ctx.createLesionReview('seed_1', DIFFERENTIALS_GAP_REQUEST_TEXT);
+  const before = JSON.stringify(ctx.DATA);
+  // melhora OUTRO campo (tags) mas ignora completamente o motivo do pedido.
+  const json = JSON.stringify({
+    reviewId: review.id, summary: 'Tags melhoradas.', reasoning: 'Ajustei a lista de tags radiológicas.',
+    proposedChanges: { tags: ['a', 'b', 'c'] }
+  });
+  const res = ctx.importReviewAiSolution(review.id, json);
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'differentials_gap_not_addressed');
+  assert.equal(JSON.stringify(ctx.DATA), before, 'nada é alterado quando a lacuna é ignorada');
+  assert.equal(review.status, 'pending', 'revisão continua pendente — força nova tentativa');
+});
+
+test('B3. "Os diferenciais não foram avaliados." é OMISSÃO, não decisão -> REJEITADA', () => {
+  const ctx = buildTestContext({ data: [makeLesion()] });
+  const { review } = ctx.createLesionReview('seed_1', DIFFERENTIALS_GAP_REQUEST_TEXT);
+  const before = JSON.stringify(ctx.DATA);
+  const json = JSON.stringify({
+    reviewId: review.id, summary: 'a', reasoning: 'Os diferenciais não foram avaliados.',
+    proposedChanges: {}
+  });
+  const res = ctx.importReviewAiSolution(review.id, json);
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'differentials_gap_not_addressed', '"não avaliados" tem "não", mas nenhuma palavra de juízo de valor/pertinência — não é uma decisão');
+  assert.equal(JSON.stringify(ctx.DATA), before);
+});
+
+test('B4. "A descrição permanece sem diferencial." é OMISSÃO (sem "não") -> REJEITADA', () => {
+  const ctx = buildTestContext({ data: [makeLesion()] });
+  const { review } = ctx.createLesionReview('seed_1', DIFFERENTIALS_GAP_REQUEST_TEXT);
+  const before = JSON.stringify(ctx.DATA);
+  const json = JSON.stringify({
+    reviewId: review.id, summary: 'A descrição permanece sem diferencial.', reasoning: '',
+    proposedChanges: {}
+  });
+  const res = ctx.importReviewAiSolution(review.id, json);
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'differentials_gap_not_addressed');
+  assert.equal(JSON.stringify(ctx.DATA), before);
+});
+
+test('B5. "Não foi possível definir diferenciais." é INCAPACIDADE, não decisão de valor -> REJEITADA', () => {
+  const ctx = buildTestContext({ data: [makeLesion()] });
+  const { review } = ctx.createLesionReview('seed_1', DIFFERENTIALS_GAP_REQUEST_TEXT);
+  const before = JSON.stringify(ctx.DATA);
+  const json = JSON.stringify({
+    reviewId: review.id, summary: 'a', reasoning: 'Não foi possível definir diferenciais.',
+    proposedChanges: {}
+  });
+  const res = ctx.importReviewAiSolution(review.id, json);
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'differentials_gap_not_addressed');
+  assert.equal(JSON.stringify(ctx.DATA), before);
+});
+
+test('B6. menção incidental à palavra "diferencial" sem decisão explícita -> REJEITADA', () => {
+  const ctx = buildTestContext({ data: [makeLesion()] });
+  const { review } = ctx.createLesionReview('seed_1', DIFFERENTIALS_GAP_REQUEST_TEXT);
+  const before = JSON.stringify(ctx.DATA);
+  const json = JSON.stringify({
+    reviewId: review.id, summary: 'a',
+    reasoning: 'Há ausência de diagnóstico diferencial nesta descrição, entre outras observações gerais sobre o caso.',
+    proposedChanges: {}
+  });
+  const res = ctx.importReviewAiSolution(review.id, json);
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'differentials_gap_not_addressed', 'menção lexical isolada não é uma decisão de que diferenciais não agregam valor');
+  assert.equal(JSON.stringify(ctx.DATA), before);
+});
+
+test('B7. dupla negação em palavra autonegativa NÃO conta como decisão de omitir (gate B endurecido pela 2a rodada)', () => {
+  const CASES = [
+    // [reasoning, deve passar?]
+    ['Diferenciais não agregam valor nesta entidade.', true],
+    ['Diferenciais não são pertinentes neste contexto.', true],
+    ['Não é necessário acrescentar diferenciais.', true],
+    ['Não há diferencial relevante a acrescentar.', true],
+    ['Acrescentar diferenciais seria desnecessário.', true],
+    ['Um bloco de diferenciais é dispensável neste caso.', true],
+    ['Os diferenciais não foram avaliados.', false],
+    ['A descrição permanece sem diferencial.', false],
+    ['Não foi possível definir diferenciais.', false],
+    ['Há ausência de diagnóstico diferencial.', false],
+    ['Os diferenciais não são desnecessários.', false],
+    ['Não é irrelevante considerar os diferenciais.', false],
+    ['Os diferenciais são relevantes.', false],
+    ['É necessário considerar diagnósticos diferenciais.', false]
+  ];
+  const ctx = buildTestContext({ data: [makeLesion()] });
+  for (const [reasoning, expected] of CASES) {
+    const got = ctx.reviewAiAddressedDifferentialsGap({}, '', reasoning);
+    assert.equal(got, expected, `"${reasoning}" deveria ${expected ? 'PASSAR' : 'REJEITAR'}`);
+  }
+});
+
+test('C. review SEM a lacuna de diferenciais (outro motivo) -> o novo gate nunca interfere, comportamento de sempre', () => {
+  const ctx = buildTestContext({ data: [makeLesion()] });
+  const { review } = ctx.createLesionReview('seed_1', 'Revisão proativa de conteúdo (lacunas identificadas automaticamente): poucas tags.');
+  const json = JSON.stringify({ reviewId: review.id, summary: 'a', reasoning: 'b', proposedChanges: { tags: ['a', 'b', 'c'] } });
+  const res = ctx.importReviewAiSolution(review.id, json);
+  assert.equal(res.ok, true, 'sem o marcador exato de "sem diferencial" no requestText, o gate é um no-op');
+  assert.deepEqual(serialize(ctx.DATA[0].tags), ['a', 'b', 'c']);
+});
+
+test('J. o novo gate nunca afrouxa a allowlist — campo proibido continua rejeitado mesmo quando a lacuna de diferenciais é corretamente endereçada', () => {
+  const ctx = buildTestContext({ data: [makeLesion()] });
+  const { review } = ctx.createLesionReview('seed_1', DIFFERENTIALS_GAP_REQUEST_TEXT);
+  const before = JSON.stringify(ctx.DATA);
+  const json = JSON.stringify({
+    reviewId: review.id, summary: 'a', reasoning: 'Diferenciais não agregam a esta entidade.',
+    proposedChanges: { images: [] }
+  });
+  const res = ctx.importReviewAiSolution(review.id, json);
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'invalid_changes');
+  assert.equal(res.detail, 'forbidden_field:images');
+  assert.equal(JSON.stringify(ctx.DATA), before, 'imagens/ownership/estrutura continuam fora do alcance, como sempre');
+});
+
+test('lote: a mesma exigência (A/B) vale no fluxo em lote, independente do "result" escolhido', () => {
+  const ctx = buildTestContext({ data: [makeLesion()] });
+  const { review } = ctx.createLesionReview('seed_1', DIFFERENTIALS_GAP_REQUEST_TEXT);
+  const doc = JSON.stringify({ results: [{ reviewId: review.id, result: 'no_change', summary: 'a', reasoning: 'Sem melhoria real; diferenciais não agregam valor a esta entidade.' }] });
+  const ok = ctx.importReviewAiBatch(doc);
+  assert.equal(ok.ok, true);
+  assert.equal(ok.summary.noChange, 1, 'justificativa explícita aceita result no_change normalmente');
+
+  const ctx2 = buildTestContext({ data: [makeLesion()] });
+  const { review: review2 } = ctx2.createLesionReview('seed_1', DIFFERENTIALS_GAP_REQUEST_TEXT);
+  const doc2 = JSON.stringify({ results: [{ reviewId: review2.id, result: 'no_change', summary: 'a', reasoning: 'Sem alteração necessária.' }] });
+  const bad = ctx2.importReviewAiBatch(doc2);
+  assert.equal(bad.ok, true);
+  assert.equal(bad.summary.failed, 1, 'no_change SEM nenhuma menção a diferencial é rejeitado — lacuna ignorada em silêncio');
+  assert.equal(bad.items[0].reason, 'differentials_gap_not_addressed');
+});
+
+test('I. prompt continua instruindo explicitamente a não duplicar tags radiológicas em clinicalTags', () => {
+  const ctx = buildTestContext({ data: [makeLesion()] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  const built = ctx.buildReviewAiPrompt(review.id);
+  assert.equal(built.ok, true);
+  assert.match(built.text, /clinicalTags.*nunca repita (ali )?(os )?achados radiológicos de "tags"/s);
+});
+
 test('IA (importar): rejected (após desfazer) permite NOVA tentativa com novo snapshot', () => {
   const lesion = makeLesion();
   const ctx = buildTestContext({ data: [lesion] });
