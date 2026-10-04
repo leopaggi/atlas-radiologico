@@ -54,6 +54,7 @@ const mapping = html.slice(html.indexOf('const STRUCTURAL_REVIEW_CANDIDATE_NAMES
 const planTypes = html.slice(html.indexOf('const STRUCTURAL_PLAN_TYPES = '), html.indexOf('function structuralPlanError('));
 const execConsts = html.slice(html.indexOf('const STRUCTURAL_EXECUTOR_VERSION = '), html.indexOf('function structuralExecutionId('));
 const statusesConst = "const ACTIVE_LESION_REVIEW_STATUSES = ['pending','rejected','proposed','applied_pending_validation','manual_action_required'];\n";
+const snapshotStoreConst = html.slice(html.indexOf('let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED'), html.indexOf('function authorizeAndApplyReviewSolution('));
 
 function lesion(id, over) {
   return Object.assign({ id, name: 'Lesão ' + id, s: 'Pelve Feminina', site: 'Ovário', notes: '', classification: null,
@@ -82,7 +83,7 @@ function ctxFixture() {
     updateReviewCenterBadges: () => { calls.badges++; },
     toast: () => {}, console });
   ctx.calls = calls;
-  vm.runInContext(consts + '\n' + mapping + '\n' + planTypes + '\n' + execConsts + '\n' + statusesConst + names.map(fn).join('\n'), ctx, { filename: 'batch-test.js' });
+  vm.runInContext(consts + '\n' + mapping + '\n' + planTypes + '\n' + execConsts + '\n' + statusesConst + snapshotStoreConst + names.map(fn).join('\n'), ctx, { filename: 'batch-test.js' });
   return ctx;
 }
 

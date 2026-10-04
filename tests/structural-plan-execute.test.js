@@ -46,6 +46,9 @@ const names = [
   'structuralApplyMerge', 'structuralApplyRemovePlacement',
   'structuralApplyTransferImages', 'structuralApplyAddCases',
   'rollbackStructuralExecution',
+  'buildAtlasSnapshotRecord', 'computeDeterministicFingerprint',
+  'structuralSnapshotLocalCacheKey', 'structuralSnapshotFirestoreRef',
+  'saveSnapshotToLocalCache', 'saveSnapshotToFirestore',
   'structuralDryRunSummaryHtml', 'getEffectiveStructuralStatus', 'structuralPlanCardBadgeHtml', 'structuralPlanCardButtonsHtml',
   'resolveReviewManually',
   'imageOwnerIdV1', 'assertManualImageOwnershipChange', 'canChangeImageOwnership',
@@ -65,6 +68,18 @@ const statusesConst = "const ACTIVE_LESION_REVIEW_STATUSES = ['pending','rejecte
 const anatomicGuardConst = html.slice(
   html.indexOf('const SECTION_ANATOMIC_SYSTEM = {'),
   html.indexOf('function validateReviewAiPlacement(suggested, sourceSection){')
+);
+// Snapshot store (Fase 3 da externalização): flag + leitores de alto
+// nível. executeStructuralPlan/rollbackStructuralExecution dependem deles
+// mesmo com a flag OFF (leitura incondicional, só a ESCRITA externa é
+// condicionada à flag).
+const snapshotStoreConst = html.slice(
+  html.indexOf('let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED'),
+  html.indexOf('function authorizeAndApplyReviewSolution(')
+);
+const schemaVersionConst = html.slice(
+  html.indexOf('const STRUCTURAL_SNAPSHOT_SCHEMA_VERSION = '),
+  html.indexOf('function structuralSnapshotLocalCacheKey(')
 );
 
 function lesion(id, over) {
@@ -97,8 +112,15 @@ function ctxFixture() {
   };
   const LESION_REVISIONS = { R208: manual('R208', 'seed_698') };
   const calls = { saves: 0, badges: 0 };
+  // Fase 3B: cache local em memória para o caminho flag-ON
+  // (saveSnapshotToLocalCache/getSnapshotFromLocalCache). Flag OFF nunca toca aqui.
+  const backing = {};
+  const storage = {
+    async get(key) { if (Object.prototype.hasOwnProperty.call(backing, key)) return { value: backing[key] }; throw new Error('not found: ' + key); },
+    async set(key, value) { backing[key] = value; }
+  };
   const ctx = vm.createContext({
-    DATA, LESION_REVISIONS,
+    DATA, LESION_REVISIONS, storage,
     REVIEW: {}, REVIEW_STAMPS: {}, REVIEW_PROGRESS: {}, REVIEW_OVERRIDE: {},
     SRS: {}, LESION_MERGES: {}, PENDING_LOCAL_IMAGE_ADDS: {},
     saveData: async () => { calls.saves++; },
@@ -116,8 +138,9 @@ function ctxFixture() {
     toast: () => {}, document: undefined, console
   });
   ctx.calls = calls;
+  ctx.__backing = backing;
   ctx.mergeResolution = mergeResolution;
-  vm.runInContext(execConsts + '\n' + ownershipConst + statusesConst + anatomicGuardConst + src, ctx, { filename: 'fase3-test.js' });
+  vm.runInContext(execConsts + '\n' + ownershipConst + statusesConst + anatomicGuardConst + snapshotStoreConst + '\n' + schemaVersionConst + src, ctx, { filename: 'fase3-test.js' });
   return ctx;
 }
 
@@ -166,6 +189,25 @@ test('Fase 3: execute funde, registra execução e resolve a revisão', async ()
   assert.ok(r.structuralExecution.beforeSnapshot, 'snapshot guardado para rollback');
   assert.equal(r.status, 'accepted', 'revisão resolvida após sucesso');
   assert.ok(r.history.some(h => h.action === 'structural_plan_executed'));
+});
+
+test('Fase 3 (flag ON, só neste contexto isolado): execução nova grava metadata compacta + tombstone sem previousSnapshot; flag OFF (produção) continua inline — prova que ambos os ramos realmente existem no mesmo código', async () => {
+  const ctx = ctxFixture();
+  acceptPlan(ctx, 'R208');
+  vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = true;', ctx);
+  const res = await ctx.executeStructuralPlan('R208');
+  assert.equal(res.ok, true);
+  const r = ctx.LESION_REVISIONS['R208'];
+  assert.equal(r.structuralExecution.snapshotStorage, 'external');
+  assert.equal(r.structuralExecution.snapshotRef, res.executionId);
+  assert.equal(r.structuralExecution.beforeSnapshot, undefined, 'não guarda mais o snapshot inline quando a flag está ligada');
+  assert.equal(r.structuralExecution.afterSnapshot, undefined);
+  assert.ok(r.structuralExecution.tombstone, 'merge_duplicates ainda gera tombstone');
+  assert.equal(r.structuralExecution.tombstone.previousSnapshot, undefined, 'tombstone novo NUNCA duplica o snapshot');
+  assert.equal(r.structuralExecution.tombstone.snapshotRef, res.executionId, 'tombstone referencia o MESMO executionId — nenhum doc novo');
+  // campos de auditoria do tombstone continuam presentes (só o snapshot pesado saiu).
+  assert.equal(r.structuralExecution.tombstone.removeId, 'seed_698');
+  assert.equal(r.structuralExecution.tombstone.keeperId, 'seed_208');
 });
 
 test('Fase 3: stale nunca executa', async () => {

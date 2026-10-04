@@ -40,6 +40,7 @@ const execConsts = html.slice(
   html.indexOf('const STRUCTURAL_EXECUTOR_VERSION = '),
   html.indexOf('function structuralExecutionId(')
 );
+const snapshotStoreConst = html.slice(html.indexOf('let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED'), html.indexOf('function authorizeAndApplyReviewSolution('));
 
 function lesion(id, over) {
   return Object.assign({ id, name: 'Lesão ' + id, s: 'Pelve Feminina', site: 'Ovário', notes: '',
@@ -67,7 +68,7 @@ function ctxFixture() {
     toast: () => {}, console
   });
   ctx.calls = calls;
-  vm.runInContext(execConsts + '\n' + src, ctx, { filename: 'history-test.js' });
+  vm.runInContext(execConsts + '\n' + snapshotStoreConst + src, ctx, { filename: 'history-test.js' });
   return ctx;
 }
 

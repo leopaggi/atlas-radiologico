@@ -66,6 +66,7 @@ const planTypes = html.slice(html.indexOf('const STRUCTURAL_PLAN_TYPES = '), htm
 const execConsts = html.slice(html.indexOf('const STRUCTURAL_EXECUTOR_VERSION = '), html.indexOf('function structuralExecutionId('));
 const ownershipConst = "const IMAGE_OWNERSHIP_MANUAL = { manual:true };\n";
 const statusesConst = "const ACTIVE_LESION_REVIEW_STATUSES = ['pending','rejected','proposed','applied_pending_validation','manual_action_required'];\n";
+const snapshotStoreConst = html.slice(html.indexOf('let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED'), html.indexOf('function authorizeAndApplyReviewSolution('));
 
 const RID = 'lrev_muhnyp9a_jwivjs';
 function lesion(id, over) {
@@ -103,7 +104,7 @@ function ctxFixture() {
     toast: () => {}, console
   });
   ctx.calls = calls;
-  vm.runInContext(consts + '\n' + mapping + '\n' + planTypes + '\n' + execConsts + '\n' + ownershipConst + statusesConst + src, ctx, { filename: 'mucinoso-test.js' });
+  vm.runInContext(consts + '\n' + mapping + '\n' + planTypes + '\n' + execConsts + '\n' + ownershipConst + statusesConst + snapshotStoreConst + src, ctx, { filename: 'mucinoso-test.js' });
   return ctx;
 }
 

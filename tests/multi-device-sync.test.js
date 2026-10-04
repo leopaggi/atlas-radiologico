@@ -161,6 +161,15 @@ const reviewFns089 = ['normalizeReviewStamps', 'loadReviewStamps', 'saveReviewSt
 // erro resumido de sync (usados por writeShardedState/readShardedState/push).
 const structuralSyncFns = ['structuralSnapshotWalkMaps', 'structuralSnapshotProgressToFirestore', 'structuralSnapshotProgressFromFirestore', 'syncFailureStatus']
   .map((n) => extractFunction(html, n).source).join('\n');
+// Fase 3B — helpers do snapshot store chamados INCONDICIONALMENTE por
+// writeShardedState() (pending/retry local + refs da store). Sem eles no
+// engine, toda escrita real lançaria ReferenceError no contexto isolado.
+// Com a flag OFF e sem refs externas, o pending resolve [] e nada mais é
+// tocado — comportamento legado preservado.
+const snapshotStoreFns3B = ['snapshotSyncedLocalKey', 'isSnapshotMarkedSynced', 'markSnapshotSynced',
+  'collectExternalSnapshotRefs', 'collectPendingSnapshotRefs',
+  'structuralSnapshotLocalCacheKey', 'structuralSnapshotFirestoreRef', 'getSnapshotFromLocalCache']
+  .map((n) => extractFunction(html, n).source).join('\n');
 // PROTEÇÃO 091c — mapa de fusão clínica (módulo real: normalize/merge/fold).
 const lesionMergesModule091c = html.slice(html.indexOf("const LESION_MERGES_KEY = 'atlas:lesionMerges';"), html.indexOf('/* Plano APROVADO pelo usuário (091c).'));
 // PROTEÇÃO 085 — ordem de seções/sítios com carimbo de reordenação manual.
@@ -459,6 +468,7 @@ function makeDevice(cloud, { seed = [] } = {}) {
     const REVIEW_LABELS = {0:'Não revisado',1:'Revisando',2:'Dominado'};
     ${reviewFns089}
     ${structuralSyncFns}
+    ${snapshotStoreFns3B}
     ${lesionMergesModule091c}
     function __getLesionMerges091c(){ return LESION_MERGES; }
     function __setLesionMerges091c(v){ LESION_MERGES = v; }

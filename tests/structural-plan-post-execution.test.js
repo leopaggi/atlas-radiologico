@@ -57,6 +57,7 @@ const execConsts = html.slice(
 );
 const ownershipConst = "const IMAGE_OWNERSHIP_MANUAL = { manual:true };\n";
 const statusesConst = "const ACTIVE_LESION_REVIEW_STATUSES = ['pending','rejected','proposed','applied_pending_validation','manual_action_required'];\n";
+const snapshotStoreConst = html.slice(html.indexOf('let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED'), html.indexOf('function authorizeAndApplyReviewSolution('));
 
 function lesion(id, over) {
   return Object.assign({
@@ -98,7 +99,7 @@ function ctxFixture() {
     toast: () => {}, console
   });
   ctx.calls = calls;
-  vm.runInContext(execConsts + '\n' + ownershipConst + statusesConst + src, ctx, { filename: 'postexec-test.js' });
+  vm.runInContext(execConsts + '\n' + ownershipConst + statusesConst + snapshotStoreConst + src, ctx, { filename: 'postexec-test.js' });
   return ctx;
 }
 

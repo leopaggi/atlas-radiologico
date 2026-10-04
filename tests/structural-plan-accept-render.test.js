@@ -54,6 +54,7 @@ const execConsts = html.slice(
   html.indexOf('function structuralExecutionId(')
 );
 const statusesConst = "const ACTIVE_LESION_REVIEW_STATUSES = ['pending','rejected','proposed','applied_pending_validation','manual_action_required'];\n";
+const snapshotStoreConst = html.slice(html.indexOf('let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED'), html.indexOf('function authorizeAndApplyReviewSolution('));
 
 function lesion(id, over) {
   return Object.assign({
@@ -94,7 +95,7 @@ function ctxFixture() {
     toast: () => {}, console
   });
   ctx.calls = calls;
-  vm.runInContext(execConsts + '\n' + statusesConst + src, ctx, { filename: 'accept-render-test.js' });
+  vm.runInContext(execConsts + '\n' + statusesConst + snapshotStoreConst + src, ctx, { filename: 'accept-render-test.js' });
   return ctx;
 }
 

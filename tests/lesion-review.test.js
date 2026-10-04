@@ -212,6 +212,22 @@ function buildTestContext(opts) {
   }
   vm.createContext(context);
   vm.runInContext(moduleSource, context, { filename: 'lesion-review-module.js' });
+  if (opts.withSnapshotHeavyInfra) {
+    // A parte "pesada" da snapshot store (buildAtlasSnapshotRecord, store
+    // local/Firestore, fingerprint) fica fora do módulo LESION_REVISIONS
+    // (perto de executeStructuralPlan) — só quem precisa testar o caminho
+    // flag-ON de authorizeAndApplyReviewSolution/applyReviewAiSuggestedPlacement
+    // pede esse pedaço extra; o resto dos testes deste arquivo nunca liga a flag.
+    const canonicalJsonStringSource = html.slice(
+      html.indexOf('function canonicalJsonString('),
+      html.indexOf('function deepStableEqual(')
+    );
+    const heavySource = html.slice(
+      html.indexOf('const STRUCTURAL_SNAPSHOT_SCHEMA_VERSION = '),
+      html.indexOf('function buildSnapshotMigrationPlan(')
+    );
+    vm.runInContext(canonicalJsonStringSource + '\n' + heavySource, context, { filename: 'lesion-review-module-snapshot-heavy.js' });
+  }
   return context;
 }
 
@@ -402,7 +418,7 @@ test('5) APROVAR: approveAppliedReviewSolution() -> accepted -> 🔔=0 💡=0, D
   assert.ok(res.review.attempts[0].approvedAt, 'a tentativa precisa registrar quando foi aprovada');
 });
 
-test('6) DESFAZER: rollbackAppliedReviewSolution() restaura EXATAMENTE o beforeSnapshot -> rejected -> 🔔=1 💡=0', () => {
+test('6) DESFAZER: rollbackAppliedReviewSolution() restaura EXATAMENTE o beforeSnapshot -> rejected -> 🔔=1 💡=0', async () => {
   const lesion = makeLesion();
   // authorizeAndApplyReviewSolution() muta a lesão em DATA IN PLACE (mesma
   // referência de `lesion`) — por isso guardamos uma cópia congelada do
@@ -414,7 +430,7 @@ test('6) DESFAZER: rollbackAppliedReviewSolution() restaura EXATAMENTE o beforeS
   ctx.authorizeAndApplyReviewSolution(review.id);
   assert.equal(ctx.DATA[0].classification, 'BIRADS');
 
-  const res = ctx.rollbackAppliedReviewSolution(review.id, 'classificação errada mesmo assim');
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'classificação errada mesmo assim');
   assert.equal(res.ok, true);
   assert.equal(res.review.status, 'rejected');
   assert.deepEqual(serialize(ctx.DATA[0]), originalLesionSnapshot, 'a lesão precisa voltar EXATAMENTE ao estado do snapshot');
@@ -428,13 +444,13 @@ test('6) DESFAZER: rollbackAppliedReviewSolution() restaura EXATAMENTE o beforeS
   assert.ok(res.review.attempts[0].rolledBackAt, 'a tentativa precisa registrar quando foi desfeita');
 });
 
-test('7) NOVA TENTATIVA após rollback: novo snapshot independente do anterior', () => {
+test('7) NOVA TENTATIVA após rollback: novo snapshot independente do anterior', async () => {
   const lesion = makeLesion();
   const ctx = buildTestContext({ data: [lesion] });
   const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
   ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
   ctx.authorizeAndApplyReviewSolution(review.id);
-  ctx.rollbackAppliedReviewSolution(review.id, 'não serviu');
+  await ctx.rollbackAppliedReviewSolution(review.id, 'não serviu');
 
   // Segunda proposta sobre a MESMA revisão reaberta (rejected -> proposed).
   const proposeAgain = ctx.setReviewSolution(review.id, 'aplicar TIRADS', { classification: 'TIRADS' });
@@ -514,15 +530,15 @@ test('autorizar: só é permitido quando existe uma proposta (status "proposed")
   assert.equal(res.reason, 'not_proposed');
 });
 
-test('aprovar/desfazer: só são permitidos quando existe uma correção aplicada aguardando validação', () => {
+test('aprovar/desfazer: só são permitidos quando existe uma correção aplicada aguardando validação', async () => {
   const ctx = buildTestContext({ data: [makeLesion()] });
   const { review } = ctx.createLesionReview('seed_1', 'pedido');
   assert.equal(ctx.approveAppliedReviewSolution(review.id).ok, false);
-  assert.equal(ctx.rollbackAppliedReviewSolution(review.id).ok, false);
+  assert.equal((await ctx.rollbackAppliedReviewSolution(review.id)).ok, false);
   ctx.setReviewSolution(review.id, 'x', { notes: 'y' });
   // ainda em "proposed", não "applied_pending_validation"
   assert.equal(ctx.approveAppliedReviewSolution(review.id).ok, false);
-  assert.equal(ctx.rollbackAppliedReviewSolution(review.id).ok, false);
+  assert.equal((await ctx.rollbackAppliedReviewSolution(review.id)).ok, false);
 });
 
 test('setReviewSolution não pode reabrir proposta enquanto uma correção está aplicada aguardando validação', () => {
@@ -535,22 +551,22 @@ test('setReviewSolution não pode reabrir proposta enquanto uma correção está
   assert.equal(res.reason, 'awaiting_validation');
 });
 
-test('funções com id inexistente não quebram', () => {
+test('funções com id inexistente não quebram', async () => {
   const ctx = buildTestContext({ data: [] });
   assert.equal(ctx.setReviewSolution('nao-existe', 'x', { notes: 'y' }).ok, false);
   assert.equal(ctx.rejectProposedReviewSolution('nao-existe').ok, false);
   assert.equal(ctx.authorizeAndApplyReviewSolution('nao-existe').ok, false);
   assert.equal(ctx.approveAppliedReviewSolution('nao-existe').ok, false);
-  assert.equal(ctx.rollbackAppliedReviewSolution('nao-existe').ok, false);
+  assert.equal((await ctx.rollbackAppliedReviewSolution('nao-existe')).ok, false);
 });
 
-test('histórico completo preservado: criada → proposta → autorizada → snapshot → aplicada → desfeita → reaberta → nova proposta → autorizada → aprovada', () => {
+test('histórico completo preservado: criada → proposta → autorizada → snapshot → aplicada → desfeita → reaberta → nova proposta → autorizada → aprovada', async () => {
   const lesion = makeLesion();
   const ctx = buildTestContext({ data: [lesion] });
   const { review } = ctx.createLesionReview('seed_1', 'diagnósticos diferenciais incompletos');
   ctx.setReviewSolution(review.id, 'primeira proposta', { classification: 'BIRADS' });
   ctx.authorizeAndApplyReviewSolution(review.id);
-  ctx.rollbackAppliedReviewSolution(review.id, 'sistema errado');
+  await ctx.rollbackAppliedReviewSolution(review.id, 'sistema errado');
   ctx.setReviewSolution(review.id, 'segunda proposta', { classification: 'TIRADS' });
   const finalRes = ctx.authorizeAndApplyReviewSolution(review.id);
   const approveRes = ctx.approveAppliedReviewSolution(review.id);
@@ -590,7 +606,7 @@ test('REGRESSÃO: updateReviewCenterBadges() nunca lança erro sem document (hea
   assert.doesNotThrow(() => ctx.updateReviewCenterBadges());
 });
 
-test('REGRESSÃO: os badges do header reagem IMEDIATAMENTE em cada transição da máquina de 2 aceites', () => {
+test('REGRESSÃO: os badges do header reagem IMEDIATAMENTE em cada transição da máquina de 2 aceites', async () => {
   const lesion = makeLesion();
   const lesion2 = makeLesion({ id: 'seed_2', name: 'Osteocondroma' });
   const ctx = buildTestContext({ data: [lesion, lesion2], dom: true });
@@ -620,7 +636,7 @@ test('REGRESSÃO: os badges do header reagem IMEDIATAMENTE em cada transição d
   ctx.setReviewSolution(second.id, 'proposta 2', { notes: 'y' });
   ctx.authorizeAndApplyReviewSolution(second.id);
   assert.equal(els['ready-solutions-badge'].textContent, '1');
-  ctx.rollbackAppliedReviewSolution(second.id, 'não funcionou');
+  await ctx.rollbackAppliedReviewSolution(second.id, 'não funcionou');
   assert.equal(els['pending-reviews-badge'].textContent, '1', 'desfazer devolve pra pendentes imediatamente');
   assert.equal(els['ready-solutions-badge'].textContent, '', 'desfazer some do badge de soluções imediatamente');
 });
@@ -848,14 +864,14 @@ test('F5/reload: revisão cancelada continua cancelada e fora das filas ativas',
   assert.equal(reloaded.solution.proposedChanges.classification, 'BIRADS', 'proposedChanges precisa ser preservado no histórico');
 });
 
-test('cancelar NÃO apaga requestText, createdAt, attempts[] nem histórico anterior', () => {
+test('cancelar NÃO apaga requestText, createdAt, attempts[] nem histórico anterior', async () => {
   const lesion = makeLesion();
   const ctx = buildTestContext({ data: [lesion] });
   const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
   const createdAt = review.createdAt;
   ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
   ctx.authorizeAndApplyReviewSolution(review.id);
-  ctx.rollbackAppliedReviewSolution(review.id, 'não funcionou');
+  await ctx.rollbackAppliedReviewSolution(review.id, 'não funcionou');
   // rejected -> proposed -> autorizar de novo -> aplicado, para ter attempts[]
   ctx.setReviewSolution(review.id, 'aplicar TIRADS', { classification: 'TIRADS' });
   const historyBefore = review.history.length;
@@ -935,14 +951,14 @@ test('CANCELAR rejected: rejected -> cancelled, sai de getPendingReviews() e pre
   assert.equal(res.review.solution.proposedChanges.classification, 'BIRADS', 'a proposta recusada precisa continuar preservada');
 });
 
-test('CANCELAR rejected: NÃO altera DATA, NÃO refaz rollback, NÃO aplica solução e preserva attempts[]', () => {
+test('CANCELAR rejected: NÃO altera DATA, NÃO refaz rollback, NÃO aplica solução e preserva attempts[]', async () => {
   const lesion = makeLesion();
   const originalSnapshot = JSON.parse(JSON.stringify(lesion));
   const ctx = buildTestContext({ data: [lesion] });
   const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
   ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
   ctx.authorizeAndApplyReviewSolution(review.id);   // aplica + cria attempts[0]
-  ctx.rollbackAppliedReviewSolution(review.id, 'não funcionou'); // desfaz -> rejected
+  await ctx.rollbackAppliedReviewSolution(review.id, 'não funcionou'); // desfaz -> rejected
   assert.equal(ctx.DATA[0].classification, null, 'rollback já devolveu a lesão ao estado original');
   const attemptsBefore = serialize(review.attempts);
   const saveDataBefore = ctx.saveDataCalls.length;
@@ -1053,14 +1069,14 @@ test('IA (importar): NÃO existe etapa intermediária de "autorizar correção" 
   assert.equal(auth.details.origin, 'import', 'a autorização é registrada como vinda da importação humana');
 });
 
-test('IA (importar) + DESFAZER: rollback EXATO restaura o estado anterior e volta para rejected', () => {
+test('IA (importar) + DESFAZER: rollback EXATO restaura o estado anterior e volta para rejected', async () => {
   const lesion = makeLesion();
   const original = JSON.parse(JSON.stringify(lesion));
   const ctx = buildTestContext({ data: [lesion] });
   const { review } = ctx.createLesionReview('seed_1', 'x');
   ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId: review.id, summary: 'a', reasoning: 'b', proposedChanges: { classification: 'BIRADS', notes: 'mudou' } }));
   assert.equal(ctx.DATA[0].classification, 'BIRADS');
-  const res = ctx.rollbackAppliedReviewSolution(review.id, 'não serviu');
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'não serviu');
   assert.equal(res.ok, true);
   assert.equal(res.review.status, 'rejected');
   assert.deepEqual(serialize(ctx.DATA[0]), original, 'rollback restaura EXATAMENTE o beforeSnapshot');
@@ -1113,26 +1129,26 @@ test('clinicalTags: pode ser PROPOSTA e aplicada provisoriamente, exatamente com
   assert.equal(ctx.DATA[0].name, lesion.name, 'nenhum outro campo foi tocado');
 });
 
-test('clinicalTags: ROLLBACK restaura exatamente o valor anterior (mesmo snapshot genérico de sempre)', () => {
+test('clinicalTags: ROLLBACK restaura exatamente o valor anterior (mesmo snapshot genérico de sempre)', async () => {
   const lesion = makeLesion({ clinicalTags: ['tag original'] });
   const original = JSON.parse(JSON.stringify(lesion));
   const ctx = buildTestContext({ data: [lesion] });
   const { review } = ctx.createLesionReview('seed_1', 'x');
   ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId: review.id, summary: 'a', reasoning: 'b', proposedChanges: { clinicalTags: ['tag nova'] } }));
   assert.deepEqual(serialize(ctx.DATA[0].clinicalTags), ['tag nova']);
-  const res = ctx.rollbackAppliedReviewSolution(review.id, 'não serviu');
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'não serviu');
   assert.equal(res.ok, true);
   assert.deepEqual(serialize(ctx.DATA[0]), original, 'rollback restaura clinicalTags junto com o resto da lesão');
   assert.deepEqual(serialize(ctx.DATA[0].clinicalTags), ['tag original']);
 });
 
-test('clinicalTags: aparece em previousAttempts (buildReviewAiAttempts) como qualquer outro campo de proposedChanges', () => {
+test('clinicalTags: aparece em previousAttempts (buildReviewAiAttempts) como qualquer outro campo de proposedChanges', async () => {
   const ctx = buildTestContext({ data: [makeLesion({ clinicalTags: [] })] });
   const { review } = ctx.createLesionReview('seed_1', 'x');
   ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId: review.id, summary: 'resumo', reasoning: 'motivo', proposedChanges: { clinicalTags: ['febre'] } }));
   // Novo pacote só é aceito com a revisão de volta a pending/rejected — por
   // isso desfaz antes (mesmo fluxo real de uma 2ª tentativa).
-  ctx.rollbackAppliedReviewSolution(review.id, 'tag errada');
+  await ctx.rollbackAppliedReviewSolution(review.id, 'tag errada');
   const built = ctx.buildReviewAiPacket(review.id);
   assert.equal(built.ok, true);
   const attempts = serialize(built.packet.previousAttempts);
@@ -1374,12 +1390,12 @@ test('I. prompt continua instruindo explicitamente a não duplicar tags radioló
   assert.match(built.text, /clinicalTags.*nunca repita (ali )?(os )?achados radiológicos de "tags"/s);
 });
 
-test('IA (importar): rejected (após desfazer) permite NOVA tentativa com novo snapshot', () => {
+test('IA (importar): rejected (após desfazer) permite NOVA tentativa com novo snapshot', async () => {
   const lesion = makeLesion();
   const ctx = buildTestContext({ data: [lesion] });
   const { review } = ctx.createLesionReview('seed_1', 'x');
   ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId: review.id, summary: 'a', reasoning: 'b', proposedChanges: { classification: 'BIRADS' } }));
-  ctx.rollbackAppliedReviewSolution(review.id, 'não');
+  await ctx.rollbackAppliedReviewSolution(review.id, 'não');
   assert.equal(review.status, 'rejected');
   const res = ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId: review.id, summary: 'c', reasoning: 'd', proposedChanges: { classification: 'TIRADS' } }));
   assert.equal(res.ok, true);
@@ -1914,12 +1930,12 @@ test('FEEDBACK: motivo de recusa é persistido (rejectionReason + humanFeedback)
   assert.equal(h.details.reason, 'continua incompleto, falta diferenciar de lesão Y');
 });
 
-test('FEEDBACK: motivo de rollback é persistido (rollbackReason + tentativa + humanFeedback)', () => {
+test('FEEDBACK: motivo de rollback é persistido (rollbackReason + tentativa + humanFeedback)', async () => {
   const ctx = buildTestContext({ data: [makeLesion()] });
   const { review } = ctx.createLesionReview('seed_1', 'x');
   ctx.setReviewSolution(review.id, 'proposta', { classification: 'BIRADS' });
   ctx.authorizeAndApplyReviewSolution(review.id);
-  const res = ctx.rollbackAppliedReviewSolution(review.id, 'classificação errada pro órgão');
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'classificação errada pro órgão');
   assert.equal(res.ok, true);
   assert.equal(review.rollbackReason, 'classificação errada pro órgão');
   assert.equal(review.lastHumanFeedback, 'classificação errada pro órgão');
@@ -1982,14 +1998,14 @@ test('FEEDBACK: buildReviewAiPrompt inclui o feedback humano e manda NÃO repeti
   assert.match(built.text, /feedback humano/);
 });
 
-test('FEEDBACK: previousAttempts preserva TODAS as propostas anteriores em ordem', () => {
+test('FEEDBACK: previousAttempts preserva TODAS as propostas anteriores em ordem', async () => {
   const ctx = buildTestContext({ data: [makeLesion()] });
   const { review } = ctx.createLesionReview('seed_1', 'x');
   ctx.setReviewSolution(review.id, 'primeira', { notes: '1' }, { summary: 's1', reasoning: 'r1' });
   ctx.rejectProposedReviewSolution(review.id, 'motivo 1');
   ctx.setReviewSolution(review.id, 'segunda', { classification: 'BIRADS' }, { summary: 's2', reasoning: 'r2' });
   ctx.authorizeAndApplyReviewSolution(review.id);
-  ctx.rollbackAppliedReviewSolution(review.id, 'motivo 2');
+  await ctx.rollbackAppliedReviewSolution(review.id, 'motivo 2');
   const built = ctx.buildReviewAiPacket(review.id);
   const at = built.packet.previousAttempts;
   assert.equal(at.length, 2);
@@ -2065,11 +2081,11 @@ test('FEEDBACK: accepted/cancelled não entram em nova tentativa (pacote bloquea
   assert.ok(!eligibleIds.includes(cancelled.id));
 });
 
-test('FEEDBACK: importar a solução da IA guarda summary/reasoning para a próxima tentativa', () => {
+test('FEEDBACK: importar a solução da IA guarda summary/reasoning para a próxima tentativa', async () => {
   const ctx = buildTestContext({ data: [makeLesion()] });
   const { review } = ctx.createLesionReview('seed_1', 'x');
   ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId: review.id, summary: 'resumo IA', reasoning: 'raciocínio IA', proposedChanges: { notes: 'novo' } }));
-  ctx.rollbackAppliedReviewSolution(review.id, 'não funcionou');
+  await ctx.rollbackAppliedReviewSolution(review.id, 'não funcionou');
   const built = ctx.buildReviewAiPacket(review.id);
   assert.equal(built.packet.previousAttempts[0].summary, 'resumo IA');
   assert.equal(built.packet.previousAttempts[0].reasoning, 'raciocínio IA');
@@ -2093,12 +2109,12 @@ test('CONTEXTO: latestHumanFeedback null mas previousAttempts com feedback -> de
   assert.equal(built.packet.previousAttempts[0].humanFeedback, 'nao gostei das tags, ta praticamente falando o diagnostico');
 });
 
-test('CONTEXTO: rolledback histórico sem campo direto -> latestHumanFeedback derivado', () => {
+test('CONTEXTO: rolledback histórico sem campo direto -> latestHumanFeedback derivado', async () => {
   const ctx = buildTestContext({ data: [makeLesion()] });
   const { review } = ctx.createLesionReview('seed_1', 'x');
   ctx.setReviewSolution(review.id, 'X', { notes: 'y' });
   ctx.authorizeAndApplyReviewSolution(review.id);
-  ctx.rollbackAppliedReviewSolution(review.id, 'teste de rollback');
+  await ctx.rollbackAppliedReviewSolution(review.id, 'teste de rollback');
   delete review.lastHumanFeedback;
   const built = ctx.buildReviewAiPacket(review.id);
   assert.equal(built.packet.latestHumanFeedback, 'teste de rollback');
@@ -2151,13 +2167,13 @@ test('CONTEXTO: sem nenhuma informação de feedback -> continua null', () => {
   assert.equal(built.packet.previousOutcome, null);
 });
 
-test('CONTEXTO: pacote em LOTE herda a mesma normalização por revisão', () => {
+test('CONTEXTO: pacote em LOTE herda a mesma normalização por revisão', async () => {
   const ctx = buildTestContext({ data: [makeLesion({ id: 'seed_1' }), makeLesion({ id: 'seed_2', name: 'Osteocondroma' })] });
   const a = ctx.createLesionReview('seed_1', 'A').review;
   const b = ctx.createLesionReview('seed_2', 'B').review;
   ctx.setReviewSolution(a.id, 'X', { notes: 'y' });
   ctx.authorizeAndApplyReviewSolution(a.id);
-  ctx.rollbackAppliedReviewSolution(a.id, 'teste de rollback');
+  await ctx.rollbackAppliedReviewSolution(a.id, 'teste de rollback');
   delete a.lastHumanFeedback;
   ctx.setReviewSolution(b.id, 'Z', { notes: 'w' });
   ctx.rejectProposedReviewSolution(b.id, 'nao gostei das tags');
@@ -2332,7 +2348,7 @@ test('LOCAL: alvo igual à localização principal é recusado (already_primary)
   assert.equal(res.reason, 'already_primary');
 });
 
-test('LOCAL: rollback remove SÓ a localização adicionada e restaura o estado anterior', () => {
+test('LOCAL: rollback remove SÓ a localização adicionada e restaura o estado anterior', async () => {
   const lesion = makeLesion({ id: 'seed_1', name: 'Holoprosencefalia', s: 'Medicina Fetal', site: 'Anomalias fetais estruturais' });
   const ctx = buildTestContext({ data: [lesion, makeLesion({ id: 'seed_9', s: 'Neurorradiologia', site: 'Encéfalo' })] });
   const original = JSON.parse(JSON.stringify(lesion));
@@ -2340,7 +2356,7 @@ test('LOCAL: rollback remove SÓ a localização adicionada e restaura o estado 
   ctx.importReviewAiBatch(JSON.stringify({ results: [JSON.parse(placementJson(r.id, 'Neurorradiologia', 'Encéfalo'))] }));
   ctx.applyReviewAiSuggestedPlacement(r.id);
   assert.equal(lesion.altPlacements.length, 1);
-  const res = ctx.rollbackAppliedReviewSolution(r.id, 'não serviu');
+  const res = await ctx.rollbackAppliedReviewSolution(r.id, 'não serviu');
   assert.equal(res.ok, true);
   assert.equal(r.status, 'rejected');
   assert.deepEqual(serialize(ctx.DATA[0]), original, 'lesão volta EXATAMENTE ao estado anterior');
@@ -2560,4 +2576,26 @@ test('LAYOUT: botões da aba Ações manuais continuam presentes', () => {
   assert.match(solutions, /Abrir lesão/, 'botão de abrir lesão precisa continuar');
   assert.match(solutions, /Voltar para revisões/);
   assert.match(solutions, /Cancelar pedido/);
+});
+
+test('Fase 3 (flag ON, só neste contexto isolado): authorizeAndApplyReviewSolution grava attempt externo; rollback funciona lendo da store; flag OFF (os outros ~190 testes deste arquivo) continua inline', async () => {
+  const ctx = buildTestContext({ data: [makeLesion()], withSnapshotHeavyInfra: true });
+  vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = true;', ctx);
+  const { review } = ctx.createLesionReview('seed_1', 'pedido');
+  ctx.setReviewSolution(review.id, 'corrigir notas', { notes: 'nota nova' });
+  const applied = ctx.authorizeAndApplyReviewSolution(review.id);
+  assert.equal(applied.ok, true);
+  const attempt = review.attempts[review.attempts.length - 1];
+  assert.equal(attempt.snapshotStorage, 'external');
+  assert.ok(attempt.snapshotRef, 'tem um snapshotRef (o próprio attempt.id)');
+  assert.equal(attempt.beforeSnapshot, undefined, 'não guarda mais inline quando a flag está ligada');
+  assert.equal(ctx.DATA[0].notes, 'nota nova');
+  // rollback precisa funcionar MESMO sem o snapshot ter sincronizado pra
+  // nuvem ainda: saveSnapshotToLocalCache é aguardado... não, é fire-and-
+  // forget — então aguardamos um "tick" pra garantir que a escrita local
+  // (cache individual) já aconteceu antes do rollback precisar dela.
+  await new Promise((r) => setImmediate(r));
+  const rb = await ctx.rollbackAppliedReviewSolution(review.id, 'não funcionou');
+  assert.equal(rb.ok, true, JSON.stringify(rb.reason));
+  assert.equal(ctx.DATA[0].notes, 'lesão óssea benigna clássica', 'restaurado ao estado anterior via snapshot externo (cache local)');
 });

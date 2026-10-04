@@ -131,7 +131,7 @@ test('091-11/12/13/14: rejected (devolver), manual_action_required, accepted e c
   assert.equal(c.saveDataCalls, 0);
 });
 
-test('091-15: aplicação direta em DATA é recusada para global (authorize/rollback/placement/setReviewSolution)', () => {
+test('091-15: aplicação direta em DATA é recusada para global (authorize/rollback/placement/setReviewSolution)', async () => {
   const c = makeCtx();
   const before = JSON.stringify(c.DATA);
   const g = G(c, 'Revisar classificações');
@@ -140,7 +140,7 @@ test('091-15: aplicação direta em DATA é recusada para global (authorize/roll
   r.status = 'proposed'; r.solution = { text: 'x', proposedChanges: { notes: 'HACK' } };
   assert.equal(c.authorizeAndApplyReviewSolution(g.review.id).reason, 'global_review_has_no_direct_target');
   r.status = 'applied_pending_validation';
-  assert.equal(c.rollbackAppliedReviewSolution(g.review.id).reason, 'global_review_has_no_direct_target');
+  assert.equal((await c.rollbackAppliedReviewSolution(g.review.id)).reason, 'global_review_has_no_direct_target');
   r.status = 'manual_action_required';
   assert.equal(c.applyReviewAiSuggestedPlacement(g.review.id).reason, 'global_review_has_no_direct_target');
   r.status = 'pending';

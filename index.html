@@ -2261,7 +2261,7 @@ function checkChunkSize(chunk, label){
    mesclado — nunca às cegas. Ver seção 29 do CONTEXTO_MESTRE. */
 const CLOUD_REVISION_FIELD = 'revision';
 let lastKnownCloudRevision = null; // null = nunca lido com sucesso nesta sessão
-let lastWriteRefusedReason = null; // 'device_bootstrap_pending'|'chunk_too_large'|'no_known_revision'|'cloud_revision_conflict'|'canonical_restore_in_progress'|null
+let lastWriteRefusedReason = null; // 'device_bootstrap_pending'|'chunk_too_large'|'no_known_revision'|'cloud_revision_conflict'|'canonical_restore_in_progress'|'snapshot_content_conflict'|'snapshot_unavailable_for_commit'|null
 let lastRevisionConflictAt = null; // Date.now() do último conflito de revisão detectado (diagnóstico)
 /* Escreve DATA em vários documentos pequenos + um documento "main" com o
    resto do estado, dentro de UMA transação com verificação de revisão (ver
@@ -2396,6 +2396,55 @@ function gateStaleLocalOnlyImagesForWrite(localData, remoteData, tombstones, pen
   });
   return { data, blocked, tombstoned };
 }
+/* ============================================================
+   SNAPSHOT STORE — pendência local (Fase 3B). Nunca cresce dentro de
+   atlas_state/main: cada id pendente é só uma chave local pequena
+   ('atlas:snapshotSynced:<id>'), nunca um array/objeto acumulando no
+   documento principal. Reconstrutível após reload (basta re-varrer
+   LESION_REVISIONS — já carregado no boot — e checar a flag local de
+   cada ref encontrada); idempotente (checar/marcar a mesma flag duas
+   vezes é um no-op). Usada só por writeShardedState() para decidir, a
+   cada tentativa de sync, quais snapshots externos este dispositivo
+   ainda precisa publicar atomicamente junto da metadata que os referencia.
+   ============================================================ */
+function snapshotSyncedLocalKey(snapshotId){
+  return 'atlas:snapshotSynced:' + snapshotId;
+}
+async function isSnapshotMarkedSynced(snapshotId){
+  try{ await storage.get(snapshotSyncedLocalKey(snapshotId), false); return true; }
+  catch(_e){ return false; }
+}
+// Falha ao GRAVAR a flag de "já sincronizado" nunca é um erro real: na
+// pior hipótese, a próxima tentativa de sync re-verifica e re-publica o
+// MESMO snapshot (idempotente, via fingerprint, nunca duplica nem
+// corrompe) — por isso o catch aqui é silencioso e justificado, ao
+// contrário dos catches removidos em volta da escrita do snapshot em si.
+async function markSnapshotSynced(snapshotId){
+  try{ await storage.set(snapshotSyncedLocalKey(snapshotId), 'true', false); }
+  catch(_e){}
+}
+// Varre uma cópia de LESION_REVISIONS (local OU já mesclada com o remoto,
+// dependendo de quando é chamada) e lista os snapshotRef externos
+// referenciados — nunca lê/retorna o conteúdo pesado, só os ids.
+function collectExternalSnapshotRefs(lesionRevisions){
+  const refs = [];
+  Object.values(lesionRevisions || {}).forEach(r=>{
+    if(!r) return;
+    const ex = r.structuralExecution;
+    if(ex && ex.snapshotStorage==='external' && ex.snapshotRef) refs.push(ex.snapshotRef);
+    if(ex && ex.tombstone && ex.tombstone.snapshotStorage==='external' && ex.tombstone.snapshotRef) refs.push(ex.tombstone.snapshotRef);
+    (Array.isArray(r.attempts) ? r.attempts : []).forEach(a=>{
+      if(a && a.snapshotStorage==='external' && a.snapshotRef) refs.push(a.snapshotRef);
+    });
+  });
+  return Array.from(new Set(refs));
+}
+async function collectPendingSnapshotRefs(lesionRevisions){
+  const all = collectExternalSnapshotRefs(lesionRevisions);
+  const pending = [];
+  for(const id of all){ if(!(await isSnapshotMarkedSynced(id))) pending.push(id); }
+  return pending;
+}
 async function writeShardedState(ms=15000){
   // Bloqueia QUALQUER envio (debounced, imediato ou "sincronizar este
   // dispositivo") enquanto o dispositivo estiver pendente de bootstrap —
@@ -2477,9 +2526,26 @@ async function writeShardedState(ms=15000){
   };
   if(!checkChunkSize(metaPayloadBase, 'documento principal (revisão/SRS/histórico)')){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
 
+  // Fase 3B — snapshots externos que este dispositivo ainda não confirmou
+  // publicados na nuvem (flag OFF hoje: sempre []). Lidos do cache local
+  // ANTES da transação (leitura local não entra no read-set do Firestore);
+  // o CONTEÚDO vai pra dentro da mesma transação do documento principal
+  // logo abaixo — nunca uma segunda transação, nunca fire-and-forget.
+  const pendingSnapshotIds = await collectPendingSnapshotRefs(metaPayloadBase.lesionRevisions);
+  const pendingSnapshotRecords = {};
+  for(const snapshotId of pendingSnapshotIds){
+    const cached = await getSnapshotFromLocalCache(snapshotId);
+    if(cached.ok) pendingSnapshotRecords[snapshotId] = cached.record;
+    // Ausente do cache local: fica undefined aqui de propósito — a
+    // transação abaixo VAI exigir isso e abortar com
+    // 'snapshot_unavailable_for_commit' se for realmente necessário pra
+    // publicar, em vez de publicar a metadata sem o snapshot.
+  }
+
   let committedRevision = null;
   let committedStaleImagesBlocked = 0;
   let committedPayloadData = null;
+  let committedSnapshotIds = [];
   try{
     await withFirebaseTimeout(fbDb.runTransaction(async (tx)=>{
       const metaSnap = await tx.get(FB_META_REF());
@@ -2513,6 +2579,14 @@ async function writeShardedState(ms=15000){
         });
       }else if(Array.isArray(remoteMeta.data)){
         remoteData = remoteMeta.data;
+      }
+      // Fase 3B — leitura dos docs de snapshot pendentes DENTRO da mesma
+      // transação, ainda na fase de leitura (Firestore exige todo tx.get
+      // antes de qualquer tx.set). A decisão de escrever/conflitar/pular
+      // cada um só é tomada depois, na fase de escrita — aqui só se lê.
+      const snapshotReadResults = {};
+      for(const snapshotId of pendingSnapshotIds){
+        snapshotReadResults[snapshotId] = await tx.get(structuralSnapshotFirestoreRef(snapshotId));
       }
       // PROTEÇÃO 091c — mapa de fusão: união local ∪ remoto e aplicado ao
       // payload E à base remota DENTRO da transação (PC desatualizado nunca
@@ -2589,7 +2663,41 @@ async function writeShardedState(ms=15000){
       if(!checkChunkSize(firestoreMeta, 'documento principal (revisão/SRS/histórico)')){
         const err = new Error('documento principal grande demais'); err.code = 'chunk_too_large'; throw err;
       }
+      // Fase 3B — fase de ESCRITA do snapshot store, dentro da MESMA
+      // transação do documento principal: só agora que writeLesionRevisions
+      // (o que de fato vai pro firestoreMeta) é definitivo, decide-se quais
+      // refs externos realmente precisam ir pra nuvem nesta rodada. Nunca
+      // publica a metadata (tx.set abaixo) sem que o snapshot correspondente
+      // já exista remotamente OU seja criado aqui mesmo — ambos ou nenhum.
+      const finalPendingIds = collectExternalSnapshotRefs(writeLesionRevisions).filter(id => pendingSnapshotIds.includes(id));
+      for(const snapshotId of finalPendingIds){
+        const localRecord = pendingSnapshotRecords[snapshotId];
+        const remoteSnap = snapshotReadResults[snapshotId];
+        if(remoteSnap && remoteSnap.exists){
+          const remoteFp = (remoteSnap.data()||{}).fingerprint;
+          if(localRecord){
+            if(remoteFp !== localRecord.fingerprint){
+              const err = new Error('snapshot já existe remotamente com conteúdo diferente: ' + snapshotId);
+              err.code = 'snapshot_content_conflict';
+              throw err; // nunca sobrescrever silenciosamente; nunca publicar a metadata sobre um conflito
+            }
+            // já existe remotamente e bate — nada a escrever, só confirmar sincronizado depois do commit.
+          }
+          // Eco de outro PC (remote existe, cache local ausente neste
+          // dispositivo): satisfeito sem escrever — este dispositivo só está
+          // republicando metadata que já veio da nuvem. O rollback sob demanda
+          // busca da nuvem via getSnapshotFromStore (cache-first) quando precisar.
+        }else{
+          if(!localRecord){
+            const err = new Error('snapshot referenciado não está disponível localmente para publicar atomicamente: ' + snapshotId);
+            err.code = 'snapshot_unavailable_for_commit';
+            throw err; // nunca publicar metadata externalizada sem o snapshot correspondente
+          }
+          tx.set(structuralSnapshotFirestoreRef(snapshotId), localRecord); // MESMA transação do documento principal
+        }
+      }
       tx.set(FB_META_REF(), firestoreMeta);
+      committedSnapshotIds = finalPendingIds.slice();
       for(let i=0;i<gatedChunks.length;i++){
         tx.set(FB_CHUNK_REF(i), {items: gatedChunks[i]});
       }
@@ -2605,12 +2713,30 @@ async function writeShardedState(ms=15000){
       setSyncStatus(false, 'a nuvem mudou desde a última leitura — reconciliando antes de tentar de novo.');
       return false;
     }
+    // Fase 3B — a transação INTEIRA não comita (Firestore é tudo-ou-nada):
+    // nem o documento principal nem o snapshot foram publicados. O estado
+    // local não muda; o próximo ciclo de sync tenta de novo. Nunca publica
+    // metadata externalizada sem o snapshot correspondente.
+    if(e && e.code === 'snapshot_content_conflict'){
+      lastWriteRefusedReason = 'snapshot_content_conflict';
+      setSyncStatus(false, 'conflito: um snapshot de execução/tentativa já existe na nuvem com conteúdo diferente — sincronização bloqueada até revisão manual.');
+      return false;
+    }
+    if(e && e.code === 'snapshot_unavailable_for_commit'){
+      lastWriteRefusedReason = 'snapshot_unavailable_for_commit';
+      setSyncStatus(false, 'sincronização pendente: um snapshot referenciado ainda não está disponível neste dispositivo — tentando de novo em seguida.');
+      return false;
+    }
     throw e; // outros erros (rede/timeout/pedaço grande) sobem normalmente, como antes
   }
 
   lastKnownCloudRevision = committedRevision;
   lastWriteRefusedReason = null;
   lastWriteStaleImagesBlocked = committedStaleImagesBlocked;
+  // Fase 3B — só marca sincronizado DEPOIS do commit confirmado (nunca
+  // antes): se a transação falhar, o catch acima já retornou, e esta
+  // linha nunca executa — o próximo ciclo revarre e tenta de novo.
+  for(const snapshotId of committedSnapshotIds){ await markSnapshotSynced(snapshotId); }
   // ALTERAÇÃO 079d — escrita CONFIRMADA: o remoto agora contém exatamente
   // o payload gravado; só as imagens marcadas que estão nele saem da lista
   // de pendentes (erro/conflito/recusa nunca chegam aqui).
@@ -6691,6 +6817,72 @@ function rejectProposedReviewSolution(reviewId, reasonText){
   return { ok:true, reason:null, review };
 }
 
+/* ============================================================
+   SNAPSHOT STORE — leitores de alto nível (legado inline / coexistência /
+   externo) + interruptor de ativação. NADA aqui migra dado real: enquanto
+   STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED for false (padrão), toda
+   escrita nova continua inline, byte a byte como hoje. Hoje 100% dos
+   registros reais são inline — os leitores sempre caem no primeiro ramo,
+   sem mudança de comportamento observável em produção. A parte "pesada"
+   da infraestrutura (buildAtlasSnapshotRecord, leitura/escrita da store
+   local/Firestore, fingerprint, helpers de migração) fica junto do código
+   estrutural (perto de executeStructuralPlan) — aqui ficam só o
+   interruptor e os dois leitores de alto nível, porque authorizeAndApply-
+   ReviewSolution/applyReviewAiSuggestedPlacement/rollbackAppliedReview-
+   Solution (abaixo) e executeStructuralPlan/rollbackStructuralExecution
+   (mais adiante) todos dependem deles. */
+// Interruptor único: só controla se uma escrita NOVA usa armazenamento
+// externo. `let` (não `const`) de propósito — só pra os testes desta
+// infraestrutura poderem ligar dentro do seu próprio contexto isolado;
+// nenhum fluxo de produção toca nisto nesta fase.
+let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;
+// Cache em memória (só desta sessão) do que já foi resolvido via rede —
+// alimenta as variantes SÍNCRONAS usadas em renders que não podem virar
+// async (listas desenhadas em loop).
+const ATLAS_SNAPSHOT_MEMORY_CACHE = {};
+function structuralExecutionSnapshotsSync(review){
+  const ex = review && review.structuralExecution;
+  if(!ex) return { ok:false, reason:'no_execution' };
+  if(ex.beforeSnapshot || ex.afterSnapshot)
+    return { ok:true, format:'inline', beforeSnapshot: ex.beforeSnapshot||null, afterSnapshot: ex.afterSnapshot||null };
+  if(ex.snapshotStorage==='external' && ex.snapshotRef){
+    const mem = ATLAS_SNAPSHOT_MEMORY_CACHE[ex.snapshotRef];
+    if(mem) return { ok:true, format:'external', beforeSnapshot: mem.beforeSnapshot||null, afterSnapshot: mem.afterSnapshot||null };
+    return { ok:false, reason:'not_loaded_yet', snapshotRef: ex.snapshotRef };
+  }
+  return { ok:false, reason:'no_snapshot_recorded' };
+}
+/* Camada única de leitura (legado inline / coexistência / externo) para
+   snapshots de execução estrutural. Nunca duplicar esta cadeia em outro
+   call site — todo leitor de beforeSnapshot/afterSnapshot passa por aqui. */
+async function getStructuralExecutionSnapshots(review){
+  const sync = structuralExecutionSnapshotsSync(review);
+  if(sync.ok || sync.reason!=='not_loaded_yet') return sync;
+  const got = await getSnapshotFromStore(sync.snapshotRef);
+  if(!got.ok) return got;
+  ATLAS_SNAPSHOT_MEMORY_CACHE[sync.snapshotRef] = got.record;
+  return { ok:true, format:'external', beforeSnapshot: got.record.beforeSnapshot||null, afterSnapshot: got.record.afterSnapshot||null };
+}
+function reviewAttemptSnapshotSync(attempt){
+  if(!attempt) return { ok:false, reason:'no_attempt' };
+  if(attempt.beforeSnapshot)
+    return { ok:true, format:'inline', beforeSnapshot: attempt.beforeSnapshot };
+  if(attempt.snapshotStorage==='external' && attempt.snapshotRef){
+    const mem = ATLAS_SNAPSHOT_MEMORY_CACHE[attempt.snapshotRef];
+    if(mem) return { ok:true, format:'external', beforeSnapshot: mem.beforeSnapshot||null };
+    return { ok:false, reason:'not_loaded_yet', snapshotRef: attempt.snapshotRef };
+  }
+  return { ok:false, reason:'no_snapshot_recorded' };
+}
+/* Idem, pro beforeSnapshot de um attempt de revisão comum (não-estrutural). */
+async function getReviewAttemptSnapshot(review, attempt){
+  const sync = reviewAttemptSnapshotSync(attempt);
+  if(sync.ok || sync.reason!=='not_loaded_yet') return sync;
+  const got = await getSnapshotFromStore(sync.snapshotRef);
+  if(!got.ok) return got;
+  ATLAS_SNAPSHOT_MEMORY_CACHE[sync.snapshotRef] = got.record;
+  return { ok:true, format:'external', beforeSnapshot: got.record.beforeSnapshot||null };
+}
 /* PRIMEIRO ACEITE — concedido: "autorizo executar esta correção proposta?".
    Cria um snapshot COMPLETO da lesão ANTES de qualquer escrita, valida de
    novo (defesa em profundidade) e só então aplica exclusivamente os campos
@@ -6716,17 +6908,59 @@ function authorizeAndApplyReviewSolution(reviewId, opts){
   pushLesionReviewHistory(review, 'application_authorized', origin==='import' ? { origin:'import', via:'importReviewAiSolution' } : null);
 
   const beforeSnapshot = JSON.parse(JSON.stringify(lesion));
-  const attempt = {
-    id: genLesionReviewAttemptId(),
-    beforeSnapshot,
-    proposedChanges: check.changes,
-    summary: (review.solution && review.solution.summary) || '',
-    reasoning: (review.solution && review.solution.reasoning) || '',
-    appliedAt: Date.now(),
-    approvedAt: null,
-    rolledBackAt: null,
-    rollbackReason: null
-  };
+  const attemptId = genLesionReviewAttemptId();
+  // Flag OFF (padrão/produção hoje): beforeSnapshot inline, igual a
+  // sempre. Flag ON (só em teste nesta fase): metadata compacta + grava
+  // na snapshot store (cache local sempre; Firestore em melhor esforço).
+  const attempt = Object.assign(
+    { id: attemptId, proposedChanges: check.changes,
+      summary: (review.solution && review.solution.summary) || '',
+      reasoning: (review.solution && review.solution.reasoning) || '',
+      appliedAt: Date.now(), approvedAt: null, rolledBackAt: null, rollbackReason: null },
+    STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED ? { snapshotStorage:'external', snapshotRef:attemptId } : { beforeSnapshot }
+  );
+  if(STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED){
+    // authorizeAndApplyReviewSolution/applyReviewAiSuggestedPlacement
+    // continuam síncronas nesta fase (dezenas de call sites em
+    // index.html/testes leem o retorno na hora — virar async cascataria
+    // pra importReviewAiSolution/processReviewAiBatchItem e seus
+    // próprios chamadores). A garantia REAL de nunca publicar metadata
+    // externalizada sem o snapshot correspondente vive na transação
+    // atômica do sync (Fase 3B) — esta escrita local aqui é só o melhor
+    // esforço pra deixar o cache pronto o quanto antes. Por isso nunca
+    // fire-and-forget silencioso: falha aqui é logada, reverte o attempt
+    // para inline E re-persiste (rollback preservado em memória e no
+    // IndexedDB — a transação do sync também recusa publicar se o cache
+    // ainda não tiver o snapshot quando tentar).
+    const built = buildAtlasSnapshotRecord({ kind:'review_attempt', reviewId: review.id, attemptId, beforeSnapshot });
+    if(built.ok){
+      // saveSnapshotToLocalCache NUNCA rejeita (resolve {ok:false} ao falhar),
+      // por isso o fallback precisa tratar os dois casos — .catch sozinho
+      // seria código morto.
+      const revertAttemptToInline = (e)=>{
+        try{ console.error('[Atlas] falha ao cachear snapshot de attempt localmente — revertendo attempt para inline e re-persistindo:', attemptId, e||'cache_write_failed'); }catch(_e){}
+        try{
+          // REGRA LOCAL Fase 3B: metadata externalizada nunca pode apontar
+          // para snapshot ausente do cache. Como esta função é síncrona e o
+          // cache é assíncrono, a falha (rara) reverte o attempt para inline
+          // — rollback continua possível, sem corrupção.
+          attempt.beforeSnapshot = beforeSnapshot;
+          delete attempt.snapshotStorage;
+          delete attempt.snapshotRef;
+        }catch(_e2){}
+        try{
+          // PERSISTÊNCIA Fase 3B: o saveLesionRevisions() do fluxo já gravou
+          // a metadata externalizada; sem este re-save, um reload antes de
+          // outro save deixaria o IndexedDB com metadata externa sem
+          // snapshot. Re-persiste pelo caminho padrão (marca dirty + agenda
+          // push — retry coerente; não duplica o attempt: o objeto já está
+          // em review.attempts, só mudou de forma).
+          saveLesionRevisions();
+        }catch(_e3){}
+      };
+      saveSnapshotToLocalCache(built.record).then(res=>{ if(!res || !res.ok) revertAttemptToInline(res && res.reason); }).catch(revertAttemptToInline);
+    }
+  }
   pushLesionReviewHistory(review, 'before_snapshot_created', { attemptId: attempt.id });
 
   Object.keys(check.changes).forEach(field=>{ lesion[field] = check.changes[field]; });
@@ -6764,19 +6998,24 @@ function approveAppliedReviewSolution(reviewId){
    EXATAMENTE a partir do beforeSnapshot daquela tentativa específica (nunca
    um snapshot de outra tentativa) e reabre a revisão em "rejected", pronta
    pra uma nova proposta/tentativa com seu próprio snapshot novo. */
-function rollbackAppliedReviewSolution(reviewId, reasonText){
+async function rollbackAppliedReviewSolution(reviewId, reasonText){
   const review = LESION_REVISIONS[reviewId];
   if(isGlobalReview(review)) return { ok:false, reason:GLOBAL_REVIEW_NO_TARGET, review }; // PROTEÇÃO 091
   if(!review || review.status!=='applied_pending_validation') return { ok:false, reason:'not_awaiting_validation', review:review||null };
   const attempt = review.attempts && review.attempts[review.attempts.length-1];
-  if(!attempt || !attempt.beforeSnapshot) return { ok:false, reason:'no_snapshot', review };
+  if(!attempt) return { ok:false, reason:'no_snapshot', review };
+  // Operação destrutiva: SEMPRE aguarda o snapshot (inline ou externo) com
+  // sucesso antes de restaurar — hoje (100% inline) resolve na mesma
+  // microtask, sem latência observável.
+  const snap = await getReviewAttemptSnapshot(review, attempt);
+  if(!snap.ok || !snap.beforeSnapshot) return { ok:false, reason: snap.reason || 'no_snapshot', review };
   const idx = DATA.findIndex(e=>e && e.id===review.lesionId);
   if(idx===-1) return { ok:false, reason:'lesion_not_found', review };
 
   const reason = (reasonText||'').trim() || null;
   pushLesionReviewHistory(review, 'application_rejected', { attemptId: attempt.id, reason });
 
-  DATA[idx] = JSON.parse(JSON.stringify(attempt.beforeSnapshot));
+  DATA[idx] = JSON.parse(JSON.stringify(snap.beforeSnapshot));
   attempt.rolledBackAt = Date.now();
   attempt.rollbackReason = reason;
 
@@ -6988,18 +7227,56 @@ function applyReviewAiSuggestedPlacement(reviewId, siteOverride){
   const beforeSnapshot = JSON.parse(JSON.stringify(lesion));
   const beforeAltPlacements = JSON.parse(JSON.stringify(existing));
   const placement = { s: section, site };
-  const attempt = {
-    id: genLesionReviewAttemptId(),
-    kind: 'alt_placement',
-    beforeSnapshot,
-    beforeAltPlacements,
-    proposedChanges: {},
-    placement,
-    appliedAt: Date.now(),
-    approvedAt: null,
-    rolledBackAt: null,
-    rollbackReason: null
-  };
+  const attemptId = genLesionReviewAttemptId();
+  // Mesma regra de authorizeAndApplyReviewSolution: flag OFF (padrão/
+  // produção hoje) = beforeSnapshot inline, igual a sempre.
+  const attempt = Object.assign(
+    { id: attemptId, kind: 'alt_placement', beforeAltPlacements, proposedChanges: {}, placement,
+      appliedAt: Date.now(), approvedAt: null, rolledBackAt: null, rollbackReason: null },
+    STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED ? { snapshotStorage:'external', snapshotRef:attemptId } : { beforeSnapshot }
+  );
+  if(STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED){
+    // authorizeAndApplyReviewSolution/applyReviewAiSuggestedPlacement
+    // continuam síncronas nesta fase (dezenas de call sites em
+    // index.html/testes leem o retorno na hora — virar async cascataria
+    // pra importReviewAiSolution/processReviewAiBatchItem e seus
+    // próprios chamadores). A garantia REAL de nunca publicar metadata
+    // externalizada sem o snapshot correspondente vive na transação
+    // atômica do sync (Fase 3B) — esta escrita local aqui é só o melhor
+    // esforço pra deixar o cache pronto o quanto antes. Por isso nunca
+    // fire-and-forget silencioso: falha aqui é logada, reverte o attempt
+    // para inline E re-persiste (rollback preservado em memória e no
+    // IndexedDB — a transação do sync também recusa publicar se o cache
+    // ainda não tiver o snapshot quando tentar).
+    const built = buildAtlasSnapshotRecord({ kind:'review_attempt', reviewId: review.id, attemptId, beforeSnapshot });
+    if(built.ok){
+      // saveSnapshotToLocalCache NUNCA rejeita (resolve {ok:false} ao falhar),
+      // por isso o fallback precisa tratar os dois casos — .catch sozinho
+      // seria código morto.
+      const revertAttemptToInline = (e)=>{
+        try{ console.error('[Atlas] falha ao cachear snapshot de attempt localmente — revertendo attempt para inline e re-persistindo:', attemptId, e||'cache_write_failed'); }catch(_e){}
+        try{
+          // REGRA LOCAL Fase 3B: metadata externalizada nunca pode apontar
+          // para snapshot ausente do cache. Como esta função é síncrona e o
+          // cache é assíncrono, a falha (rara) reverte o attempt para inline
+          // — rollback continua possível, sem corrupção.
+          attempt.beforeSnapshot = beforeSnapshot;
+          delete attempt.snapshotStorage;
+          delete attempt.snapshotRef;
+        }catch(_e2){}
+        try{
+          // PERSISTÊNCIA Fase 3B: o saveLesionRevisions() do fluxo já gravou
+          // a metadata externalizada; sem este re-save, um reload antes de
+          // outro save deixaria o IndexedDB com metadata externa sem
+          // snapshot. Re-persiste pelo caminho padrão (marca dirty + agenda
+          // push — retry coerente; não duplica o attempt: o objeto já está
+          // em review.attempts, só mudou de forma).
+          saveLesionRevisions();
+        }catch(_e3){}
+      };
+      saveSnapshotToLocalCache(built.record).then(res=>{ if(!res || !res.ok) revertAttemptToInline(res && res.reason); }).catch(revertAttemptToInline);
+    }
+  }
   pushLesionReviewHistory(review, 'before_snapshot_created', { attemptId: attempt.id });
   lesion.altPlacements = existing.concat([placement]);
   lesion._userUpdatedAt = Date.now();
@@ -17485,7 +17762,11 @@ function openReviewValidationModal(reviewId, opts){
   const attempt = review.attempts && review.attempts[review.attempts.length-1];
   const isPlacement = !!(attempt && attempt.kind==='alt_placement');
   const changes = (attempt && attempt.proposedChanges) || (review.solution && review.solution.proposedChanges) || {};
-  const diffRows = attempt ? describeLesionReviewFieldChanges(attempt.beforeSnapshot, meta.lesion, Object.keys(changes)) : [];
+  // Render síncrono (nunca faz rede aqui): inline ou cache de memória; se
+  // o snapshot externo ainda não carregou, diffRows fica vazio — igual ao
+  // comportamento de hoje quando não há attempt.
+  const attemptSnapForDiff = attempt ? reviewAttemptSnapshotSync(attempt) : { ok:false };
+  const diffRows = attemptSnapForDiff.ok ? describeLesionReviewFieldChanges(attemptSnapForDiff.beforeSnapshot, meta.lesion, Object.keys(changes)) : [];
   const ov = document.createElement('div');
   ov.className = 'overlay';
   ov.onclick = e=>{ if(e.target===ov) ov.remove(); };
@@ -17523,7 +17804,7 @@ function openReviewValidationModal(reviewId, opts){
   };
   ov.querySelector('#review-validate-rollback').onclick = ()=>{
     openReasonPromptModal(reviewId, async (reason)=>{
-      const res = rollbackAppliedReviewSolution(reviewId, reason);
+      const res = await rollbackAppliedReviewSolution(reviewId, reason);
       if(!res.ok){ toast('Não foi possível desfazer a correção (' + (res.reason||'erro') + ').'); return; }
       await saveLesionRevisions();
       if(typeof renderAll==='function') renderAll();
@@ -18354,7 +18635,8 @@ function openReadySolutionsModal(){
       const meta = reviewCenterLesionMeta(r.lesionId);
       const attempt = r.attempts && r.attempts[r.attempts.length-1];
       const when = attempt ? new Date(attempt.appliedAt).toLocaleString('pt-BR') : '';
-      const diffRows = attempt ? describeLesionReviewFieldChanges(attempt.beforeSnapshot, meta.lesion, Object.keys(attempt.proposedChanges||{})) : [];
+      const attemptSnapForDiff2 = attempt ? reviewAttemptSnapshotSync(attempt) : { ok:false };
+      const diffRows = attemptSnapForDiff2.ok ? describeLesionReviewFieldChanges(attemptSnapForDiff2.beforeSnapshot, meta.lesion, Object.keys(attempt.proposedChanges||{})) : [];
       const row = document.createElement('div');
       row.className = 'review-center-row';
       row.innerHTML = `
@@ -18381,7 +18663,7 @@ function openReadySolutionsModal(){
       };
       row.querySelector('.review-rollback').onclick = ()=>{
         openReasonPromptModal(r.id, async (reason)=>{
-          const res = rollbackAppliedReviewSolution(r.id, reason);
+          const res = await rollbackAppliedReviewSolution(r.id, reason);
           if(res.ok){
             await saveLesionRevisions();
             renderAll(); // rollback restaurou DATA — mantém a grade/lista principal em dia
@@ -25166,9 +25448,20 @@ function isStructuralExecutionStale(review){
   // esperado do merge, não stale). Detecta alteração EXTERNA posterior.
   // Puro (só leitura). Para não-executed: { postExecution:false }.
   const ex = review && review.structuralExecution;
-  if(!ex || ex.status!=='executed' || !ex.afterSnapshot || !ex.afterSnapshot.lesions)
-    return { stale:false, reason:null, changedIds:[], postExecution:false };
-  const after = ex.afterSnapshot.lesions;
+  if(!ex || ex.status!=='executed') return { stale:false, reason:null, changedIds:[], postExecution:false };
+  // Inline (hoje, sempre): usa ex.afterSnapshot direto, comportamento
+  // idêntico a antes. Externo (futuro, após a feature ser ativada): só
+  // usa o que já estiver em ATLAS_SNAPSHOT_MEMORY_CACHE — nunca faz rede
+  // aqui (render síncrono) — se ainda não carregou, devolve "unknown"
+  // explícito em vez de fingir que está tudo certo.
+  let afterLesions = ex.afterSnapshot && ex.afterSnapshot.lesions;
+  if(!afterLesions && ex.snapshotStorage==='external' && ex.snapshotRef){
+    const cached = ATLAS_SNAPSHOT_MEMORY_CACHE[ex.snapshotRef];
+    afterLesions = cached && cached.afterSnapshot && cached.afterSnapshot.lesions;
+    if(!afterLesions) return { stale:false, reason:'snapshot_not_loaded', changedIds:[], postExecution:true, unknown:true };
+  }
+  if(!afterLesions) return { stale:false, reason:null, changedIds:[], postExecution:false };
+  const after = afterLesions;
   const changed = [];
   for(const id of Object.keys(after)){
     const rec = after[id];
@@ -25697,14 +25990,39 @@ async function executeStructuralPlan(reviewId){
       if(missing.length) return await recordFailure('postcondition_images_lost', missing.map(t=>t.key));
     }
     const after = { lesions:structuralSnapshotLesions(dry.affectedLesionIds) };
+    // Flag OFF (padrão/produção hoje): tombstone.previousSnapshot e
+    // structuralExecution.beforeSnapshot/afterSnapshot inline, byte a byte
+    // como sempre — nenhuma mudança de comportamento. Flag ON (só em
+    // teste, nesta fase): metadata compacta + snapshot vai pra store
+    // (cache local sempre; Firestore em melhor esforço, sem bloquear —
+    // mesmo padrão "local-first" já usado pelo resto do app).
     const tombstone = v.type==='merge_duplicates'
-      ? { removeId:v.removeId, keeperId:v.keeperId, previousName:(before.lesions[v.removeId]&&before.lesions[v.removeId].lesion.name)||null,
-          timestamp:new Date().toISOString(), reviewId, structuralPlan:{ type:v.type }, previousSnapshot:before,
-          reason:v.reasoning||null, executorVersion:STRUCTURAL_EXECUTOR_VERSION }
+      ? Object.assign(
+          { removeId:v.removeId, keeperId:v.keeperId, previousName:(before.lesions[v.removeId]&&before.lesions[v.removeId].lesion.name)||null,
+            timestamp:new Date().toISOString(), reviewId, structuralPlan:{ type:v.type },
+            reason:v.reasoning||null, executorVersion:STRUCTURAL_EXECUTOR_VERSION },
+          STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED ? { snapshotStorage:'external', snapshotRef:executionId } : { previousSnapshot:before }
+        )
       : null;
-    r.structuralExecution = { executionId, status:'executed', type:v.type, at:new Date().toISOString(),
-      affectedIds:dry.affectedLesionIds.slice(), operations:dry.operations.slice(), tombstone, beforeSnapshot:before,
-      afterSnapshot:after, executorVersion:STRUCTURAL_EXECUTOR_VERSION };
+    r.structuralExecution = Object.assign(
+      { executionId, status:'executed', type:v.type, at:new Date().toISOString(),
+        affectedIds:dry.affectedLesionIds.slice(), operations:dry.operations.slice(), tombstone, executorVersion:STRUCTURAL_EXECUTOR_VERSION },
+      STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED ? { snapshotStorage:'external', snapshotRef:executionId } : { beforeSnapshot:before, afterSnapshot:after }
+    );
+    if(STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED){
+      // Cache local AGUARDADO (nunca fire-and-forget): sem isso, nem o
+      // rollback no mesmo dispositivo nem a futura transação de sync têm
+      // de onde ler o snapshot. Falha aqui aborta a execução inteira —
+      // nunca marca "executed" com uma referência externa que não existe
+      // em lugar nenhum. A publicação remota (Firestore) NÃO acontece
+      // aqui: fica a cargo exclusivo da transação atômica em
+      // writeShardedState(), disparada pelo saveLesionRevisions()/
+      // saveData() mais abaixo — nunca uma escrita solta e separada.
+      const built = buildAtlasSnapshotRecord({ kind:'structural_execution', reviewId, executionId, beforeSnapshot:before, afterSnapshot:after });
+      if(!built.ok) return await recordFailure('snapshot_build_failed', built.reason);
+      const cached = await saveSnapshotToLocalCache(built.record);
+      if(!cached.ok) return await recordFailure('snapshot_cache_write_failed', cached.reason);
+    }
     if(v.type==='merge_duplicates') r.lesionId = v.keeperId;
     r.structuralPlan.status = 'executed';
     r.structuralPlan.decidedAt = new Date().toISOString();
@@ -25865,13 +26183,19 @@ async function rollbackStructuralExecution(reviewId){
   // Não depende de histórico do navegador: tudo vem de r.structuralExecution.
   const r = LESION_REVISIONS[reviewId] || null;
   const ex = r && r.structuralExecution;
-  if(!ex || ex.status!=='executed' || !ex.beforeSnapshot)
+  if(!ex || ex.status!=='executed')
     return { ok:false, reason:'no_executed_plan' };
   if(STRUCTURAL_EXEC_IN_FLIGHT[reviewId])
     return { ok:false, reason:'already_running' };
+  // Operação destrutiva: SEMPRE aguarda o snapshot (inline ou externo) com
+  // sucesso antes de restaurar qualquer coisa — nunca reverte com dado
+  // ausente/parcial. Hoje (100% inline) resolve na mesma microtask.
+  const snap = await getStructuralExecutionSnapshots(r);
+  if(!snap.ok || !snap.beforeSnapshot)
+    return { ok:false, reason: snap.reason || 'no_executed_plan' };
   STRUCTURAL_EXEC_IN_FLIGHT[reviewId] = true;
   try{
-    structuralRestoreSnapshots(ex.beforeSnapshot);
+    structuralRestoreSnapshots(snap.beforeSnapshot);
     try{ await saveData(); }catch(_e){}
     try{ await structuralPersistAll(); }catch(_e){}
     ex.status = 'rolledback'; ex.rolledbackAt = new Date().toISOString();
@@ -25884,6 +26208,191 @@ async function rollbackStructuralExecution(reviewId){
   }finally{
     delete STRUCTURAL_EXEC_IN_FLIGHT[reviewId];
   }
+}
+/* ============================================================
+   SNAPSHOT STORE — parte "pesada" (build/escrita/leitura local+Firestore,
+   fingerprint). Os leitores de alto nível (structuralExecutionSnapshotsSync/
+   getStructuralExecutionSnapshots/reviewAttemptSnapshotSync/
+   getReviewAttemptSnapshot) e o interruptor ficam perto de
+   authorizeAndApplyReviewSolution (precisam estar dentro do módulo
+   LESION_REVISIONS para os testes de extração completa) — delegam pra
+   estas funções aqui quando o formato é externo. ============================================================ */
+const STRUCTURAL_SNAPSHOT_SCHEMA_VERSION = 1;
+function structuralSnapshotLocalCacheKey(snapshotId){
+  return 'atlas:snapshot:' + snapshotId;
+}
+function structuralSnapshotFirestoreRef(snapshotId){
+  return FB_META_REF().collection('snapshotStore').doc(snapshotId);
+}
+// Fingerprint determinístico — NÃO criptográfico (não defende contra
+// adulteração; só detecta divergência acidental de conteúdo entre a
+// fonte local e o read-back remoto, mesmo princípio zero-dependência do
+// resto do projeto: sem Web Crypto, sem libs, uma função pura de hash
+// sobre a serialização canônica).
+function computeDeterministicFingerprint(value){
+  const s = canonicalJsonString(value);
+  let h1 = 0x811c9dc5, h2 = 0x1000193;
+  for(let i=0;i<s.length;i++){
+    const c = s.charCodeAt(i);
+    h1 = (h1 ^ c) >>> 0; h1 = Math.imul(h1, 0x01000193) >>> 0;
+    h2 = (h2 + c) >>> 0; h2 = Math.imul(h2, 0x85ebca6b) >>> 0;
+  }
+  return s.length + ':' + h1.toString(16) + h2.toString(16);
+}
+function buildAtlasSnapshotRecord(opts){
+  opts = opts || {};
+  const kind = opts.kind;
+  if(kind!=='structural_execution' && kind!=='review_attempt')
+    return { ok:false, reason:'invalid_kind' };
+  const snapshotId = kind==='structural_execution' ? opts.executionId : opts.attemptId;
+  if(!snapshotId) return { ok:false, reason:'missing_id' };
+  if(!opts.beforeSnapshot) return { ok:false, reason:'missing_before_snapshot' };
+  const record = {
+    snapshotId, kind,
+    reviewId: opts.reviewId || null,
+    executionId: kind==='structural_execution' ? snapshotId : null,
+    attemptId: kind==='review_attempt' ? snapshotId : null,
+    createdAt: opts.createdAt || new Date().toISOString(),
+    beforeSnapshot: opts.beforeSnapshot,
+    afterSnapshot: (kind==='structural_execution' && opts.afterSnapshot) ? opts.afterSnapshot : null,
+    schemaVersion: STRUCTURAL_SNAPSHOT_SCHEMA_VERSION
+  };
+  record.fingerprint = computeDeterministicFingerprint({ beforeSnapshot: record.beforeSnapshot, afterSnapshot: record.afterSnapshot });
+  return { ok:true, record };
+}
+async function saveSnapshotToLocalCache(record){
+  try{ await storage.set(structuralSnapshotLocalCacheKey(record.snapshotId), JSON.stringify(record), false); return { ok:true }; }
+  catch(e){ return { ok:false, reason:'local_cache_write_failed', detail:String((e&&e.message)||e) }; }
+}
+async function getSnapshotFromLocalCache(snapshotId){
+  try{
+    const r = await storage.get(structuralSnapshotLocalCacheKey(snapshotId), false);
+    return { ok:true, record: JSON.parse(r.value) };
+  }catch(e){ return { ok:false, reason:'not_in_local_cache' }; }
+}
+// Fase 3B: escrita remota isolada — usada SÓ por testes e pela migração
+// futura (copySnapshotMigrationItem). NENHUM fluxo produtivo chama isto
+// fora da transação atômica do sync (que faz tx.set direto).
+async function saveSnapshotToFirestore(record){
+  if(!fbDb) return { ok:false, reason:'no_cloud' };
+  try{ await structuralSnapshotFirestoreRef(record.snapshotId).set(record); return { ok:true }; }
+  catch(e){ return { ok:false, reason:'firestore_write_failed', detail:String((e&&e.message)||e) }; }
+}
+async function getSnapshotFromFirestore(snapshotId){
+  if(!fbDb) return { ok:false, reason:'no_cloud' };
+  try{
+    const snap = await structuralSnapshotFirestoreRef(snapshotId).get();
+    if(!snap.exists) return { ok:false, reason:'external_snapshot_missing' };
+    return { ok:true, record: snap.data() };
+  }catch(e){ return { ok:false, reason:'external_snapshot_fetch_failed', detail:String((e&&e.message)||e) }; }
+}
+// Único ponto de leitura da store: cache local -> nuvem -> cacheia
+// localmente o que veio da nuvem. Os leitores de alto nível (estrutural/
+// attempt) delegam pra isto — nunca duplicam esta cadeia em vários lugares.
+async function getSnapshotFromStore(snapshotId){
+  if(!snapshotId) return { ok:false, reason:'missing_snapshot_id' };
+  const cached = await getSnapshotFromLocalCache(snapshotId);
+  if(cached.ok) return { ok:true, record: cached.record, source:'cache' };
+  const remote = await getSnapshotFromFirestore(snapshotId);
+  if(!remote.ok){
+    if(typeof navigator!=='undefined' && navigator && navigator.onLine===false)
+      return { ok:false, reason:'external_snapshot_unavailable_offline' };
+    return remote;
+  }
+  // Cachear localmente o que veio da nuvem é só otimização: se falhar, a
+  // próxima leitura busca da nuvem de novo (idempotente, sem perda).
+  try{ await saveSnapshotToLocalCache(remote.record); }catch(_e){}
+  return { ok:true, record: remote.record, source:'firestore' };
+}
+/* ============================================================
+   MIGRAÇÃO (planejamento/validação) — nunca disparada automaticamente,
+   nunca chamada no boot, nunca ligada a nenhum botão nesta fase. build
+   (só lê) -> copy (só grava na store, nunca em LESION_REVISIONS) ->
+   verify (confere fingerprint) -> compact (só avalia se os 100% bateram;
+   a remoção real do inline fica para uma fase futura, aprovada à parte). */
+function buildSnapshotMigrationPlan(){
+  const all = (typeof LESION_REVISIONS==='object' ? LESION_REVISIONS : {});
+  const items = [];
+  Object.values(all).forEach(r=>{
+    if(!r) return;
+    const ex = r.structuralExecution;
+    if(ex && (ex.beforeSnapshot || ex.afterSnapshot) && ex.executionId){
+      items.push({ kind:'structural_execution', reviewId:r.id, executionId:ex.executionId,
+        snapshotId: ex.executionId, beforeSnapshot: ex.beforeSnapshot||null, afterSnapshot: ex.afterSnapshot||null,
+        tombstoneHasInlineSnapshot: !!(ex.tombstone && ex.tombstone.previousSnapshot) });
+    }
+    (Array.isArray(r.attempts)?r.attempts:[]).forEach(a=>{
+      if(a && a.beforeSnapshot && a.id){
+        items.push({ kind:'review_attempt', reviewId:r.id, attemptId:a.id,
+          snapshotId: a.id, beforeSnapshot: a.beforeSnapshot, afterSnapshot: null });
+      }
+    });
+  });
+  return { ok:true, items, totalCount: items.length };
+}
+async function copySnapshotMigrationItem(item){
+  const built = buildAtlasSnapshotRecord({ kind:item.kind, reviewId:item.reviewId,
+    executionId: item.kind==='structural_execution'?item.executionId:undefined,
+    attemptId: item.kind==='review_attempt'?item.attemptId:undefined,
+    beforeSnapshot:item.beforeSnapshot, afterSnapshot:item.afterSnapshot });
+  if(!built.ok) return { ok:false, snapshotId:item.snapshotId, reason:built.reason };
+  const existing = await getSnapshotFromFirestore(item.snapshotId);
+  if(existing.ok){
+    const prevFp = existing.record && existing.record.fingerprint;
+    if(prevFp && prevFp!==built.record.fingerprint)
+      return { ok:false, snapshotId:item.snapshotId, reason:'snapshot_content_conflict' };
+    return { ok:true, snapshotId:item.snapshotId, skipped:true }; // já existe e é idêntico — idempotente
+  }
+  const saved = await saveSnapshotToFirestore(built.record);
+  if(!saved.ok) return { ok:false, snapshotId:item.snapshotId, reason:saved.reason };
+  // Melhor esforço (migração futura, sem call site produtivo): o VERIFY
+  // posterior reconfere o fingerprint remoto de qualquer jeito.
+  try{ await saveSnapshotToLocalCache(built.record); }catch(_e){}
+  return { ok:true, snapshotId:item.snapshotId, skipped:false, fingerprint: built.record.fingerprint };
+}
+async function verifySnapshotMigrationItem(item){
+  const expected = buildAtlasSnapshotRecord({ kind:item.kind, reviewId:item.reviewId,
+    executionId: item.kind==='structural_execution'?item.executionId:undefined,
+    attemptId: item.kind==='review_attempt'?item.attemptId:undefined,
+    beforeSnapshot:item.beforeSnapshot, afterSnapshot:item.afterSnapshot });
+  if(!expected.ok) return { ok:false, snapshotId:item.snapshotId, reason:expected.reason };
+  const remote = await getSnapshotFromFirestore(item.snapshotId);
+  if(!remote.ok) return { ok:false, snapshotId:item.snapshotId, reason:remote.reason };
+  const remoteFp = remote.record && remote.record.fingerprint;
+  if(remoteFp!==expected.record.fingerprint)
+    return { ok:false, snapshotId:item.snapshotId, reason:'snapshot_content_conflict' };
+  return { ok:true, snapshotId:item.snapshotId, fingerprint: expected.record.fingerprint };
+}
+// SÓ autoriza compactação se TODOS os itens bateram — nenhuma parcial, nunca.
+function evaluateSnapshotMigrationReadiness(plan, verifyResults){
+  const totalCount = plan.totalCount;
+  const verified = verifyResults.filter(v=>v.ok).length;
+  const failed = verifyResults.filter(v=>!v.ok);
+  const ready = totalCount>0 && verified===totalCount && failed.length===0 && verifyResults.length===totalCount;
+  return { ready, totalCount, verifiedCount:verified, failedCount:failed.length, failed };
+}
+/* Só AVALIA se a compactação é segura (100% verificado + fonte não mudou
+   desde o COPY, via re-cálculo do fingerprint contra o estado ATUAL
+   fornecido por opts.reread). NÃO remove nada de LESION_REVISIONS — essa
+   escrita real fica para uma fase futura explicitamente aprovada. */
+async function compactSnapshotMigrationPlan(plan, verifyResults, opts){
+  const readiness = evaluateSnapshotMigrationReadiness(plan, verifyResults);
+  if(!readiness.ready) return Object.assign({ ok:false, reason:'not_fully_verified' }, readiness);
+  const verifiedFingerprintBySnapshotId = {};
+  verifyResults.forEach(v=>{ if(v.ok) verifiedFingerprintBySnapshotId[v.snapshotId] = v.fingerprint; });
+  const results = [];
+  for(const item of plan.items){
+    const current = (opts && typeof opts.reread==='function') ? opts.reread(item) : item;
+    const builtNow = buildAtlasSnapshotRecord({ kind:item.kind, reviewId:item.reviewId,
+      executionId: item.kind==='structural_execution'?item.executionId:undefined,
+      attemptId: item.kind==='review_attempt'?item.attemptId:undefined,
+      beforeSnapshot: current.beforeSnapshot, afterSnapshot: current.afterSnapshot });
+    const expectedFp = verifiedFingerprintBySnapshotId[item.snapshotId];
+    if(!builtNow.ok || builtNow.record.fingerprint !== expectedFp)
+      return { ok:false, reason:'source_changed_since_copy', snapshotId:item.snapshotId };
+    results.push({ snapshotId:item.snapshotId, ok:true });
+  }
+  return { ok:true, compactedCount: results.length, results };
 }
 function structuralPlanPreviewHtml(v){
   // Prévia 100% a partir do plano VALIDADO + snapshot (nunca do DATA mutável
@@ -26108,9 +26617,16 @@ function openStructuralPlanRollbackConfirmModal(reviewId, onDone){
   // Preserva o histórico da execução e registra a reversão. Nunca Cloudinary.
   const r = LESION_REVISIONS[reviewId] || null;
   const ex = r && r.structuralExecution;
-  if(!ex || ex.status!=='executed' || !ex.beforeSnapshot){ try{ toast('Nada a reverter.'); }catch(_e){} return; }
+  if(!ex || ex.status!=='executed'){ try{ toast('Nada a reverter.'); }catch(_e){} return; }
+  // Preview SÍNCRONO (nunca faz rede aqui): usa inline ou o que já estiver
+  // em cache de memória. A ação real de reverter (abaixo, no confirm)
+  // passa por rollbackStructuralExecution, que aguarda o snapshot de
+  // verdade antes de agir — este preview nunca é a checagem de segurança.
+  const snap = structuralExecutionSnapshotsSync(r);
+  if(!snap.ok && snap.reason!=='not_loaded_yet'){ try{ toast('Nada a reverter.'); }catch(_e){} return; }
   const esc = s=>String(s==null?'':s).replace(/</g,'&lt;');
-  const beforeIds = ex.beforeSnapshot && ex.beforeSnapshot.lesions ? Object.keys(ex.beforeSnapshot.lesions) : (ex.affectedIds||[]);
+  const beforeIds = (snap.ok && snap.beforeSnapshot && snap.beforeSnapshot.lesions) ? Object.keys(snap.beforeSnapshot.lesions) : (ex.affectedIds||[]);
+  const snapshotLoadingNote = (!snap.ok && snap.reason==='not_loaded_yet') ? '<div class="review-center-row-meta">⏳ Carregando detalhes do snapshot…</div>' : '';
   const ov = document.createElement('div');
   ov.className = 'overlay';
   ov.onclick = e=>{ if(e.target===ov) close(); };
@@ -26120,6 +26636,7 @@ function openStructuralPlanRollbackConfirmModal(reviewId, onDone){
   ov.innerHTML = '<div class="modal review-center-modal"><h2>↩️ Reverter execução estrutural</h2>' +
     '<div class="modal-sub">Revisão <b>'+esc(reviewId)+'</b> · execução <b>'+esc(ex.executionId)+'</b> ('+esc(ex.at||'')+').</div>' +
     '<div class="review-center-list"><div class="review-center-row">' +
+    snapshotLoadingNote +
     '<div><b>Será restaurado do snapshot:</b> '+esc(beforeIds.join(', ')||'(nenhuma lesão)')+'</div>' +
     (ex.operations&&ex.operations.length?'<div><b>Operações desfeitas:</b> '+esc(ex.operations.join(', '))+'</div>':'') +
     (ex.tombstone?'<div><b>Auditoria mantida:</b> tombstone de '+esc(ex.tombstone.removeId)+' → '+esc(ex.tombstone.keeperId)+' permanece no histórico.</div>':'') +
@@ -26244,6 +26761,12 @@ function structuralExecutionDetailsHtml(reviewId){
   const tb = ex.tombstone || null;
   const snapCount = (s)=>{ try{ return s && s.lesions ? Object.keys(s.lesions).length : 0; }catch(_e){ return 0; } };
   const snapIds = (s)=>{ try{ return s && s.lesions ? Object.keys(s.lesions).join(', ') : '—'; }catch(_e){ return '—'; } };
+  // Detalhe é só visualização (nunca faz rede aqui, igual ao resto desta
+  // função — "Puro"): usa inline ou o que já estiver em cache de memória.
+  const snap = structuralExecutionSnapshotsSync(r);
+  const snapNote = (!snap.ok && snap.reason==='not_loaded_yet') ? ' (⏳ carregando…)' : '';
+  const beforeForDisplay = snap.ok ? snap.beforeSnapshot : null;
+  const afterForDisplay = snap.ok ? snap.afterSnapshot : null;
   let tech = null;
   try{ tech = JSON.stringify({ structuralPlan:r.structuralPlan, structuralExecution:r.structuralExecution }, null, 1); }catch(_e){}
   return '<div class="review-center-row-main">' +
@@ -26256,8 +26779,8 @@ function structuralExecutionDetailsHtml(reviewId){
     '<div><b>Lesões afetadas:</b> '+esc(aff.join(', ')||'—')+'</div>' +
     (ops.length?'<div><b>Operações:</b> '+esc(ops.join(', '))+'</div>':'') +
     (tb?'<div><b>Tombstone:</b> '+esc(tb.removeId)+' → '+esc(tb.keeperId)+'</div>':'') +
-    '<div><b>beforeSnapshot:</b> '+snapCount(ex.beforeSnapshot)+' lesão(ões) ('+esc(snapIds(ex.beforeSnapshot))+')</div>' +
-    '<div><b>afterSnapshot:</b> '+snapCount(ex.afterSnapshot)+' lesão(ões) ('+esc(snapIds(ex.afterSnapshot))+')</div>' +
+    '<div><b>beforeSnapshot:</b> '+snapCount(beforeForDisplay)+' lesão(ões) ('+esc(snapIds(beforeForDisplay))+')'+snapNote+'</div>' +
+    '<div><b>afterSnapshot:</b> '+snapCount(afterForDisplay)+' lesão(ões) ('+esc(snapIds(afterForDisplay))+')'+snapNote+'</div>' +
     '<div><b>Executado em:</b> '+esc(ex.at||'—')+'</div>' +
     (ex.rolledbackAt?'<div><b>Revertido em:</b> '+esc(ex.rolledbackAt)+'</div>':'') +
     '<div class="review-center-row-meta">'+(st==='executed'?'Rollback disponível abaixo. Não há reexecução automática.':'Sem nova execução a partir daqui.')+'</div>' +

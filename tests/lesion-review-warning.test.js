@@ -112,7 +112,7 @@ test('086: tooltip e aria-label presentes; símbolo de atenção sem dependênci
   assert.doesNotMatch(markup, /<img|url\(|https?:/);
 });
 
-test('086 AO VIVO: criar revisão (createLesionReview real) -> ⚠ aparece sem F5; concluir -> some; rollback reabre -> volta', () => {
+test('086 AO VIVO: criar revisão (createLesionReview real) -> ⚠ aparece sem F5; concluir -> some; rollback reabre -> volta', async () => {
   const host = makeHost('seed_1');
   const other = makeHost('seed_2');
   const ctx = buildContext([host, other]);
@@ -142,7 +142,7 @@ test('086 AO VIVO: criar revisão (createLesionReview real) -> ⚠ aparece sem F
   const c3 = ctx.createLesionReview('seed_1', 'terceira');
   ctx.setReviewSolution(c3.review.id, 's', { notes: 'x3' });
   ctx.authorizeAndApplyReviewSolution(c3.review.id);
-  const rb = ctx.rollbackAppliedReviewSolution(c3.review.id, 'não resolveu');
+  const rb = await ctx.rollbackAppliedReviewSolution(c3.review.id, 'não resolveu');
   assert.equal(rb.ok, true);
   assert.equal(icons(host), 1, 'rollback reabre (rejected) -> alerta volta');
   ctx.cancelLesionReview(c3.review.id, 'desisti');
