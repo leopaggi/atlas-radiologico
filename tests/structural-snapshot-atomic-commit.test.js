@@ -36,7 +36,7 @@ function fn(name) {
 
 const txSrc = fn('writeShardedState');
 const META_SET = 'tx.set(FB_META_REF(), firestoreMeta)';
-const SNAP_SET = 'tx.set(structuralSnapshotFirestoreRef(snapshotId), localRecord)';
+const SNAP_SET = 'tx.set(structuralSnapshotFirestoreRef(snapshotId), pendingSnapshotDocs[snapshotId])';
 
 // ---------- 1/2/3/13/14 — a transação atômica (estático) ----------
 

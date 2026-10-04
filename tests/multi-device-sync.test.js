@@ -168,7 +168,8 @@ const structuralSyncFns = ['structuralSnapshotWalkMaps', 'structuralSnapshotProg
 // tocado — comportamento legado preservado.
 const snapshotStoreFns3B = ['snapshotSyncedLocalKey', 'isSnapshotMarkedSynced', 'markSnapshotSynced',
   'collectExternalSnapshotRefs', 'collectPendingSnapshotRefs',
-  'structuralSnapshotLocalCacheKey', 'structuralSnapshotFirestoreRef', 'getSnapshotFromLocalCache']
+  'structuralSnapshotLocalCacheKey', 'structuralSnapshotFirestoreRef', 'getSnapshotFromLocalCache',
+  'encodeSnapshotRecordForFirestore']
   .map((n) => extractFunction(html, n).source).join('\n');
 // PROTEÇÃO 091c — mapa de fusão clínica (módulo real: normalize/merge/fold).
 const lesionMergesModule091c = html.slice(html.indexOf("const LESION_MERGES_KEY = 'atlas:lesionMerges';"), html.indexOf('/* Plano APROVADO pelo usuário (091c).'));

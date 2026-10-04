@@ -2541,6 +2541,18 @@ async function writeShardedState(ms=15000){
     // 'snapshot_unavailable_for_commit' se for realmente necessário pra
     // publicar, em vez de publicar a metadata sem o snapshot.
   }
+  // Fase 3C — Firestore recusa nested arrays como valores nativos (erro real
+  // invalid-argument no primeiro COPY). Codifica cada snapshot pendente para
+  // o envelope Firestore-safe ANTES da transação; falha aqui recusa o commit
+  // como indisponível (sem taxonomia nova de erro).
+  const pendingSnapshotDocs = {};
+  for(const snapshotId of pendingSnapshotIds){
+    const localRecord = pendingSnapshotRecords[snapshotId];
+    if(!localRecord) continue; // ausência decidida dentro da transação
+    const encoded = encodeSnapshotRecordForFirestore(localRecord);
+    if(!encoded.ok){ lastWriteRefusedReason = 'snapshot_unavailable_for_commit'; return false; }
+    pendingSnapshotDocs[snapshotId] = encoded.doc;
+  }
 
   let committedRevision = null;
   let committedStaleImagesBlocked = 0;
@@ -2693,7 +2705,7 @@ async function writeShardedState(ms=15000){
             err.code = 'snapshot_unavailable_for_commit';
             throw err; // nunca publicar metadata externalizada sem o snapshot correspondente
           }
-          tx.set(structuralSnapshotFirestoreRef(snapshotId), localRecord); // MESMA transação do documento principal
+          tx.set(structuralSnapshotFirestoreRef(snapshotId), pendingSnapshotDocs[snapshotId]); // envelope encoded Fase 3C — MESMA transação do documento principal
         }
       }
       tx.set(FB_META_REF(), firestoreMeta);
@@ -26218,6 +26230,11 @@ async function rollbackStructuralExecution(reviewId){
    LESION_REVISIONS para os testes de extração completa) — delegam pra
    estas funções aqui quando o formato é externo. ============================================================ */
 const STRUCTURAL_SNAPSHOT_SCHEMA_VERSION = 1;
+// Fase 3C — Firestore recusa nested arrays como valores nativos (erro real
+// invalid-argument no primeiro COPY). Os documentos da snapshotStore viajam
+// SEMPRE neste envelope: metadata em campos normais + payload complexo
+// serializado em JSON. Fingerprint continua sobre o LOGICAL record.
+const SNAPSHOT_FIRESTORE_PAYLOAD_ENCODING = 'json-v1';
 function structuralSnapshotLocalCacheKey(snapshotId){
   return 'atlas:snapshot:' + snapshotId;
 }
@@ -26260,6 +26277,66 @@ function buildAtlasSnapshotRecord(opts){
   record.fingerprint = computeDeterministicFingerprint({ beforeSnapshot: record.beforeSnapshot, afterSnapshot: record.afterSnapshot });
   return { ok:true, record };
 }
+/* Fase 3C — codec Firestore do snapshot store (centralizado, determinístico,
+   reversível). O Firestore recusa nested arrays nativos; o payload complexo
+   (before/afterSnapshot) viaja como string JSON. Tipos: snapshots lógicos
+   nascem de JSON.parse(JSON.stringify(...)) (structuralClone / clones de
+   attempt), logo contêm SÓ tipos preservados exatamente por JSON — o
+   round-trip é lossless e o fingerprint (canônico, chaves ordenadas) é
+   idêntico antes/depois. Nunca transforma arrays em objetos. */
+function encodeSnapshotRecordForFirestore(record){
+  if(!record || typeof record!=='object' || Array.isArray(record))
+    return { ok:false, reason:'invalid_snapshot_record' };
+  const snapshotId = record.snapshotId, kind = record.kind;
+  if(typeof snapshotId!=='string' || !snapshotId) return { ok:false, reason:'missing_snapshot_id' };
+  if(kind!=='structural_execution' && kind!=='review_attempt') return { ok:false, reason:'invalid_kind' };
+  if(!record.beforeSnapshot || typeof record.beforeSnapshot!=='object') return { ok:false, reason:'missing_before_snapshot' };
+  if(typeof record.fingerprint!=='string' || !record.fingerprint) return { ok:false, reason:'missing_fingerprint' };
+  let payloadJson;
+  try{ payloadJson = JSON.stringify({ beforeSnapshot: record.beforeSnapshot, afterSnapshot: (record.afterSnapshot===undefined ? null : record.afterSnapshot) }); }
+  catch(e){ return { ok:false, reason:'snapshot_encode_failed', detail:String((e&&e.message)||e) }; }
+  return { ok:true, doc:{
+    snapshotId, kind,
+    reviewId: (record.reviewId===undefined ? null : record.reviewId),
+    executionId: (record.executionId===undefined ? null : record.executionId),
+    attemptId: (record.attemptId===undefined ? null : record.attemptId),
+    createdAt: (record.createdAt===undefined ? null : record.createdAt),
+    schemaVersion: record.schemaVersion, fingerprint: record.fingerprint,
+    payloadEncoding: SNAPSHOT_FIRESTORE_PAYLOAD_ENCODING, payloadJson } };
+}
+function decodeSnapshotRecordFromFirestore(doc){
+  if(!doc || typeof doc!=='object' || Array.isArray(doc))
+    return { ok:false, reason:'snapshot_decode_failed', detail:'not_an_object' };
+  if(doc.payloadEncoding !== SNAPSHOT_FIRESTORE_PAYLOAD_ENCODING)
+    return { ok:false, reason:'snapshot_decode_failed', detail:'unknown_payload_encoding' };
+  if(typeof doc.payloadJson !== 'string')
+    return { ok:false, reason:'snapshot_decode_failed', detail:'missing_payload' };
+  let payload;
+  try{ payload = JSON.parse(doc.payloadJson); }
+  catch(e){ return { ok:false, reason:'snapshot_decode_failed', detail:'corrupt_payload_json' }; }
+  if(!payload || typeof payload!=='object' || !payload.beforeSnapshot || typeof payload.beforeSnapshot!=='object')
+    return { ok:false, reason:'snapshot_decode_failed', detail:'missing_before_snapshot' };
+  const record = {
+    snapshotId: doc.snapshotId, kind: doc.kind,
+    reviewId: (doc.reviewId===undefined ? null : doc.reviewId),
+    executionId: (doc.executionId===undefined ? null : doc.executionId),
+    attemptId: (doc.attemptId===undefined ? null : doc.attemptId),
+    createdAt: (doc.createdAt===undefined ? null : doc.createdAt),
+    beforeSnapshot: payload.beforeSnapshot,
+    afterSnapshot: (payload.afterSnapshot===undefined ? null : payload.afterSnapshot),
+    schemaVersion: doc.schemaVersion, fingerprint: doc.fingerprint };
+  if(record.kind!=='structural_execution' && record.kind!=='review_attempt')
+    return { ok:false, reason:'snapshot_decode_failed', detail:'invalid_kind' };
+  if(typeof record.snapshotId!=='string' || !record.snapshotId)
+    return { ok:false, reason:'snapshot_decode_failed', detail:'missing_snapshot_id' };
+  if(record.schemaVersion !== STRUCTURAL_SNAPSHOT_SCHEMA_VERSION)
+    return { ok:false, reason:'snapshot_decode_failed', detail:'schema_mismatch' };
+  if(typeof record.fingerprint!=='string' || !record.fingerprint)
+    return { ok:false, reason:'snapshot_decode_failed', detail:'missing_fingerprint' };
+  if(computeDeterministicFingerprint({ beforeSnapshot: record.beforeSnapshot, afterSnapshot: record.afterSnapshot }) !== record.fingerprint)
+    return { ok:false, reason:'snapshot_decode_failed', detail:'fingerprint_mismatch' };
+  return { ok:true, record };
+}
 async function saveSnapshotToLocalCache(record){
   try{ await storage.set(structuralSnapshotLocalCacheKey(record.snapshotId), JSON.stringify(record), false); return { ok:true }; }
   catch(e){ return { ok:false, reason:'local_cache_write_failed', detail:String((e&&e.message)||e) }; }
@@ -26275,7 +26352,11 @@ async function getSnapshotFromLocalCache(snapshotId){
 // fora da transação atômica do sync (que faz tx.set direto).
 async function saveSnapshotToFirestore(record){
   if(!fbDb) return { ok:false, reason:'no_cloud' };
-  try{ await structuralSnapshotFirestoreRef(record.snapshotId).set(record); return { ok:true }; }
+  // Fase 3C: nunca envia o record lógico cru (nested arrays são rejeitados
+  // pelo Firestore) — sempre o envelope encoded.
+  const encoded = encodeSnapshotRecordForFirestore(record);
+  if(!encoded.ok) return { ok:false, reason:encoded.reason, detail:encoded.detail };
+  try{ await structuralSnapshotFirestoreRef(record.snapshotId).set(encoded.doc); return { ok:true }; }
   catch(e){ return { ok:false, reason:'firestore_write_failed', detail:String((e&&e.message)||e) }; }
 }
 async function getSnapshotFromFirestore(snapshotId){
@@ -26283,7 +26364,11 @@ async function getSnapshotFromFirestore(snapshotId){
   try{
     const snap = await structuralSnapshotFirestoreRef(snapshotId).get();
     if(!snap.exists) return { ok:false, reason:'external_snapshot_missing' };
-    return { ok:true, record: snap.data() };
+    // Fase 3C: o documento remoto é o envelope encoded — devolve ao app o
+    // logical record decodificado (transparente para os leitores).
+    const decoded = decodeSnapshotRecordFromFirestore(snap.data());
+    if(!decoded.ok) return { ok:false, reason:decoded.reason, detail:decoded.detail };
+    return { ok:true, record: decoded.record };
   }catch(e){ return { ok:false, reason:'external_snapshot_fetch_failed', detail:String((e&&e.message)||e) }; }
 }
 // Único ponto de leitura da store: cache local -> nuvem -> cacheia

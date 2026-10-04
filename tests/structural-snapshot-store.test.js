@@ -50,6 +50,7 @@ const names = [
   'reviewAttemptSnapshotSync', 'getReviewAttemptSnapshot',
   'structuralSnapshotLocalCacheKey', 'structuralSnapshotFirestoreRef',
   'computeDeterministicFingerprint', 'buildAtlasSnapshotRecord',
+  'encodeSnapshotRecordForFirestore', 'decodeSnapshotRecordFromFirestore',
   'saveSnapshotToLocalCache', 'getSnapshotFromLocalCache',
   'saveSnapshotToFirestore', 'getSnapshotFromFirestore', 'getSnapshotFromStore',
   'buildSnapshotMigrationPlan', 'copySnapshotMigrationItem',
