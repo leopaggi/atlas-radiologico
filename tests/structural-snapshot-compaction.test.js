@@ -104,7 +104,7 @@ function countFixture(revs) {
 // ---------- contexto mínimo do apply (sem módulo, sem DATA) ----------
 
 const applyNames = [
-  'canonicalJsonString',
+  'canonicalJsonString', 'utf8ByteLength',
   'computeDeterministicFingerprint', 'buildAtlasSnapshotRecord',
   'structuralSnapshotLocalCacheKey', 'structuralSnapshotFirestoreRef',
   'encodeSnapshotRecordForFirestore', 'decodeSnapshotRecordFromFirestore',
@@ -162,9 +162,10 @@ function applyCtx(fixture, opts) {
 function liveOf(ctx) { return vm.runInContext('LESION_REVISIONS', ctx); }
 function expectedFor(ctx) {
   const live = liveOf(ctx);
+  const str = JSON.stringify(live);
   return {
     sourceFingerprint: ctx.computeDeterministicFingerprint(live),
-    sourceBytes: JSON.stringify(live).length,
+    sourceBytes: Buffer.byteLength(str, 'utf8'),
     total: 58, structural: 12, attempts: 46, tombstones: 10
   };
 }
@@ -221,7 +222,7 @@ test('5B-03 plano != 58 aborta (expectativa maior que o real)', async () => {
   const fixture = buildFixture58();
   delete fixture.r_att_01; // 57 itens
   const ctx = applyCtx(fixture, {});
-  const exp = { sourceFingerprint: ctx.computeDeterministicFingerprint(liveOf(ctx)), sourceBytes: JSON.stringify(liveOf(ctx)).length, total: 58, structural: 12, attempts: 46, tombstones: 10 };
+  const exp = { sourceFingerprint: ctx.computeDeterministicFingerprint(liveOf(ctx)), sourceBytes: Buffer.byteLength(JSON.stringify(liveOf(ctx)), 'utf8'), total: 58, structural: 12, attempts: 46, tombstones: 10 };
   const res = await ctx.applySnapshotMigrationCompaction({ expected: exp, dryRunOnly: true });
   assert.equal(res.ok, false);
   assert.equal(res.reason, 'plan_count_mismatch');
@@ -639,3 +640,139 @@ test('5B-30 flag ON aborta o apply (gate) — nenhuma execução real fora de fi
     assert.equal(ctx.__stats.sets, 0, 'nada persistido com flag ON');
   });
 });
+
+test('5B-30 flag ON aborta o apply (gate) — nenhuma execução real fora de fixtures', () => {
+  const ctx = applyCtx(buildFixture58(), {});
+  vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = true;', ctx);
+  const before = JSON.stringify(liveOf(ctx));
+  return ctx.applySnapshotMigrationCompaction({ expected: expectedFor(ctx), dryRunOnly: true }).then((res) => {
+    assert.equal(res.ok, false);
+    assert.equal(res.reason, 'flag_must_be_off');
+    assert.equal(JSON.stringify(liveOf(ctx)), before, 'nada mutado com flag ON');
+    assert.equal(ctx.__stats.sets, 0, 'nada persistido com flag ON');
+  });
+});
+
+// ---------- correção 5B-fix: bytes UTF-8 reais + detecção por presença ----------
+
+function utf8Reference(s) { return Buffer.byteLength(String(s), 'utf8'); } // implementação independente (Node)
+
+test('5B-31 utf8ByteLength equivale a Blob.size / Buffer.byteLength', () => {
+  const ctx = applyCtx(buildFixture58(), {});
+  const cases = ['a', 'é', '€', '😀', 'lesão óssea — 日本語 🎯', 'plain ascii 123'];
+  for (const s of cases) assert.equal(ctx.utf8ByteLength(s), utf8Reference(s), JSON.stringify(s));
+  assert.equal(ctx.utf8ByteLength(''), 0);
+});
+
+// Fixture com multibyte real: length !== bytes.
+function buildFixtureMultibyte() {
+  const revs = {};
+  revs.r_exec_mb = {
+    id: 'r_exec_mb', lesionId: 'seed_mb', status: 'manual_action_required', requestText: 'fundir — ação já concluída 🎯',
+    structuralExecution: { executionId: 'exec_mb', status: 'executed', type: 'merge_duplicates', at: '2026-01-01',
+      affectedIds: ['seed_mb'], operations: ['merge'], executorVersion: 1,
+      beforeSnapshot: { lesions: { seed_mb: { index: 0, lesion: snapLesion('seed_mb', 'Lesão óssea — 日本語') } },
+        maps: { review: {}, reviewStamps: {}, reviewProgress: {}, reviewOverride: {}, srs: {}, merges: {}, pendingAdds: {} } },
+      afterSnapshot: { lesions: {} },
+      tombstone: { removeId: 'seed_x', keeperId: 'seed_mb', previousSnapshot: { lesions: {} }, timestamp: '2026-01-01', reviewId: 'r_exec_mb', executorVersion: 1 } },
+    attempts: [Object.assign(mkAttempt('att_mb1', 'mb1'), { summary: 'ação executada ✅' })],
+    history: [], createdAt: 1, updatedAt: 2
+  };
+  return revs;
+}
+function expectedForBytes(ctx) {
+  const live = liveOf(ctx);
+  const str = JSON.stringify(live);
+  return {
+    sourceFingerprint: ctx.computeDeterministicFingerprint(live),
+    sourceBytes: utf8Reference(str), sourceLength: str.length,
+    total: 2, structural: 1, attempts: 1, tombstones: 1
+  };
+}
+
+test('5B-32 fixture multibyte: length difere de bytes; target usa bytes reais', async () => {
+  const ctx = applyCtx(buildFixtureMultibyte(), {});
+  await seedRemoteFor(ctx, 2);
+  const exp = expectedForBytes(ctx);
+  assert.ok(exp.sourceBytes > exp.sourceLength, 'a fixture precisa ter multibyte (bytes > length)');
+  const res = await ctx.applySnapshotMigrationCompaction({ expected: exp });
+  assert.equal(res.ok, true, JSON.stringify(res.reason || res.detail || ''));
+  assert.equal(res.targetBytes, utf8Reference(JSON.stringify(liveOf(ctx))), 'target em bytes reais');
+  assert.equal(res.targetBytes, Buffer.byteLength(JSON.stringify(liveOf(ctx)), 'utf8'));
+  assert.equal(res.structuralCount, 1);
+  assert.equal(res.attemptCount, 1);
+  assert.equal(res.tombstoneCount, 1);
+  const ex = liveOf(ctx).r_exec_mb.structuralExecution;
+  assert.equal(ex.snapshotStorage, 'external');
+  assert.equal(ex.snapshotRef, 'exec_mb');
+});
+
+test('5B-33 gate sourceBytes usa bytes reais (length multibyte aborta)', async () => {
+  const ctx = applyCtx(buildFixtureMultibyte(), {});
+  await seedRemoteFor(ctx, 2);
+  const exp = expectedForBytes(ctx);
+  const okRes = await ctx.applySnapshotMigrationCompaction({ expected: exp, dryRunOnly: true });
+  assert.equal(okRes.ok, true, 'com bytes reais passa');
+  const wrong = Object.assign({}, exp, { sourceBytes: exp.sourceLength }); // string.length, não bytes
+  const bad = await ctx.applySnapshotMigrationCompaction({ expected: wrong, dryRunOnly: true });
+  assert.equal(bad.ok, false);
+  assert.equal(bad.reason, 'source_bytes_mismatch');
+});
+
+test('5B-34 campos null/falsey explícitos são detectados por presença e abortam', async () => {
+  // attempt com beforeSnapshot:null explícito (fora do plano por truthiness,
+  // mas presente para a varredura hasOwnProperty do clone).
+  const revs = {};
+  revs.r_exec_n = {
+    id: 'r_exec_n', lesionId: 'seed_n', status: 'manual_action_required', requestText: 'x',
+    structuralExecution: { executionId: 'exec_n', status: 'executed', type: 'merge_duplicates', at: '2026-01-01',
+      affectedIds: ['seed_n'], operations: ['merge'], executorVersion: 1,
+      beforeSnapshot: { lesions: {} }, afterSnapshot: { lesions: {} } },
+    attempts: [Object.assign(mkAttempt('att_null1', 'n1'), { beforeSnapshot: null })],
+    history: [], createdAt: 1, updatedAt: 2
+  };
+  const ctx = applyCtx(revs, {});
+  await seedRemoteFor(ctx, 1);
+  const live = liveOf(ctx);
+  const str = JSON.stringify(live);
+  const exp = { sourceFingerprint: ctx.computeDeterministicFingerprint(live), sourceBytes: utf8Reference(str), total: 1, structural: 1, attempts: 0, tombstones: 0 };
+  const before = JSON.stringify(live);
+  const res = await ctx.applySnapshotMigrationCompaction({ expected: exp, dryRunOnly: true });
+  assert.equal(res.ok, false, 'campo null explícito não passa batido');
+  assert.equal(res.reason, 'clone_validation_failed');
+  assert.deepEqual(plain(res.detail.remainingInline), { exec: 0, att: 1, tomb: 0 });
+  assert.equal(JSON.stringify(liveOf(ctx)), before, 'nada mutado');
+  // tombstone com previousSnapshot:null explícito: mesma detecção.
+  const revs2 = {};
+  revs2.r_exec_t = {
+    id: 'r_exec_t', lesionId: 'seed_t', status: 'manual_action_required', requestText: 'x',
+    structuralExecution: { executionId: 'exec_t', status: 'executed', type: 'merge_duplicates', at: '2026-01-01',
+      affectedIds: ['seed_t'], operations: ['merge'], executorVersion: 1,
+      beforeSnapshot: { lesions: {} }, afterSnapshot: { lesions: {} },
+      tombstone: { removeId: 'a', keeperId: 'b', previousSnapshot: null } },
+    attempts: [], history: [], createdAt: 1, updatedAt: 2
+  };
+  const ctx2 = applyCtx(revs2, {});
+  await seedRemoteFor(ctx2, 1);
+  const live2 = liveOf(ctx2);
+  const str2 = JSON.stringify(live2);
+  const exp2 = { sourceFingerprint: ctx2.computeDeterministicFingerprint(live2), sourceBytes: utf8Reference(str2), total: 1, structural: 1, attempts: 0, tombstones: 0 };
+  const res2 = await ctx2.applySnapshotMigrationCompaction({ expected: exp2, dryRunOnly: true });
+  assert.equal(res2.ok, false, 'tombstone null explícito não passa batido');
+  assert.equal(res2.reason, 'clone_validation_failed');
+});
+
+// Semeia N itens do plano no Firestore falso (para fixtures pequenas).
+async function seedRemoteFor(ctx, n) {
+  const plan = ctx.buildSnapshotMigrationPlan();
+  assert.equal(plan.totalCount, n);
+  for (const item of plan.items) {
+    const b = ctx.buildAtlasSnapshotRecord({ kind: item.kind, reviewId: item.reviewId,
+      executionId: item.kind === 'structural_execution' ? item.executionId : undefined,
+      attemptId: item.kind === 'review_attempt' ? item.attemptId : undefined,
+      beforeSnapshot: item.beforeSnapshot, afterSnapshot: item.afterSnapshot });
+    assert.equal(b.ok, true);
+    assert.equal((await ctx.saveSnapshotToFirestore(b.record)).ok, true);
+  }
+  return plan;
+}

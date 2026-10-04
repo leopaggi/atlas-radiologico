@@ -26479,6 +26479,24 @@ async function compactSnapshotMigrationPlan(plan, verifyResults, opts){
   }
   return { ok:true, compactedCount: results.length, results };
 }
+/* Fase 5B — bytes UTF-8 reais de uma string (equivalente a
+   new Blob([s]).size, mesma medida do dry-run aprovado). Blob existe no
+   browser; o fallback manual conta os bytes UTF-8 de forma idêntica
+   (sobrevive a contextos sem Blob, ex.: testes isolados). */
+function utf8ByteLength(s){
+  s = String(s == null ? '' : s);
+  try{ if(typeof Blob !== 'undefined') return new Blob([s]).size; }catch(_e){}
+  let n = 0;
+  for(let i=0;i<s.length;i++){
+    const c = s.charCodeAt(i);
+    if(c >= 0xD800 && c <= 0xDBFF && i+1 < s.length){
+      const d = s.charCodeAt(i+1);
+      if(d >= 0xDC00 && d <= 0xDFFF){ n += 4; i++; continue; }
+    }
+    n += c < 0x80 ? 1 : (c < 0x800 ? 2 : 3);
+  }
+  return n;
+}
 /* Fase 5B — projeção para comparar fonte × clone compactado IGNORANDO só os
    campos autorizados (snapshots inline removidos + markers externos).
    Pura (nunca muta a entrada): se canonicalJsonString(projeção(fonte)) ===
@@ -26536,7 +26554,9 @@ async function applySnapshotMigrationCompaction(opts){
   const liveStr = JSON.stringify(LESION_REVISIONS);
   if(computeDeterministicFingerprint(LESION_REVISIONS) !== exp.sourceFingerprint)
     return fail('source_fingerprint_mismatch');
-  if(liveStr.length !== exp.sourceBytes)
+  // Fase 5B-fix: bytes UTF-8 reais (não string.length) — mesma medida do
+  // dry-run aprovado (new Blob([json]).size).
+  if(utf8ByteLength(liveStr) !== exp.sourceBytes)
     return fail('source_bytes_mismatch');
   const plan = buildSnapshotMigrationPlan();
   const nStructural = plan.items.filter(i=>i.kind==='structural_execution').length;
@@ -26577,10 +26597,13 @@ async function applySnapshotMigrationCompaction(opts){
     const r = clone[rid];
     if(!r || typeof r!=='object') continue;
     const ex = r.structuralExecution;
-    if(ex && (ex.beforeSnapshot || ex.afterSnapshot) && ex.executionId && seenIds.has(ex.executionId)){
+    // Fase 5B-fix: detecção por PRESENÇA da propriedade (hasOwnProperty,
+    // igual ao dry-run aprovado) — não por truthiness: campo existente com
+    // valor null/falsey conta como inline presente.
+    if(ex && (Object.prototype.hasOwnProperty.call(ex, 'beforeSnapshot') || Object.prototype.hasOwnProperty.call(ex, 'afterSnapshot')) && ex.executionId && seenIds.has(ex.executionId)){
       delete ex.beforeSnapshot; delete ex.afterSnapshot;
       ex.snapshotStorage = 'external'; ex.snapshotRef = ex.executionId;
-      if(ex.tombstone && ex.tombstone.previousSnapshot){
+      if(ex.tombstone && Object.prototype.hasOwnProperty.call(ex.tombstone, 'previousSnapshot')){
         delete ex.tombstone.previousSnapshot;
         ex.tombstone.snapshotStorage = 'external'; ex.tombstone.snapshotRef = ex.executionId;
         cTombstones++;
@@ -26588,7 +26611,7 @@ async function applySnapshotMigrationCompaction(opts){
       cStructural++; refs.push(ex.executionId);
     }
     (Array.isArray(r.attempts) ? r.attempts : []).forEach(a=>{
-      if(a && a.beforeSnapshot && a.id && seenIds.has(a.id)){
+      if(a && Object.prototype.hasOwnProperty.call(a, 'beforeSnapshot') && a.id && seenIds.has(a.id)){
         delete a.beforeSnapshot;
         a.snapshotStorage = 'external'; a.snapshotRef = a.id;
         cAttempts++; refs.push(a.id);
@@ -26596,7 +26619,7 @@ async function applySnapshotMigrationCompaction(opts){
     });
   }
   // VALIDATE do clone.
-  const targetBytes = JSON.stringify(clone).length;
+  const targetBytes = utf8ByteLength(JSON.stringify(clone));
   const failClone = (reason, extra)=> fail(reason, Object.assign({ structuralCount:cStructural, attemptCount:cAttempts, tombstoneCount:cTombstones }, extra || {}));
   if(cStructural !== exp.structural || cAttempts !== exp.attempts || cTombstones !== exp.tombstones)
     return failClone('clone_validation_failed', { detail:{ structural:cStructural, attempts:cAttempts, tombstones:cTombstones } });
@@ -26605,9 +26628,10 @@ async function applySnapshotMigrationCompaction(opts){
   let remExec = 0, remAtt = 0, remTomb = 0;
   Object.values(clone).forEach(r=>{
     const ex = r && r.structuralExecution;
-    if(ex && (ex.beforeSnapshot || ex.afterSnapshot)) remExec++;
-    if(ex && ex.tombstone && ex.tombstone.previousSnapshot) remTomb++;
-    (r && Array.isArray(r.attempts) ? r.attempts : []).forEach(a=>{ if(a && a.beforeSnapshot) remAtt++; });
+    // Fase 5B-fix: presença (hasOwnProperty), como no dry-run aprovado.
+    if(ex && (Object.prototype.hasOwnProperty.call(ex, 'beforeSnapshot') || Object.prototype.hasOwnProperty.call(ex, 'afterSnapshot'))) remExec++;
+    if(ex && ex.tombstone && Object.prototype.hasOwnProperty.call(ex.tombstone, 'previousSnapshot')) remTomb++;
+    (r && Array.isArray(r.attempts) ? r.attempts : []).forEach(a=>{ if(a && Object.prototype.hasOwnProperty.call(a, 'beforeSnapshot')) remAtt++; });
   });
   if(remExec !== 0 || remAtt !== 0 || remTomb !== 0)
     return failClone('clone_validation_failed', { detail:{ remainingInline:{ exec:remExec, att:remAtt, tomb:remTomb } } });
