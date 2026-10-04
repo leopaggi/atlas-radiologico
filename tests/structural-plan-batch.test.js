@@ -84,6 +84,7 @@ function ctxFixture() {
     toast: () => {}, console });
   ctx.calls = calls;
   vm.runInContext(consts + '\n' + mapping + '\n' + planTypes + '\n' + execConsts + '\n' + statusesConst + snapshotStoreConst + names.map(fn).join('\n'), ctx, { filename: 'batch-test.js' });
+  vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;', ctx); // Fase 6: cobre o legado inline
   return ctx;
 }
 

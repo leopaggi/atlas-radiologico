@@ -39,6 +39,7 @@ function makeCtx() {
   ctx.saveData = () => { ctx.saveDataCalls += 1; };
   vm.createContext(ctx);
   vm.runInContext(moduleSource + '\nfunction __revs(){ return LESION_REVISIONS; }\nfunction __setRevs(v){ LESION_REVISIONS = v; }', ctx);
+  vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;', ctx); // Fase 6: cobre o legado inline
   return ctx;
 }
 const G = (c, text, category) => c.createReviewRequest({ scope: 'global', requestText: text, category });

@@ -464,7 +464,10 @@ function reviewCtxB(opts) {
   vm.createContext(context);
   vm.runInContext(moduleSourceB, context, { filename: 'lesion-review-5b.js' });
   vm.runInContext(canonSrcB + '\n' + heavySourceB, context, { filename: 'lesion-review-5b-heavy.js' });
+  // Fase 6: default publicado é ON; estes testes de leitura/legado pinam OFF
+  // exceto opts.flagOn explícito.
   if (opts.flagOn) vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = true;', context);
+  else vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;', context);
   return context;
 }
 function mkLesionB(id, notes) {

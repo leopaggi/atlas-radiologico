@@ -323,7 +323,9 @@ function reviewCtx3C(opts) {
   vm.createContext(context);
   vm.runInContext(moduleSource, context, { filename: 'lesion-review-module-3c.js' });
   vm.runInContext(canonSrc + '\n' + heavySource, context, { filename: 'lesion-review-module-3c-heavy.js' });
+  // Fase 6: default publicado é ON; legado inline pinado exceto opts.flagOn.
   if (opts.flagOn) vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = true;', context);
+  else vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;', context);
   return context;
 }
 const tick3C = () => new Promise((r) => setTimeout(r, 10));
@@ -357,8 +359,8 @@ test('3C-18 flag OFF continua comportamento legado (inline, sem Firestore)', asy
   assert.equal(Object.keys(ctx.__backing).filter((k) => k.indexOf('atlas:snapshot:') === 0).length, 0, 'nada no cache de snapshots');
 });
 
-test('3C-19 nenhuma migração automática', () => {
-  assert.ok(html.includes('let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false'), 'flag nasce OFF');
+test('3C-19 nenhuma migração automática, flag ON (Fase 6)', () => {
+  assert.ok(html.includes('let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = true'), 'flag nasce ON');
   // build tem 2 ocorrências: definição + rebuild live no apply manual (5B).
   for (const pair of [['copySnapshotMigrationItem(', 1], ['verifySnapshotMigrationItem(', 1], ['compactSnapshotMigrationPlan(', 1]]) {
     assert.equal(html.split(pair[0]).length - 1, pair[1], pair[0] + ' só tem a definição');

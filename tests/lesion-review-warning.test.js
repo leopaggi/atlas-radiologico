@@ -51,6 +51,7 @@ function buildContext(hosts) {
   };
   vm.createContext(context);
   vm.runInContext(moduleSource, context, { filename: 'lesion-review-module.js' });
+  vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;', context); // Fase 6: cobre o legado inline
   return context;
 }
 const setRevisions = (ctx, obj) => vm.runInContext('LESION_REVISIONS = ' + JSON.stringify(obj) + ';', ctx);

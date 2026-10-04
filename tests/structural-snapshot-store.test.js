@@ -377,11 +377,13 @@ test('31. COMPACT só aceita quando 100% verificado E a fonte não mudou desde o
   assert.equal(changedResult.reason, 'source_changed_since_copy');
 });
 
-// ---------- flag OFF por padrão / nenhuma mudança de comportamento em produção ----------
+// ---------- flag ON por padrão desde a Fase 6 / leitura independe da flag ----------
 
-test('a flag de externalização nasce OFF — nenhum fluxo de produção liga sozinho', () => {
+test('a flag de externalização nasce ON — novos snapshots externalizam por padrão', () => {
   const ctx = buildCtx({});
-  assert.equal(ctx.__getSnapshotFlag(), false);
+  assert.equal(ctx.__getSnapshotFlag(), true);
+  ctx.__setSnapshotFlag(false);
+  assert.equal(ctx.__getSnapshotFlag(), false, 'ainda desligável por contexto (legado coberto pelos demais testes)');
 });
 
 test('37. render síncrono não quebra quando o snapshot externo ainda não foi carregado (devolve not_loaded_yet, nunca lança)', () => {

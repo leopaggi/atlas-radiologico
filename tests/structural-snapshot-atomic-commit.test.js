@@ -211,7 +211,10 @@ function reviewCtx(opts) {
   vm.createContext(context);
   vm.runInContext(moduleSource, context, { filename: 'lesion-review-module-3b.js' });
   vm.runInContext(canonSrc + '\n' + heavySource, context, { filename: 'lesion-review-module-3b-heavy.js' });
+  // Fase 6: default publicado é ON; legado inline pinado exceto opts.flagOn.
+  // opts.keepDefault preserva o default real do app (para o teste do default).
   if (opts.flagOn) vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = true;', context);
+  else if (!opts.keepDefault) vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;', context);
   return context;
 }
 
@@ -319,6 +322,9 @@ function structuralCtx(failSnapshotCache) {
     toast: () => {}, document: undefined, console
   });
   vm.runInContext(execConsts + '\n' + ownershipConst + statusesConst + anatomicGuardConst + snapshotStoreConst + '\n' + schemaConst + execSrc, ctx, { filename: 'fase3b-exec-test.js' });
+  // Fase 6: default publicado é ON; este fixture cobre o legado inline
+  // (3B-16 liga explicitamente depois).
+  vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;', ctx);
   const res = { reviewId: 'R208', valid: true, type: 'merge_duplicates', keeperId: 'seed_208', removeId: 'seed_698', keeperName: 'x', removeName: 'y', merge: {}, reasoning: 'teste' };
   const r = ctx.LESION_REVISIONS['R208'];
   r.structuralPlan = { status: 'accepted', importedAt: '2026-09-27T00:00:00.000Z', type: res.type, resolution: res, snapshot: ctx.buildStructuralPlanSnapshot(res) };
@@ -356,8 +362,8 @@ test('3B-19 nenhum .catch(()=>{}) em persistência de snapshot', () => {
   }
 });
 
-test('3B-20 nenhuma migração automática, nenhum dado real tocado, flag OFF', () => {
-  assert.ok(html.includes('let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false'), 'flag nasce OFF');
+test('3B-20 nenhuma migração automática, nenhum dado real tocado, flag ON (Fase 6)', () => {
+  assert.ok(html.includes('let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = true'), 'flag nasce ON');
   // build tem 2 ocorrências: definição + rebuild live DENTRO do apply manual
   // (5B, explícito, nunca boot/save/sync) — demais fns só a definição.
   assert.equal(html.split('buildSnapshotMigrationPlan(').length - 1, 2, 'build: definição + rebuild do apply');
@@ -483,4 +489,21 @@ test('3B-26 sucesso de cache: metadata continua externalizada (não volta para i
   assert.equal(att.beforeSnapshot, undefined, 'memória: sem inline');
   assert.equal(JSON.parse(backing['atlas:lesionRevisions'])[reviewId].attempts[0].snapshotStorage, 'external', 'persistido: continua externo');
   assert.ok((await ctx.getSnapshotFromLocalCache(att.id)).ok, 'snapshot em cache');
+});
+
+test('3B-27 default publicado (Fase 6): novos attempts externalizam sem opt-in', async () => {
+  const backing = {};
+  const ctx = reviewCtx({ data: [makeLesion3B()], backing, keepDefault: true }); // vale o default do app
+  assert.equal(vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED', ctx), true, 'default ON no contexto');
+  const { review } = ctx.createLesionReview('seed_1', 'pedido');
+  const reviewId = review.id;
+  ctx.setReviewSolution(reviewId, 'x', { notes: 'nova' });
+  assert.equal(ctx.authorizeAndApplyReviewSolution(reviewId).ok, true);
+  const attempt = review.attempts[review.attempts.length - 1];
+  assert.equal(attempt.snapshotStorage, 'external', 'metadata externa por padrão');
+  assert.equal(attempt.snapshotRef, attempt.id, 'ref = attempt.id');
+  assert.equal(attempt.beforeSnapshot, undefined, 'sem inline');
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok((await ctx.getSnapshotFromLocalCache(attempt.id)).ok, 'snapshot em cache local');
+  assert.equal(JSON.parse(backing['atlas:lesionRevisions'])[reviewId].attempts[0].snapshotStorage, 'external', 'persistido externo');
 });

@@ -96,6 +96,7 @@ function ctxFixture() {
   });
   ctx.calls = calls;
   vm.runInContext(execConsts + '\n' + statusesConst + snapshotStoreConst + src, ctx, { filename: 'accept-render-test.js' });
+  vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;', ctx); // Fase 6: cobre o legado inline
   return ctx;
 }
 

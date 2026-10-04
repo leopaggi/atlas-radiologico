@@ -48,7 +48,7 @@ const names = [
   'rollbackStructuralExecution',
   'buildAtlasSnapshotRecord', 'computeDeterministicFingerprint',
   'structuralSnapshotLocalCacheKey', 'structuralSnapshotFirestoreRef',
-  'saveSnapshotToLocalCache', 'saveSnapshotToFirestore',
+  'saveSnapshotToLocalCache', 'getSnapshotFromLocalCache', 'saveSnapshotToFirestore',
   'structuralDryRunSummaryHtml', 'getEffectiveStructuralStatus', 'structuralPlanCardBadgeHtml', 'structuralPlanCardButtonsHtml',
   'resolveReviewManually',
   'imageOwnerIdV1', 'assertManualImageOwnershipChange', 'canChangeImageOwnership',
@@ -92,7 +92,8 @@ function lesion(id, over) {
 }
 const IMG = (assetId) => ({ assetId, data: 'https://res.cloudinary.com/x/' + assetId + '.jpg', source: 'cloudinary', label: 'img ' + assetId, lesionId: 'seed_698', lesionName: 'clone' });
 
-function ctxFixture() {
+function ctxFixture(opts) {
+  opts = opts || {};
   const DATA = [
     lesion('seed_208', { name: 'Cistoadenoma mucinoso', classification: 'O-RADS', tags: ['mucinoso'], images: [IMG('A208')] }),
     lesion('seed_698', { name: 'Cistadenoma mucinoso ovariano', classification: 'O-RADS', images: [IMG('A698')], clinicalCases: [{ id: 'c1', title: 'caso 1' }] }),
@@ -141,6 +142,10 @@ function ctxFixture() {
   ctx.__backing = backing;
   ctx.mergeResolution = mergeResolution;
   vm.runInContext(execConsts + '\n' + ownershipConst + statusesConst + anatomicGuardConst + snapshotStoreConst + '\n' + schemaVersionConst + src, ctx, { filename: 'fase3-test.js' });
+  // Fase 6: o default publicado é ON; este fixture cobre o legado inline,
+  // exceto opts.keepDefault (que preserva o default real do app).
+  // (o teste flag-ON liga explicitamente depois).
+  if (!opts.keepDefault) vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;', ctx);
   return ctx;
 }
 
@@ -383,4 +388,17 @@ test('Fase 3: sem Cloudinary delete e sem execução em lote no código', () => 
   assert.ok(!/deleteimage|destroy\(|api\.cloudinary/.test(fns), 'sem delete remoto');
   assert.ok(!/function\s+executeStructuralPlans|executeAll|forEach\s*\(\s*\w+\s*=>\s*execute/.test(html), 'nenhuma execução em lote');
   assert.ok(html.includes('STRUCTURAL_EXEC_IN_FLIGHT'), 'trava de concorrência presente');
+});
+
+test('Fase 6 (default ON): execução nova já nasce externalizada sem opt-in', async () => {
+  const ctx = ctxFixture({ keepDefault: true });
+  assert.equal(vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED', ctx), true, 'default ON no contexto');
+  acceptPlan(ctx, 'R208');
+  const res = await ctx.executeStructuralPlan('R208');
+  assert.equal(res.ok, true);
+  const r = ctx.LESION_REVISIONS['R208'];
+  assert.equal(r.structuralExecution.snapshotStorage, 'external', 'metadata externa por padrão');
+  assert.equal(r.structuralExecution.snapshotRef, res.executionId, 'ref = executionId');
+  assert.equal(r.structuralExecution.beforeSnapshot, undefined, 'sem inline');
+  assert.ok((await ctx.getSnapshotFromLocalCache(res.executionId)).ok, 'snapshot em cache local');
 });

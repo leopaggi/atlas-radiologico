@@ -212,6 +212,10 @@ function buildTestContext(opts) {
   }
   vm.createContext(context);
   vm.runInContext(moduleSource, context, { filename: 'lesion-review-module.js' });
+  // Fase 6: o default publicado é externalização ON; estes testes cobrem o
+  // caminho legado inline (opts.flagOn opta pelo novo default).
+  if (opts.flagOn) vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = true;', context);
+  else vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;', context);
   if (opts.withSnapshotHeavyInfra) {
     // A parte "pesada" da snapshot store (buildAtlasSnapshotRecord, store
     // local/Firestore, fingerprint) fica fora do módulo LESION_REVISIONS

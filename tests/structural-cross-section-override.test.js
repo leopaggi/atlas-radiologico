@@ -86,6 +86,7 @@ function ctxFixture(keepIds) {
     toast: () => {}, console });
   ctx.calls = calls;
   vm.runInContext(consts + '\n' + mapping + '\n' + planTypes + '\n' + execConsts + '\n' + ownershipConst + statusesConst + snapshotStoreConst + names.map(fn).join('\n'), ctx, { filename: 'override-test.js' });
+  vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;', ctx); // Fase 6: cobre o legado inline
   return ctx;
 }
 const plain = (o) => JSON.parse(JSON.stringify(o));

@@ -6831,23 +6831,24 @@ function rejectProposedReviewSolution(reviewId, reasonText){
 
 /* ============================================================
    SNAPSHOT STORE — leitores de alto nível (legado inline / coexistência /
-   externo) + interruptor de ativação. NADA aqui migra dado real: enquanto
-   STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED for false (padrão), toda
-   escrita nova continua inline, byte a byte como hoje. Hoje 100% dos
-   registros reais são inline — os leitores sempre caem no primeiro ramo,
-   sem mudança de comportamento observável em produção. A parte "pesada"
-   da infraestrutura (buildAtlasSnapshotRecord, leitura/escrita da store
-   local/Firestore, fingerprint, helpers de migração) fica junto do código
-   estrutural (perto de executeStructuralPlan) — aqui ficam só o
+   externo) + interruptor de ativação. NADA aqui migra dado real: com
+   STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED true (padrão desde a Fase 6),
+   toda escrita NOVA usa metadata compacta + snapshot na store (cache local
+   sempre; Firestore junto da metadata na transação atômica). Os 58 registros
+   reais já compactados continuam lidos pelo mesmo caminho — os leitores
+   abaixo nunca consultam a flag, só o formato de cada registro. A parte
+   "pesada" da infraestrutura (buildAtlasSnapshotRecord, leitura/escrita da
+   store local/Firestore, fingerprint, helpers de migração) fica junto do
+   código estrutural (perto de executeStructuralPlan) — aqui ficam só o
    interruptor e os dois leitores de alto nível, porque authorizeAndApply-
    ReviewSolution/applyReviewAiSuggestedPlacement/rollbackAppliedReview-
    Solution (abaixo) e executeStructuralPlan/rollbackStructuralExecution
    (mais adiante) todos dependem deles. */
 // Interruptor único: só controla se uma escrita NOVA usa armazenamento
 // externo. `let` (não `const`) de propósito — só pra os testes desta
-// infraestrutura poderem ligar dentro do seu próprio contexto isolado;
-// nenhum fluxo de produção toca nisto nesta fase.
-let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;
+// infraestrutura poderem desligar dentro do seu próprio contexto isolado;
+// nenhum fluxo de produção toca nisto.
+let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = true;
 // Cache em memória (só desta sessão) do que já foi resolvido via rede —
 // alimenta as variantes SÍNCRONAS usadas em renders que não podem virar
 // async (listas desenhadas em loop).

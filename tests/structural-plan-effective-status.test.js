@@ -105,6 +105,7 @@ function ctxFixture() {
   });
   ctx.calls = calls;
   vm.runInContext(consts + '\n' + mapping + '\n' + planTypes + '\n' + execConsts + '\n' + ownershipConst + statusesConst + snapshotStoreConst + src, ctx, { filename: 'mucinoso-test.js' });
+  vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;', ctx); // Fase 6: cobre o legado inline
   return ctx;
 }
 
