@@ -2524,6 +2524,7 @@ async function writeShardedState(ms=15000){
     // transação abaixo, então nenhum caminho de escrita apaga revisão alheia.
     lesionRevisions: stripUndefinedDeep(LESION_REVISIONS || {}),
     lesionMerges: normalizeLesionMerges(LESION_MERGES), // PROTEÇÃO 091c
+    lesionTombstones: normalizeLesionTombstones(LESION_TOMBSTONES), // PROTEÇÃO 094
     chunkCount: chunks.length,
     stateSchemaVersion: 4, // v4 = estado dividido em pedaços (chunks)
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -2628,6 +2629,14 @@ async function writeShardedState(ms=15000){
           remoteMeta = { ...remoteMeta, review: rm.review, reviewUpdatedAt: rm.reviewStamps, reviewProgress: rm.reviewProgress, reviewOverride: rm.reviewOverride, lesionRevisions: rm.lesionRevisions };
         }
       }
+      // PROTEÇÃO 094 — tombstones de LESÃO: união local ∪ remoto DENTRO da
+      // transação (mesmo motivo do mapa de fusão acima) e reaplicados a
+      // txData — um PC que ainda não sabia de uma exclusão feita em outro
+      // device nunca escreve essa lesão de volta na nuvem por cima dela.
+      const writeLesionTombstones = mergeLesionTombstones(txBase.lesionTombstones, remoteMeta.lesionTombstones);
+      if(Object.keys(writeLesionTombstones).length){
+        txData = txData.filter(e=>!e || !Object.prototype.hasOwnProperty.call(writeLesionTombstones, e.id));
+      }
       // Tombstones: união local ∪ remoto (o remoto nunca some do payload,
       // nem num envio sem reconcile) e aplicados às imagens que saem.
       const writeTombstones = mergeImageTombstones(txBase.tombstones, remoteMeta.tombstones);
@@ -2654,7 +2663,7 @@ async function writeShardedState(ms=15000){
       // também dentro da transação; o REVIEW gravado é o materializado.
       const writeProgress = mergeReviewProgress(txBase.reviewProgress, reviewProgressFromFirestore(remoteMeta.reviewProgress));
       const writeOverride = mergeReviewOverrides(txBase.reviewOverride, remoteMeta.reviewOverride);
-      const metaPayload = {...txBase, lesionMerges: writeMerges, review: stripUndefinedDeep(materializeReviewState(writeReview.review, writeProgress, writeOverride)), reviewUpdatedAt: writeReview.stamps,
+      const metaPayload = {...txBase, lesionMerges: writeMerges, lesionTombstones: writeLesionTombstones, review: stripUndefinedDeep(materializeReviewState(writeReview.review, writeProgress, writeOverride)), reviewUpdatedAt: writeReview.stamps,
         reviewProgress: writeProgress, reviewOverride: writeOverride, tombstones: stripUndefinedDeep(writeTombstones), lesionRevisions: writeLesionRevisions,
         sectionOrder: writeOrder.sectionOrder, siteOrder: writeOrder.siteOrder, orderUpdatedAt: writeOrder.stamps, chunkCount: gatedChunks.length};
       if(!checkChunkSize(metaPayload, 'documento principal (revisão/SRS/histórico)')){
@@ -2813,6 +2822,7 @@ async function readShardedState(ms=15000){
     reviewUpdatedAt: normalizeReviewStamps(meta.reviewUpdatedAt), // PROTEÇÃO 089 — ausente = sem carimbo
     reviewProgress: reviewProgressFromFirestore(meta.reviewProgress), reviewOverride: normalizeReviewOverrides(meta.reviewOverride), // PROTEÇÃO 090
     lesionMerges: normalizeLesionMerges(meta.lesionMerges), // PROTEÇÃO 091c
+    lesionTombstones: normalizeLesionTombstones(meta.lesionTombstones), // PROTEÇÃO 094
     sectionOrder: meta.sectionOrder, siteOrder: meta.siteOrder,
     orderUpdatedAt: normalizeOrderStamps(meta.orderUpdatedAt), // PROTEÇÃO 085 — ausente = sem carimbo
     tombstones: (meta.tombstones && typeof meta.tombstones === 'object' && !Array.isArray(meta.tombstones)) ? meta.tombstones : {},
@@ -3860,6 +3870,9 @@ async function adoptRemoteStateForNewDevice(){
   if(canonicalRestoreInProgress) return;
   const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'carregar catálogo da nuvem (dispositivo novo)');
   if(!remote) return; // nuvem nunca escrita — mantém o SEED que já estava em DATA
+  // PROTEÇÃO 094 — tombstones de lesão ANTES do filtro de DATA abaixo: um
+  // dispositivo novo nunca pode herdar uma lesão já excluída em outro.
+  LESION_TOMBSTONES = normalizeLesionTombstones(remote.lesionTombstones);
   DATA = (Array.isArray(remote.data) ? remote.data : []).filter(e => e && !isQuarantinedSeedId(e.id));
   REVIEW = (remote.review && typeof remote.review === 'object' && !Array.isArray(remote.review)) ? remote.review : {};
   REVIEW_STAMPS = normalizeReviewStamps(remote.reviewUpdatedAt); // PROTEÇÃO 089
@@ -4857,6 +4870,11 @@ function countRemoteOnlyAdopted(localData, remoteData, mergedData){
 // estado remoto JÁ LIDO. Não faz push, não toca syncDirty, não persiste
 // (quem chama persiste). Devolve { preservedCloudOnly }.
 function reconcileStateWithRemote(remote){
+  // PROTEÇÃO 094 — tombstones de lesão: união local ∪ remoto ANTES de
+  // qualquer filtro, pelo mesmo motivo do mapa de fusão abaixo — um PC que
+  // nunca viu a exclusão (feita em outro device) só aprende dela aqui, e
+  // precisa saber ANTES de decidir quem é "solo" linhas abaixo.
+  LESION_TOMBSTONES = mergeLesionTombstones(LESION_TOMBSTONES, remote && remote.lesionTombstones);
   // PROTEÇÃO 091c — mapa de fusão: união e aplicação (local E remoto) ANTES
   // de qualquer filtro — PC desatualizado converge para o keeper; id fundido
   // não ressuscita (isQuarantinedSeedId + activeCanonicalSeedV172).
@@ -4970,6 +4988,7 @@ async function persistLocalStateNow(){
   await saveReviewStamps(); // PROTEÇÃO 089
   await saveReviewProgressState(); // PROTEÇÃO 090
   await saveLesionMerges(); // PROTEÇÃO 091c
+  await saveLesionTombstones(); // PROTEÇÃO 094
   try{ await storage.set(SRS_KEY, JSON.stringify(SRS), false); }catch(_e){}
   try{ await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false); }catch(_e){}
   try{ await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false); }catch(_e){}
@@ -5030,6 +5049,7 @@ async function reconcileBeforePush(reason){
       reviewUpdatedAt: normalizeReviewStamps(quarantineIndexedByLesionId(REVIEW_STAMPS)), // PROTEÇÃO 089
       reviewProgress: normalizeReviewProgress(quarantineIndexedByLesionId(REVIEW_PROGRESS)), reviewOverride: normalizeReviewOverrides(quarantineIndexedByLesionId(REVIEW_OVERRIDE)), // PROTEÇÃO 090
       lesionMerges: normalizeLesionMerges(LESION_MERGES), // PROTEÇÃO 091c
+      lesionTombstones: normalizeLesionTombstones(LESION_TOMBSTONES), // PROTEÇÃO 094 — mudança só de exclusão NÃO é no-op
       sessionLog: SESSIONLOG, sectionOrder, siteOrder, tombstones: IMAGE_TOMBSTONES,
       lesionRevisions: LESION_REVISIONS || {}, // PROTEÇÃO 084 — mudança só de revisão NÃO é no-op
       orderUpdatedAt: normalizeOrderStamps(ORDER_STAMPS) // PROTEÇÃO 085
@@ -5040,6 +5060,7 @@ async function reconcileBeforePush(reason){
       reviewUpdatedAt: normalizeReviewStamps(quarantineIndexedByLesionId(remote.reviewUpdatedAt||{})),
       reviewProgress: normalizeReviewProgress(quarantineIndexedByLesionId(remote.reviewProgress||{})), reviewOverride: normalizeReviewOverrides(quarantineIndexedByLesionId(remote.reviewOverride||{})),
       lesionMerges: normalizeLesionMerges(remote.lesionMerges),
+      lesionTombstones: normalizeLesionTombstones(remote.lesionTombstones), // PROTEÇÃO 094
       sessionLog: remote.sessionLog||{}, sectionOrder: remote.sectionOrder||[], siteOrder: remote.siteOrder||{},
       tombstones: remote.tombstones||{},
       lesionRevisions: remote.lesionRevisions||{},
@@ -5099,6 +5120,7 @@ async function syncFromFirebase(){
       await saveReviewStamps(); // PROTEÇÃO 089
       await saveReviewProgressState(); // PROTEÇÃO 090
       await saveLesionMerges(); // PROTEÇÃO 091c
+      await saveLesionTombstones(); // PROTEÇÃO 094
       await storage.set(SRS_KEY, JSON.stringify(SRS), false);
       await storage.set(SESSIONLOG_KEY, JSON.stringify(SESSIONLOG), false);
       await storage.set(ORDER_KEY, JSON.stringify(sectionOrder), false);
@@ -9745,10 +9767,95 @@ function isMergedAwayLesionId(id){
   try{ return !!(LESION_MERGES && typeof LESION_MERGES==='object' && Object.prototype.hasOwnProperty.call(LESION_MERGES, id)); }
   catch(_e){ return false; } // antes da inicialização do módulo (TDZ): nenhum id fundido
 }
+/* ============================================================
+   PROTEÇÃO 094 — TOMBSTONE DE LESÃO INTEIRA (exclusão permanente)
+   ------------------------------------------------------------
+   Causa raiz corrigida: o botão "Excluir" só fazia DATA.filter(...) +
+   saveData() — mas saveData() dispara pushToFirebaseNow(), que roda
+   reconcileBeforePush() ANTES de publicar, e reconcileStateWithRemote()
+   trata qualquer lesão presente só de um lado (local XOR remoto) como
+   "solo" e a preserva. Sem um tombstone da lesão INTEIRA (o que já existe
+   é só IMAGE_TOMBSTONES, 073, para imagens DENTRO de uma lesão), a cópia
+   ainda viva no Firestore sempre voltava no próprio ciclo de salvamento
+   que tentou excluí-la.
+   LESION_TOMBSTONES {[lesionId]: {deletedAt}} — IndexedDB
+   atlas:lesionTombstones, Firestore lesionTombstones (documento principal,
+   união local ∪ remoto — nunca encolhe) e backup completo. Reaproveita
+   isQuarantinedSeedId (mesma barreira usada por SUPPRESSED_DUPLICATE_IDS_V172/
+   QUARANTINED_HIGH_IDS_20260924/LESION_MERGES): todo ponto que já filtra
+   por isQuarantinedSeedId (reconcileStateWithRemote, loadData,
+   adoptRemoteStateForNewDevice, writeShardedState, quarantineIndexedByLesionId)
+   passa a respeitar o tombstone de lesão automaticamente — nenhum caminho
+   paralelo de exclusão. Diferente de LESION_MERGES (091c), não funde
+   conteúdo em nenhum keeper: é para a lesão que não tem — e não deve
+   ganhar — substituto. REVIEW/SRS/LESION_REVISIONS/SESSIONLOG NUNCA são
+   apagados por isto — só saem das vistas "ativas" pela mesma quarentena
+   (quarantineIndexedByLesionId), exatamente como já ocorre com ids
+   fundidos/suprimidos; histórico de revisão nunca é destruído. */
+const LESION_TOMBSTONES_KEY = 'atlas:lesionTombstones';
+let LESION_TOMBSTONES = {};
+function normalizeLesionTombstones(v){
+  const out = {};
+  if(v && typeof v==='object' && !Array.isArray(v)){
+    for(const [id, t] of Object.entries(v)){
+      if(!id || !t || typeof t!=='object') continue;
+      const deletedAt = Number(t.deletedAt)||0;
+      if(deletedAt<=0) continue;
+      out[id] = { deletedAt };
+    }
+  }
+  return out;
+}
+// União determinística: conflito para o mesmo id = o carimbo MAIS ANTIGO
+// vence (a primeira exclusão real é a que importa; união nunca "desfaz"
+// uma exclusão — não existe undelete automático por merge).
+function mergeLesionTombstones(a, b){
+  const A = normalizeLesionTombstones(a), B = normalizeLesionTombstones(b), out = { ...A };
+  for(const [id, t] of Object.entries(B)){
+    const cur = out[id];
+    if(!cur || t.deletedAt < cur.deletedAt) out[id] = t;
+  }
+  return out;
+}
+function isLesionTombstoned(id){
+  try{ return !!(LESION_TOMBSTONES && typeof LESION_TOMBSTONES==='object' && Object.prototype.hasOwnProperty.call(LESION_TOMBSTONES, id)); }
+  catch(_e){ return false; } // antes da inicialização do módulo (TDZ): nenhum id tombstoned
+}
+async function loadLesionTombstones(){
+  try{ const r = await storage.get(LESION_TOMBSTONES_KEY, false); LESION_TOMBSTONES = normalizeLesionTombstones(JSON.parse(r.value)); }
+  catch(e){ LESION_TOMBSTONES = {}; }
+}
+async function saveLesionTombstones(){
+  try{ await storage.set(LESION_TOMBSTONES_KEY, JSON.stringify(normalizeLesionTombstones(LESION_TOMBSTONES)), false); }
+  catch(e){ console.error('storage error', e); }
+}
 function isQuarantinedSeedId(id){
   // PROTEÇÃO 091c: id fundido (mapa LESION_MERGES, sincronizado) também sai
   // do catálogo ativo — nunca volta pelo SEED nem por PC desatualizado.
-  return SUPPRESSED_DUPLICATE_IDS_V172.has(id) || QUARANTINED_HIGH_IDS_20260924.has(id) || isMergedAwayLesionId(id);
+  // PROTEÇÃO 094: id com tombstone de lesão (exclusão permanente) idem.
+  return SUPPRESSED_DUPLICATE_IDS_V172.has(id) || QUARANTINED_HIGH_IDS_20260924.has(id) || isMergedAwayLesionId(id) || isLesionTombstoned(id);
+}
+/* Função OFICIAL de exclusão permanente de uma lesão (PROTEÇÃO 094). Único
+   caminho suportado — o botão "Excluir" chama esta função, nunca
+   DATA.filter()+saveData() direto. Idempotente: repetir no mesmo id não
+   falha nem duplica tombstone. Nunca apaga REVIEW/SRS/LESION_REVISIONS/
+   SESSIONLOG/snapshots — só remove a entrada de DATA e registra o
+   tombstone (histórico preservado, ver módulo acima). */
+async function deleteLesionPermanently(lesionId){
+  if(!lesionId || typeof lesionId!=='string') return { ok:false, reason:'invalid_id' };
+  const already = isLesionTombstoned(lesionId);
+  const existing = (Array.isArray(DATA)?DATA:[]).find(e=>e && e.id===lesionId);
+  if(!existing){
+    return already ? { ok:true, reason:'already_deleted', id:lesionId } : { ok:false, reason:'lesion_not_found' };
+  }
+  const name = existing.name;
+  DATA = DATA.filter(e=>!e || e.id!==lesionId);
+  if(!already){
+    LESION_TOMBSTONES = { ...LESION_TOMBSTONES, [lesionId]: { deletedAt: Date.now() } };
+    await saveLesionTombstones();
+  }
+  await saveData();
+  return { ok:true, id:lesionId, name };
 }
 
 function getActiveCanonicalSeed(){ return SEED.filter(e=>e && !isQuarantinedSeedId(e.id)); }
@@ -14672,6 +14779,9 @@ async function loadData(){
   if(foldLesionMergesIntoGlobals().changed){
     await saveData(true); await saveReview(true); await saveSRS(true); await saveLesionRevisions(true); await savePendingLocalImageAdds();
   }
+  // PROTEÇÃO 094 — tombstones de lesão: carregados antes da barreira final
+  // (v187) abaixo, que já filtra DATA por isQuarantinedSeedId.
+  await loadLesionTombstones();
 
   // v252 — BOOTSTRAP SEGURO EM DISPOSITIVO NOVO: só entra aqui quando o
   // catálogo local (STORAGE_KEY) não existia (ver o catch acima). REVIEW/
@@ -15567,8 +15677,10 @@ function openDetail(id, opts){
   };
   document.getElementById('btn-del').onclick = async ()=>{
     if(confirm(`Excluir "${e.name}" do seu banco?`)){
-      DATA = DATA.filter(x=>x.id!==id);
-      await saveData();
+      // PROTEÇÃO 094 — caminho único de exclusão (nunca DATA.filter()+
+      // saveData() direto): registra o tombstone antes de persistir/publicar,
+      // senão o próximo reconcile/pré-push a reintroduz como "solo".
+      await deleteLesionPermanently(id);
       closeOverlay();
       renderAll();
       toast('Lesão excluída.');
@@ -19641,6 +19753,7 @@ document.getElementById('btn-export').onclick = async ()=>{
     reviewUpdatedAt: REVIEW_STAMPS, // PROTEÇÃO 089
     reviewProgress: REVIEW_PROGRESS, reviewOverride: REVIEW_OVERRIDE, // PROTEÇÃO 090
     lesionMerges: LESION_MERGES, // PROTEÇÃO 091c
+    lesionTombstones: LESION_TOMBSTONES, // PROTEÇÃO 094
     srs: SRS,
     sessionLog: SESSIONLOG,
     sectionOrder: sectionOrder,
@@ -19728,6 +19841,12 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
     stampRestoredReviewOverrides(); await saveReviewProgressState();
     LESION_MERGES = mergeLesionMergeMaps(LESION_MERGES, parsed.lesionMerges); await saveLesionMerges(); // PROTEÇÃO 091c (backup antigo = mapa atual)
     foldLesionMergesIntoGlobals();
+    // PROTEÇÃO 094 — tombstones de lesão: união nunca encolhe (backup antigo
+    // pode ser anterior a uma exclusão explícita feita depois dele); DATA
+    // importado é refiltrado imediatamente, para a exclusão não esperar o
+    // próximo reconcile/pull para reaparecer.
+    LESION_TOMBSTONES = mergeLesionTombstones(LESION_TOMBSTONES, parsed.lesionTombstones); await saveLesionTombstones();
+    DATA = DATA.filter(e=>e && !isQuarantinedSeedId(e.id));
     SRS = quarantineIndexedByLesionId((parsed.srs && typeof parsed.srs==='object') ? parsed.srs : {});
     SESSIONLOG = (parsed.sessionLog && typeof parsed.sessionLog==='object') ? parsed.sessionLog : {};
     sectionOrder = Array.isArray(parsed.sectionOrder) && parsed.sectionOrder.length

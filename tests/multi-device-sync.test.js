@@ -173,6 +173,11 @@ const snapshotStoreFns3B = ['snapshotSyncedLocalKey', 'isSnapshotMarkedSynced', 
   .map((n) => extractFunction(html, n).source).join('\n');
 // PROTEÇÃO 091c — mapa de fusão clínica (módulo real: normalize/merge/fold).
 const lesionMergesModule091c = html.slice(html.indexOf("const LESION_MERGES_KEY = 'atlas:lesionMerges';"), html.indexOf('/* Plano APROVADO pelo usuário (091c).'));
+// PROTEÇÃO 094 — tombstone de lesão inteira (exclusão permanente): módulo
+// novo (consts + normalize/merge/isLesionTombstoned/load/save), consultado
+// por isQuarantinedSeedId/reconcileStateWithRemote/adoptRemoteStateForNewDevice/
+// writeShardedState/readShardedState/loadData (ver index.html).
+const lesionTombstonesModule094 = html.slice(html.indexOf("const LESION_TOMBSTONES_KEY = 'atlas:lesionTombstones';"), html.indexOf('function isQuarantinedSeedId(id){'));
 // PROTEÇÃO 085 — ordem de seções/sítios com carimbo de reordenação manual.
 const orderFns085 = ['normalizeOrderStamps', 'loadOrderStamps', 'saveOrderStamps', 'markSectionOrderManual',
   'markSiteOrderManual', 'markRestoredOrderManual', 'dedupeOrderList', 'isAutoSectionOrder', 'isAutoSiteList',
@@ -507,6 +512,9 @@ function makeDevice(cloud, { seed = [] } = {}) {
     ${snapshotStoreFns3B}
     ${lesionMergesModule091c}
     function __getLesionMerges091c(){ return LESION_MERGES; }
+    ${lesionTombstonesModule094}
+    function __getLesionTombstones094(){ return LESION_TOMBSTONES; }
+    function __setLesionTombstones094(v){ LESION_TOMBSTONES = v; }
     function __setLesionMerges091c(v){ LESION_MERGES = v; }
     let lastWriteStaleImagesBlocked = 0;
     ${gateStaleImagesFn.source}

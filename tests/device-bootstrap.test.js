@@ -117,6 +117,9 @@ const lesionRevisionsFns084 = ['canonicalJsonString', 'mergeLesionRevisions', 's
 const isValidTombFn2 = extractFunction(html, 'isValidImageTombstone');
 const saveTombFn2 = extractFunction(html, 'saveImageTombstones');
 const tombScopeFn2 = extractFunction(html, 'tombstoneScopeKey');
+// PROTEÇÃO 094 — módulo novo (consts + normalize/merge/isLesionTombstoned/load/save),
+// consultado por adoptRemoteStateForNewDevice() (ver index.html).
+const lesionTombstonesModule094 = html.slice(html.indexOf("const LESION_TOMBSTONES_KEY = 'atlas:lesionTombstones';"), html.indexOf('function isQuarantinedSeedId(id){'));
 
 // ===========================================================================
 // 1) DETECÇÃO — checkCloudForBootstrapV1 (server-only, nunca assume vazio)
@@ -233,6 +236,7 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
     "const REVIEW_STAMPS_KEY = 'atlas:reviewUpdatedAt'; let REVIEW_STAMPS = {};\n" +
     "const REVIEW_PROGRESS_KEY = 'atlas:reviewProgress'; const REVIEW_OVERRIDE_KEY = 'atlas:reviewOverride'; const REVIEW_ATTEMPTS_MAX = 8; let REVIEW_PROGRESS = {}; let REVIEW_OVERRIDE = {};\n" + reviewFns089 + '\n' +
     lesionMergesModule091c + '\n' +
+    lesionTombstonesModule094 + '\n' +
     'function stripUndefinedDeep(v){try{return JSON.parse(JSON.stringify(v));}catch(_e){return v;}}\n' +
     extractFunction(html, 'findNestedArrayPaths').source + '\n' +
     structuralSyncFns + '\n' +
@@ -465,6 +469,8 @@ test('loadData() real: dispositivo NOVO (storage.get lança) aciona o bootstrap 
       loadSRS: async () => {}, loadSessionLog: async () => {},
       // ALTERAÇÃO 073: loadData() real carrega tombstones (stub, mesmo padrão).
       loadImageTombstones: async () => {},
+      // PROTEÇÃO 094: loadData() real também carrega o tombstone de lesão (stub, mesmo padrão).
+      loadLesionTombstones: async () => {},
       loadPendingLocalImageAdds: async () => {}, // ALTERAÇÃO 079d
       IMAGE_TOMBSTONES: {},
       loadLesionRevisions: async () => {}, loadClassificationReviewDecisions: async () => {},
@@ -559,6 +565,8 @@ test('loadData() real: reload DEPOIS do bootstrap não repete o fluxo (storage j
       // ALTERAÇÃO 073: loadData() real carrega tombstones (stub, mesmo padrão;
       // a varredura é try/catch no próprio loadData e não precisa de stub).
       loadImageTombstones: async () => {},
+      // PROTEÇÃO 094: loadData() real também carrega o tombstone de lesão (stub, mesmo padrão).
+      loadLesionTombstones: async () => {},
       loadPendingLocalImageAdds: async () => {}, // ALTERAÇÃO 079d
       loadLesionRevisions: async () => {}, loadClassificationReviewDecisions: async () => {},
       saveReview: async () => {}, saveSRS: async () => {}, createSafetySnapshot: () => null,
@@ -774,6 +782,8 @@ function makeAdoptContext({ localData, remoteMeta, remoteChunks } = {}) {
     ${lesionRevisionsFns084}
     ${lesionMergesModule091c}
     function __getLesionMerges091c(){ return LESION_MERGES; }
+    ${lesionTombstonesModule094}
+    function __getLesionTombstones094(){ return LESION_TOMBSTONES; }
     ${adoptRemoteFn.source}
   `;
   new vm.Script(engine).runInContext(ctx);
