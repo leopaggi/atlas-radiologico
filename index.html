@@ -1960,8 +1960,6 @@ body{
         <button class="foot-btn" id="btn-clinical-merges-091c" title="Fusão controlada dos 4 grupos de duplicatas clínicas APROVADOS pelo usuário. Mostra o relatório com os dados reais antes; exige backup recente e cria snapshot.">🧬 fusões clínicas aprovadas<br><span class="foot-btn-sub">relatório antes — só funde após backup + confirmação</span></button>
         <button class="foot-btn" id="btn-classification-audit" title="Compara a classificação de cada lesão com o SEED pela identidade (seção+sítio+nome) e aponta as inválidas; corrigir exige confirmação e cria snapshot">📋 auditar classificações<br><span class="foot-btn-sub">aponta classificações inválidas — não altera nada até você confirmar</span></button>
         <button class="foot-btn" id="btn-tag-audit" title="Painel interativo para revisar as tags do catálogo (manter/editar/eliminar/revisar). Usa o DATA atual em runtime para contagens e lesões; não altera nenhuma tag — só registra suas decisões localmente">🏷️ auditoria de tags<br><span class="foot-btn-sub">revisão interativa — decisões ficam salvas no navegador, nada é aplicado aqui</span></button>
-        <button class="foot-btn" id="btn-taxonomy-panel" title="Carrega TAXONOMY.json (dicionário clínico-radiológico aprovado na TAXO-01) e permite explorar grupos/conceitos/sinônimos/relações. Somente leitura: não cria attributes em nenhuma lesão, não altera DATA/SEED/Firestore/IndexedDB/localStorage">🧬 Taxonomia clínico-radiológica<br><span class="foot-btn-sub">painel somente leitura do dicionário aprovado — nenhuma lesão é alterada aqui</span></button>
-        <button class="foot-btn" id="btn-review-queue-panel" title="Carrega TAXO04_REVIEW_QUEUE.json (267 lesões que ficaram em review-required na migração de attributes, TAXO-04) e permite filtrar/explorar. Somente leitura: não cria/altera attributes, não altera DATA/SEED/Firestore/IndexedDB/localStorage">🗂 Revisão de atributos<br><span class="foot-btn-sub">fila somente leitura das lesões em review-required — nenhum attribute é criado aqui</span></button>
       </div>
     </div>
   </div>
@@ -19350,8 +19348,6 @@ document.getElementById('btn-system-diagnostic').onclick = openSystemDiagnosticM
 document.getElementById('btn-audit-images').onclick = openImageAuditModal;
 document.getElementById('btn-classification-audit').onclick = openClassificationAuditModal;
 document.getElementById('btn-tag-audit').onclick = openTagAuditModal;
-document.getElementById('btn-taxonomy-panel').onclick = openTaxonomyPanel; // TAXO-02, somente leitura
-document.getElementById('btn-review-queue-panel').onclick = openReviewQueuePanel; // TAXO-04 FASE 2, somente leitura
 document.getElementById('btn-clinical-merges-091c').onclick = openClinicalMergesModal091c; // PROTEÇÃO 091c
 document.getElementById('btn-sync-to-cloud').onclick = openSyncDeviceToCloudModal;
 document.getElementById('btn-sync-from-cloud').onclick = openUpdateFromCloudModal;

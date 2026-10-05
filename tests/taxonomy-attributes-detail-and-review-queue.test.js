@@ -160,12 +160,9 @@ test('12. nenhuma lesão em TAXO04_REVIEW_QUEUE.json tem migrationStatus diferen
 
 /* ===================== fila continua acessível em Ferramentas Avançadas ===================== */
 
-test('13. botão "Revisão de atributos" continua existindo e acessível, sem protagonismo (fora do detalhe, dentro de Ferramentas Avançadas)', () => {
-  assert.ok(html.includes('id="btn-review-queue-panel"'));
-  assert.ok(html.includes("document.getElementById('btn-review-queue-panel').onclick = openReviewQueuePanel;"));
-  const btnIdx = html.indexOf('id="btn-review-queue-panel"');
-  const advancedToolsIdx = html.indexOf('id="advanced-tools"');
-  assert.ok(advancedToolsIdx > 0 && advancedToolsIdx < btnIdx, 'botão deveria estar dentro do bloco #advanced-tools');
+test('13. botão "Revisão de atributos" foi removido das Ferramentas Avançadas (funções preservadas)', () => {
+  assert.ok(!html.includes('id="btn-review-queue-panel"'), 'botão removido da interface');
+  assert.ok(!html.includes("document.getElementById('btn-review-queue-panel')"), 'wiring removido');
 });
 
 test('14. openReviewQueuePanel/reviewQueueMountPanel continuam intactos (fila não foi tocada nesta rodada)', () => {

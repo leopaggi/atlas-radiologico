@@ -402,9 +402,10 @@ test('o único I/O do painel é fetch(\'TAXONOMY.json...\') — nenhum outro end
 // 16 (wiring). Botão em "Ferramentas avançadas" abre o painel, nada mais
 // ===========================================================================
 
-test('botão "Taxonomia clínico-radiológica" existe em Ferramentas avançadas e só abre o painel', () => {
-  assert.match(html, /id="btn-taxonomy-panel"[^>]*>🧬 Taxonomia clínico-radiológica/);
-  assert.match(html, /document\.getElementById\('btn-taxonomy-panel'\)\.onclick = openTaxonomyPanel;/);
+test('botão "Taxonomia clínico-radiológica" foi removido das Ferramentas avançadas (função preservada)', () => {
+  assert.doesNotMatch(html, /id="btn-taxonomy-panel"/);
+  assert.doesNotMatch(html, /document\.getElementById\('btn-taxonomy-panel'\)/);
+  assert.match(html, /function openTaxonomyPanel\(\)/, 'função interna preservada para outros usos');
 });
 
 test('openTaxonomyPanel() não recebe parâmetros de lesão/edição (é sempre o mesmo painel global, não contextual)', () => {
