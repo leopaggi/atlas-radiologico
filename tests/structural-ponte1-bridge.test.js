@@ -46,7 +46,8 @@ const names = ['normalizeExternalTitle', 'normalizeRadiopaediaCaseTitle', 'token
   'reviewAcceptsAiProposal', 'flagManualActionRequired', 'reviewAiManualActionReason',
   'validateReviewAiPlacement', 'reviewAiKnownSections',
   'bridgeManualActionToStructuralPlan', 'importReviewAiSolution',
-  'reviewRequestFlaggedMissingDifferentials', 'reviewAiAddressedDifferentialsGap'];
+  'reviewRequestFlaggedMissingDifferentials', 'reviewAiAddressedDifferentialsGap',
+  'reviewDifferentialsSection', 'hasStructuredDifferentials', 'hasLegacyGenericDifferentials', 'reviewAiDifferentialsGate'];
 const consts = html.slice(html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = '), html.indexOf('// Tokens relevantes:', html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = ')));
 const mapping = html.slice(html.indexOf('const STRUCTURAL_REVIEW_CANDIDATE_NAMES = '), html.indexOf('function structuralReviewPick('));
 const planTypes = html.slice(html.indexOf('const STRUCTURAL_PLAN_TYPES = '), html.indexOf('function structuralPlanError('));

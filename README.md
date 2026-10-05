@@ -1,5 +1,14 @@
 # Atlas Radiológico
 
+### Qualidade dos diferenciais nas revisões por IA (em revisão, sem publicação)
+
+Ao preparar pedidos individuais ou em lote, o Atlas sinaliza descrições com
+listas genéricas de diferenciais mesmo quando a revisão foi aberta por outro
+motivo. Respostas que deixem esse texto antigo intacto são recusadas antes
+da aplicação; descrições já estruturadas podem permanecer como estão, mesmo
+quando o pedido histórico dizia faltar diferenciais. A triagem só aponta a
+lacuna para revisão humana. A apresentação visual dos diferenciais não mudou.
+
 ### Ponte estrutural — Fase 3: execução unitária controlada (2026-09-27, commit `15619f8`)
 
 Na aba **💡 Soluções disponíveis → 🛠 Ações manuais**, um plano estrutural

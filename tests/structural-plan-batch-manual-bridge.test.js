@@ -52,6 +52,7 @@ const names = ['normalizeExternalTitle', 'normalizeRadiopaediaCaseTitle', 'token
   'validateReviewAiPlacement', 'reviewAiKnownSections',
   'bridgeManualActionToStructuralPlan', 'importReviewAiSolution', 'rejectStructuralPlan',
   'reviewRequestFlaggedMissingDifferentials', 'reviewAiAddressedDifferentialsGap',
+  'reviewDifferentialsSection', 'hasStructuredDifferentials', 'hasLegacyGenericDifferentials', 'reviewAiDifferentialsGate',
   'getEffectiveStructuralStatus', 'getManualActionSolutions',
   'structuralPlanCardDecideHtml', 'structuralPlanPreviewHtml', 'structuralPlanStatusRowHtml',
   'mergeLesionRevisions',

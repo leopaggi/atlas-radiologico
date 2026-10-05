@@ -8,6 +8,16 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**Revisões por IA — qualidade dos diferenciais (working tree, aguardando
+revisão; sem commit/publicação):** `index.html` passou a detectar formatos
+genéricos em `notes` e a distinguir uma lacuna histórica já resolvida no
+estado atual. Pedidos individuais/lote instruem a IA a normalizar somente
+descrições com lacuna real; a importação rejeita respostas que mantenham
+o texto legado e preserva revisões já adequadas. Triagem continua somente
+leitura, sem migrar catálogo; renderizador não foi alterado. Dois testes
+preexistentes de rollback estrutural continuam falhando intencionalmente na
+working tree e estão fora deste ajuste. Ver AI.md e LOG_DESENVOLVIMENTO.md.
+
 **3º ajuste — layout imagem/descrição no Quiz (2026-09-28, mesma revisão
 `lrev_mulfu0x2_ocobn9`, ainda não é nova):** reprodução visual real mostrou
 que, mesmo com a imagem estável, "o quadro da descrição" ocupava quase todo

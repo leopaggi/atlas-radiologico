@@ -1,5 +1,16 @@
 # Diario de desenvolvimento
 
+## Qualidade dos diferenciais em revisões por IA (sem commit/publicação)
+
+O Atlas agora identifica frases antigas/genéricas ou listas de diagnósticos
+sem um critério individual nas descrições. Ao montar pedidos para IA (um ou
+vários), avisa qual revisão precisa dessa normalização, mesmo se o pedido
+original mencionar outro problema. Resposta que ignora essa lacuna é recusada
+antes de alterar a lesão; descrição já boa é preservada. A triagem só aponta
+possíveis casos para a pessoa selecionar; nenhum dado real foi migrado.
+O visual dos diferenciais não mudou. Testes em memória cobrem formatos bons,
+legados, pedidos históricos, justificativas e os fluxos manuais.
+
 ## Ponte estrutural — Fase 3: executor unitário controlado (27/09/2026, commit 15619f8)
 
 O plano estrutural aprovado ganhou os botões de executar e reverter. Na

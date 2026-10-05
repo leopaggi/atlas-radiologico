@@ -64,6 +64,7 @@ function extractConst(source, name) {
 }
 
 const FN_NAMES = [
+  'reviewDifferentialsSection', 'hasStructuredDifferentials', 'hasLegacyGenericDifferentials',
   'triageReasonLabel', 'triageNormalize', 'triageNotesReasons', 'triageTagsReasons', 'triageEnTermReasons',
   'triageClassificationApplicable', 'triageClassificationReasons', 'triageClinicalTagsReasons', 'triageRichImagesWeakNotesReasons',
   'evaluateLesionForTriage', 'scanCatalogForTriage', 'createTriageReviewBatch',
@@ -314,12 +315,25 @@ test('10. lesão "perfeita" (todos os campos preenchidos, sem lacuna) -> reasons
   // lacuna de verdade quando a classificação já existe.
   const perfect = lesion({
     name: 'Hemangioma hepático', enTerm: 'Hepatic hemangioma', classification: 'LIRADS',
-    notes: 'Lesão nodular hipervascular com realce centrípeto progressivo e preenchimento tardio completo, achado característico. Diferenciais-chave: metástase hipervascular, adenoma e CHC em fígado cirrótico.',
+    notes: 'Descrição de teste suficientemente longa para a triagem. Diferenciais-chave: Alternativa A (critério específico A); Alternativa B (critério específico B).',
     tags: ['realce centrípeto', 'hipervascular', 'benigno'], images: [{ data: 'a' }]
   });
   const r = ctx.evaluateLesionForTriage(perfect);
   assert.deepEqual(plain(r.reasons), []);
   assert.equal(r.score, 0);
+});
+
+test('notes legado com diferenciais corridos é sinalizado mesmo quando há menção a diferencial; bloco com critérios é preservado', () => {
+  const ctx = buildCtx({});
+  const legacy = lesion({ notes:'Padrão: descrição. Diferenciais-chave: A, B e C. Favorecem este diagnóstico, quando presentes no contexto adequado. A distinção deve integrar origem anatômica.', enTerm:'Termo em inglês', tags:['a','b','c'] });
+  const before = JSON.stringify(legacy);
+  const reasons = plain(ctx.triageNotesReasons(legacy));
+  assert.ok(reasons.includes('notes_legacy_generic_differentials'));
+  assert.ok(!reasons.includes('notes_missing_differentials'), 'já havia menção lexical');
+  const good = lesion({ notes:'Padrão: informação de teste. Diferenciais-chave: A (critério prático próprio); B (critério prático diferente).', enTerm:'Termo em inglês', tags:['a','b','c'] });
+  assert.ok(!plain(ctx.triageNotesReasons(good)).includes('notes_legacy_generic_differentials'));
+  assert.equal(JSON.stringify(legacy), before, 'triagem somente leitura');
+  assert.equal(ctx.__calls.savedLesionRevisions, 0);
 });
 
 test('11. lesão com várias lacunas -> reasons acumula TODOS os motivos aplicáveis, score soma os pesos', () => {

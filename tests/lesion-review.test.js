@@ -1369,6 +1369,107 @@ test('C. review SEM a lacuna de diferenciais (outro motivo) -> o novo gate nunca
   assert.deepEqual(serialize(ctx.DATA[0].tags), ['a', 'b', 'c']);
 });
 
+// Padrão legado descrito pelo usuário: uma lista corrida seguida de frases
+// genéricas, não de critérios próprios. Estas fixtures NÃO modificam o acervo.
+const LAM_LEGACY_NOTES = 'Padrão: cistos difusos e bilaterais.\nDiferenciais-chave: Histiocitose pulmonar de células de Langerhans, Proteinose alveolar pulmonar e Enfisema pulmonar. Favorecem este diagnóstico, quando presentes no contexto adequado, cístico, difuso e bilateral. A distinção deve integrar origem anatômica, composição, padrão de sinal/densidade, realce e contexto clínico.';
+const ACRETISM_GOOD_NOTES = 'Padrão: descrição previamente revisada.\nDiferenciais-chave:\nplacenta prévia sem espectro de acretismo (critério discriminativo específico); lagos placentários (critério discriminativo específico); deiscência de cicatriz uterina (critério discriminativo específico).';
+
+test('LAM legada: prompt individual e lote exigem normalização mesmo com pedido só de enTerm/tags', () => {
+  const ctx = buildTestContext({ data: [makeLesion({ name:'Linfangioleiomiomatose (LAM)', notes:LAM_LEGACY_NOTES })] });
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir enTerm, possível classificação e clinicalTags');
+  assert.equal(ctx.hasLegacyGenericDifferentials(LAM_LEGACY_NOTES), true);
+  assert.equal(ctx.hasStructuredDifferentials(LAM_LEGACY_NOTES), false);
+  const individual = ctx.buildReviewAiPrompt(review.id);
+  const batch = ctx.buildReviewAiBatchPrompt([review.id]);
+  for(const prompt of [individual.text, batch.text]){
+    assert.match(prompt, /FORMATO LEGADO DE DIFERENCIAIS DETECTADO/);
+    assert.match(prompt, /reavalie notes/);
+    assert.match(prompt, /critério prático próprio/);
+  }
+  assert.match(batch.text, new RegExp(review.id), 'o lote identifica qual revisão precisa da normalização');
+});
+
+test('LAM legada: corrigir outro campo e deixar notes como estava é rejeitado (individual e lote)', () => {
+  const entry = makeLesion({ notes:LAM_LEGACY_NOTES });
+  const ctx = buildTestContext({ data: [entry] });
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir enTerm');
+  const before = JSON.stringify(ctx.DATA);
+  const single = ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId:review.id, summary:'Corrigi o termo em inglês', reasoning:'termo ajustado', proposedChanges:{ enTerm:'new term' } }));
+  assert.equal(single.ok, false);
+  assert.equal(single.reason, 'legacy_differentials_not_normalized');
+  assert.equal(review.status, 'pending');
+  const batch = ctx.importReviewAiBatch(JSON.stringify({ results:[{ reviewId:review.id, result:'apply', summary:'Corrigi o termo', reasoning:'termo ajustado', proposedChanges:{ enTerm:'new term' } }] }));
+  assert.equal(batch.summary.failed, 1);
+  assert.equal(batch.items[0].reason, 'legacy_differentials_not_normalized');
+  assert.equal(JSON.stringify(ctx.DATA), before, 'nenhuma proposta parcial alterou a lesão');
+});
+
+test('formas genéricas singulares/plurais e lista corrida são legadas; bloco com critérios NÃO é', () => {
+  const ctx = buildTestContext();
+  for(const notes of [
+    'Diferenciais-chave: A, B e C. Favorecem este diagnóstico, quando presentes no contexto adequado.',
+    'Diferenciais-chave: A, B e C. Favorece este diagnóstico, quando presente no contexto adequado.',
+    'Diferenciais-chave: A; B; C.',
+    'Diferenciais-chave: A, B e C. A distinção deve integrar origem anatômica.'
+  ]) assert.equal(ctx.hasLegacyGenericDifferentials(notes), true, notes);
+  assert.equal(ctx.hasLegacyGenericDifferentials(ACRETISM_GOOD_NOTES), false);
+  assert.equal(ctx.hasStructuredDifferentials(ACRETISM_GOOD_NOTES), true);
+});
+
+test('acretismo bom: nem individual nem lote obrigam reescrever notes só por estilo', () => {
+  const ctx = buildTestContext({ data:[makeLesion({ notes:ACRETISM_GOOD_NOTES })] });
+  const { review } = ctx.createLesionReview('seed_1', 'revisar enTerm');
+  for(const prompt of [ctx.buildReviewAiPrompt(review.id).text, ctx.buildReviewAiBatchPrompt([review.id]).text])
+    assert.doesNotMatch(prompt, /FORMATO LEGADO DE DIFERENCIAIS DETECTADO/);
+  const originalNotes = ctx.DATA[0].notes;
+  const result = ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId:review.id, summary:'Termo revisado.', reasoning:'notes já estão adequadas', proposedChanges:{ enTerm:'english term' } }));
+  assert.equal(result.ok, true);
+  assert.equal(ctx.DATA[0].notes, originalNotes, 'notes bom preservado');
+});
+
+test('requestText histórico sem diferenciais + notes ATUAL já adequado: no_change individual/lote passa', () => {
+  const ctx = buildTestContext({ data:[makeLesion({ notes:ACRETISM_GOOD_NOTES })] });
+  const { review } = ctx.createLesionReview('seed_1', DIFFERENTIALS_GAP_REQUEST_TEXT);
+  const original = JSON.stringify(ctx.DATA);
+  const result = ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId:review.id, summary:'Sem mudanças.', reasoning:'A descrição atual já apresenta diferenciais com critérios.', proposedChanges:{} }));
+  assert.equal(result.ok, true);
+  assert.equal(result.outcome, 'no_applicable_changes');
+  const batch = ctx.importReviewAiBatch(JSON.stringify({ results:[{ reviewId:review.id, result:'no_change', summary:'Sem mudanças.', reasoning:'Notes atual adequado.', proposedChanges:{} }] }));
+  assert.equal(batch.summary.noChange, 1);
+  assert.equal(JSON.stringify(ctx.DATA), original);
+});
+
+test('lote misto: legado rejeitado sem travar no_change de outra revisão já adequada', () => {
+  const ctx = buildTestContext({ data:[
+    makeLesion({ id:'seed_1', notes:LAM_LEGACY_NOTES }),
+    makeLesion({ id:'seed_2', notes:ACRETISM_GOOD_NOTES })
+  ] });
+  const bad = ctx.createLesionReview('seed_1', 'corrigir enTerm').review;
+  const good = ctx.createLesionReview('seed_2', DIFFERENTIALS_GAP_REQUEST_TEXT).review;
+  const before = JSON.stringify(ctx.DATA);
+  const res = ctx.importReviewAiBatch(JSON.stringify({ results:[
+    { reviewId:bad.id, result:'apply', summary:'Novo termo.', reasoning:'termo atualizado', proposedChanges:{ enTerm:'English term' } },
+    { reviewId:good.id, result:'no_change', summary:'Sem alterações.', reasoning:'Diferenciais atuais já estão adequados.', proposedChanges:{} }
+  ] }));
+  assert.equal(res.ok, true);
+  assert.equal(res.summary.failed, 1);
+  assert.equal(res.items[0].reason, 'legacy_differentials_not_normalized');
+  assert.equal(res.summary.noChange, 1);
+  assert.equal(JSON.stringify(ctx.DATA), before);
+});
+
+test('IA não pode produzir lista genérica em notes; normalização estruturada é aceita', () => {
+  const ctx = buildTestContext({ data:[makeLesion({ notes:LAM_LEGACY_NOTES })] });
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir enTerm');
+  const weak = ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId:review.id, summary:'notes alterado', reasoning:'proposta', proposedChanges:{ notes:'Padrão: teste.\nDiferenciais-chave: A, B e C.' } }));
+  assert.equal(weak.reason, 'legacy_differentials_not_normalized');
+  assert.equal(review.status, 'pending');
+  const goodNotes = 'Padrão: descrição proposta para revisão humana.\nDiferenciais-chave: Alternativa A (critério individual um); Alternativa B (critério individual dois).';
+  const good = ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId:review.id, summary:'notes normalizadas', reasoning:'cada hipótese tem critério', proposedChanges:{ notes:goodNotes } }));
+  assert.equal(good.ok, true);
+  assert.equal(ctx.DATA[0].notes, goodNotes);
+});
+
 test('J. o novo gate nunca afrouxa a allowlist — campo proibido continua rejeitado mesmo quando a lacuna de diferenciais é corretamente endereçada', () => {
   const ctx = buildTestContext({ data: [makeLesion()] });
   const { review } = ctx.createLesionReview('seed_1', DIFFERENTIALS_GAP_REQUEST_TEXT);

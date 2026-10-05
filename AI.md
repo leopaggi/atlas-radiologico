@@ -1,5 +1,20 @@
 # AI.md — instruções para assistentes de IA (Claude, DeepSeek, ChatGPT, etc.)
 
+## Revisões por IA — diferenciais estruturados (em revisão, sem publicação)
+
+A ponte individual e a de lote agora leem `notes` ATUAL, além de `requestText`:
+`hasLegacyGenericDifferentials` reconhece boilerplate histórico e listas
+corridas sem critério por item; `hasStructuredDifferentials` identifica bloco
+com diagnósticos e critérios individuais. Pedido antigo "sem nenhuma menção a
+diferencial" não bloqueia `no_change` se `notes` já foi resolvido; `notes`
+legado não pode sobreviver a uma resposta que só altera outro campo.
+O prompt recomenda 2–4 diferenciais pertinentes quando agregarem, ou uma
+justificativa explícita para não incluí-los. Respostas de ação exclusivamente
+manual/estrutural mantêm o fluxo existente. A triagem somente leitura pode
+sinalizar `notes_legacy_generic_differentials` em futuras seleções humanas;
+nenhuma lesão é alterada pela triagem. O renderizador
+`notesDifferentialsHtml` permanece intocado.
+
 ## Ponte estrutural — Fase 3: executor unitário controlado (2026-09-27, commit `15619f8`)
 
 `dryRunStructuralPlan` (puro) descreve o que seria aplicado sem tocar nada;

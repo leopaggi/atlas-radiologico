@@ -7396,6 +7396,35 @@ function buildReviewAiPacket(reviewId){
     }
   };
 }
+// Só o trecho de diferenciais, até o próximo parágrafo; preserva `notes`.
+function reviewDifferentialsSection(notes){
+  const match = /diferenciais-chave:\s*([\s\S]*?)(?:\n\s*\n|$)/i.exec(String(notes||''));
+  return match ? match[1].trim() : '';
+}
+// Indício conservador de formato didático: ao menos dois diagnósticos
+// separados por ';' ou linha, cada um com seu próprio critério.
+function hasStructuredDifferentials(notes){
+  const items = reviewDifferentialsSection(notes).match(/(?:^|[;\n])\s*[^();\n]+?\s*\([^()\n]{3,}\)/g) || [];
+  return items.length >= 2;
+}
+// Detecta boilerplate histórico ou lista corrida/sem critério individual.
+// O cabeçalho sozinho não significa que um bloco bem escrito seja legado.
+function hasLegacyGenericDifferentials(notes){
+  const text = String(notes||'');
+  if(/favorece(?:m)? este diagn[oó]stico,? quando presente(?:s)? no contexto adequado/i.test(text)
+    || /a distin[cç][aã]o deve integrar origem anat[oô]mica/i.test(text)) return true;
+  const section = reviewDifferentialsSection(text);
+  if(!section) return false;
+  const items = section.split(/;\s*(?![^()]*\))/).filter(s=>s.trim());
+  if(items.length >= 2 && items.some(s=>!/^\s*[^()]+\([^()]+\)/.test(s.trim()))) return true;
+  const firstSentence = section.split(/[.!?\n]/)[0];
+  return !/\([^()]+\)/.test(firstSentence)
+    && /,\s*[^,;()]+\s+(?:e|ou)\s+[^,;()]+/i.test(firstSentence);
+}
+const REVIEW_AI_NOTES_FORMAT_RULES = [
+  'FORMATO PADRÃO DE NOTES (somente se houver lacuna real): "Padrão: <descrição objetiva e discriminativa>. Diferenciais-chave: Diagnóstico 1 (critério prático próprio); Diagnóstico 2 (critério prático próprio); Diagnóstico 3 (critério prático próprio)." Use 2 a 4 diferenciais quando pertinentes; nunca sinônimo da própria entidade, achado genérico ou boilerplate como "Favorecem este diagnóstico..." e "A distinção deve integrar origem anatômica...". Se diferenciais não agregam, justifique explicitamente em reasoning. Não reescreva notes já bons apenas por estilo.',
+  'FORMATO LEGADO DE DIFERENCIAIS DETECTADO nesta revisão: mesmo que o pedido original seja sobre outro campo, reavalie notes. Se os diferenciais forem pertinentes, normalize cada diagnóstico com seu próprio critério; nunca mantenha as frases genéricas. Se não agregarem, remova o bloco legado e justifique em reasoning.'
+];
 // Texto pronto para colar numa IA (OpenCode/Claude/DeepSeek). Só lê; não altera nada.
 const GLOBAL_REVIEW_AI_RULES = [
   'Esta é uma PENDÊNCIA GERAL do Atlas (scope "global"): uma solicitação de auditoria/manutenção, SEM uma lesão alvo única.',
@@ -7431,11 +7460,13 @@ function buildReviewAiPrompt(reviewId){
     'NÃO inclua: ' + REVIEW_AI_FORBIDDEN_FIELDS.join(', ') + '.',
     '',
     'Diretrizes de conteúdo (use o que for pertinente — não exija tudo de toda lesão):',
-    '- "notes": descrição radiológica + achados discriminativos. SE esta revisão foi aberta por "sem nenhuma menção a diferencial" (veja requestText), você é OBRIGADO a tomar uma destas duas decisões — nunca ignorar a lacuna em silêncio: (A) acrescentar um bloco real no estilo já usado no Atlas — "Padrão: ..." seguido de "Diferenciais-chave: diagnóstico 1 (critério discriminativo); diagnóstico 2 (critério discriminativo); ..." — com 2 a 4 diferenciais radiologicamente pertinentes, cada um com pelo menos um critério prático que o distingue (nunca sinônimos da própria entidade, nunca achados genéricos só pra preencher, nunca confundir manifestação associada com diagnóstico diferencial); OU (B) se diferenciais genuinamente não agregam valor a esta entidade específica, NÃO invente nenhum e diga isso explicitamente em "reasoning". Fora desse caso específico, diferenciais continuam opcionais; se já existirem bons diferenciais, não reescreva só por estilo.',
+    '- "notes": descrição radiológica + achados discriminativos. SE esta revisão foi aberta por "sem nenhuma menção a diferencial" (veja requestText) E a lacuna ainda existir no estado atual, você é OBRIGADO a (A) acrescentar diferenciais pertinentes com critérios próprios OU (B) justificar explicitamente em "reasoning" por que não agregam. Diferenciais já bons não precisam ser reescritos.',
+    REVIEW_AI_NOTES_FORMAT_RULES[0],
     '- "clinicalTags": contexto CLÍNICO verdadeiro (sintoma, faixa etária, mecanismo de trauma, fator de risco, contexto sindrômico) — nunca repita ali os achados radiológicos de "tags".',
     '- "classification": verifique se existe um sistema oficial ESPECÍFICO pra esta entidade exata (ex.: Lichtman para doença de Kienböck, Graf para displasia do desenvolvimento do quadril, ENSAT para carcinoma adrenocortical) — nunca proponha um sistema só porque a lesão está na mesma região anatômica de outro sistema conhecido (ex.: mielolipoma adrenal NÃO é Bosniak, mesmo perto do rim).',
     '- Se nada acima tiver melhoria real, devolva "proposedChanges": {} (equivalente a no_change) em vez de inventar conteúdo.'
   ];
+  if(hasLegacyGenericDifferentials(p.currentFields.notes)) lines.push(REVIEW_AI_NOTES_FORMAT_RULES[1]);
   const hasPrevious = Array.isArray(p.previousAttempts) && p.previousAttempts.length > 0;
   if(hasPrevious){
     lines.push(
@@ -7524,8 +7555,30 @@ function reviewAiExplicitlyDeclinesDifferentials(text){
 }
 function reviewAiAddressedDifferentialsGap(proposedChanges, summary, reasoning){
   const notesChange = (proposedChanges && typeof proposedChanges.notes==='string') ? proposedChanges.notes : '';
-  if(/diferenciais-chave:\s*\S/i.test(notesChange)) return true; // decisão A (bloco com conteúdo real, não vazio)
+  if(hasStructuredDifferentials(notesChange) && !hasLegacyGenericDifferentials(notesChange)) return true; // decisão A: critérios por diagnóstico
   return reviewAiExplicitlyDeclinesDifferentials(String(summary||'') + '\n' + String(reasoning||'')); // decisão B (negação explícita)
+}
+// A decisão considera o notes ATUAL, não somente o texto histórico do pedido:
+// uma lacuna antiga já resolvida não bloqueia no_change. Formato legado atual
+// exige normalização de notes mesmo se o pedido tratava de outro campo.
+function reviewAiDifferentialsGate(review, changes, summary, reasoning, manualOnly){
+  const lesion = (Array.isArray(DATA) ? DATA : []).find(e=>e && e.id===review.lesionId);
+  const currentNotes = lesion && lesion.notes;
+  const nextNotes = changes && typeof changes.notes==='string' ? changes.notes : null;
+  // Uma resposta que só encaminha ação ESTRUTURAL não altera conteúdo:
+  // a ponte manual existente não deve ser bloqueada por notes de outra fila.
+  if(!manualOnly && nextNotes!==null && hasLegacyGenericDifferentials(nextNotes)) return 'legacy_differentials_not_normalized';
+  if(!manualOnly && hasLegacyGenericDifferentials(currentNotes)){
+    if(nextNotes===null || (!hasStructuredDifferentials(nextNotes)
+      && !(reviewAiExplicitlyDeclinesDifferentials(String(summary||'')+'\n'+String(reasoning||'')) && !/diferenciais-chave:/i.test(nextNotes))))
+      return 'legacy_differentials_not_normalized';
+    return null;
+  }
+  if(reviewRequestFlaggedMissingDifferentials(review.requestText)
+    && !hasStructuredDifferentials(currentNotes)
+    && !reviewAiAddressedDifferentialsGap(changes, summary, reasoning))
+    return 'differentials_gap_not_addressed';
+  return null;
 }
 // Importa o JSON devolvido pela IA: valida tudo ANTES de qualquer mudança.
 // Aceita 3 resultados válidos:
@@ -7609,11 +7662,11 @@ function importReviewAiSolution(reviewId, rawText){
   const summary = String(parsed.summary||'').trim();
   const reasoning = String(parsed.reasoning||'').trim();
   const solutionText = [summary, reasoning].filter(Boolean).join('\n\n') || 'Proposta importada da IA.';
-  // PROTEÇÃO [lrev] — lacuna "sem diferenciais" (se foi o motivo do pedido)
-  // precisa ser resolvida ou justificada; nunca ignorada em silêncio.
-  if(reviewRequestFlaggedMissingDifferentials(review.requestText) && !reviewAiAddressedDifferentialsGap(rawChanges, summary, reasoning)){
-    return { ok:false, reason:'differentials_gap_not_addressed' };
-  }
+  // Lacuna histórica já resolvida cede ao notes atual; formato legado atual
+  // nunca passa só porque outro campo foi corrigido.
+  const differentialsError = reviewAiDifferentialsGate(review, rawChanges, summary, reasoning,
+    keys.length===0 && !!(parsed.manualAction && typeof parsed.manualAction==='object'));
+  if(differentialsError) return { ok:false, reason:differentialsError };
   // 2/3) Nenhum campo aplicável — não altera nada.
   if(keys.length===0){
     const manual = (parsed.manualAction && typeof parsed.manualAction==='object') ? parsed.manualAction : null;
@@ -7756,7 +7809,8 @@ function buildReviewAiBatchPrompt(reviewIds){
     '- Para revisões com tentativas anteriores (previousAttempts), use OBRIGATORIAMENTE o feedback humano (humanFeedback/latestHumanFeedback). Não repita uma solução já recusada (rejected/rolledback) sem corrigir o motivo indicado.',
     '- Se a correção exigir ADICIONAR a lesão a outra seção/localização, use result "manual_action_required" com manualAction.type "additional_section_placement" e suggestedPlacement {section, site} usando SOMENTE seções/sítios da lista abaixo.',
     '- Itens com "scope":"global" são PENDÊNCIAS GERAIS do Atlas (sem lesão alvo): use result "analysis" (análise/plano em summary+reasoning), "manual_action_required" ou "no_change"; NUNCA "apply", nunca proposedChanges, nunca invente lesionId.',
-    '- Diretrizes de conteúdo (use o que for pertinente — não exija tudo de toda lesão): "notes" é descrição + achados discriminativos. SE a revisão foi aberta por "sem nenhuma menção a diferencial" (requestText), você é OBRIGADO a (A) acrescentar "Diferenciais-chave: diagnóstico 1 (critério discriminativo); ..." com 2-4 diferenciais pertinentes e um critério prático cada (nunca sinônimo da própria entidade, nunca genérico só pra preencher) OU (B) justificar explicitamente em "reasoning" por que diferenciais não agregam — nunca ignorar a lacuna. "clinicalTags" é contexto CLÍNICO verdadeiro (sintoma, idade, trauma, fator de risco) — nunca repita achados radiológicos de "tags". "classification": só um sistema ESPECÍFICO pra esta entidade exata (ex.: Lichtman/Kienböck, Graf/DDQ, ENSAT/carcinoma adrenocortical) — nunca só pela região anatômica (ex.: mielolipoma adrenal NÃO é Bosniak). Sem melhoria real em nenhum campo, use "no_change".',
+    '- Diretrizes de conteúdo (use o que for pertinente — não exija tudo de toda lesão): "notes" é descrição + achados discriminativos. Se requestText citar "sem nenhuma menção a diferencial" E a lacuna persistir no estado atual, acrescente diferenciais pertinentes com critério próprio OU justifique explicitamente em "reasoning" por que não agregam. "clinicalTags" é contexto CLÍNICO verdadeiro (sintoma, idade, trauma, fator de risco) — nunca repita achados radiológicos de "tags". "classification": só um sistema ESPECÍFICO pra esta entidade exata (ex.: Lichtman/Kienböck, Graf/DDQ, ENSAT/carcinoma adrenocortical) — nunca só pela região anatômica (ex.: mielolipoma adrenal NÃO é Bosniak). Sem melhoria real em nenhum campo, use "no_change".',
+    REVIEW_AI_NOTES_FORMAT_RULES[0],
     '- Responda SOMENTE com JSON válido, sem nenhum texto fora dele.',
     '',
     'Formato exato:',
@@ -7767,8 +7821,10 @@ function buildReviewAiBatchPrompt(reviewIds){
     '',
     '=== PACOTE DAS REVISÕES (JSON) ===',
     JSON.stringify(p, null, 2)
-  ].join('\n');
-  return { ok:true, text, packet:p };
+  ];
+  const legacyReviewIds = p.reviews.filter(r=>r.scope==='lesion' && hasLegacyGenericDifferentials(r.currentFields && r.currentFields.notes)).map(r=>r.reviewId);
+  if(legacyReviewIds.length) text.splice(text.length-2, 0, REVIEW_AI_NOTES_FORMAT_RULES[1], 'reviewIds com formato legado: '+legacyReviewIds.join(', '), '');
+  return { ok:true, text:text.join('\n'), packet:p };
 }
 // Processa UM item do lote de forma independente. Nunca lança.
 function processReviewAiBatchItem(raw, seen){
@@ -7792,13 +7848,12 @@ function processReviewAiBatchItem(raw, seen){
   const summary = String(raw.summary||'').trim();
   const reasoning = String(raw.reasoning||'').trim();
   const solutionText = [summary, reasoning].filter(Boolean).join('\n\n') || 'Análise importada da IA (lote).';
-  // PROTEÇÃO [lrev] — mesmo gate do fluxo individual (importReviewAiSolution):
-  // lacuna "sem diferenciais" precisa ser resolvida ou justificada, nunca
-  // ignorada em silêncio — independente do result escolhido no lote.
+  // Mesmo gate do fluxo individual: lacuna atual ou notes legados, antes de
+  // qualquer aplicação/status (item inválido não bloqueia os demais).
   const rawChangesForGapCheck = (raw.proposedChanges && typeof raw.proposedChanges==='object' && !Array.isArray(raw.proposedChanges)) ? raw.proposedChanges : {};
-  if(reviewRequestFlaggedMissingDifferentials(review.requestText) && !reviewAiAddressedDifferentialsGap(rawChangesForGapCheck, summary, reasoning)){
-    return { reviewId, status:'failed', reason:'differentials_gap_not_addressed' };
-  }
+  const differentialsError = reviewAiDifferentialsGate(review, rawChangesForGapCheck, summary, reasoning,
+    result==='manual_action_required');
+  if(differentialsError) return { reviewId, status:'failed', reason:differentialsError };
   if(result==='manual_action_required'){
     const manual = (raw.manualAction && typeof raw.manualAction==='object') ? raw.manualAction : {};
     const actionType = String(manual.type||'').trim() || null;
@@ -18082,6 +18137,7 @@ const TRIAGE_REASON_LABELS = {
   notes_too_short: 'descrição muito curta',
   notes_repeats_name_only: 'descrição praticamente só repete o nome da lesão',
   notes_missing_differentials: 'descrição longa sem nenhuma menção a diferencial — avaliar se é pertinente',
+  notes_legacy_generic_differentials: 'diferenciais em formato legado/genérico — revisar critérios individuais',
   tags_empty: 'nenhuma tag',
   tags_insufficient: 'poucas tags',
   enterm_empty: 'termo em inglês vazio',
@@ -18094,7 +18150,7 @@ const TRIAGE_REASON_LABELS = {
 // qualidade"); pesos simples e documentados, sem IA.
 const TRIAGE_REASON_WEIGHTS = {
   notes_empty: 5, notes_too_short: 3, notes_repeats_name_only: 3,
-  notes_missing_differentials: 2, tags_empty: 3, tags_insufficient: 1,
+  notes_missing_differentials: 2, notes_legacy_generic_differentials: 2, tags_empty: 3, tags_insufficient: 1,
   enterm_empty: 2, enterm_equals_name: 1, classification_missing_applicable: 2,
   clinical_tags_missing_with_context: 2, rich_images_weak_notes: 2
 };
@@ -18115,6 +18171,7 @@ function triageNotesReasons(e){
   const remainder = tokenizeExternalTitle(notes).filter(t=>!nameTokens.has(t));
   if(remainder.length < TRIAGE_MIN_NOTES_REMAINDER_TOKENS) reasons.push('notes_repeats_name_only');
   if(notes.length >= TRIAGE_MIN_NOTES_CHARS_FOR_DIFFERENTIALS && !/diferencia/i.test(notes)) reasons.push('notes_missing_differentials');
+  if(hasLegacyGenericDifferentials(notes)) reasons.push('notes_legacy_generic_differentials');
   return reasons;
 }
 function triageTagsReasons(e){
