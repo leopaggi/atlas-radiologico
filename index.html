@@ -551,6 +551,12 @@ body{
 .review-status-tag.rejected{color:var(--red);background:var(--amber-dim);}
 .review-center-row-actions{display:flex;gap:6px;flex:1 1 auto;min-width:0;flex-wrap:wrap;align-items:flex-start;}
 .review-center-row-actions .btn{max-width:100%;white-space:normal;overflow-wrap:anywhere;}
+/* Preview flutuante (hover) da lesão — somente leitura, sem overlay/modal. */
+.lesion-hover-preview{position:fixed;z-index:9999;width:480px;max-width:calc(100vw - 24px);max-height:min(70vh,560px);overflow-y:auto;background:var(--panel);border:1px solid var(--muted-2);border-radius:10px;padding:12px 14px;box-shadow:0 8px 32px rgba(0,0,0,.45);font-size:13px;line-height:1.45;}
+.lesion-hover-preview h3{margin:0 0 2px;font-size:15px;}
+.lesion-hover-preview-meta{font-size:12px;color:var(--muted);margin-bottom:6px;}
+.lesion-hover-preview-tags{margin:6px 0;display:flex;flex-wrap:wrap;gap:4px;}
+.lesion-hover-preview-notes{margin-top:6px;white-space:pre-wrap;}
 .review-history-request{font-size:12.5px;color:var(--muted);margin:4px 0 14px;line-height:1.4;}
 .review-history-list{display:flex;flex-direction:column;gap:8px;}
 .review-history-item{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius);padding:9px 12px;}
@@ -17339,6 +17345,104 @@ function reviewCenterLesionMeta(lesionId, review){
     : { name: '(lesão não encontrada — id: '+lesionId+')', sub: '', found:false, lesion:null };
 }
 
+/* Preview flutuante (hover) da lesão no botão "ver lesão corrigida" das
+   Soluções disponíveis. SOMENTE LEITURA: nenhum botão de ação, nenhum
+   saveData/push/sync, nenhum modal, nenhuma navegação. O clique do botão
+   continua abrindo o detalhe completo exatamente como antes. */
+let lesionHoverPreviewEl = null;
+let lesionHoverPreviewLesionId = null;
+let lesionHoverOpenTimer = null;
+let lesionHoverCloseTimer = null;
+let lesionHoverEscHandler = null;
+let lesionHoverClickAwayHandler = null;
+const LESION_HOVER_OPEN_DELAY = 300;
+const LESION_HOVER_CLOSE_DELAY = 200;
+function lesionHoverSupported(){
+  // Mouse presente basta: touchscreen em notebook Windows pode responder
+  // '(hover: hover)' como false mesmo com mouse conectado — '(pointer: fine)'
+  // cobre esse caso. Sem matchMedia (ou em erro), assume habilitado para não
+  // penalizar desktop; o clique do botão nunca depende daqui.
+  try{
+    if(typeof window==='undefined' || typeof window.matchMedia!=='function') return true;
+    return !!window.matchMedia('(hover: hover), (pointer: fine)').matches;
+  }catch(_e){ return true; }
+}
+function lesionHoverPreviewHtml(e){
+  const tags = (Array.isArray(e.tags)?e.tags:[]).map(t=>`<span class="mini-tag match">${esc(t)}</span>`).join('');
+  const ct = (Array.isArray(e.clinicalTags)?e.clinicalTags:[]).map(t=>`<span class="mini-tag clinical">${esc(t)}</span>`).join('');
+  return `<h3>${esc(e.name)}</h3>` +
+    `<div class="lesion-hover-preview-meta">${esc(e.s)} · ${esc(e.site)}</div>` +
+    (e.classification?`<div class="lesion-hover-preview-meta">🏷 ${esc(e.classification)}</div>`:'') +
+    (e.enTerm?`<div class="lesion-hover-preview-meta">EN: ${esc(e.enTerm)}</div>`:'') +
+    ((tags||ct)?`<div class="lesion-hover-preview-tags">${tags}${ct}</div>`:'') +
+    `<div class="lesion-hover-preview-notes">${e.notes ? notesDifferentialsHtml(e.notes) : 'sem anotações ainda.'}</div>`;
+}
+function positionLesionHoverPreview(el, anchor){
+  const margin = 12, width = 480;
+  const vw = window.innerWidth || 1024, vh = window.innerHeight || 768;
+  let left = margin, top = margin;
+  try{
+    const r = anchor.getBoundingClientRect();
+    left = r.right + margin;
+    if(left + width > vw - margin) left = r.left - width - margin;
+    if(left < margin) left = margin;
+    top = Math.min(Math.max(margin, r.top), Math.max(margin, vh - margin - 40));
+  }catch(_e){}
+  el.style.left = Math.max(margin, Math.min(left, Math.max(margin, vw - margin - 100))) + 'px';
+  el.style.top = top + 'px';
+}
+function closeLesionHoverPreview(){
+  if(lesionHoverOpenTimer){ try{ clearTimeout(lesionHoverOpenTimer); }catch(_e){} lesionHoverOpenTimer = null; }
+  if(lesionHoverCloseTimer){ try{ clearTimeout(lesionHoverCloseTimer); }catch(_e){} lesionHoverCloseTimer = null; }
+  if(lesionHoverEscHandler){ try{ document.removeEventListener('keydown', lesionHoverEscHandler); }catch(_e){} lesionHoverEscHandler = null; }
+  if(lesionHoverClickAwayHandler){ try{ document.removeEventListener('click', lesionHoverClickAwayHandler, true); }catch(_e){} lesionHoverClickAwayHandler = null; }
+  if(lesionHoverPreviewEl){ try{ lesionHoverPreviewEl.remove(); }catch(_e){} lesionHoverPreviewEl = null; }
+  lesionHoverPreviewLesionId = null;
+}
+function openLesionHoverPreview(anchorBtn, lesionId){
+  // Somente um preview por vez; lesão inexistente = sem preview, sem crash.
+  closeLesionHoverPreview();
+  if(!anchorBtn || !lesionId) return false;
+  const lesion = DATA.find(x=>x && x.id===lesionId);
+  if(!lesion) return false;
+  const el = document.createElement('div');
+  el.className = 'lesion-hover-preview';
+  el.innerHTML = lesionHoverPreviewHtml(lesion);
+  el.addEventListener('mouseenter', ()=>{
+    if(lesionHoverCloseTimer){ try{ clearTimeout(lesionHoverCloseTimer); }catch(_e){} lesionHoverCloseTimer = null; }
+  });
+  el.addEventListener('mouseleave', ()=>{
+    if(lesionHoverCloseTimer){ try{ clearTimeout(lesionHoverCloseTimer); }catch(_e){} }
+    try{ lesionHoverCloseTimer = setTimeout(closeLesionHoverPreview, LESION_HOVER_CLOSE_DELAY); }catch(_e){}
+  });
+  document.body.appendChild(el);
+  positionLesionHoverPreview(el, anchorBtn);
+  lesionHoverPreviewEl = el;
+  lesionHoverPreviewLesionId = lesionId;
+  lesionHoverEscHandler = (ev)=>{ if(ev && ev.key==='Escape') closeLesionHoverPreview(); };
+  document.addEventListener('keydown', lesionHoverEscHandler);
+  lesionHoverClickAwayHandler = (ev)=>{
+    if(lesionHoverPreviewEl && !lesionHoverPreviewEl.contains(ev.target) && ev.target!==anchorBtn) closeLesionHoverPreview();
+  };
+  document.addEventListener('click', lesionHoverClickAwayHandler, true);
+  return true;
+}
+function wireLesionHoverPreview(btn, lesionId){
+  // Sem hover confiável (touch): mantém só o clique atual, sem listeners.
+  if(!lesionHoverSupported() || !btn || !lesionId) return;
+  btn.addEventListener('mouseenter', ()=>{
+    if(lesionHoverCloseTimer){ try{ clearTimeout(lesionHoverCloseTimer); }catch(_e){} lesionHoverCloseTimer = null; }
+    if(lesionHoverPreviewEl && lesionHoverPreviewLesionId===lesionId) return;
+    if(lesionHoverOpenTimer){ try{ clearTimeout(lesionHoverOpenTimer); }catch(_e){} }
+    try{ lesionHoverOpenTimer = setTimeout(()=>{ lesionHoverOpenTimer = null; openLesionHoverPreview(btn, lesionId); }, LESION_HOVER_OPEN_DELAY); }catch(_e){}
+  });
+  btn.addEventListener('mouseleave', ()=>{
+    if(lesionHoverOpenTimer){ try{ clearTimeout(lesionHoverOpenTimer); }catch(_e){} lesionHoverOpenTimer = null; }
+    if(lesionHoverCloseTimer){ try{ clearTimeout(lesionHoverCloseTimer); }catch(_e){} }
+    try{ lesionHoverCloseTimer = setTimeout(closeLesionHoverPreview, LESION_HOVER_CLOSE_DELAY); }catch(_e){}
+  });
+}
+
 /* PROTEÇÃO 091d — editar o motivo do pedido (Central e atalho do ⚠).
    Modais pequenos por cima do que estiver aberto (ov.remove(), nunca
    closeOverlay()) — o detalhe/lista por baixo continua como estava. */
@@ -18724,7 +18828,7 @@ function openReadySolutionsModal(){
           <button type="button" class="btn btn-primary review-approve">✓ funcionou — manter</button>
           <button type="button" class="btn btn-ghost review-rollback">↩ não funcionou — desfazer</button>
         </div>`;
-      if(meta.found) row.querySelector('.review-open-lesion').onclick = ()=>{ closeAllAndCleanup(); openDetail(meta.lesion.id); };
+      if(meta.found){ const openBtn = row.querySelector('.review-open-lesion'); openBtn.onclick = ()=>{ closeLesionHoverPreview(); closeAllAndCleanup(); openDetail(meta.lesion.id); }; wireLesionHoverPreview(openBtn, meta.lesion.id); }
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
       const aEditBtn = row.querySelector('.review-edit-request'); // PROTEÇÃO 091d
       if(aEditBtn) aEditBtn.onclick = ()=> openEditReviewRequestModal(r.id, renderBothLists);
