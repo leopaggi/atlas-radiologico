@@ -189,6 +189,22 @@ const lesionRevisionsFns084 = ['mergeLesionRevisions', 'saveLesionRevisions', 'u
   // PROTEÇÃO 091d — edição do motivo (requestText/requestHistory)
   'isReviewRequestEditable', 'normalizeReviewRequestText', 'reviewRequestHistory', 'editReviewRequestText']
   .map((n) => extractFunction(html, n).source).join('\n');
+// REGRESSÃO rollback-externo (seed_390): ciclo real criar→propor→autorizar→
+// rollback contra merge REAL (sem stubbar reconcile/merge). Funções reais do
+// 1º/2º aceite + leitores de snapshot + store local.
+const lesionReviewApplyFns = ['createLesionReview', 'setReviewSolution', 'validateProposedChanges',
+  'authorizeAndApplyReviewSolution', 'rollbackAppliedReviewSolution',
+  'getReviewAttemptSnapshot', 'reviewAttemptSnapshotSync', 'getSnapshotFromStore',
+  'getSnapshotFromLocalCache', 'saveSnapshotToLocalCache',
+  'buildAtlasSnapshotRecord', 'computeDeterministicFingerprint',
+  'genLesionReviewAttemptId', 'pushHumanFeedback']
+  .map((n) => extractFunction(html, n).source).join('\n');
+const lesionReviewConsts = html.slice(html.indexOf("const LESION_REVIEW_EDITABLE_FIELDS = "),
+  html.indexOf('function validateProposedChanges('));
+const snapshotFlagConst = html.slice(html.indexOf('let STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED'),
+  html.indexOf('function structuralExecutionSnapshotsSync('));
+const snapshotSchemaConst = html.slice(html.indexOf('const STRUCTURAL_SNAPSHOT_SCHEMA_VERSION = '),
+  html.indexOf('function structuralSnapshotLocalCacheKey('));
 
 // Nuvem falsa COMPARTILHADA entre "dispositivos" — simula um único projeto
 // Firestore (atlas_state/main + data_chunk_i) visto por computadores
@@ -235,7 +251,23 @@ function makeFakeCloud() {
         }
         const data = store.get('main');
         return { exists: !!data, data: () => data };
-      }
+      },
+      // REGRESSÃO rollback-externo: a snapshotStore vive em subcoleção do
+      // doc principal (atlas_state/main/snapshotStore/{id}); o fake precisa
+      // suportar .collection().doc().get()/set() como o Firestore real.
+      collection: (sub) => ({
+        doc: (id) => {
+          const subKey = 'sub/' + sub + '/' + id;
+          return {
+            __kind: 'sub', __sub: sub, __id: id,
+            set: async (payload) => { store.set(subKey, payload); },
+            get: async () => {
+              const data = store.get(subKey);
+              return { exists: !!data, data: () => data };
+            }
+          };
+        }
+      })
     }),
     FB_CHUNK_REF: (i) => {
       const key = 'chunk_' + i;
@@ -255,15 +287,14 @@ function makeFakeCloud() {
     // writeShardedState() (dentro da própria função extraída, real) vale
     // de verdade entre os "dispositivos" do teste.
     runTransaction: async (fn) => {
+      const subKeyOf = (ref) => (ref.__kind === 'meta' ? 'main' : (ref.__kind === 'sub' ? ('sub/' + ref.__sub + '/' + ref.__id) : ('chunk_' + ref.__i)));
       const tx = {
         get: async (ref) => {
-          const key = ref.__kind === 'meta' ? 'main' : ('chunk_' + ref.__i);
-          const data = store.get(key);
+          const data = store.get(subKeyOf(ref));
           return { exists: !!data, data: () => data };
         },
         set: (ref, payload) => {
-          const key = ref.__kind === 'meta' ? 'main' : ('chunk_' + ref.__i);
-          store.set(key, payload);
+          store.set(subKeyOf(ref), payload);
         }
       };
       return fn(tx);
@@ -462,6 +493,10 @@ function makeDevice(cloud, { seed = [] } = {}) {
     const LESION_REVIEW_WARNING_TEXT = 'Esta lesão possui revisão ativa';
     const REVIEW_REQUEST_TEXT_MAX = 2000; // PROTEÇÃO 091d
     ${lesionRevisionsFns084}
+    ${lesionReviewApplyFns}
+    ${lesionReviewConsts}
+    ${snapshotFlagConst}
+    ${snapshotSchemaConst}
     const ORDER_STAMPS_KEY = 'atlas:orderUpdatedAt';
     ${orderFns085}
     const REVIEW_STAMPS_KEY = 'atlas:reviewUpdatedAt';
@@ -502,6 +537,8 @@ function makeDevice(cloud, { seed = [] } = {}) {
     // simula o usuário salvando uma edição (ex.: adicionar imagem) — mesmo
     // caminho real: persiste local e empurra pra nuvem.
     save: () => context.saveData(),
+    // acesso de teste ao IndexedDB local simulado (para provar reload).
+    peekLocal: (key) => localBacking[key],
     // ALTERAÇÃO 072: simula "este dispositivo tem uma edição real ainda não
     // confirmada na nuvem" SEM precisar simular a edição inteira — usado só
     // no SETUP de cenários (ex.: popular a nuvem falsa pela primeira vez),
@@ -4408,6 +4445,96 @@ test('PROTEÇÃO 092 - PC A edita label, PC B edita sourcePage/contexto: converg
   await editImage092(b, (im) => { im.label = 'editado depois da exclusão'; im.metaUpdatedAt = Object.assign({}, im.metaUpdatedAt, { label: 9e12 }); });
   assert.equal(img092Of(cloudLesion093(cloud)).length, 0, 'imagem excluída não volta por metadado mais novo');
   assert.equal(img092Of(b.context.DATA.find((x) => x.id === 'seed_1')).length, 0, 'PC B converge para a exclusão');
+});
+
+// ===========================================================================
+// REGRESSÃO rollback-externo (caso real seed_390): o rollback restaurava o
+// conteúdo mas mantinha _userUpdatedAt antigo; o reconcile pré-push (remoto
+// vence quando rt > lt) ressuscitava a versão ainda aplicada — em memória,
+// no IndexedDB e na nuvem. O fix recarimba o restaurado com Date.now().
+// Fluxo REAL de ponta a ponta: authorize -> push -> rollback -> push ->
+// reload simulado. Sem esse recarimbo, este teste falha no passo do segundo
+// push (remoto vence de volta).
+// ===========================================================================
+
+test('ROLLBACK-EXTERNO: lesão restaurada vence o reconcile (não ressuscita após push+reload)', async () => {
+  const cloud = makeFakeCloud();
+  // Flush determinístico do debounce de push (400ms) e de saves flutuantes
+  // internos (authorize dispara saveData sem await): sem isso, um reconcile
+  // ainda em voo faria o push seguinte cair em 'busy' de forma intermitente.
+  const flushSync = () => new Promise((r) => setTimeout(r, 700));
+  const seed = [Object.assign(makeSeedEntry({ id: 'seed_390', name: 'Isquemia mesentérica aguda' }), {
+    clinicalTags: ['difusa', 'dor abdominal'],
+    _userUpdatedAt: 1000 // T0 fixo: passado determinístico, sem flake de relógio
+  })];
+  const device = makeDevice(cloud, { seed: JSON.parse(JSON.stringify(seed)) });
+  await device.boot();
+  const ctx = device.context;
+  const TAGS_APLICADAS = ['difusa', 'dor abdominal', 'fibrilação atrial'];
+
+  // 2. aplica a revisão (1º aceite) — caminho real, snapshot externo (flag ON).
+  const created = ctx.createLesionReview('seed_390', 'adicionar tag');
+  assert.equal(created.created, true);
+  const reviewId = created.review.id;
+  assert.equal(ctx.setReviewSolution(reviewId, 's', { clinicalTags: TAGS_APLICADAS }).ok, true);
+  const applied = ctx.authorizeAndApplyReviewSolution(reviewId, { origin: 'import' });
+  assert.equal(applied.ok, true);
+  const attempt = applied.attempt;
+  assert.equal(attempt.snapshotStorage, 'external', 'attempt externalizado');
+  assert.ok(attempt.snapshotRef, 'snapshotRef válido');
+  assert.equal(attempt.beforeSnapshot, undefined, 'sem beforeSnapshot inline');
+  const T1 = ctx.DATA.find((e) => e.id === 'seed_390')._userUpdatedAt;
+  assert.ok(T1 > 1000, 'aplicação carimbou T1 > T0');
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.DATA.find((e) => e.id === 'seed_390').clinicalTags)), TAGS_APLICADAS);
+
+  // 4. snapshot externo contém o estado anterior (T0).
+  const snap = await ctx.getReviewAttemptSnapshot(ctx.LESION_REVISIONS[reviewId], attempt);
+  assert.equal(snap.ok, true, 'snapshot legível');
+  assert.equal(snap.beforeSnapshot.id, 'seed_390');
+  assert.deepEqual(JSON.parse(JSON.stringify(snap.beforeSnapshot.clinicalTags)), ['difusa', 'dor abdominal']);
+  assert.equal(snap.beforeSnapshot._userUpdatedAt, 1000, 'snapshot guarda T0');
+
+  // publica a aplicação (nuvem passa a ter a versão aplicada com T1).
+  await device.save();
+  await flushSync();
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(cloud.peekChunkItems(0).find((e) => e.id === 'seed_390').clinicalTags)),
+    TAGS_APLICADAS, 'nuvem com a versão aplicada');
+
+  // 5-6. rollback + estado imediato.
+  const rb = await ctx.rollbackAppliedReviewSolution(reviewId, 'teste controlado');
+  assert.equal(rb.ok, true, 'rollback ok');
+  const restored = ctx.DATA.find((e) => e.id === 'seed_390');
+  assert.deepEqual(JSON.parse(JSON.stringify(restored.clinicalTags)), ['difusa', 'dor abdominal'], 'tags restauradas');
+  assert.ok(!restored.clinicalTags.includes('fibrilação atrial'), '"fibrilação atrial" ausente');
+  assert.ok(restored._userUpdatedAt >= T1, 'restaurado recarimbado com timestamp NOVO (>= T1)');
+
+  // 7-8. push real com reconcile contra o remoto ainda aplicado (T1): o
+  // restaurado (T2 >= T1) VENCE o merge e não é ressuscitado.
+  await device.save();
+  await flushSync();
+  const afterPush = ctx.DATA.find((e) => e.id === 'seed_390');
+  assert.deepEqual(JSON.parse(JSON.stringify(afterPush.clinicalTags)), ['difusa', 'dor abdominal'], 'push não ressuscitou a tag revertida');
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(cloud.peekChunkItems(0).find((e) => e.id === 'seed_390').clinicalTags)),
+    ['difusa', 'dor abdominal'], 'nuvem convergiu para o restaurado');
+
+  // 9-11. reload simulado: relê o IndexedDB local + revisões.
+  const reloadedData = JSON.parse(device.peekLocal('data'));
+  const reloadedRevs = JSON.parse(device.peekLocal('atlas:lesionRevisions'));
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(reloadedData.find((e) => e.id === 'seed_390').clinicalTags)),
+    ['difusa', 'dor abdominal'], 'após reload: restaurado continua restaurado');
+  assert.equal(reloadedRevs[reviewId].status, 'rejected', 'review rejected após reload');
+  const reloadedAttempt = reloadedRevs[reviewId].attempts[reloadedRevs[reviewId].attempts.length - 1];
+  assert.ok(reloadedAttempt.rolledBackAt, 'rolledBackAt presente após reload');
+  assert.equal(reloadedAttempt.snapshotStorage, 'external', 'metadata externa intacta');
+  assert.equal(reloadedAttempt.snapshotRef, attempt.snapshotRef, 'snapshotRef inalterado');
+  assert.equal(reloadedAttempt.beforeSnapshot, undefined, 'sem inline reaparecido');
+  // snapshot externo segue íntegro e resolvível.
+  const snap2 = await ctx.getReviewAttemptSnapshot(reloadedRevs[reviewId], reloadedAttempt);
+  assert.equal(snap2.ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(snap2.beforeSnapshot.clinicalTags)), ['difusa', 'dor abdominal']);
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');

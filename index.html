@@ -7029,6 +7029,10 @@ async function rollbackAppliedReviewSolution(reviewId, reasonText){
   pushLesionReviewHistory(review, 'application_rejected', { attemptId: attempt.id, reason });
 
   DATA[idx] = JSON.parse(JSON.stringify(snap.beforeSnapshot));
+  // BUGFIX rollback-externo: o snapshot guarda _userUpdatedAt antigo; sem
+  // recarimbo, o reconcile pré-push (remoto vence quando rt > lt) ressuscita
+  // a versão ainda aplicada. Rollback é mutação humana nova e vence recência.
+  DATA[idx]._userUpdatedAt = Date.now();
   attempt.rolledBackAt = Date.now();
   attempt.rollbackReason = reason;
 

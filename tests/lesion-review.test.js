@@ -433,11 +433,15 @@ test('6) DESFAZER: rollbackAppliedReviewSolution() restaura EXATAMENTE o beforeS
   ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
   ctx.authorizeAndApplyReviewSolution(review.id);
   assert.equal(ctx.DATA[0].classification, 'BIRADS');
+  const appliedStamp6 = ctx.DATA[0]._userUpdatedAt;
 
   const res = await ctx.rollbackAppliedReviewSolution(review.id, 'classificação errada mesmo assim');
   assert.equal(res.ok, true);
   assert.equal(res.review.status, 'rejected');
-  assert.deepEqual(serialize(ctx.DATA[0]), originalLesionSnapshot, 'a lesão precisa voltar EXATAMENTE ao estado do snapshot');
+  const { _userUpdatedAt: rbStamp6, ...restored6 } = serialize(ctx.DATA[0]);
+  const { _userUpdatedAt: _origStamp6, ...orig6 } = originalLesionSnapshot;
+  assert.deepEqual(restored6, orig6, 'a lesão precisa voltar EXATAMENTE ao estado do snapshot (exceto o recarimbo)');
+  assert.ok(typeof rbStamp6 === 'number' && rbStamp6 >= appliedStamp6, 'rollback recarimba com timestamp novo (vence o reconcile pré-push)');
   assert.equal(ctx.countPendingLesionReviews(), 1);
   assert.equal(ctx.countReadyLesionSolutions(), 0);
   assert.equal(ctx.saveDataCalls.length, 2, 'aplicar + desfazer, os dois persistem via saveData()');
@@ -964,6 +968,8 @@ test('CANCELAR rejected: NÃO altera DATA, NÃO refaz rollback, NÃO aplica solu
   ctx.authorizeAndApplyReviewSolution(review.id);   // aplica + cria attempts[0]
   await ctx.rollbackAppliedReviewSolution(review.id, 'não funcionou'); // desfaz -> rejected
   assert.equal(ctx.DATA[0].classification, null, 'rollback já devolveu a lesão ao estado original');
+  const appliedStampCancel = ctx.DATA[0]._userUpdatedAt;
+  assert.ok(typeof appliedStampCancel === 'number', 'restaurado carrega recarimbo do rollback');
   const attemptsBefore = serialize(review.attempts);
   const saveDataBefore = ctx.saveDataCalls.length;
 
@@ -971,7 +977,9 @@ test('CANCELAR rejected: NÃO altera DATA, NÃO refaz rollback, NÃO aplica solu
   assert.equal(res.ok, true);
   assert.equal(res.review.status, 'cancelled');
   assert.deepEqual(serialize(res.review.attempts), attemptsBefore, 'attempts[] precisa ficar intacto');
-  assert.deepEqual(serialize(ctx.DATA[0]), originalSnapshot, 'cancelar rejected NUNCA altera DATA');
+  const { _userUpdatedAt: _rbStampCancel, ...restoredCancel } = serialize(ctx.DATA[0]);
+  const { _userUpdatedAt: _origStampCancel, ...origCancel } = originalSnapshot;
+  assert.deepEqual(restoredCancel, origCancel, 'cancelar rejected NUNCA altera DATA (conteúdo idêntico ao restaurado)');
   assert.equal(ctx.saveDataCalls.length, saveDataBefore, 'cancelar NUNCA chama saveData()');
   assert.ok(res.review.history.some(h => h.action === 'rollback_completed'), 'o rollback anterior precisa continuar no histórico');
 });
@@ -1080,10 +1088,14 @@ test('IA (importar) + DESFAZER: rollback EXATO restaura o estado anterior e volt
   const { review } = ctx.createLesionReview('seed_1', 'x');
   ctx.importReviewAiSolution(review.id, JSON.stringify({ reviewId: review.id, summary: 'a', reasoning: 'b', proposedChanges: { classification: 'BIRADS', notes: 'mudou' } }));
   assert.equal(ctx.DATA[0].classification, 'BIRADS');
+  const appliedStampImport = ctx.DATA[0]._userUpdatedAt;
   const res = await ctx.rollbackAppliedReviewSolution(review.id, 'não serviu');
   assert.equal(res.ok, true);
   assert.equal(res.review.status, 'rejected');
-  assert.deepEqual(serialize(ctx.DATA[0]), original, 'rollback restaura EXATAMENTE o beforeSnapshot');
+  const { _userUpdatedAt: rbStampImport, ...restoredImport } = serialize(ctx.DATA[0]);
+  const { _userUpdatedAt: _origStampImport, ...origImport } = original;
+  assert.deepEqual(restoredImport, origImport, 'rollback restaura EXATAMENTE o beforeSnapshot (exceto o recarimbo)');
+  assert.ok(typeof rbStampImport === 'number' && rbStampImport >= appliedStampImport, 'rollback recarimba com timestamp novo');
   assert.equal(ctx.countPendingLesionReviews(), 1, 'volta para pendentes (permite nova tentativa)');
   assert.equal(ctx.countReadyLesionSolutions(), 0);
   assert.equal(ctx.saveDataCalls.length, 2, 'aplicar + desfazer persistem via saveData()');
@@ -1142,7 +1154,10 @@ test('clinicalTags: ROLLBACK restaura exatamente o valor anterior (mesmo snapsho
   assert.deepEqual(serialize(ctx.DATA[0].clinicalTags), ['tag nova']);
   const res = await ctx.rollbackAppliedReviewSolution(review.id, 'não serviu');
   assert.equal(res.ok, true);
-  assert.deepEqual(serialize(ctx.DATA[0]), original, 'rollback restaura clinicalTags junto com o resto da lesão');
+  const { _userUpdatedAt: _rbStampCt, ...restoredCt } = serialize(ctx.DATA[0]);
+  const { _userUpdatedAt: _origStampCt, ...origCt } = original;
+  assert.deepEqual(restoredCt, origCt, 'rollback restaura clinicalTags junto com o resto da lesão (exceto o recarimbo)');
+  assert.ok(typeof ctx.DATA[0]._userUpdatedAt === 'number', 'restaurado carrega recarimbo do rollback');
   assert.deepEqual(serialize(ctx.DATA[0].clinicalTags), ['tag original']);
 });
 
@@ -2363,7 +2378,9 @@ test('LOCAL: rollback remove SÓ a localização adicionada e restaura o estado 
   const res = await ctx.rollbackAppliedReviewSolution(r.id, 'não serviu');
   assert.equal(res.ok, true);
   assert.equal(r.status, 'rejected');
-  assert.deepEqual(serialize(ctx.DATA[0]), original, 'lesão volta EXATAMENTE ao estado anterior');
+  const { _userUpdatedAt: _rbStampLoc, ...restoredLoc } = serialize(ctx.DATA[0]);
+  const { _userUpdatedAt: _origStampLoc, ...origLoc } = original;
+  assert.deepEqual(restoredLoc, origLoc, 'lesão volta EXATAMENTE ao estado anterior (exceto o recarimbo do rollback)');
   assert.equal(ctx.DATA[0].s, 'Medicina Fetal', 'seção principal intacta');
   assert.equal(ctx.DATA[0].images.length, 0);
 });
