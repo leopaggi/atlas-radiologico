@@ -111,9 +111,13 @@ function makeFakeTimers() {
 
 function makeFakeEl(tag) {
   const listeners = {};
-  return {
+  const el = {
     tag, className: '', innerHTML: '', style: {}, removed: false, children: [],
     _listeners: listeners,
+    // Altura/retângulo "renderizados" simulados — sobrescrever via
+    // el.getBoundingClientRect = () => ({...}) por teste, do mesmo jeito que
+    // __anchor já faz. Default 0 (sem dimensão), nunca undefined/throw.
+    getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }),
     addEventListener: (t, f) => { (listeners[t] = listeners[t] || []).push(f); },
     removeEventListener: (t, f) => { listeners[t] = (listeners[t] || []).filter((x) => x !== f); },
     appendChild: function (c) { this.children.push(c); return c; },
@@ -122,6 +126,7 @@ function makeFakeEl(tag) {
     fire: function (t, ev) { (listeners[t] || []).slice().forEach((f) => f(ev || {})); },
     listenerCount: function (t) { return (listeners[t] || []).length; }
   };
+  return el;
 }
 
 function makeCtx(lesions, opts) {
@@ -246,6 +251,86 @@ test('posicionamento prefere a direita e respeita a viewport', () => {
   assert.equal(el2.style.left, '408px', 'sem espaço: abre à esquerda');
 });
 
+/* ---------- posicionamento vertical (corte perto do rodapé) ----------
+ * Bug real: o clamp antigo usava uma constante fixa (40px) no lugar da
+ * altura REAL do card, então um preview alto (notes longo/vários
+ * diferenciais) perto da metade/rodapé da viewport abria com a maior parte
+ * fora da área visível. A correção mede a altura real já renderizada
+ * (el.getBoundingClientRect().height, disponível porque o card já está no
+ * DOM com CSS width/max-height aplicados antes desta função rodar) e só
+ * sobe o `top` o necessário para caber — nunca baseado só no espaço ABAIXO
+ * do botão. Helper local: configura anchor.top e a altura simulada do card.
+ */
+function positionWithHeights(anchorTop, previewHeight, vh) {
+  const ctx = makeCtx([LESION]);
+  ctx.window.innerHeight = vh || 768;
+  const el = ctx.document.createElement('div');
+  el.getBoundingClientRect = () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 480, height: previewHeight });
+  const anchor = ctx.document.createElement('button');
+  anchor.getBoundingClientRect = () => ({ left: 100, right: 200, top: anchorTop, bottom: anchorTop + 20 });
+  vm.runInContext('positionLesionHoverPreview(__el, __anchor)', Object.assign(ctx, { __el: el, __anchor: anchor }));
+  return parseFloat(el.style.top);
+}
+
+test('1. botão perto do topo: preview alinha ao topo do botão, nunca sobe além da margem', () => {
+  const top = positionWithHeights(20, 300, 768);
+  assert.equal(top, 20, 'cabe inteiro abaixo do botão — usa o topo do botão como está');
+});
+
+test('2. botão no meio da viewport com preview baixo: alinha ao topo do botão (cabe sem ajuste)', () => {
+  const top = positionWithHeights(380, 150, 768);
+  assert.equal(top, 380);
+});
+
+test('3. botão perto do rodapé com preview alto: sobe o preview (nunca usa só o espaço abaixo do botão)', () => {
+  const top = positionWithHeights(700, 500, 768);
+  assert.equal(top, 768 - 500 - 12, 'top = viewport - altura do card - margem');
+  assert.ok(top < 700, 'subiu acima do topo do próprio botão — não fica "pendurado" cortado embaixo');
+});
+
+test('4. preview muito alto (quase a viewport inteira) perto do rodapé: nunca ultrapassa o topo (clamps em margem)', () => {
+  const top = positionWithHeights(700, 760, 768);
+  assert.equal(top, 12, 'vh-altura-margem ficaria negativo — clamp final garante top=margem');
+});
+
+test('5. preview baixo em qualquer posição: comportamento inalterado (sem ajuste de altura)', () => {
+  assert.equal(positionWithHeights(50, 80, 768), 50);
+  assert.equal(positionWithHeights(400, 80, 768), 400);
+});
+
+test('6. nunca top < margem, em nenhum dos cenários acima (topo/meio/rodapé × preview baixo/alto)', () => {
+  const margin = 12;
+  for (const [anchorTop, h] of [[0, 300], [20, 760], [700, 760], [768, 620], [1, 1]]) {
+    const top = positionWithHeights(anchorTop, h, 768);
+    assert.ok(top >= margin, `top=${top} para anchorTop=${anchorTop} h=${h}`);
+  }
+});
+
+test('7. nunca bottom (top + altura real) > viewport - margem, quando a altura cabe na viewport', () => {
+  const margin = 12, vh = 768;
+  for (const [anchorTop, h] of [[0, 300], [380, 150], [700, 500], [768, 100]]) {
+    const top = positionWithHeights(anchorTop, h, vh);
+    if (h <= vh - 2 * margin) assert.ok(top + h <= vh - margin, `bottom ultrapassou para anchorTop=${anchorTop} h=${h}`);
+  }
+});
+
+test('8. scroll interno permanece (CSS) — o ajuste de posição nunca precisa mover a lista/página', () => {
+  assert.match(html, /\.lesion-hover-preview\{[^}]*overflow-y:auto/);
+  assert.match(html, /\.lesion-hover-preview\{[^}]*max-height:min\(calc\(100vh - 24px\),620px\)/);
+});
+
+test('9. posicionamento horizontal existente não foi alterado por esta correção', () => {
+  const body = extractFunction(html, 'positionLesionHoverPreview').body;
+  assert.match(body, /left = r\.right \+ margin/);
+  assert.match(body, /if\(left \+ width > vw - margin\) left = r\.left - width - margin/);
+});
+
+test('10. a correção de posicionamento não toca wiring/clique/hover (só positionLesionHoverPreview muda)', () => {
+  for (const n of ['wireLesionHoverPreview', 'openLesionHoverPreview', 'closeLesionHoverPreview']) {
+    assert.doesNotMatch(extractFunction(html, n).body, /getBoundingClientRect\(\)\.height/, n + ' não precisa medir altura — isso é só de positionLesionHoverPreview');
+  }
+});
+
 test('13. lista não é substituída: nenhum overlay/modal é criado', () => {
   const ctx = makeCtx([LESION]);
   vm.runInContext('wireLesionHoverPreview(__anchor, "seed_1")', ctx);
@@ -312,4 +397,110 @@ test('clique continua funcionando mesmo quando hover está desabilitado', () => 
   assert.equal(opened, 'seed_1', 'onclick original intacto e funcional');
   assert.match(html, /openBtn\.onclick = \(\)=>\{ closeLesionHoverPreview\(\); closeAllAndCleanup\(\); openDetail\(meta\.lesion\.id\); \};/,
     'onclick real ainda fecha preview, limpa tudo e abre o detalhe');
+});
+
+/* ---------- legibilidade (réplica compacta do detalhe) ----------
+ * Mesma filosofia dos testes acima: auditoria estática do CSS/HTML real +
+ * execução das funções extraídas. notesDifferentialsHtml NUNCA é tocado —
+ * todo o ganho de legibilidade abaixo é só CSS (incl. ::first-line, que não
+ * precisa de marcação nova), reaproveitando as MESMAS classes do detalhe
+ * completo (.detail-notes/.notes-differential-item), nunca um parser novo.
+ */
+
+test('16. título do preview: CSS evidente — negrito, ligeiramente maior, cor de destaque', () => {
+  const rule = /\.lesion-hover-preview h3\{([^}]*)\}/.exec(html);
+  assert.ok(rule, 'regra .lesion-hover-preview h3{} precisa existir');
+  assert.match(rule[1], /font-weight:700/);
+  assert.match(rule[1], /font-size:1[6-9]px/, 'ligeiramente maior que o h3 original (15px)');
+  assert.match(rule[1], /color:var\(--text\)/);
+});
+
+test('17. seção/sítio do preview: cor secundária, menor destaque que o corpo das notas', () => {
+  const metaRule = /\.lesion-hover-preview-meta\{([^}]*)\}/.exec(html);
+  const notesRule = /\.lesion-hover-preview-notes\{([^}]*)\}/.exec(html);
+  assert.ok(metaRule && notesRule);
+  assert.match(metaRule[1], /color:var\(--muted-2\)/, 'meta mais discreta que o corpo');
+  assert.match(notesRule[1], /color:var\(--muted\)/, 'corpo das notas no mesmo tom do detalhe completo (.detail-notes)');
+});
+
+test('18. "Padrão:" ganha destaque só por CSS (::first-line) — notesDifferentialsHtml continua sem nenhuma lógica sobre "Padrão"', () => {
+  assert.match(html, /\.lesion-hover-preview-notes::first-line\{[^}]*font-weight:600[^}]*color:var\(--text\)/);
+  const helperBody = extractFunction(html, 'lesionHoverPreviewHtml').body;
+  assert.doesNotMatch(helperBody, /Padrão/, 'nenhuma lógica nova sobre "Padrão" dentro do preview');
+  const ctx = makeCtx([LESION]);
+  const out = vm.runInContext('lesionHoverPreviewHtml(DATA[0])', ctx);
+  assert.match(out, /Padrão: nódulo denso\./, '"Padrão:" continua só escapado, texto intacto');
+});
+
+test('19. "Diferenciais-chave:" ganha linha própria + espaço acima (CSS por seletor de filho direto, sem classe nova no HTML gerado)', () => {
+  assert.match(html, /\.detail-notes > strong,\.lesion-hover-preview-notes > strong\{display:block;margin-top:\d+px;color:var\(--text\);?\}/,
+    'regra aplicada aos DOIS containers (detalhe e preview) — mesma classe, nenhuma nova');
+  const ctx = makeCtx([LESION]);
+  const out = vm.runInContext('lesionHoverPreviewHtml(DATA[0])', ctx);
+  assert.match(out, /<strong>Diferenciais-chave:<\/strong>/, 'HTML do marcador não mudou (continua bare <strong>, sem atributo novo)');
+});
+
+test('20. cada diferencial em bloco próprio, com espaço perceptível entre eles (mesma classe do detalhe)', () => {
+  const rule = /\.notes-differential-item\{([^}]*)\}/.exec(html);
+  assert.ok(rule);
+  assert.match(rule[1], /display:block/);
+  assert.match(rule[1], /margin-top:[4-9]px/, 'espaço maior que o original (3px), mas ainda compacto');
+});
+
+test('21. critério (texto entre parênteses) visualmente separado do nome — nunca herda o branco/negrito do diagnóstico', () => {
+  const ctx = makeCtx([LESION]);
+  const out = vm.runInContext('lesionHoverPreviewHtml(DATA[0])', ctx);
+  assert.match(out, /<strong>A<\/strong> \(critério um\)/);
+  assert.doesNotMatch(out, /<strong>A \(critério um/, 'o critério nunca entra dentro do <strong>');
+});
+
+test('22. notes SEM "Diferenciais-chave:" dentro do preview continua normal (só escapado, nenhuma marcação nova)', () => {
+  const plain = Object.assign({}, LESION, { notes: 'lesão óssea benigna clássica' });
+  const ctx = makeCtx([plain]);
+  const out = vm.runInContext('lesionHoverPreviewHtml(DATA[0])', ctx);
+  assert.match(out, /<div class="lesion-hover-preview-notes">lesão óssea benigna clássica<\/div>/,
+    'notes aparece só escapada dentro do container, sem nenhuma marcação nova');
+  assert.doesNotMatch(out, /<strong>|notes-differential-item/, 'sem o marcador, notesDifferentialsHtml não insere HTML novo');
+});
+
+test('23. notes longo com vários diferenciais renderiza por completo; card mantém teto de altura (70-80vh) + scroll interno próprio (nunca move a lista/página)', () => {
+  const longLesion = Object.assign({}, LESION, {
+    notes: 'Padrão: ' + 'achado longo repetido. '.repeat(40) + '\nDiferenciais-chave: ' +
+      Array.from({ length: 6 }, (_, i) => `Diagnóstico ${i} (critério discriminativo número ${i} bem detalhado)`).join('; ') + '.'
+  });
+  const ctx = makeCtx([longLesion]);
+  const out = vm.runInContext('lesionHoverPreviewHtml(DATA[0])', ctx);
+  const items = out.match(/<div class="notes-differential-item">/g) || [];
+  assert.equal(items.length, 6, 'os 6 diferenciais são renderizados inteiros, sem truncar nem paginar');
+  assert.match(html, /\.lesion-hover-preview\{[^}]*max-height:min\(calc\(100vh - 24px\),620px\)/, 'teto de altura adaptativo à viewport real (nunca cobre a tela toda)');
+  assert.match(html, /\.lesion-hover-preview\{[^}]*overflow-y:auto/, 'scroll interno — nunca o da lista/viewport');
+  assert.match(html, /\.lesion-hover-preview\{[^}]*width:480px/, 'largura dentro de 480-540px');
+});
+
+/* ---------- Validar correção: mesmo preview, nenhum sistema novo ---------- */
+
+test('24. "👁 ver lesão" do modal "Validar correção" agora chama o MESMO wireLesionHoverPreview (sem segundo sistema de preview)', () => {
+  const body = extractFunction(html, 'openReviewValidationModal').body;
+  assert.match(body, /id="review-validate-open-lesion"/, 'botão existe dentro do modal correto');
+  assert.match(body, /wireLesionHoverPreview\(openLesionBtn, meta\.lesion\.id\)/, 'reusa exatamente a função já usada em "ver lesão corrigida"');
+  assert.doesNotMatch(body, /function\s+lesionHoverPreviewHtml|notesDifferentialsHtml\(/, 'nenhum renderer de preview duplicado dentro do modal');
+});
+
+test('25. clique no "👁 ver lesão" do modal "Validar correção" continua abrindo o detalhe completo e fecha o modal/preview antes', () => {
+  const body = extractFunction(html, 'openReviewValidationModal').body;
+  assert.match(body, /openLesionBtn\.onclick = \(\)=>\{ closeLesionHoverPreview\(\); close\(\); openDetail\(meta\.lesion\.id\); \};/);
+});
+
+test('26. a nova chamada em "Validar correção" não introduz saveData/push/sync/storage (mesma garantia do preview em geral)', () => {
+  const body = extractFunction(html, 'openReviewValidationModal').body;
+  for (const pat of [/saveData\s*\(/, /pushToFirebase/, /writeShardedState/, /storage\.set/]) {
+    assert.doesNotMatch(body, pat, 'não pode conter ' + pat);
+  }
+});
+
+test('27. touch no botão de "Validar correção" continua usando só o clique (mesmo guard lesionHoverSupported de wireLesionHoverPreview, já comprovado touch-safe acima)', () => {
+  const ctx = makeCtx([LESION], { hover: false });
+  // Reproduz o wiring real do modal (mesma função, mesmo argumento) fora do DOM real.
+  vm.runInContext('wireLesionHoverPreview(__anchor, "seed_1")', ctx);
+  assert.equal(ctx.__anchor.listenerCount('mouseenter'), 0, 'sem listeners de hover em touch — clique normal preservado');
 });

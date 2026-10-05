@@ -551,12 +551,17 @@ body{
 .review-status-tag.rejected{color:var(--red);background:var(--amber-dim);}
 .review-center-row-actions{display:flex;gap:6px;flex:1 1 auto;min-width:0;flex-wrap:wrap;align-items:flex-start;}
 .review-center-row-actions .btn{max-width:100%;white-space:normal;overflow-wrap:anywhere;}
-/* Preview flutuante (hover) da lesão — somente leitura, sem overlay/modal. */
-.lesion-hover-preview{position:fixed;z-index:9999;width:480px;max-width:calc(100vw - 24px);max-height:min(70vh,560px);overflow-y:auto;background:var(--panel);border:1px solid var(--muted-2);border-radius:10px;padding:12px 14px;box-shadow:0 8px 32px rgba(0,0,0,.45);font-size:13px;line-height:1.45;}
-.lesion-hover-preview h3{margin:0 0 2px;font-size:15px;}
-.lesion-hover-preview-meta{font-size:12px;color:var(--muted);margin-bottom:6px;}
-.lesion-hover-preview-tags{margin:6px 0;display:flex;flex-wrap:wrap;gap:4px;}
-.lesion-hover-preview-notes{margin-top:6px;white-space:pre-wrap;}
+/* Preview flutuante (hover) da lesão — somente leitura, sem overlay/modal.
+   Legibilidade: réplica compacta da hierarquia já usada no detalhe completo
+   (.detail-notes/.notes-differential-item) — título evidente, meta/EN/
+   classification discretos, notas no tom --muted (mesmo do detalhe) para dar
+   contraste real ao <strong> branco dos diagnósticos (ver .notes-differential-item
+   strong) e ao cabeçalho "Diferenciais-chave:" (ver regra > strong abaixo). */
+.lesion-hover-preview{position:fixed;z-index:9999;width:480px;max-width:calc(100vw - 24px);max-height:min(calc(100vh - 24px),620px);overflow-y:auto;background:var(--panel);border:1px solid var(--muted-2);border-radius:10px;padding:12px 14px;box-shadow:0 8px 32px rgba(0,0,0,.45);font-size:13px;line-height:1.5;color:var(--muted);}
+.lesion-hover-preview h3{margin:0 0 4px;font-size:16px;font-weight:700;color:var(--text);}
+.lesion-hover-preview-meta{font-size:12px;color:var(--muted-2);margin-bottom:6px;}
+.lesion-hover-preview-tags{margin:8px 0;display:flex;flex-wrap:wrap;gap:4px;}
+.lesion-hover-preview-notes{margin-top:10px;padding-top:8px;border-top:1px solid var(--line);white-space:pre-wrap;color:var(--muted);}
 .review-history-request{font-size:12.5px;color:var(--muted);margin:4px 0 14px;line-height:1.4;}
 .review-history-list{display:flex;flex-direction:column;gap:8px;}
 .review-history-item{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius);padding:9px 12px;}
@@ -808,8 +813,18 @@ body{
 }
 .detail-img-clinical-pac{font-weight:600;color:var(--muted);margin-bottom:1px;}
 .detail-notes{color:var(--muted);font-size:13.5px;white-space:pre-wrap;line-height:1.6;}
-.notes-differential-item{display:block;margin-top:3px;}
+.notes-differential-item{display:block;margin-top:6px;}
 .notes-differential-item strong{color:#fff;font-weight:700;}
+/* Legibilidade do bloco notes (detalhe, preview hover e Quiz — todos usam
+   .detail-notes ou .lesion-hover-preview-notes): o rótulo "Diferenciais-chave:"
+   é sempre o único <strong> FILHO DIRETO destes containers (o dos diagnósticos
+   fica dentro de .notes-differential-item, nunca alcançado por este seletor —
+   ver notesDifferentialsHtml) — ganha linha própria e espaço acima, sem
+   precisar de nenhuma classe nova no HTML gerado. "Padrão:" (sempre a 1ª
+   linha da convenção de notes) ganha destaque só por CSS (::first-line),
+   também sem tocar no parser/HTML de notesDifferentialsHtml. */
+.detail-notes > strong,.lesion-hover-preview-notes > strong{display:block;margin-top:10px;color:var(--text);}
+.detail-notes::first-line,.lesion-hover-preview-notes::first-line{font-weight:600;color:var(--text);}
 .detail-meta{color:var(--muted-2);font-size:12px;font-family:'IBM Plex Mono',monospace;margin-bottom:14px;}
 .detail-altplacements{color:var(--teal);font-size:12px;margin:-8px 0 14px 0;opacity:.9;}
 .detail-altplacements b{font-weight:600;}
@@ -17498,7 +17513,19 @@ function positionLesionHoverPreview(el, anchor){
     left = r.right + margin;
     if(left + width > vw - margin) left = r.left - width - margin;
     if(left < margin) left = margin;
-    top = Math.min(Math.max(margin, r.top), Math.max(margin, vh - margin - 40));
+    // Correção do corte vertical: o clamp antigo usava uma constante fixa
+    // (40) no lugar da altura REAL do card — com notes longos/vários
+    // diferenciais o preview passa facilmente de 400-600px, então um botão
+    // na metade/rodapé da tela abria o card com a maior parte fora da
+    // viewport (sem scroll da PÁGINA pra alcançar, só o scroll interno do
+    // próprio card ajudava, e nem sempre). `el` já está no DOM (position:fixed,
+    // width/max-height do CSS já aplicados) quando esta função roda — a
+    // altura medida aqui já é a altura final renderizada (max-height+overflow
+    // do CSS já limitam o valor quando o conteúdo é maior que a tela).
+    const previewHeight = el.getBoundingClientRect().height || 0;
+    top = r.top;
+    if(top + previewHeight > vh - margin) top = vh - previewHeight - margin;
+    if(top < margin) top = margin;
   }catch(_e){}
   el.style.left = Math.max(margin, Math.min(left, Math.max(margin, vw - margin - 100))) + 'px';
   el.style.top = top + 'px';
@@ -18079,7 +18106,10 @@ function openReviewValidationModal(reviewId, opts){
   const close = ()=>{ ov.remove(); document.removeEventListener('keydown', closeOnEsc); };
   ov.querySelector('#review-validate-close').onclick = close;
   const openLesionBtn = ov.querySelector('#review-validate-open-lesion');
-  if(openLesionBtn) openLesionBtn.onclick = ()=>{ close(); openDetail(meta.lesion.id); };
+  if(openLesionBtn){
+    openLesionBtn.onclick = ()=>{ closeLesionHoverPreview(); close(); openDetail(meta.lesion.id); };
+    wireLesionHoverPreview(openLesionBtn, meta.lesion.id); // mesmo preview hover de "ver lesão corrigida"
+  }
   ov.querySelector('#review-validate-approve').onclick = async ()=>{
     const res = approveAppliedReviewSolution(reviewId);
     if(!res.ok){ toast('Não foi possível manter a correção (' + (res.reason||'erro') + ').'); return; }
