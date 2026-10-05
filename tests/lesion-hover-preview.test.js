@@ -504,3 +504,59 @@ test('27. touch no botão de "Validar correção" continua usando só o clique (
   vm.runInContext('wireLesionHoverPreview(__anchor, "seed_1")', ctx);
   assert.equal(ctx.__anchor.listenerCount('mouseenter'), 0, 'sem listeners de hover em touch — clique normal preservado');
 });
+
+/* ---------- Revisões pendentes: mesmo preview, 3º ponto da interface ----------
+ * 2-6 (abrir a lesão certa, notes estruturado, Padrão, Diferenciais-chave,
+ * negrito) e 7-8 (sair/ESC fecham) são propriedades do MESMO
+ * wireLesionHoverPreview/openLesionHoverPreview/lesionHoverPreviewHtml já
+ * exaustivamente testados acima (shared, sem override aqui) — por isso os
+ * testes abaixo focam no que é específico deste botão: existência do
+ * wiring, composição (sem renderer duplicado), onclick preservado,
+ * isolamento hover×fechamento da lista, ausência de saveData/DATA, e touch.
+ */
+
+test('28. "ver lesão" de "Revisões pendentes" (3º ponto) recebe o MESMO wireLesionHoverPreview', () => {
+  const body = extractFunction(html, 'openPendingReviewsModal').body;
+  assert.match(body, /class="btn btn-ghost review-open-lesion">ver lesão<\/button>/, 'botão existe dentro do modal correto');
+  assert.match(body, /wireLesionHoverPreview\(openBtn, meta\.lesion\.id\)/, 'reusa exatamente a função já usada nos outros dois pontos');
+});
+
+test('29. nenhum renderer/parser de preview duplicado dentro de "Revisões pendentes" (reuso, não recriação)', () => {
+  const body = extractFunction(html, 'openPendingReviewsModal').body;
+  assert.doesNotMatch(body, /function\s+lesionHoverPreviewHtml|notesDifferentialsHtml\(|Diferenciais-chave:/, 'nenhuma lógica de preview/diferenciais reimplementada aqui');
+});
+
+test('30. clique normal em "Revisões pendentes" continua abrindo o detalhe completo (comportamento de clique preservado)', () => {
+  const body = extractFunction(html, 'openPendingReviewsModal').body;
+  assert.match(body, /openBtn\.onclick = \(\)=>\{ closeLesionHoverPreview\(\); closeOverlay\(\); document\.removeEventListener\('keydown', closeOnEsc\); openDetail\(meta\.lesion\.id\); \};/,
+    'onclick real: fecha o preview (se aberto), fecha a lista e abre o detalhe — exatamente como antes, só com closeLesionHoverPreview() adicionado na frente');
+});
+
+test('31. hover isolado do fechamento da lista: wireLesionHoverPreview/openLesionHoverPreview/closeLesionHoverPreview nunca chamam closeOverlay/closeAllAndCleanup', () => {
+  for (const n of ['wireLesionHoverPreview', 'openLesionHoverPreview', 'closeLesionHoverPreview']) {
+    assert.doesNotMatch(extractFunction(html, n).body, /closeOverlay\(|closeAllAndCleanup\(/, n + ' não pode fechar nenhuma tela/modal por conta própria');
+  }
+});
+
+test('32. a nova chamada em "Revisões pendentes" não introduz saveData/push/sync/storage nem toca DATA diretamente', () => {
+  const body = extractFunction(html, 'openPendingReviewsModal').body;
+  for (const pat of [/saveData\s*\(/, /pushToFirebase/, /writeShardedState/, /storage\.set/, /\bDATA\s*=/, /DATA\.(push|splice)\(/]) {
+    assert.doesNotMatch(body, pat, 'não pode conter ' + pat);
+  }
+});
+
+test('33. touch no botão de "Revisões pendentes" continua usando só o clique (mesmo guard lesionHoverSupported)', () => {
+  const ctx = makeCtx([LESION], { hover: false });
+  vm.runInContext('wireLesionHoverPreview(__anchor, "seed_1")', ctx);
+  assert.equal(ctx.__anchor.listenerCount('mouseenter'), 0, 'sem listeners de hover em touch — clique normal preservado');
+});
+
+test('34. os três pontos da interface (ver lesão corrigida / Validar correção / Revisões pendentes) chamam exatamente o mesmo par onclick+wireLesionHoverPreview — nenhum componente novo', () => {
+  const sites = ['openPendingReviewsModal', 'openReviewValidationModal'];
+  for (const fn of sites) {
+    const body = extractFunction(html, fn).body;
+    assert.match(body, /wireLesionHoverPreview\(open(Btn|LesionBtn), meta\.lesion\.id\)/);
+  }
+  // "ver lesão corrigida" já coberto pelo primeiro teste estático do arquivo.
+  assert.match(html, /wireLesionHoverPreview\(openBtn, meta\.lesion\.id\)/);
+});

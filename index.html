@@ -18322,7 +18322,11 @@ function openPendingReviewsModal(){
           <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}${reviewResolveButtonHtml(r)}
           ${cancellable?'<button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>':''}
         </div>`;
-      if(meta.found) row.querySelector('.review-open-lesion').onclick = ()=>{ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); openDetail(meta.lesion.id); };
+      if(meta.found){
+        const openBtn = row.querySelector('.review-open-lesion');
+        openBtn.onclick = ()=>{ closeLesionHoverPreview(); closeOverlay(); document.removeEventListener('keydown', closeOnEsc); openDetail(meta.lesion.id); };
+        wireLesionHoverPreview(openBtn, meta.lesion.id); // mesmo preview hover de "ver lesão corrigida"/"Validar correção"
+      }
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
       const editReqBtn = row.querySelector('.review-edit-request'); // PROTEÇÃO 091d
       if(editReqBtn) editReqBtn.onclick = ()=> openEditReviewRequestModal(r.id, renderList);
