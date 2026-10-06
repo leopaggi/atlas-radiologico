@@ -214,6 +214,32 @@ const snapshotFlagConst = html.slice(html.indexOf('let STRUCTURAL_SNAPSHOT_EXTER
 const snapshotSchemaConst = html.slice(html.indexOf('const STRUCTURAL_SNAPSHOT_SCHEMA_VERSION = '),
   html.indexOf('function structuralSnapshotLocalCacheKey('));
 
+// Executor real carregado somente nos dois testes de rollback estrutural:
+// reutiliza o mesmo device com saveData/reconcile/Firestore simulados reais
+// deste arquivo (os testes unitários do executor usam saveData stubado).
+const structuralRollbackConsts = html.slice(html.indexOf('const STRUCTURAL_EXECUTOR_VERSION = '),
+  html.indexOf('function structuralExecutionId('));
+const structuralRollbackGuards = html.slice(html.indexOf('const SECTION_ANATOMIC_SYSTEM = {'),
+  html.indexOf('function validateReviewAiPlacement(suggested, sourceSection){'));
+const structuralRollbackReaders = ['structuralExecutionSnapshotsSync', 'getStructuralExecutionSnapshots',
+  'getSnapshotFromStore', 'getSnapshotFromFirestore', 'decodeSnapshotRecordFromFirestore'];
+const structuralRollbackFns = [
+  'structuralSectionOf', 'structuralSiteOf', 'hasStrongAnatomicConflict',
+  'structuralOrganTags', 'hasIncompatibleOrganAnatomy', 'isCrossSectionOverrideValid',
+  'structuralPlanLesion', 'structuralPlanResolveImage', 'buildStructuralPlanSnapshot',
+  'isStructuralPlanStale', 'structuralExecutionId', 'structuralClone',
+  'structuralLesionIndex', 'structuralMapHas', 'dryRunStructuralPlan',
+  'structuralSnapshotLesions', 'structuralSnapshotMaps', 'structuralPersistAll',
+  'structuralRestoreSnapshots', 'executeStructuralPlan', 'structuralApplyMerge',
+  'structuralApplyRemovePlacement', 'structuralApplyTransferImages',
+  'structuralApplyAddCases', 'rollbackStructuralExecution',
+  'buildAtlasSnapshotRecord', 'computeDeterministicFingerprint',
+  'saveSnapshotToLocalCache', 'encodeSnapshotRecordForFirestore',
+  'resolveReviewManually', 'assertManualImageOwnershipChange',
+  'lesionMergeLinkKey', 'mergeClinicalCasesForFold', 'mergeDidacticItems',
+  'genDidacticId', ...structuralRollbackReaders
+].map((name) => extractFunction(html, name).source).join('\n');
+
 // Nuvem falsa COMPARTILHADA entre "dispositivos" — simula um único projeto
 // Firestore (atlas_state/main + data_chunk_i) visto por computadores
 // diferentes, cada um com seu próprio IndexedDB local.
@@ -4611,3 +4637,153 @@ test('ROLLBACK-EXTERNO: lesão restaurada vence o reconcile (não ressuscita ap�
 });
 
 console.log('multi-device-sync.test.js carregado — loadData/syncFromFirebase/writeShardedState/readShardedState REAIS, nenhuma rede/DOM real usada.');
+
+// ===========================================================================
+// REGRESSÃO AINDA NÃO CORRIGIDA: rollback estrutural com remoto em T1.
+// Os testes exigem que o desfazer humano sobreviva ao reconcile + reload.
+// Usam o executor, os leitores de snapshot (flag ON), saveData,
+// reconcileBeforePush, mergeEntryNonDestructive e loadData REAIS.
+// Não recarimbam DATA manualmente nem executam contra dados reais.
+// ===========================================================================
+
+function installStructuralRollbackRuntime(device) {
+  const ctx = device.context;
+  ctx.updateReviewCenterBadges = () => {};
+  vm.runInContext(structuralRollbackConsts + '\n' + structuralRollbackGuards +
+    '\nconst IMAGE_OWNERSHIP_MANUAL = { manual:true };\n' + structuralRollbackFns,
+    ctx, { filename: 'structural-rollback-with-real-sync.js' });
+  // Instrumentação: lê o resultado do helper real ANTES de saveData reconciliar.
+  const realRestore = ctx.structuralRestoreSnapshots;
+  ctx.structuralRestoreSnapshots = (snap) => {
+    realRestore(snap);
+    ctx.__restoredBeforeReconcile = JSON.parse(JSON.stringify(ctx.DATA));
+  };
+  return ctx;
+}
+
+function acceptStructuralRollbackFixture(ctx, reviewId, resolution) {
+  const r = ctx.LESION_REVISIONS[reviewId];
+  r.structuralPlan = {
+    status: 'accepted', type: resolution.type, resolution,
+    importedAt: '2026-09-27T00:00:00.000Z',
+    snapshot: ctx.buildStructuralPlanSnapshot(resolution)
+  };
+}
+
+const testLesion = (id, name, over = {}) => Object.assign({
+  id, name, s: 'Neurorradiologia', site: 'Encéfalo', notes: 'original',
+  images: [], altPlacements: [], clinicalCases: [], radiologicSigns: [],
+  classificationSchemes: [], tags: [], links: [], inc: 1,
+  _userUpdatedAt: 1000 // T0 determinístico, anterior à execução
+}, over);
+const assertRollbackPersisted = (value, expected, diagnostic) =>
+  assert.deepEqual(JSON.parse(JSON.stringify(value)), expected,
+    'o desfazer humano deve persistir após reconcile/reload; diagnóstico: ' + JSON.stringify(diagnostic));
+
+test('REGRESSÃO estrutural: remove_additional_section_placement desfeito não pode ressuscitar após reconcile/reload', async () => {
+  const cloud = makeFakeCloud();
+  const placement = { s: 'Coluna Vertebral', site: 'Intradural' };
+  const original = testLesion('seed_1', 'Lesão de teste', { altPlacements: [placement] });
+  const device = makeDevice(cloud, { seed: [original] });
+  await device.boot();
+  const ctx = installStructuralRollbackRuntime(device);
+  const reviewId = 'review_rollback_placement';
+  ctx.LESION_REVISIONS[reviewId] = { id: reviewId, lesionId: 'seed_1',
+    status: 'manual_action_required', history: [], updatedAt: 1, createdAt: 1 };
+  acceptStructuralRollbackFixture(ctx, reviewId, {
+    reviewId, valid: true, type: 'remove_additional_section_placement',
+    lesionId: 'seed_1', placement: { section: placement.s, site: placement.site }, reasoning: 'teste'
+  });
+  const executed = await ctx.executeStructuralPlan(reviewId);
+  assert.equal(executed.ok, true, 'operação estrutural real: ' + JSON.stringify(executed));
+  const after = ctx.DATA.find(e => e.id === 'seed_1');
+  const T1 = after._userUpdatedAt;
+  assert.ok(T1 > 1000, 'execução carimbou T1 > T0');
+  assertRollbackPersisted(after.altPlacements, [], { stage: 'executed' });
+  const review = ctx.LESION_REVISIONS[reviewId];
+  assert.equal(review.structuralExecution.snapshotStorage, 'external');
+  const snap = await ctx.getStructuralExecutionSnapshots(review);
+  assert.equal(snap.ok, true);
+  assert.equal(snap.beforeSnapshot.lesions.seed_1.lesion._userUpdatedAt, 1000);
+  assertRollbackPersisted(snap.beforeSnapshot.lesions.seed_1.lesion.altPlacements, [placement], { stage: 'snapshot' });
+  // Aguardar flush do save debounced de resolveReviewManually().
+  await new Promise(r => setTimeout(r, 700));
+  const remoteT1 = cloud.peekChunkItems(0).find(e => e.id === 'seed_1');
+  assert.ok(remoteT1, 'nuvem contém execução');
+  assert.equal(remoteT1._userUpdatedAt, T1);
+  assertRollbackPersisted(remoteT1.altPlacements, [], { stage: 'remote_T1' });
+
+  const rolledBack = await ctx.rollbackStructuralExecution(reviewId);
+  assert.equal(rolledBack.ok, true, 'rollback real: ' + JSON.stringify(rolledBack));
+  const restoredBefore = ctx.__restoredBeforeReconcile.find(e => e.id === 'seed_1');
+  const localAfterReconcile = ctx.DATA.find(e => e.id === 'seed_1');
+  const disk = JSON.parse(device.peekLocal('data')).find(e => e.id === 'seed_1');
+  const reloaded = makeDevice(cloud, { seed: JSON.parse(device.peekLocal('data')) });
+  await reloaded.boot();
+  const afterReload = reloaded.context.DATA.find(e => e.id === 'seed_1');
+  const evidence = { snapshotStamp: snap.beforeSnapshot.lesions.seed_1.lesion._userUpdatedAt,
+    restoredStamp: restoredBefore && restoredBefore._userUpdatedAt,
+    remoteStamp: remoteT1._userUpdatedAt,
+    mergeDecision: remoteT1._userUpdatedAt > restoredBefore._userUpdatedAt ? 'remote_wins' : 'local_wins',
+    restoredBeforeReconcile: restoredBefore && restoredBefore.altPlacements,
+    afterReconcile: localAfterReconcile && localAfterReconcile.altPlacements,
+    disk: disk && disk.altPlacements, afterReload: afterReload && afterReload.altPlacements };
+  assertRollbackPersisted(afterReload.altPlacements, [placement], evidence);
+});
+
+test('REGRESSÃO estrutural: merge desfeito conserva keeper, ID removido e mapa após reconcile/reload', async () => {
+  const cloud = makeFakeCloud();
+  const seed = [testLesion('seed_1', 'Keeper', { notes: 'keeper original' }),
+    testLesion('seed_2', 'Clone', { notes: 'clone original' })];
+  const device = makeDevice(cloud, { seed });
+  await device.boot();
+  const ctx = installStructuralRollbackRuntime(device);
+  const reviewId = 'review_rollback_merge';
+  ctx.LESION_REVISIONS[reviewId] = { id: reviewId, lesionId: 'seed_2',
+    status: 'manual_action_required', history: [], updatedAt: 1, createdAt: 1 };
+  acceptStructuralRollbackFixture(ctx, reviewId, {
+    reviewId, valid: true, type: 'merge_duplicates', keeperId: 'seed_1', removeId: 'seed_2',
+    keeperName: 'Keeper', removeName: 'Clone', merge: { notes: 'keeper executado' }, reasoning: 'teste'
+  });
+  const executed = await ctx.executeStructuralPlan(reviewId);
+  assert.equal(executed.ok, true, 'merge real: ' + JSON.stringify(executed));
+  const keeperT1 = ctx.DATA.find(e => e.id === 'seed_1');
+  assert.ok(keeperT1._userUpdatedAt > 1000);
+  assert.equal(keeperT1.notes, 'keeper executado');
+  assert.equal(ctx.DATA.some(e => e.id === 'seed_2'), false);
+  assert.equal(vm.runInContext('LESION_MERGES', ctx).seed_2.into, 'seed_1');
+  const review = ctx.LESION_REVISIONS[reviewId];
+  const snap = await ctx.getStructuralExecutionSnapshots(review);
+  assert.equal(snap.ok, true);
+  assert.equal(snap.beforeSnapshot.lesions.seed_1.lesion._userUpdatedAt, 1000);
+  await new Promise(r => setTimeout(r, 700));
+  const remoteT1 = cloud.peekChunkItems(0).find(e => e.id === 'seed_1');
+  assert.ok(remoteT1, 'merge publicado');
+  assert.equal(cloud.peekChunkItems(0).some(e => e.id === 'seed_2'), false);
+
+  const rolledBack = await ctx.rollbackStructuralExecution(reviewId);
+  assert.equal(rolledBack.ok, true, 'rollback real: ' + JSON.stringify(rolledBack));
+  const restoredBefore = ctx.__restoredBeforeReconcile.find(e => e.id === 'seed_1');
+  const diskData = JSON.parse(device.peekLocal('data'));
+  const reloaded = makeDevice(cloud, { seed: diskData });
+  await reloaded.boot();
+  const keeper = reloaded.context.DATA.find(e => e.id === 'seed_1');
+  const clone = reloaded.context.DATA.find(e => e.id === 'seed_2');
+  const evidence = { snapshotStamp: snap.beforeSnapshot.lesions.seed_1.lesion._userUpdatedAt,
+    restoredStamp: restoredBefore && restoredBefore._userUpdatedAt,
+    remoteStamp: remoteT1._userUpdatedAt,
+    mergeDecision: remoteT1._userUpdatedAt > restoredBefore._userUpdatedAt ? 'remote_wins' : 'local_wins',
+    restoredKeeper: restoredBefore && restoredBefore.notes,
+    afterReconcileKeeper: ctx.DATA.find(e => e.id === 'seed_1')?.notes,
+    diskKeeper: diskData.find(e => e.id === 'seed_1')?.notes,
+    afterReloadKeeper: keeper && keeper.notes,
+    restoredClonePresent: ctx.__restoredBeforeReconcile.some(e => e.id === 'seed_2'),
+    afterReconcileClonePresent: ctx.DATA.some(e => e.id === 'seed_2'),
+    afterReloadClonePresent: !!clone,
+    afterReloadMergeMap: vm.runInContext('LESION_MERGES', reloaded.context).seed_2 || null };
+  assert.equal(keeper?.notes, 'keeper original',
+    'keeper restaurado deve permanecer após reconcile/reload; diagnóstico: ' + JSON.stringify(evidence));
+  assert.ok(clone, 'ID removido deve permanecer reinserido; diagnóstico: ' + JSON.stringify(evidence));
+  assert.equal(vm.runInContext('LESION_MERGES', reloaded.context).seed_2, undefined,
+    'mapa de merge deve permanecer desfeito; diagnóstico: ' + JSON.stringify(evidence));
+});

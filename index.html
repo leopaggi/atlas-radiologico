@@ -2116,6 +2116,18 @@ let syncFromFirebaseSkipTrailingPush = false;
 // syncFromFirebaseSkipTrailingPush acima (preserva as assinaturas que
 // testes localizam pelo texto exato).
 let pendingWriteImageExclusionsById = null;
+// BUGFIX rollback estrutural de merge (2026) — mesmo papel da variável
+// transiente acima, mas em globalThis (não `let`): rollbackStructuralExecution()
+// e reconcileStateWithRemote() são extraídos/injetados em scripts `vm`
+// SEPARADOS pelos testes (cada um com seu próprio escopo léxico de topo) —
+// uma `let` compartilhada entre os dois não atravessaria essa fronteira nos
+// testes (embora funcionasse no app real, script único). globalThis é a
+// mesma referência em ambos os casos (window no app real; o próprio objeto
+// de contexto do vm nos testes), então a propriedade fica visível nos dois.
+// rollbackStructuralExecution() marca aqui o id acabado de desfazer ANTES
+// de chamar saveData(); reconcileStateWithRemote() exclui esse id da união
+// de LESION_MERGES nesta reconciliação — nunca persistido como tal, só
+// evita que o registro remoto antigo ressuscite a fusão recém-desfeita.
 /* ALTERAÇÃO 070 — trata o sinal de CONFLITO DE REVISÃO (ver writeShardedState):
    reconcilia com a nuvem (mesmo merge não destrutivo de sempre, sem push
    próprio) e tenta escrever UMA vez mais, já com o estado mesclado. Nunca
@@ -2763,6 +2775,15 @@ async function writeShardedState(ms=15000){
       // payload E à base remota DENTRO da transação (PC desatualizado nunca
       // grava id fundido; imagens movidas continuam passando pelo gate).
       const writeMerges = mergeLesionMergeMaps(metaPayloadBase.lesionMerges, remoteMeta.lesionMerges);
+      // BUGFIX rollback estrutural de merge: esta é a união DENTRO da
+      // transação (leitura fresca do remoto, proteção extra contra
+      // concorrência) — o mesmo desfazer humano sinalizado antes de
+      // saveData() (ver reconcileStateWithRemote) precisa vencer aqui
+      // também, senão o id acabado de reinserir é removido de novo bem no
+      // commit, mesmo já tendo sido excluído na reconciliação anterior.
+      if(globalThis.PENDING_LESION_MERGE_UNDOS){
+        for(const dropId of Object.keys(globalThis.PENDING_LESION_MERGE_UNDOS)) delete writeMerges[dropId];
+      }
       let txData = cleanData, txBase = metaPayloadBase, txPending = pendingAddsSnapshot;
       if(Object.keys(writeMerges).length){
         const clone = v => JSON.parse(JSON.stringify(v || {}));
@@ -5288,6 +5309,14 @@ function reconcileStateWithRemote(remote){
   // de qualquer filtro — PC desatualizado converge para o keeper; id fundido
   // não ressuscita (isQuarantinedSeedId + activeCanonicalSeedV172).
   LESION_MERGES = mergeLesionMergeMaps(LESION_MERGES, remote && remote.lesionMerges);
+  // BUGFIX rollback estrutural de merge: a união acima é "mais antigo vence"
+  // (091c) e por isso reintroduziria a fusão que um rollback humano acabou
+  // de desfazer localmente (remoto ainda tem o registro antigo). Ver
+  // comentário de globalThis.PENDING_LESION_MERGE_UNDOS perto de
+  // pendingWriteImageExclusionsById.
+  if(globalThis.PENDING_LESION_MERGE_UNDOS){
+    for(const dropId of Object.keys(globalThis.PENDING_LESION_MERGE_UNDOS)) delete LESION_MERGES[dropId];
+  }
   if(Object.keys(LESION_MERGES).length){
     foldLesionMergesIntoGlobals();
     if(remote){
@@ -26924,7 +26953,27 @@ async function rollbackStructuralExecution(reviewId){
   STRUCTURAL_EXEC_IN_FLIGHT[reviewId] = true;
   try{
     structuralRestoreSnapshots(snap.beforeSnapshot);
+    // BUGFIX rollback estrutural (mesmo padrão de rollbackAppliedReviewSolution,
+    // "rollback-externo"): o snapshot guarda _userUpdatedAt antigo (T0); sem
+    // recarimbo, o reconcile pré-push (remoto vence quando rt > lt) ressuscita
+    // a versão executada (T1). Rollback é mutação humana nova e deve vencer
+    // a recência — recarimba TODAS as lesões afetadas pela execução (keeper
+    // e, no caso de merge, o id reinserido).
+    const rollbackNow = Date.now();
+    for(const lesionId of Object.keys(snap.beforeSnapshot.lesions || {})){
+      const li = structuralLesionIndex(lesionId);
+      if(li>=0) DATA[li]._userUpdatedAt = rollbackNow;
+    }
+    // Merge desfeito: LESION_MERGES é unido entre dispositivos por "mais
+    // antigo vence" (091c) — um delete local simples não sobrevive ao
+    // reconcile contra um remoto que ainda tem o registro da fusão
+    // executada. Sinaliza o id a excluir da próxima reconciliação (ver
+    // reconcileStateWithRemote); NUNCA grava isso como estado persistido.
+    if(ex.type==='merge_duplicates' && ex.tombstone && ex.tombstone.removeId){
+      globalThis.PENDING_LESION_MERGE_UNDOS = { [ex.tombstone.removeId]: true };
+    }
     try{ await saveData(); }catch(_e){}
+    globalThis.PENDING_LESION_MERGE_UNDOS = null;
     try{ await structuralPersistAll(); }catch(_e){}
     ex.status = 'rolledback'; ex.rolledbackAt = new Date().toISOString();
     if(r.structuralPlan){ r.structuralPlan.status = 'rolledback'; r.structuralPlan.decidedAt = new Date().toISOString(); }
