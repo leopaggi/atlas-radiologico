@@ -8448,6 +8448,292 @@ function importReviewAiBatch(rawText){
   }
   return { ok:true, summary, items };
 }
+
+/* ============================================================
+   PIPELINE AUTOMÁTICO DE PROPOSTAS (IA) — V1, LIMITE 20
+   ------------------------------------------------------------
+   Reaproveita o motor já existente (getBatchEligibleReviews,
+   buildReviewAiBatchPacket — mesmo payload do fluxo manual —,
+   setReviewSolution/flagManualActionRequired) e a MESMA regra
+   fundamental do topo do módulo: a IA PODE gerar proposta; a IA NUNCA
+   autoriza/aplica/aprova/desfaz. Nenhuma função abaixo chama
+   authorizeAndApplyReviewSolution, approveAppliedReviewSolution,
+   rollbackAppliedReviewSolution, executeStructuralPlan ou
+   rollbackStructuralExecution — e nenhuma referencia DATA.
+
+   setReviewNoChangeSolution/confirmNoChangeReviewSolution cobrem o caso
+   "falso positivo": a IA conclui que não há nada a corrigir, mas isso
+   AINDA é uma proposta (status 'proposed', aparece em SOLUÇÕES) que
+   exige decisão humana — nunca encerra a revisão sozinha.
+
+   REVIEW_AI_PIPELINE_PROVIDER é o único ponto de saída: hoje aponta pro
+   mock (REVIEW_AI_MOCK_PROVIDER), nunca pra rede/chave. Um adapter real
+   é só reatribuir esta variável a outro objeto com o mesmo contrato
+   (analyzeBatch(packet) -> Promise<{results:[...]}>, mesmo formato de
+   buildReviewAiBatchPrompt()).
+   ============================================================ */
+const AI_PIPELINE_BATCH_LIMIT = 20; // limite absoluto deste ensaio — nunca configurável acima disto aqui.
+
+/* Igual a setReviewSolution, mas para a conclusão "sem alteração necessária"
+   (provável falso positivo da triagem): nunca exige proposedChanges
+   não-vazio, nunca toca DATA. Ainda precisa de decisão humana (confirmar ou
+   recusar) — nunca encerra a revisão por conta própria. */
+function setReviewNoChangeSolution(reviewId, solutionText, meta){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review) return { ok:false, reason:'not_found', review:null };
+  if(isGlobalReview(review)) return { ok:false, reason:GLOBAL_REVIEW_NO_TARGET, review };
+  if(review.status==='applied_pending_validation') return { ok:false, reason:'awaiting_validation', review };
+  const wasRejected = review.status === 'rejected';
+  if(wasRejected) pushLesionReviewHistory(review, 'reopened', null);
+  const m = (meta && typeof meta==='object') ? meta : {};
+  const solution = {
+    text: (solutionText||'').trim() || 'IA concluiu que não há alteração necessária (provável falso positivo da triagem).',
+    proposedChanges: {},
+    kind: 'no_change',
+    createdAt: Date.now(),
+    summary: typeof m.summary==='string' ? m.summary : '',
+    reasoning: typeof m.reasoning==='string' ? m.reasoning : ''
+  };
+  review.solution = solution;
+  review.status = 'proposed';
+  review.updatedAt = Date.now();
+  pushLesionReviewHistory(review, 'solution_proposed', { solution });
+  saveLesionRevisions();
+  updateReviewCenterBadges();
+  return { ok:true, reason:null, review };
+}
+
+/* Decisão HUMANA sobre uma proposta "sem alteração" — nunca toca DATA, só
+   encerra o workflow como definitivo (mesmo papel de
+   approveAppliedReviewSolution para o caminho que chegou a ser aplicado). */
+function confirmNoChangeReviewSolution(reviewId){
+  const review = LESION_REVISIONS[reviewId];
+  if(!review || review.status!=='proposed' || !review.solution || review.solution.kind!=='no_change'){
+    return { ok:false, reason:'not_no_change_proposal', review:review||null };
+  }
+  review.status = 'accepted';
+  review.updatedAt = Date.now();
+  pushLesionReviewHistory(review, 'no_change_confirmed', null);
+  saveLesionRevisions();
+  updateReviewCenterBadges();
+  return { ok:true, reason:null, review };
+}
+
+/* Seleciona até `limit` (nunca mais que AI_PIPELINE_BATCH_LIMIT) revisões
+   elegíveis para o pipeline automático: reaproveita getBatchEligibleReviews()
+   (pending+rejected) e restringe ao escopo desta V1 — só lesão (nunca
+   pendência global), só 'pending' (triagem "ainda pendente"; nunca reabre
+   uma 'rejected' sozinha) e nunca uma com processamento desta IA já em
+   andamento. Determinístico: mais antiga primeiro. Puro — nunca grava nada. */
+function selectEligibleReviewsForAiPipeline(limit){
+  const cap = Math.max(0, Math.min(AI_PIPELINE_BATCH_LIMIT, Number(limit)||AI_PIPELINE_BATCH_LIMIT));
+  return getBatchEligibleReviews()
+    .filter(r => r && r.status==='pending' && !isGlobalReview(r)
+      && !(r.aiPipeline && r.aiPipeline.state==='processing'))
+    .sort((a,b)=>(Number(a.createdAt)||0)-(Number(b.createdAt)||0))
+    .slice(0, cap);
+}
+
+/* Provider MOCK — contrato que um adapter real (sempre atrás de um backend
+   seguro, NUNCA com chave no navegador) precisa cumprir: analyzeBatch(packet)
+   -> Promise<{results:[{reviewId, result, summary, reasoning,
+   proposedChanges?, manualAction?}]}>. Esta versão nunca inventa conteúdo
+   clínico: devolve sempre "no_change" com justificativa honesta — serve só
+   pra exercitar o pipeline fim-a-fim sem rede. Testes injetam seu próprio
+   provider (qualquer função pura e determinística). */
+const REVIEW_AI_MOCK_PROVIDER = {
+  async analyzeBatch(packet){
+    const reviews = (packet && Array.isArray(packet.reviews)) ? packet.reviews : [];
+    return { results: reviews.map(r => ({
+      reviewId: r.reviewId,
+      result: 'no_change',
+      summary: 'Provider mock — sem IA real conectada.',
+      reasoning: 'Nenhum provider real está configurado nesta instalação; nenhuma mudança foi inventada por segurança.',
+      proposedChanges: {}
+    })) };
+  }
+};
+// Único ponto de saída do pipeline — null em produção de propósito: o mock
+// NUNCA fica ligado por padrão (ver runAiSolutionPipeline/isAiPipelineProvider
+// Configured — o botão da UI fica desabilitado enquanto isto for null). Um
+// adapter real é reatribuir esta variável a outro objeto com o mesmo
+// contrato, nunca embutir chave aqui. Testes/dev passam opts.provider
+// explicitamente (ou atribuem REVIEW_AI_MOCK_PROVIDER aqui manualmente, nunca
+// pela UI) — nunca dependem deste default.
+let REVIEW_AI_PIPELINE_PROVIDER = null;
+function isAiPipelineProviderConfigured(){ return !!REVIEW_AI_PIPELINE_PROVIDER; }
+// Reentrância: impede uma 2ª chamada enquanto um lote ainda está em voo —
+// mesmo padrão já usado por STRUCTURAL_EXEC_IN_FLIGHT. Nunca persistido.
+let AI_PIPELINE_RUN_IN_FLIGHT = false;
+
+/* Puro por item: aplica o resultado da IA a UMA revisão já validada como
+   pertencente ao lote enviado. NUNCA chama authorizeAndApplyReviewSolution.
+   Reusa a mesma allowlist/validação do fluxo manual
+   (LESION_REVIEW_EDITABLE_FIELDS/validateProposedChanges) para "apply". */
+function applyAiPipelineResultToReview(review, raw, batchId){
+  const result = String((raw && raw.result) || '').trim();
+  const summary = String((raw && raw.summary) || '').trim();
+  const reasoning = String((raw && raw.reasoning) || '').trim();
+  const solutionText = [summary, reasoning].filter(Boolean).join('\n\n') || 'Proposta gerada pelo pipeline automático de IA.';
+
+  if(result==='no_change'){
+    const r = setReviewNoChangeSolution(review.id, solutionText, { summary, reasoning });
+    review.aiPipeline = { state: r.ok ? 'proposed' : 'ai_error', batchId, completedAt: Date.now(), error: r.ok ? null : r.reason };
+    return { reviewId: review.id, outcome: r.ok ? 'no_change' : 'error', reason: r.ok ? null : r.reason };
+  }
+  if(result==='manual_action_required'){
+    const manual = (raw.manualAction && typeof raw.manualAction==='object') ? raw.manualAction : {};
+    const actionType = String(manual.type||'').trim() || null;
+    let suggestedPlacement = null;
+    if(actionType==='additional_section_placement'){
+      const v = validateReviewAiPlacement(manual.suggestedPlacement);
+      if(!v.valid){
+        review.aiPipeline = { state:'ai_error', batchId, completedAt: Date.now(), error:'invalid_placement:'+v.reason };
+        return { reviewId: review.id, outcome:'error', reason:'invalid_placement:'+v.reason };
+      }
+      suggestedPlacement = { section: v.placement.s, site: v.placement.site || null };
+    }
+    const description = String(manual.description||'').trim() || null;
+    const reason = description || actionType || 'manual_action_required';
+    const flagged = flagManualActionRequired(review.id, solutionText, reason, { type:actionType, description, suggestedPlacement });
+    review.aiPipeline = { state: flagged.ok ? 'needs_human_review' : 'ai_error', batchId, completedAt: Date.now(), error: flagged.ok ? null : flagged.reason };
+    return { reviewId: review.id, outcome: flagged.ok ? 'needs_human_review' : 'error', reason: flagged.ok ? null : flagged.reason };
+  }
+  if(result==='apply'){
+    const rawChanges = (raw.proposedChanges===undefined || raw.proposedChanges===null) ? {} : raw.proposedChanges;
+    if(typeof rawChanges!=='object' || Array.isArray(rawChanges)){
+      review.aiPipeline = { state:'ai_error', batchId, completedAt: Date.now(), error:'invalid_changes' };
+      return { reviewId: review.id, outcome:'error', reason:'invalid_changes' };
+    }
+    const keys = Object.keys(rawChanges);
+    const forbidden = keys.filter(k=>!LESION_REVIEW_EDITABLE_FIELDS.includes(k));
+    if(forbidden.length || keys.length===0){
+      const reason = forbidden.length ? ('forbidden_field:'+forbidden[0]) : 'empty_changes';
+      review.aiPipeline = { state:'ai_error', batchId, completedAt: Date.now(), error: reason };
+      return { reviewId: review.id, outcome:'error', reason };
+    }
+    const check = validateProposedChanges(rawChanges);
+    if(!check.valid){
+      review.aiPipeline = { state:'ai_error', batchId, completedAt: Date.now(), error: check.reason };
+      return { reviewId: review.id, outcome:'error', reason: check.reason };
+    }
+    // ÚNICA chamada que grava a proposta — NUNCA authorizeAndApplyReviewSolution.
+    const proposed = setReviewSolution(review.id, solutionText, check.changes, { summary, reasoning });
+    review.aiPipeline = { state: proposed.ok ? 'proposed' : 'ai_error', batchId, completedAt: Date.now(), error: proposed.ok ? null : proposed.reason };
+    return { reviewId: review.id, outcome: proposed.ok ? 'proposed' : 'error', reason: proposed.ok ? null : proposed.reason };
+  }
+  // result desconhecido/"analysis" fora de pendência global -> erro, nunca inventa.
+  review.aiPipeline = { state:'ai_error', batchId, completedAt: Date.now(), error:'invalid_result:'+(result||'empty') };
+  return { reviewId: review.id, outcome:'error', reason:'invalid_result:'+(result||'empty') };
+}
+
+/* Orquestrador — ÚNICA entrada da Etapa B. Nunca chama createLesionReview,
+   authorizeAndApplyReviewSolution, approveAppliedReviewSolution,
+   rollbackAppliedReviewSolution, executeStructuralPlan,
+   rollbackStructuralExecution, importReviewAiSolution ou
+   processReviewAiBatchItem (fluxo manual de conveniência — autoaplica; este
+   pipeline nunca passa por ali), nunca referencia DATA/SEED — só
+   LESION_REVISIONS, pelas mesmas funções já usadas pelo fluxo manual
+   (setReviewSolution/setReviewNoChangeSolution/flagManualActionRequired).
+   Recusa (ok:false) sem tocar em nada se não houver provider configurado
+   (produção, por padrão) ou se já houver um lote em voo (reentrância).
+   opts: {limit, provider, onProgress}. */
+async function runAiSolutionPipeline(opts){
+  const o = opts || {};
+  const provider = o.provider || REVIEW_AI_PIPELINE_PROVIDER;
+  const onProgress = typeof o.onProgress==='function' ? o.onProgress : ()=>{};
+  if(!provider) return { ok:false, reason:'no_provider_configured' };
+  if(AI_PIPELINE_RUN_IN_FLIGHT) return { ok:false, reason:'already_running' };
+  AI_PIPELINE_RUN_IN_FLIGHT = true;
+  try{
+  const batchId = 'aibatch_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
+
+  const eligible = selectEligibleReviewsForAiPipeline(o.limit);
+  const total = eligible.length;
+  onProgress({ phase:'selected', total });
+  if(total===0) return { ok:true, batchId, total:0, proposed:0, noChange:0, needsHumanReview:0, errors:0, results:[] };
+
+  const sentIds = new Set(eligible.map(r=>r.id));
+  const now0 = Date.now();
+  eligible.forEach(r=>{ r.aiPipeline = { state:'queued', batchId, queuedAt: now0 }; });
+  saveLesionRevisions();
+
+  const packetBuilt = buildReviewAiBatchPacket(eligible.map(r=>r.id));
+  if(!packetBuilt.ok){
+    eligible.forEach(r=>{ r.aiPipeline = { state:'ai_error', batchId, error: packetBuilt.reason||'packet_failed' }; });
+    saveLesionRevisions();
+    return { ok:false, batchId, total, reason: packetBuilt.reason||'packet_failed' };
+  }
+
+  eligible.forEach(r=>{ r.aiPipeline = { state:'processing', batchId, queuedAt: now0, startedAt: Date.now() }; });
+  saveLesionRevisions();
+  onProgress({ phase:'processing', total, done:0 });
+
+  let providerResponse;
+  try{
+    providerResponse = await provider.analyzeBatch(packetBuilt.packet);
+  }catch(e){
+    eligible.forEach(r=>{ r.aiPipeline = { state:'ai_error', batchId, error: String((e&&e.message)||e) }; });
+    saveLesionRevisions();
+    return { ok:false, batchId, total, reason:'provider_error', detail: String((e&&e.message)||e) };
+  }
+  const rawResults = (providerResponse && Array.isArray(providerResponse.results)) ? providerResponse.results : [];
+
+  const results = [];
+  const seenReviewIds = {};
+  let doneCount = 0;
+
+  for(const raw of rawResults){
+    const reviewId = (raw && typeof raw==='object') ? String(raw.reviewId||'') : '';
+    if(!reviewId || !sentIds.has(reviewId)){
+      // reviewId desconhecido/fora do lote enviado -> rejeitado, nunca toca nada.
+      results.push({ reviewId: reviewId||null, outcome:'rejected', reason: reviewId ? 'review_id_not_in_batch' : 'missing_review_id' });
+      continue;
+    }
+    if(seenReviewIds[reviewId]){
+      // resposta duplicada pro mesmo reviewId -> rejeitada/normalizada com segurança (só a 1ª conta).
+      results.push({ reviewId, outcome:'rejected', reason:'duplicate_review_id' });
+      continue;
+    }
+    seenReviewIds[reviewId] = true;
+    const review = LESION_REVISIONS[reviewId];
+    try{
+      results.push(applyAiPipelineResultToReview(review, raw, batchId));
+    }catch(e){
+      if(review) review.aiPipeline = { state:'ai_error', batchId, error: String((e&&e.message)||e) };
+      results.push({ reviewId, outcome:'error', reason: String((e&&e.message)||e) });
+    }
+    doneCount++;
+    onProgress({ phase:'processing', total, done:doneCount });
+  }
+
+  // elegível que não apareceu na resposta do provider também é erro (nunca
+  // fica "processing" para sempre); nenhum bloqueia os demais.
+  for(const r of eligible){
+    if(!seenReviewIds[r.id]){
+      r.aiPipeline = { state:'ai_error', batchId, error:'no_result_from_provider' };
+      results.push({ reviewId: r.id, outcome:'error', reason:'no_result_from_provider' });
+    }
+  }
+
+  saveLesionRevisions();
+  updateReviewCenterBadges();
+
+  const summary = results.reduce((acc, it)=>{
+    if(it.outcome==='proposed') acc.proposed++;
+    else if(it.outcome==='no_change') acc.noChange++;
+    else if(it.outcome==='needs_human_review') acc.needsHumanReview++;
+    else acc.errors++;
+    return acc;
+  }, { proposed:0, noChange:0, needsHumanReview:0, errors:0 });
+
+  onProgress(Object.assign({ phase:'done', total }, summary));
+  return Object.assign({ ok:true, batchId, total, results }, summary);
+  }finally{
+    AI_PIPELINE_RUN_IN_FLIGHT = false;
+  }
+}
+
 function countPendingLesionReviews(){ return getPendingReviews().length; }
 function countReadyLesionSolutions(){ return getReadySolutions().length; }
 
@@ -19247,7 +19533,11 @@ function openReadySolutionsModal(){
       <div class="review-center-list" id="manual-list" hidden></div>
       <div class="review-center-list" id="history-list" hidden></div>
       <div class="review-center-list" id="applied-list"></div>
-      <div class="modal-actions"><button class="btn btn-ghost" id="ready-solutions-close">fechar</button></div>
+      <div id="ai-pipeline-status" class="modal-sub" hidden></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="ready-solutions-close">fechar</button>
+        <button class="btn btn-primary" id="ai-pipeline-run" title="Analisa até 20 revisões pendentes e grava propostas em SOLUÇÕES — nunca aplica nada sozinha.">🤖 Gerar soluções com IA</button>
+      </div>
     </div>`;
   document.body.appendChild(ov);
   const proposedList = ov.querySelector('#proposed-list');
@@ -19324,23 +19614,26 @@ function openReadySolutionsModal(){
         proposedList.appendChild(grow);
         return;
       }
+      const isNoChange = !!(r.solution && r.solution.kind==='no_change'); // pipeline de IA: provável falso positivo
       const changes = (r.solution && r.solution.proposedChanges) || {};
-      const diffRows = describeLesionReviewFieldChanges(meta.lesion, changes, Object.keys(changes));
+      const diffRows = isNoChange ? [] : describeLesionReviewFieldChanges(meta.lesion, changes, Object.keys(changes));
       const row = document.createElement('div');
-      row.className = 'review-center-row';
+      row.className = 'review-center-row' + (isNoChange ? ' review-center-row-no-change' : '');
       row.innerHTML = `
         <div class="review-center-row-main">
-          <div class="review-center-row-title">${meta.name}</div>
+          <div class="review-center-row-title">${meta.name}${isNoChange ? ' <span class="mini-tag" title="A IA concluiu que a triagem pode ter sido um falso positivo — decisão humana necessária">SEM ALTERAÇÃO / PROVÁVEL FALSO POSITIVO</span>' : ' <span class="mini-tag">ALTERAÇÃO PROPOSTA</span>'}</div>
           <div class="review-center-row-meta">${meta.sub?meta.sub+' · ':''}proposta em ${when}</div>
           <div class="review-center-row-request"><b>Pedido:</b> ${(r.requestText||'').replace(/</g,'&lt;')}</div>
-          <div class="review-center-row-solution"><b>Solução proposta:</b> ${((r.solution&&r.solution.text)||'').replace(/</g,'&lt;')}</div>
+          <div class="review-center-row-solution"><b>${isNoChange ? 'Conclusão da IA' : 'Solução proposta'}:</b> ${((r.solution&&r.solution.text)||'').replace(/</g,'&lt;')}</div>
           ${renderFieldChangesHtml(diffRows)}
         </div>
         <div class="review-center-row-actions">
           ${meta.found?'<button type="button" class="btn btn-ghost review-open-lesion">ver lesão</button>':''}
           <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}${reviewResolveButtonHtml(r)}
-          <button type="button" class="btn btn-primary review-authorize">✓ autorizar correção</button>
-          <button type="button" class="btn btn-ghost review-reject-proposal">✕ recusar proposta</button>
+          ${isNoChange
+            ? '<button type="button" class="btn btn-primary review-confirm-no-change">✓ Confirmar sem alteração</button>'
+            : '<button type="button" class="btn btn-primary review-authorize">✓ autorizar correção</button>'}
+          <button type="button" class="btn btn-ghost review-reject-proposal">✕ Rejeitar</button>
           <button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>
         </div>`;
       if(meta.found) row.querySelector('.review-open-lesion').onclick = ()=>{ closeAllAndCleanup(); openDetail(meta.lesion.id); };
@@ -19348,18 +19641,26 @@ function openReadySolutionsModal(){
       const pEditBtn = row.querySelector('.review-edit-request'); // PROTEÇÃO 091d
       if(pEditBtn) pEditBtn.onclick = ()=> openEditReviewRequestModal(r.id, renderBothLists);
       wireReviewResolveButton(row, r.id, renderBothLists); // PROTEÇÃO 091f
-      row.querySelector('.review-authorize').onclick = async ()=>{
-        const res = authorizeAndApplyReviewSolution(r.id);
-        if(res.ok){
-          await saveLesionRevisions();
-          renderAll(); // DATA mudou de verdade — mantém a grade/lista principal em dia
-          toast('Correção autorizada e aplicada. Aguardando validação.');
-          renderBothLists();
-          showTab('applied');
-        } else {
-          toast('Não foi possível aplicar a correção (' + (res.reason||'erro') + ').');
-        }
-      };
+      if(isNoChange){
+        row.querySelector('.review-confirm-no-change').onclick = async ()=>{
+          const res = confirmNoChangeReviewSolution(r.id);
+          if(res.ok){ await saveLesionRevisions(); toast('Confirmado — nenhuma alteração necessária. Revisão encerrada.'); renderBothLists(); }
+          else toast('Não foi possível confirmar (' + (res.reason||'erro') + ').');
+        };
+      } else {
+        row.querySelector('.review-authorize').onclick = async ()=>{
+          const res = authorizeAndApplyReviewSolution(r.id);
+          if(res.ok){
+            await saveLesionRevisions();
+            renderAll(); // DATA mudou de verdade — mantém a grade/lista principal em dia
+            toast('Correção autorizada e aplicada. Aguardando validação.');
+            renderBothLists();
+            showTab('applied');
+          } else {
+            toast('Não foi possível aplicar a correção (' + (res.reason||'erro') + ').');
+          }
+        };
+      }
       row.querySelector('.review-reject-proposal').onclick = ()=>{
         openReasonPromptModal(r.id, async (reason)=>{
           const res = rejectProposedReviewSolution(r.id, reason);
@@ -19573,6 +19874,54 @@ function openReadySolutionsModal(){
     : getManualActionSolutions().length>0 ? 'manual'
     : getProposedSolutions().length>0 ? 'proposed' : 'applied');
   ov.querySelector('#ready-solutions-close').onclick = closeAllAndCleanup;
+
+  // "🤖 Gerar soluções com IA" — Etapa B: só chama runAiSolutionPipeline()
+  // (setReviewSolution/setReviewNoChangeSolution/flagManualActionRequired por
+  // baixo). NUNCA authorizeAndApplyReviewSolution. Progresso inline, sem
+  // modal por item (ver Etapa G) — some ao final, deixando o resumo.
+  const aiRunBtn = ov.querySelector('#ai-pipeline-run');
+  const aiStatusEl = ov.querySelector('#ai-pipeline-status');
+  // Desabilitado sempre que não há provider real configurado (produção,
+  // por padrão — ver REVIEW_AI_PIPELINE_PROVIDER/isAiPipelineProviderConfigured).
+  // O mock existe só pra testes/dev; nunca é ligado automaticamente pela UI.
+  if(aiRunBtn && !isAiPipelineProviderConfigured()){
+    aiRunBtn.disabled = true;
+    aiRunBtn.title = 'Nenhum provider de IA configurado nesta instalação ainda.';
+  }
+  if(aiRunBtn) aiRunBtn.onclick = async ()=>{
+    aiRunBtn.disabled = true;
+    aiStatusEl.hidden = false;
+    aiStatusEl.textContent = 'IA — preparação de soluções. Selecionando revisões pendentes…';
+    const res = await runAiSolutionPipeline({
+      onProgress: (p)=>{
+        if(p.phase==='selected'){
+          aiStatusEl.textContent = p.total===0
+            ? 'Nenhuma revisão pendente elegível agora.'
+            : ('IA — preparação de soluções. Processando: 0 / ' + p.total);
+        } else if(p.phase==='processing'){
+          aiStatusEl.textContent = 'IA — preparação de soluções. Processando: ' + p.done + ' / ' + p.total;
+        }
+      }
+    });
+    aiRunBtn.disabled = false;
+    if(!res.ok){
+      aiStatusEl.textContent = 'Não foi possível gerar soluções (' + (res.reason||'erro') + ').';
+      return;
+    }
+    if(res.total===0){
+      aiStatusEl.textContent = 'Nenhuma revisão pendente elegível agora. Nenhuma alteração no catálogo foi aplicada.';
+      return;
+    }
+    aiStatusEl.innerHTML =
+      res.total + ' triagens analisadas · ' + res.proposed + ' solução(ões) proposta(s) · ' +
+      res.noChange + ' sem alteração · ' + res.needsHumanReview + ' revisão humana necessária · ' +
+      res.errors + ' erro(s). Nenhuma alteração no catálogo foi aplicada.' +
+      ' <button type="button" class="btn btn-ghost" id="ai-pipeline-open-solutions">Abrir Soluções</button>';
+    const openBtn = aiStatusEl.querySelector('#ai-pipeline-open-solutions');
+    if(openBtn) openBtn.onclick = ()=>{ renderBothLists(); showTab('proposed'); };
+    renderBothLists();
+    if(getProposedSolutions().length>0) showTab('proposed');
+  };
 }
 
 
