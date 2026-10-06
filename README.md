@@ -1,5 +1,48 @@
 # Atlas Radiológico
 
+### Integração real de IA — Etapa I (sem deploy nesta entrega)
+
+Atlas → callable Firebase `analyzeAtlasReviewBatch` → OpenAI Responses →
+pipeline existente → **Soluções**. `apply` vira proposta, `no_change` exige
+confirmação humana e ação manual continua manual. Nada é autoaplicado.
+O botão só habilita com Functions SDK e login autorizado. Backend Node 22,
+região us-central1, projeto `atlas-radiologico`, limite 20 e 512 KiB.
+Somente a chave OpenAI vai para Secret Manager. Hosting/Rules não mudam.
+
+Comandos PowerShell, a partir da pasta do projeto (executar apenas quando
+aprovar a operação correspondente; cadastro/deploy ainda não realizados):
+
+```powershell
+npm.cmd --prefix functions ci --ignore-scripts --no-audit --no-fund
+npm.cmd --prefix functions test
+firebase.cmd functions:secrets:set OPENAI_API_KEY --project atlas-radiologico
+firebase.cmd deploy --only functions:analyzeAtlasReviewBatch --project atlas-radiologico
+```
+
+O deploy exige um projeto apto a Cloud Functions 2nd gen (plano Blaze),
+login/permissões Firebase e Secret Manager. O modelo foi configurado como
+solicitado; disponibilidade/permissão de `gpt-6.1-sol` na conta OpenAI ainda
+não foi validada com uma chamada real. Não trocar de modelo silenciosamente.
+
+Smoke após deploy, no Console do Atlas com o HTML desta entrega e login:
+
+```js
+try {
+  await firebase.functions(fbAuth.app, 'us-central1')
+    .httpsCallable('analyzeAtlasReviewBatch')({reviews: []});
+  console.error('Unexpected success');
+} catch (e) {
+  console.log(e.code); // esperado: functions/invalid-argument
+}
+```
+
+O lote vazio valida callable + autenticação e é recusado antes de ler a chave
+ou chamar OpenAI; não processa revisão, não salva nem escreve no Firestore.
+Primeiro lote real: publicar/carregar este HTML, entrar no Atlas, abrir
+**Soluções disponíveis → Gerar soluções com IA**; escolhe no máximo 20
+pendências de lesão mais antigas. Revisar as propostas em Soluções, sem
+aplicar em massa. Os testes usam OpenAI/Firestore mockados, nunca lotes reais.
+
 ### Qualidade dos diferenciais nas revisões por IA (em revisão, sem publicação)
 
 Ao preparar pedidos individuais ou em lote, o Atlas sinaliza descrições com

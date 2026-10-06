@@ -8,6 +8,15 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**Etapa I — backend callable OpenAI implementado, aguardando revisão/deploy:**
+base real `812705a`, working tree inicialmente limpa. Não existiam config
+Firebase/Functions locais, embora o projeto do app seja `atlas-radiologico`.
+Novos arquivos configuram somente Functions; região escolhida us-central1,
+Node 22. SDK Functions compat 10.13.0 integrado ao login já existente.
+Sem chave cadastrada/deploy/lotes reais. Backend não escreve Firestore;
+pipeline mantém todas as soluções como propostas humanas. Detalhes e
+comandos seguros de smoke/deploy no README; testes e baseline no diário.
+
 **Revisões por IA — qualidade dos diferenciais (working tree, aguardando
 revisão; sem commit/publicação):** `index.html` passou a detectar formatos
 genéricos em `notes` e a distinguir uma lacuna histórica já resolvida no

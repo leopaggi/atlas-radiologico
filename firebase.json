@@ -1,0 +1,8 @@
+{
+  "functions": [{
+    "source": "functions",
+    "codebase": "atlas-review-ai",
+    "runtime": "nodejs22",
+    "ignore": ["node_modules", ".git", "*.log", ".env*", ".secret*", "test"]
+  }]
+}

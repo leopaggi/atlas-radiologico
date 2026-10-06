@@ -1,5 +1,24 @@
 # Diario de desenvolvimento
 
+## Etapa I — integração Firebase/OpenAI, somente implementação local
+
+Criado o backend de análise autenticado, com segredo no Secret Manager,
+limites de lote/payload e resposta estruturada validada. O botão existente
+passa a usar a callable quando há SDK e login; indisponibilidade continua
+bloqueando o botão. A IA só apresenta propostas e nunca aplica na lesão.
+Não houve cadastro de chave, deploy, stage, commit, push ou análise real.
+Arquivos: config Functions (`firebase.json`, `.firebaserc`), `functions/`
+(entrypoint, lógica, dependências/lock, testes e ignore local), `index.html`,
+`tests/ai-firebase-provider.test.js`, ajuste de dois testes Cloudinary antigos
+em `tests/quiz-images.test.js`, README/AI e Contexto Mestre.
+Backend: 19/19; provider/pipeline: 29/29; multi-device: 185/185.
+Lesion-review: 172/173, mesma falha estática de recorte do import no HEAD.
+Suíte ampla: 2546 testes reportados, 2465 PASS, 51 FAIL, 5 TODO; quatro
+arquivos abortam antes de reportar testes (CRLF/fixtures ausentes), também
+presentes na baseline. Comparação no mesmo formato CRLF e com a ausência
+original de functions/ simulada: base 2538 testes, 2457 PASS, 51 FAIL,
+5 TODO; nenhum novo arquivo/cenário com falha detectado.
+
 ## Qualidade dos diferenciais em revisões por IA (sem commit/publicação)
 
 O Atlas agora identifica frases antigas/genéricas ou listas de diagnósticos

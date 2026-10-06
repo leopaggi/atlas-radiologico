@@ -1,5 +1,20 @@
 # AI.md — instruções para assistentes de IA (Claude, DeepSeek, ChatGPT, etc.)
 
+## Etapa I — callable OpenAI (implementada localmente, sem deploy)
+
+`functions/index.js` exporta somente `analyzeAtlasReviewBatch` (2nd gen,
+Node 22, us-central1). `OPENAI_API_KEY` é secret do Firebase, nunca frontend.
+O backend usa OpenAI Responses (`gpt-6.1-sol`, `store:false`, sem tools) com
+JSON Schema estrito e valida novamente IDs, resultado, campos e tipos.
+Exige Firebase Auth e a mesma conta verificada permitida pelo Atlas;
+1–20 revisões `scope:lesion`, payload máximo 512 KiB. Não escreve Firestore.
+O packet é projetado para não enviar metadados de imagem/ownership/snapshots.
+`REVIEW_AI_FIREBASE_PROVIDER` usa SDK compat 10.13.0 e só fica ativo com SDK
+e login autorizado. Falha vira `ai_error`; nenhum fallback para mock.
+`runAiSolutionPipeline` permanece proposta-only, inclusive `no_change`.
+Não reativar o antigo backend de delete Cloudinary. Config Firebase local
+é somente Functions, sem definição/deploy de Hosting ou Firestore Rules.
+
 ## Revisões por IA — diferenciais estruturados (em revisão, sem publicação)
 
 A ponte individual e a de lote agora leem `notes` ATUAL, além de `requestText`:

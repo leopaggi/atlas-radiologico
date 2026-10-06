@@ -407,12 +407,12 @@ test('EDITAR (upload diferido): URL externa continua sendo salva como URL, sem u
   assert.match(src, /img-add-url'\)\.onclick=[\s\S]*?pendingImgs\.push\(\{label:'',data:url,source:'url'\}\)/);
 });
 
-test('SEM BACKEND: o frontend não tem mais gancho de delete remoto nem script de Functions', () => {
+test('SEM DELETE REMOTO: Functions serve somente à análise IA, nunca ao delete Cloudinary', () => {
   assert.doesNotMatch(html, /requestCloudinaryAssetDeletion/);
   assert.doesNotMatch(html, /hasSecureCloudinaryIdentifier/);
   assert.doesNotMatch(html, /deleteCloudinaryAsset/);
-  assert.doesNotMatch(html, /firebase-functions-compat/);
-  assert.doesNotMatch(html, /firebase\.functions/);
+  assert.match(html, /firebase-functions-compat/);
+  assert.match(html, /httpsCallable\('analyzeAtlasReviewBatch'/);
 });
 
 test('SEM SEGREDO: o frontend não contém CLOUDINARY_API_SECRET nem api_secret', () => {
@@ -421,8 +421,9 @@ test('SEM SEGREDO: o frontend não contém CLOUDINARY_API_SECRET nem api_secret'
   assert.doesNotMatch(html, /CLOUDINARY_API_KEY/);
 });
 
-test('SEM BACKEND: não existe diretório functions/ nem teste de delete remoto', () => {
-  assert.equal(fs.existsSync(path.resolve(__dirname, '..', 'functions')), false);
+test('SEM DELETE REMOTO: backend de análise não contém função de exclusão Cloudinary', () => {
+  const backend = fs.readFileSync(path.resolve(__dirname, '..', 'functions', 'index.js'), 'utf8');
+  assert.doesNotMatch(backend, /cloudinary|deleteCloudinaryAsset|destroy\(/i);
   assert.equal(fs.existsSync(path.resolve(__dirname, '..', 'tests', 'cloudinary-deletion.test.js')), false);
 });
 
