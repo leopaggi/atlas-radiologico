@@ -6,6 +6,19 @@
 // index.html) e as amarrações estáticas do pipeline de sync. Os cenários
 // multi-dispositivo ponta a ponta (nuvem falsa compartilhada) ficam em
 // tests/multi-device-sync.test.js, que já tem o harness completo.
+//
+// PROTEÇÃO 095 (2026-10-05) — o conteúdo de LESION_REVISIONS sozinho passou
+// de 1 MiB (bug real: checkChunkSize recusava a escrita com uma mensagem de
+// "imagem" que não se aplicava). O campo deixou de viajar embutido no
+// documento principal e passou a ser dividido em pedaços determinísticos
+// (splitLesionRevisionsIntoShards, por bytes — ver index.html). O MERGE em
+// si (mergeLesionRevisions) e a amarração em reconcileStateWithRemote/
+// adoptRemoteStateForNewDevice/buildSyncAudit/backup NÃO mudaram — só onde
+// e como o resultado do merge é persistido no Firestore. Testes de round-
+// trip write→read com pedaços reais (vários KB/MB, multi-dispositivo,
+// legado→novo) ficam em tests/lesion-revisions-sharding.test.js (arquivo
+// novo, não mistura com a investigação em andamento em
+// multi-device-sync.test.js).
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -134,17 +147,37 @@ test('084 MERGE: puro — não muta as entradas; idempotente (merge(m,m) === m)'
 // Amarrações estáticas do pipeline (garante que cada ponto do sync participa)
 // ---------------------------------------------------------------------------
 
-test('084 PIPELINE: writeShardedState grava lesionRevisions no meta e une com o remoto DENTRO da transação', () => {
+test('095 PIPELINE: writeShardedState calcula pedaços de lesionRevisions SOBRE O ESTADO MESCLADO e nunca mais embute o campo no meta', () => {
   const src = extractFunction(html, 'writeShardedState');
-  assert.match(src, /lesionRevisions:\s*stripUndefinedDeep\(LESION_REVISIONS \|\| \{\}\)/);
-  assert.match(src, /mergeLesionRevisions\((?:metaPayloadBase|txBase)\.lesionRevisions,\s*remoteMeta\.lesionRevisions\)/);
-  assert.match(src, /lesionRevisions:\s*writeLesionRevisions/);
-  assert.match(src, /lesionRevisions:\s*structuralSnapshotProgressToFirestore\(metaPayload\.lesionRevisions\)/, 'escrita codifica progresso embutido no snapshot (sem arrays aninhados)');
+  assert.match(src, /lesionRevisions:\s*stripUndefinedDeep\(LESION_REVISIONS \|\| \{\}\)/, 'local ainda carregado em memória (collectPendingSnapshotRefs, fold de merges)');
+  assert.match(src, /mergeLesionRevisions\((?:metaPayloadBase|txBase)\.lesionRevisions,\s*remoteMeta\.lesionRevisions\)/, 'merge local∪remoto continua DENTRO da transação, antes do sharding');
+  assert.match(src, /splitLesionRevisionsIntoShards\(writeLesionRevisions\)/, 'pedaços calculados sobre o JÁ MESCLADO (só pode crescer)');
+  assert.match(src, /lesionRevisionsShardsEncoded\s*=\s*lesionRevisionsShards\.map\(s\s*=>\s*structuralSnapshotProgressToFirestore\(s\)\)/, 'pedaços passam pelo codec de progresso ANTES de qualquer checagem/escrita');
+  assert.match(src, /checkChunkSize\(\s*lesionRevisionsShardDocs\[i\],\s*`revisões de lesão/, 'checagem autoritativa roda sobre o ENVELOPE {entries} JÁ CODIFICADO (payload real), nunca sobre o pedaço cru — com label próprio (não mais a mensagem de imagem/Cloudinary)');
+  assert.match(src, /lesionRevisionsChunkCount:\s*lesionRevisionsShards\.length/, 'meta passa a guardar só a CONTAGEM de pedaços');
+  assert.match(src, /delete metaPayload\.lesionRevisions/, 'o campo embutido nunca mais é publicado — substituição total do .set() some com ele');
+  assert.match(src, /tx\.set\(FB_LESION_REVISIONS_CHUNK_REF\(i\),\s*lesionRevisionsShardDocs\[i\]\)/, 'cada pedaço (envelope {entries} já codificado, o MESMO objeto já checado por checkChunkSize) é escrito em seu próprio documento, na MESMA transação atômica do meta/DATA');
+  assert.doesNotMatch(src, /firestoreMeta\s*=\s*\{\.\.\.metaPayload,[^}]*lesionRevisions:/, 'firestoreMeta não reintroduz o campo embutido');
 });
 
-test('084 PIPELINE: readShardedState devolve lesionRevisions com fallback {} para documento antigo', () => {
+test('095 PIPELINE: readShardedState aceita formato legado (campo embutido) OU novo (pedaços), nunca os dois', () => {
   const src = extractFunction(html, 'readShardedState');
-  assert.match(src, /lesionRevisions:\s*structuralSnapshotProgressFromFirestore\(\(meta\.lesionRevisions && typeof meta\.lesionRevisions === 'object' && !Array\.isArray\(meta\.lesionRevisions\)\) \? meta\.lesionRevisions : \{\}\)/, 'leitura decodifica progresso embutido no snapshot (tuplas)');
+  assert.match(src, /lesionRevisionsChunkCount\s*=\s*Number\(meta\.lesionRevisionsChunkCount\)\|\|0/);
+  assert.match(src, /FB_LESION_REVISIONS_CHUNK_REF\(i\)\.get\(/, 'formato novo: lê os pedaços');
+  assert.match(src, /structuralSnapshotProgressFromFirestore\(entries\)/, 'pedaços decodificam o progresso embutido no snapshot (tuplas)');
+  assert.match(src, /\}else if\(meta\.lesionRevisions && typeof meta\.lesionRevisions===.object. && !Array\.isArray\(meta\.lesionRevisions\)\)\{/, 'formato legado: cai pro campo embutido quando NÃO há pedaços (chunkCount 0/ausente)');
+  assert.match(src, /combinedLesionRevisions\s*=\s*structuralSnapshotProgressFromFirestore\(meta\.lesionRevisions\)/, 'legado também decodifica o progresso embutido no snapshot');
+  assert.match(src, /lesionRevisions:\s*combinedLesionRevisions/, 'retorno único — quem chama nunca sabe se veio de pedaços ou do legado');
+});
+
+test('095 COMPATIBILIDADE: nenhum outro ponto de leitura precisou mudar — todos consomem remote.lesionRevisions já reconstruído por readShardedState', () => {
+  // reconcileStateWithRemote/adoptRemoteStateForNewDevice/buildSyncAudit/
+  // readCloudAuditFromServer (cobertos nos testes 084 abaixo) recebem
+  // `remote` sempre de uma chamada a readShardedState() — nunca leem
+  // meta.lesionRevisions ou os pedaços diretamente. Única amarração nova
+  // exigida pela 095 nesses consumidores: nenhuma (ver index.html).
+  assert.doesNotMatch(extractFunction(html, 'reconcileStateWithRemote'), /lesionRevisionsChunkCount|FB_LESION_REVISIONS_CHUNK_REF/);
+  assert.doesNotMatch(extractFunction(html, 'adoptRemoteStateForNewDevice'), /lesionRevisionsChunkCount|FB_LESION_REVISIONS_CHUNK_REF/);
 });
 
 test('084 PIPELINE: reconcile/persist/no-op/pull/adoção de device novo cobrem lesionRevisions sem marcar dirty', () => {

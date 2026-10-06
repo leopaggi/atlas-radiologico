@@ -187,6 +187,7 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
   const calls = [];
   const metaRef = { __kind: 'meta' };
   const chunkRef = (i) => ({ __kind: 'chunk', __i: i, delete: async () => { calls.push({ kind: 'delete', i }); } });
+  const lrChunkRef = (i) => ({ __kind: 'lrchunk', __i: i, delete: async () => { calls.push({ kind: 'lrdelete', i }); } }); // PROTEÇÃO 095
   const ctx = {
     deviceBootstrapPending: !!deviceBootstrapPending,
     canonicalRestoreInProgress: false,
@@ -202,6 +203,7 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
     DATA_CHUNK_SIZE: 150,
     FB_META_REF: () => metaRef,
     FB_CHUNK_REF: chunkRef,
+    FB_LESION_REVISIONS_CHUNK_REF: lrChunkRef, // PROTEÇÃO 095
     withFirebaseTimeout: (p) => p,
     setSyncStatus: () => {},
     firebase: { firestore: { FieldValue: { serverTimestamp: () => 'TS' } } },
@@ -246,6 +248,8 @@ function makeWriteShardedStateContext({ deviceBootstrapPending, data, knownRevis
     'let lastWriteStaleImagesBlocked = 0;\n' +
     "const PENDING_LOCAL_IMAGE_ADDS_KEY = 'atlas:pendingLocalImageAdds';\nlet PENDING_LOCAL_IMAGE_ADDS = {};\n" +
     helpers079c + '\n' +
+    'const LESION_REVISIONS_SHARD_TARGET_BYTES = 700*1024;\n' + // PROTEÇÃO 095
+    extractFunction(html, 'splitLesionRevisionsIntoShards').source + '\n' +
     writeShardedStateFn.source,
     ctx, { filename: 'write-sharded-state.js' }
   );
@@ -746,6 +750,8 @@ function makeAdoptContext({ localData, remoteMeta, remoteChunks } = {}) {
     ORDER_KEY: 'order', SITEORDER_KEY: 'site-order', IMAGE_TOMBSTONES_KEY: 'tombstones',
     isQuarantinedSeedId: (id) => false,
     CLOUD_REVISION_FIELD: 'revision',
+    STATE_SCHEMA_VERSION: 5, // PROTEÇÃO 095C
+    setSyncStatus: () => {}, toast: () => {},
     lastKnownCloudRevision: null,
     window: {},
     withFirebaseTimeout: (p) => p,

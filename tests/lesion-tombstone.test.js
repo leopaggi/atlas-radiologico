@@ -152,6 +152,7 @@ const snapshotFlagConst = html.slice(html.indexOf('let STRUCTURAL_SNAPSHOT_EXTER
 const snapshotSchemaConst = html.slice(html.indexOf('const STRUCTURAL_SNAPSHOT_SCHEMA_VERSION = '),
   html.indexOf('function structuralSnapshotLocalCacheKey('));
 const gateStaleImagesFn = extractFunction(html, 'gateStaleLocalOnlyImagesForWrite');
+const splitLesionRevisionsIntoShardsFn = extractFunction(html, 'splitLesionRevisionsIntoShards'); // PROTEÇÃO 095
 const writeShardedStateFn = extractFunction(html, 'writeShardedState');
 const writeShardedStateWithConflictRetryFn = extractFunction(html, 'writeShardedStateWithConflictRetry');
 const writeShardedStateSerializedFn = extractFunction(html, 'writeShardedStateSerialized');
@@ -211,8 +212,19 @@ function makeFakeCloud() {
         delete: async () => { store.delete(key); }
       };
     },
+    // PROTEÇÃO 095 — pedaços de lesionRevisions, mesmo mecanismo dos pedaços
+    // de DATA acima, só com prefixo de chave próprio (namespace separado).
+    FB_LESION_REVISIONS_CHUNK_REF: (i) => {
+      const key = 'lr_chunk_' + i;
+      return {
+        __kind: 'lrchunk', __i: i,
+        set: async (payload) => { store.set(key, payload); },
+        get: async () => { const data = store.get(key); return { exists: !!data, data: () => data }; },
+        delete: async () => { store.delete(key); }
+      };
+    },
     runTransaction: async (fn) => {
-      const subKeyOf = (ref) => (ref.__kind === 'meta' ? 'main' : (ref.__kind === 'sub' ? ('sub/' + ref.__sub + '/' + ref.__id) : ('chunk_' + ref.__i)));
+      const subKeyOf = (ref) => (ref.__kind === 'meta' ? 'main' : (ref.__kind === 'sub' ? ('sub/' + ref.__sub + '/' + ref.__id) : (ref.__kind === 'lrchunk' ? ('lr_chunk_' + ref.__i) : ('chunk_' + ref.__i))));
       const tx = {
         get: async (ref) => { const data = store.get(subKeyOf(ref)); return { exists: !!data, data: () => data }; },
         set: (ref, payload) => { store.set(subKeyOf(ref), payload); }
@@ -253,6 +265,7 @@ function makeDevice(cloud, { initialCatalog = [] } = {}) {
     syncDirty: false,
     SYNC_DIRTY_KEY: 'atlas:syncDirty',
     CLOUD_REVISION_FIELD: 'revision',
+    STATE_SCHEMA_VERSION: 5, // PROTEÇÃO 095B
     lastKnownCloudRevision: null,
     lastWriteRefusedReason: null,
     lastRevisionConflictAt: null,
@@ -265,6 +278,7 @@ function makeDevice(cloud, { initialCatalog = [] } = {}) {
     DATA_CHUNK_SIZE: 150,
     FB_META_REF: cloud.FB_META_REF,
     FB_CHUNK_REF: cloud.FB_CHUNK_REF,
+    FB_LESION_REVISIONS_CHUNK_REF: cloud.FB_LESION_REVISIONS_CHUNK_REF, // PROTEÇÃO 095
     withFirebaseTimeout: (p) => p,
     setSyncStatus: (ok) => { context.syncPushPending = !ok; },
     toast: () => {},
@@ -399,6 +413,8 @@ function makeDevice(cloud, { initialCatalog = [] } = {}) {
     ${snapshotStoreFns3B}
     let lastWriteStaleImagesBlocked = 0;
     ${gateStaleImagesFn.source}
+    const LESION_REVISIONS_SHARD_TARGET_BYTES = 700*1024; // PROTEÇÃO 095
+    ${splitLesionRevisionsIntoShardsFn.source}
     ${writeShardedStateFn.source}
     ${writeShardedStateWithConflictRetryFn.source}
     ${writeShardedStateSerializedFn.source}

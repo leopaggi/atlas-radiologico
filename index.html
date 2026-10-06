@@ -2051,6 +2051,12 @@ try{
    ============================================================ */
 const FB_META_REF = () => fbDb.collection('atlas_state').doc('main');
 const FB_CHUNK_REF = (i) => fbDb.collection('atlas_state').doc('data_chunk_'+i);
+// PROTEÇÃO 095 — pedaços de LESION_REVISIONS: mesmo nível de 'atlas_state'
+// que data_chunk_i (namespace de prefixo próprio, nunca sub-coleção de
+// 'main' — diferente de snapshotStore, que é por-snapshotId e cardinalidade
+// não-determinística; aqui o índice 0..N-1 é recalculado por completo a
+// cada escrita, igual a data_chunk_i).
+const FB_LESION_REVISIONS_CHUNK_REF = (i) => fbDb.collection('atlas_state').doc('lesion_revisions_chunk_'+i);
 const DATA_CHUNK_SIZE = 150; // ~150 lesões por pedaço fica com boa margem abaixo de 1MB
 // Mantido por compatibilidade com qualquer chamada antiga que ainda o referencie.
 const FB_DOC_REF = FB_META_REF;
@@ -2243,12 +2249,24 @@ function splitIntoChunks(arr, size){
   for(let i=0;i<arr.length;i+=size) out.push(arr.slice(i,i+size));
   return out;
 }
+// PROTEÇÃO 095 — a dica final era fixa ("Alguma imagem local precisa ir pro
+// Cloudinary"), correta SÓ para pedaços de DATA (label "pedaço X/Y"), mas
+// incorreta e confusa para o documento principal ou para pedaços de
+// LESION_REVISIONS — nenhum dos dois carrega imagem. A dica agora é
+// escolhida pelo formato do `label` de quem chamou (nenhum chamador
+// precisou mudar: os labels já eram distintos antes desta proteção).
+function checkChunkSizeHint(label){
+  const l = String(label||'');
+  if(/^pedaço \d+\/\d+$/.test(l)) return ' Alguma imagem local precisa ir pro Cloudinary.';
+  if(/^revisões de lesão/i.test(l)) return ' Alguma revisão de lesão (histórico/tentativas/soluções) ficou grande demais — considere resolver ou consolidar revisões antigas.';
+  return ' Reduza o conteúdo deste bloco antes de tentar de novo.';
+}
 function checkChunkSize(chunk, label){
   try{
     const bytes = new Blob([JSON.stringify(chunk)]).size;
     const MB = 1024*1024;
     if(bytes > 0.95*MB){
-      setSyncStatus(false, `${label} ficou grande demais (${(bytes/MB).toFixed(2)}MB de ~1MB) mesmo dividido em pedaços. Alguma imagem local precisa ir pro Cloudinary.`);
+      setSyncStatus(false, `${label} ficou grande demais (${(bytes/MB).toFixed(2)}MB de ~1MB) mesmo dividido em pedaços.${checkChunkSizeHint(label)}`);
       return false;
     }
   }catch(_e){}
@@ -2279,8 +2297,19 @@ function checkChunkSize(chunk, label){
    (syncFromFirebase) e tentando UMA vez mais, sempre com o estado já
    mesclado — nunca às cegas. Ver seção 29 do CONTEXTO_MESTRE. */
 const CLOUD_REVISION_FIELD = 'revision';
+// PROTEÇÃO 095B — barreira de versão de schema do documento principal.
+// v4 = PRÉ-095 (LESION_REVISIONS embutido no meta). v5 = PÓS-095
+// (LESION_REVISIONS em pedaços próprios, lesionRevisionsChunkCount no
+// meta). Um cliente < 5 NUNCA deve conseguir sobrescrever um documento já
+// migrado pra 5 (reintroduziria o campo legado e orfanizaria os pedaços —
+// ver PROTEÇÃO 095, teste P). A defesa tem DUAS camadas independentes:
+// 1) regra do Firestore (servidor, cobre clientes desatualizados que nem
+//    rodam este código); 2) o guard abaixo em writeShardedState (cliente
+//    atual, cobre o caso simétrico: nunca escrever por cima de uma versão
+//    de schema MAIOR que a que este código entende).
+const STATE_SCHEMA_VERSION = 5;
 let lastKnownCloudRevision = null; // null = nunca lido com sucesso nesta sessão
-let lastWriteRefusedReason = null; // 'device_bootstrap_pending'|'chunk_too_large'|'no_known_revision'|'cloud_revision_conflict'|'canonical_restore_in_progress'|'snapshot_content_conflict'|'snapshot_unavailable_for_commit'|null
+let lastWriteRefusedReason = null; // 'device_bootstrap_pending'|'chunk_too_large'|'no_known_revision'|'cloud_revision_conflict'|'canonical_restore_in_progress'|'snapshot_content_conflict'|'snapshot_unavailable_for_commit'|'schema_version_too_new'|null
 let lastRevisionConflictAt = null; // Date.now() do último conflito de revisão detectado (diagnóstico)
 /* Escreve DATA em vários documentos pequenos + um documento "main" com o
    resto do estado, dentro de UMA transação com verificação de revisão (ver
@@ -2464,6 +2493,74 @@ async function collectPendingSnapshotRefs(lesionRevisions){
   for(const id of all){ if(!(await isSnapshotMarkedSynced(id))) pending.push(id); }
   return pending;
 }
+/* ============================================================
+   PROTEÇÃO 095 — EXTERNALIZAÇÃO/SHARDING DE LESION_REVISIONS
+   ------------------------------------------------------------
+   Causa raiz do bug real (2026-10-05): LESION_REVISIONS cresceu (via uso
+   normal — ~700+ revisões, cada uma com history/attempts/humanFeedback)
+   até sozinho passar de 1 MiB (confirmado no navegador:
+   projectLesionRevisionsWithoutSnapshots(LESION_REVISIONS) = 0.991 MiB —
+   ou seja, o peso é do PRÓPRIO metadata de revisão, não de snapshots
+   externalizados, que já saem daqui desde a Fase 3B). O documento
+   principal embutia lesionRevisions por completo (ver writeShardedState()
+   abaixo, metaPayloadBase.lesionRevisions) e checkChunkSize() (teto de
+   0.95 MiB) recusava a escrita — com uma mensagem genérica de "imagem" que
+   não se aplicava a este caso.
+   Solução: LESION_REVISIONS sai do documento principal e passa a viver em
+   pedaços determinísticos — mesmo ESPÍRITO do chunking de DATA
+   (splitIntoChunks/DATA_CHUNK_SIZE), mas por BYTES, não por contagem fixa
+   de itens: registros de revisão variam muito de tamanho (um pedido novo
+   tem poucas centenas de bytes; uma correção aplicada com histórico pode
+   passar de alguns KB), então um corte por contagem fixa arriscaria ainda
+   produzir um pedaço grande demais. splitLesionRevisionsIntoShards() empacota
+   gulosamente por ORDEM ALFABÉTICA DE ID (nunca pela ordem de inserção, que
+   varia por dispositivo) — determinístico: o mesmo objeto lógico produz
+   SEMPRE os mesmos pedaços, em qualquer PC. Cada pedaço tem como alvo
+   LESION_REVISIONS_SHARD_TARGET_BYTES (margem confortável sob o teto real
+   de checkChunkSize) — o teto de 0.95 MiB continua sendo a checagem
+   AUTORITATIVA (dentro da transação abaixo, DEPOIS do merge com o remoto,
+   que só pode CRESCER o conteúdo).
+   Persistência (ver writeShardedState()/readShardedState() abaixo):
+   - novo formato: meta.lesionRevisionsChunkCount > 0 — os pedaços vivem em
+     documentos irmãos de 'main' (mesmo nível de data_chunk_i, NUNCA
+     sub-coleção — diferente de snapshotStore, que é por-snapshotId e
+     cardinalidade não-determinística): FB_LESION_REVISIONS_CHUNK_REF(i) =
+     atlas_state/lesion_revisions_chunk_i, cada um { entries: {...} }.
+   - formato legado: meta.lesionRevisions = {...} embutido (documentos
+     escritos antes desta proteção). Convivem sem ambiguidade pela mesma
+     regra de chunkCount>0 que DATA já usa (chunkCount ausente/0 → cai pro
+     campo legado se existir).
+   - migração: automática e conservadora — a PRÓXIMA escrita bem-sucedida
+     (qualquer uma, não precisa de ação manual) já grava no formato novo,
+     e como é a MESMA transação atômica do documento principal, nunca há
+     janela em que o meta aponta pra um pedaço inexistente (tudo-ou-nada,
+     igual já vale para DATA). O campo legado embutido simplesmente não é
+     mais escrito a partir desse momento (removido pelo .set() de
+     substituição total do meta) — nenhuma revisão é perdida: o conteúdo
+     dela já foi incorporado aos pedaços novos pelo merge local∪remoto de
+     sempre (mergeLesionRevisions), que roda ANTES da decisão de formato.
+   ============================================================ */
+const LESION_REVISIONS_SHARD_TARGET_BYTES = 700*1024; // ~0.667 MiB — margem sob o teto de 0.95 MiB de checkChunkSize
+function splitLesionRevisionsIntoShards(lesionRevisions){
+  const src = (lesionRevisions && typeof lesionRevisions==='object' && !Array.isArray(lesionRevisions)) ? lesionRevisions : {};
+  const ids = Object.keys(src).sort(); // determinístico: nunca a ordem de inserção (varia por dispositivo)
+  const shards = [];
+  let current = {}, currentKeys = 0, currentBytes = 2; // 2 = bytes de "{}"
+  for(const id of ids){
+    const rec = src[id];
+    let entryBytes = 0;
+    try{ entryBytes = new Blob([JSON.stringify({[id]:rec})]).size; }catch(_e){}
+    if(currentKeys && currentBytes + entryBytes > LESION_REVISIONS_SHARD_TARGET_BYTES){
+      shards.push(current);
+      current = {}; currentKeys = 0; currentBytes = 2;
+    }
+    current[id] = rec;
+    currentKeys++;
+    currentBytes += entryBytes;
+  }
+  if(currentKeys) shards.push(current);
+  return shards;
+}
 async function writeShardedState(ms=15000){
   // Bloqueia QUALQUER envio (debounced, imediato ou "sincronizar este
   // dispositivo") enquanto o dispositivo estiver pendente de bootstrap —
@@ -2534,17 +2631,31 @@ async function writeShardedState(ms=15000){
     // principal (pequenos, sem binário), protegidos pela mesma transação/
     // revisão de todo o resto.
     tombstones: stripUndefinedDeep(IMAGE_TOMBSTONES),
-    // PROTEÇÃO 084 — Central de Revisões + Soluções viaja no documento
-    // principal (mesma transação/revisão); unida ao remoto dentro da
-    // transação abaixo, então nenhum caminho de escrita apaga revisão alheia.
+    // PROTEÇÃO 084 — Central de Revisões + Soluções: mantida aqui em
+    // memória (collectPendingSnapshotRefs, clone pro fold de merges) mas
+    // NUNCA mais viaja embutida no documento principal — ver PROTEÇÃO 095
+    // (splitLesionRevisionsIntoShards) logo abaixo; unida ao remoto dentro
+    // da transação, então nenhum caminho de escrita apaga revisão alheia.
     lesionRevisions: stripUndefinedDeep(LESION_REVISIONS || {}),
     lesionMerges: normalizeLesionMerges(LESION_MERGES), // PROTEÇÃO 091c
     lesionTombstones: normalizeLesionTombstones(LESION_TOMBSTONES), // PROTEÇÃO 094
     chunkCount: chunks.length,
-    stateSchemaVersion: 4, // v4 = estado dividido em pedaços (chunks)
+    stateSchemaVersion: STATE_SCHEMA_VERSION, // PROTEÇÃO 095B — v5 = LESION_REVISIONS em pedaços próprios
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
-  if(!checkChunkSize(metaPayloadBase, 'documento principal (revisão/SRS/histórico)')){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
+  // PROTEÇÃO 095 — checagem local (pré-transação, melhor esforço: o merge
+  // com o remoto só pode CRESCER o conteúdo, então a checagem AUTORITATIVA
+  // é repetida dentro da transação depois do merge) — lesionRevisions sai
+  // do objeto checado como "documento principal" (ele nunca mais viaja
+  // embutido) e ganha sua própria checagem por pedaço, com label distinto
+  // (nunca mais a mensagem genérica de imagem/Cloudinary para este caso).
+  const metaPayloadBaseNoRevisions = { ...metaPayloadBase };
+  delete metaPayloadBaseNoRevisions.lesionRevisions;
+  if(!checkChunkSize(metaPayloadBaseNoRevisions, 'documento principal (revisão/SRS/histórico)')){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
+  const localLesionRevisionsShards = splitLesionRevisionsIntoShards(metaPayloadBase.lesionRevisions);
+  for(let i=0;i<localLesionRevisionsShards.length;i++){
+    if(!checkChunkSize(localLesionRevisionsShards[i], `revisões de lesão — pedaço ${i+1}/${localLesionRevisionsShards.length}`)){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
+  }
 
   // Fase 3B — snapshots externos que este dispositivo ainda não confirmou
   // publicados na nuvem (flag OFF hoje: sempre []). Lidos do cache local
@@ -2578,6 +2689,7 @@ async function writeShardedState(ms=15000){
   let committedStaleImagesBlocked = 0;
   let committedPayloadData = null;
   let committedSnapshotIds = [];
+  let committedLesionRevisionsChunkCount = 0; // PROTEÇÃO 095
   try{
     await withFirebaseTimeout(fbDb.runTransaction(async (tx)=>{
       const metaSnap = await tx.get(FB_META_REF());
@@ -2588,6 +2700,17 @@ async function writeShardedState(ms=15000){
         throw err;
       }
       const nextRevision = serverRevision + 1;
+      // PROTEÇÃO 095B — nunca escrever por cima de um schema MAIOR que o
+      // que este código entende (ex.: uma versão futura v6 já publicada por
+      // outro dispositivo mais novo). Checagem simétrica à regra do
+      // Firestore (que bloqueia escrita de schema < 5): aqui bloqueamos
+      // escrita quando o remoto já está ACIMA do que sabemos ler/escrever.
+      const remoteSchemaVersionSnap = metaSnap.exists ? Number((metaSnap.data()||{}).stateSchemaVersion)||0 : 0;
+      if(remoteSchemaVersionSnap > STATE_SCHEMA_VERSION){
+        const err = new Error('o documento na nuvem já está num schema mais novo do que este dispositivo entende');
+        err.code = 'schema_version_too_new';
+        throw err;
+      }
       // ALTERAÇÃO 079c — BARREIRA FINAL DE IMAGENS no choke-point de escrita.
       // Lê a base remota (chunks) DENTRO da mesma transação da revisão e
       // decide aqui, a partir do snapshot imutável `cleanData` (recalculado
@@ -2611,6 +2734,22 @@ async function writeShardedState(ms=15000){
         });
       }else if(Array.isArray(remoteMeta.data)){
         remoteData = remoteMeta.data;
+      }
+      // PROTEÇÃO 095 — lesionRevisions remoto: pedaços (formato novo) OU o
+      // campo legado já decodificado acima (formato antigo) — nunca os
+      // dois juntos. Leitura DENTRO da mesma transação (mesmo motivo do
+      // chunking de DATA acima): um PC que ainda não sabe da migração só
+      // aprende do conteúdo remoto aqui, nunca grava um estado incompleto
+      // por cima de revisões que só existem nos pedaços da nuvem.
+      const remoteLesionRevisionsChunkCount = Number(remoteMeta.lesionRevisionsChunkCount)||0;
+      if(remoteLesionRevisionsChunkCount > 0){
+        const remoteLRChunkSnaps = await Promise.all(Array.from({length:remoteLesionRevisionsChunkCount}, (_,i)=> tx.get(FB_LESION_REVISIONS_CHUNK_REF(i))));
+        const remoteLesionRevisions = {};
+        remoteLRChunkSnaps.forEach(cs=>{
+          const entries = cs && cs.exists ? (cs.data()||{}).entries : null;
+          if(entries && typeof entries==='object' && !Array.isArray(entries)) Object.assign(remoteLesionRevisions, structuralSnapshotProgressFromFirestore(entries));
+        });
+        remoteMeta = { ...remoteMeta, lesionRevisions: remoteLesionRevisions };
       }
       // Fase 3B — leitura dos docs de snapshot pendentes DENTRO da mesma
       // transação, ainda na fase de leitura (Firestore exige todo tx.get
@@ -2664,6 +2803,23 @@ async function writeShardedState(ms=15000){
       // PROTEÇÃO 084 — união local ∪ remoto por reviewId (nunca apaga uma
       // revisão que só existe na nuvem, nem em syncThisDeviceToCloud/force).
       const writeLesionRevisions = stripUndefinedDeep(mergeLesionRevisions(txBase.lesionRevisions, remoteMeta.lesionRevisions));
+      // PROTEÇÃO 095 — pedaços calculados sobre o estado JÁ MESCLADO: o
+      // merge só pode CRESCER (união de history/attempts/humanFeedback,
+      // nunca encolhe), então só aqui — depois do merge, dentro da MESMA
+      // transação — a checagem de tamanho por pedaço é autoritativa.
+      // IMPORTANTE: a checagem precisa rodar sobre o PAYLOAD REAL enviado
+      // (envelope {entries:...} JÁ codificado por structuralSnapshotProgressToFirestore
+      // — tuplas [t,ok,graded] virando objetos {t,ok,graded} podem AUMENTAR
+      // o tamanho), nunca sobre o objeto cru de revisões: checar o objeto
+      // cru subestimaria pedaços com progresso embutido grande no snapshot.
+      const lesionRevisionsShards = splitLesionRevisionsIntoShards(writeLesionRevisions);
+      const lesionRevisionsShardsEncoded = lesionRevisionsShards.map(s => structuralSnapshotProgressToFirestore(s));
+      const lesionRevisionsShardDocs = lesionRevisionsShardsEncoded.map(entries => ({entries}));
+      for(let i=0;i<lesionRevisionsShardDocs.length;i++){
+        if(!checkChunkSize(lesionRevisionsShardDocs[i], `revisões de lesão — pedaço ${i+1}/${lesionRevisionsShardDocs.length}`)){
+          const err = new Error('pedaço de revisões de lesão grande demais'); err.code = 'chunk_too_large'; throw err;
+        }
+      }
       // PROTEÇÃO 085 — ordem: merge por carimbo também DENTRO da transação
       // (nenhum caminho de escrita grava default/ordem velha por cima de uma
       // ordem remota mais nova — nem syncThisDeviceToCloud/force).
@@ -2679,8 +2835,10 @@ async function writeShardedState(ms=15000){
       const writeProgress = mergeReviewProgress(txBase.reviewProgress, reviewProgressFromFirestore(remoteMeta.reviewProgress));
       const writeOverride = mergeReviewOverrides(txBase.reviewOverride, remoteMeta.reviewOverride);
       const metaPayload = {...txBase, lesionMerges: writeMerges, lesionTombstones: writeLesionTombstones, review: stripUndefinedDeep(materializeReviewState(writeReview.review, writeProgress, writeOverride)), reviewUpdatedAt: writeReview.stamps,
-        reviewProgress: writeProgress, reviewOverride: writeOverride, tombstones: stripUndefinedDeep(writeTombstones), lesionRevisions: writeLesionRevisions,
-        sectionOrder: writeOrder.sectionOrder, siteOrder: writeOrder.siteOrder, orderUpdatedAt: writeOrder.stamps, chunkCount: gatedChunks.length};
+        reviewProgress: writeProgress, reviewOverride: writeOverride, tombstones: stripUndefinedDeep(writeTombstones),
+        sectionOrder: writeOrder.sectionOrder, siteOrder: writeOrder.siteOrder, orderUpdatedAt: writeOrder.stamps, chunkCount: gatedChunks.length,
+        lesionRevisionsChunkCount: lesionRevisionsShards.length}; // PROTEÇÃO 095 — substitui o campo embutido lesionRevisions (herdado de txBase pelo spread acima)
+      delete metaPayload.lesionRevisions; // nunca mais publicado embutido — ver pedaços abaixo
       if(!checkChunkSize(metaPayload, 'documento principal (revisão/SRS/histórico)')){
         const err = new Error('documento principal grande demais');
         err.code = 'chunk_too_large';
@@ -2688,13 +2846,14 @@ async function writeShardedState(ms=15000){
       }
       // Só a representação do histórico 090 cruza a fronteira: as tentativas
       // continuam tuplas no IndexedDB/backup/Quiz, mas objetos no Firestore.
-      // Ponte estrutural: o progresso embutido no snapshot da execução usa o
-      // mesmo codec (nunca array dentro de array no payload).
+      // PROTEÇÃO 095 — lesionRevisions NÃO entra mais aqui (nem decodificado
+      // nem no payload): vai pros pedaços próprios (lesionRevisionsShardsEncoded),
+      // já codificados acima, cada um escrito em seu próprio documento.
       const firestoreMeta = {...metaPayload, reviewProgress: reviewProgressToFirestore(writeProgress),
-        lesionRevisions: structuralSnapshotProgressToFirestore(metaPayload.lesionRevisions),
         [CLOUD_REVISION_FIELD]: nextRevision};
       const nested = findNestedArrayPaths(firestoreMeta, 'atlas_state/main');
       nested.push(...findNestedArrayPaths(gated.data, 'DATA'));
+      lesionRevisionsShardsEncoded.forEach((s,i)=> nested.push(...findNestedArrayPaths(s, 'lesion_revisions_chunk_'+i)));
       if(nested.length){
         const err = new Error('Arrays aninhados no payload Firestore: ' + nested.join(', '));
         err.code = 'firestore_nested_arrays';
@@ -2738,15 +2897,24 @@ async function writeShardedState(ms=15000){
       }
       tx.set(FB_META_REF(), firestoreMeta);
       committedSnapshotIds = finalPendingIds.slice();
+      for(let i=0;i<lesionRevisionsShardDocs.length;i++){ // PROTEÇÃO 095 — mesmo objeto já checado acima
+        tx.set(FB_LESION_REVISIONS_CHUNK_REF(i), lesionRevisionsShardDocs[i]);
+      }
       for(let i=0;i<gatedChunks.length;i++){
         tx.set(FB_CHUNK_REF(i), {items: gatedChunks[i]});
       }
       committedRevision = nextRevision;
       committedStaleImagesBlocked = gated.blocked;
       committedPayloadData = gated.data;
+      committedLesionRevisionsChunkCount = lesionRevisionsShardsEncoded.length; // PROTEÇÃO 095
     }), ms, 'gravar estado (transação com verificação de revisão)');
   }catch(e){
     if(e && e.code === 'chunk_too_large'){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
+    if(e && e.code === 'schema_version_too_new'){
+      lastWriteRefusedReason = 'schema_version_too_new';
+      setSyncStatus(false, 'a nuvem já está numa versão mais nova do que este dispositivo entende — atualize o Atlas antes de continuar (nada foi sobrescrito).');
+      return false;
+    }
     if(e && e.code === 'cloud_revision_conflict'){
       lastWriteRefusedReason = 'cloud_revision_conflict';
       lastRevisionConflictAt = Date.now();
@@ -2791,6 +2959,17 @@ async function writeShardedState(ms=15000){
     }
   }
   window.__lastKnownChunkCount = chunks.length;
+  // PROTEÇÃO 095 — mesma limpeza para pedaços de lesionRevisions que
+  // sobraram de uma rodada anterior maior (ex.: revisões antigas resolvidas/
+  // consolidadas reduziram o total). Fora da transação de propósito — mesmo
+  // raciocínio já usado acima para os pedaços de DATA.
+  const prevLesionRevisionsChunkCount = Number(window.__lastKnownLesionRevisionsChunkCount || 0);
+  if(prevLesionRevisionsChunkCount > committedLesionRevisionsChunkCount){
+    for(let i=committedLesionRevisionsChunkCount;i<prevLesionRevisionsChunkCount;i++){
+      try{ await FB_LESION_REVISIONS_CHUNK_REF(i).delete(); }catch(_e){}
+    }
+  }
+  window.__lastKnownLesionRevisionsChunkCount = committedLesionRevisionsChunkCount;
   return true;
 }
 /* Lê o documento principal + todos os pedaços, e junta tudo de volta num
@@ -2809,6 +2988,22 @@ async function readShardedState(ms=15000){
     return null;
   }
   const meta = metaSnap.data() || {};
+  // PROTEÇÃO 095C — fail-safe de versão também na LEITURA (não só na
+  // escrita): um schema remoto MAIOR que STATE_SCHEMA_VERSION nunca pode
+  // ser adotado como se este cliente entendesse — isso reconstruiria um
+  // estado incompleto (campos novos de uma versão futura, ignorados) e
+  // poderia depois ser mesclado/escrito de volta por cima do que não
+  // entende. Lança ANTES de tocar em lastKnownCloudRevision/window ou de
+  // ler qualquer pedaço — nenhum estado local nem de rastreio de
+  // sincronização é alterado; quem chamou decide (reconcileBeforePush/
+  // pushToFirebaseNow recusam o push; adoptRemoteStateForNewDevice/
+  // syncFromFirebase não adotam nem substituem DATA/REVIEW/SRS/etc).
+  const remoteSchemaVersionRead = Number(meta.stateSchemaVersion)||0;
+  if(remoteSchemaVersionRead > STATE_SCHEMA_VERSION){
+    const err = new Error('a nuvem já está num schema mais novo do que este Atlas entende — atualize para a versão mais recente antes de continuar.');
+    err.code = 'schema_version_too_new';
+    throw err;
+  }
   // ALTERAÇÃO 070: toda leitura bem-sucedida do documento principal atualiza
   // a revisão conhecida — é essa marca que writeShardedState() usa pra
   // nunca escrever às cegas por cima de um estado que este dispositivo
@@ -2833,6 +3028,33 @@ async function readShardedState(ms=15000){
     combinedData = meta.data;
   }
 
+  // PROTEÇÃO 095 — lesionRevisions: pedaços (formato novo) OU campo legado
+  // embutido (formato antigo) — nunca os dois. Mesma convenção de
+  // chunkCount>0 que DATA já usa acima; único ponto de leitura remota
+  // (adoptRemoteStateForNewDevice, reconcileStateWithRemote via
+  // syncFromFirebase/reconcileBeforePush e auditoria consomem o resultado
+  // já reconstruído por completo — nenhum precisa saber se veio de pedaços
+  // ou do campo legado).
+  const lesionRevisionsChunkCount = Number(meta.lesionRevisionsChunkCount)||0;
+  window.__lastKnownLesionRevisionsChunkCount = lesionRevisionsChunkCount;
+  let combinedLesionRevisions = {};
+  if(lesionRevisionsChunkCount > 0){
+    const lrChunkSnaps = await Promise.all(
+      Array.from({length:lesionRevisionsChunkCount}, (_,i)=> withFirebaseTimeout(FB_LESION_REVISIONS_CHUNK_REF(i).get({source:'server'}), ms, `ler revisões de lesão ${i+1}/${lesionRevisionsChunkCount}`))
+    );
+    lrChunkSnaps.forEach(snap=>{
+      if(snap.exists){
+        const entries = (snap.data()||{}).entries;
+        if(entries && typeof entries==='object' && !Array.isArray(entries)) Object.assign(combinedLesionRevisions, structuralSnapshotProgressFromFirestore(entries));
+      }
+    });
+  }else if(meta.lesionRevisions && typeof meta.lesionRevisions==='object' && !Array.isArray(meta.lesionRevisions)){
+    // Compatibilidade: documento antigo (pré-095) ainda não migrado.
+    // PROTEÇÃO 084 — documento antigo sem o campo = {} (compatível).
+    // Ponte estrutural: progresso embutido no snapshot volta a tuplas aqui.
+    combinedLesionRevisions = structuralSnapshotProgressFromFirestore(meta.lesionRevisions);
+  }
+
   return { data: combinedData, review: meta.review, srs: meta.srs, sessionLog: meta.sessionLog,
     reviewUpdatedAt: normalizeReviewStamps(meta.reviewUpdatedAt), // PROTEÇÃO 089 — ausente = sem carimbo
     reviewProgress: reviewProgressFromFirestore(meta.reviewProgress), reviewOverride: normalizeReviewOverrides(meta.reviewOverride), // PROTEÇÃO 090
@@ -2841,10 +3063,7 @@ async function readShardedState(ms=15000){
     sectionOrder: meta.sectionOrder, siteOrder: meta.siteOrder,
     orderUpdatedAt: normalizeOrderStamps(meta.orderUpdatedAt), // PROTEÇÃO 085 — ausente = sem carimbo
     tombstones: (meta.tombstones && typeof meta.tombstones === 'object' && !Array.isArray(meta.tombstones)) ? meta.tombstones : {},
-    // PROTEÇÃO 084 — documento antigo sem o campo = {} (compatível).
-    // Ponte estrutural: progresso embutido no snapshot volta a tuplas aqui
-    // (único ponto de leitura remota — adopt, pulls e auditorias).
-    lesionRevisions: structuralSnapshotProgressFromFirestore((meta.lesionRevisions && typeof meta.lesionRevisions === 'object' && !Array.isArray(meta.lesionRevisions)) ? meta.lesionRevisions : {}) };
+    lesionRevisions: combinedLesionRevisions }; // PROTEÇÃO 095 — já reconstruído por completo, pedaços ou legado
 }
 
 /* envia o estado atual pra nuvem (com pequeno atraso pra juntar mudanças rápidas em uma escrita só) */
@@ -2881,6 +3100,13 @@ function pushToFirebase(){
       // novo depois — mesma semântica de pushToFirebaseNow().
       const recon = await reconcileBeforePush('push');
       if(!recon.ok){
+        // PROTEÇÃO 095C — mesma distinção de pushToFirebaseNow() acima.
+        if(recon.reason === 'schema_version_too_new'){
+          lastWriteRefusedReason = 'schema_version_too_new';
+          setSyncStatus(false, 'este Atlas precisa ser atualizado — a nuvem já está numa versão mais nova (recarregue a página / limpe o cache antes de continuar). Nada foi perdido: sua edição ficou salva só neste dispositivo.');
+          syncPushPending = true;
+          return;
+        }
         setSyncStatus(false, 'não foi possível confirmar a nuvem antes de enviar — tentando de novo em seguida.');
         syncPushPending = true;
         return;
@@ -2922,6 +3148,15 @@ async function pushToFirebaseNow(){
   try{
     const recon = await reconcileBeforePush('push');
     if(!recon.ok){
+      // PROTEÇÃO 095C — incompatibilidade de versão não é falha transitória:
+      // nunca marca como "tentando de novo" (não vai se resolver por retry)
+      // e mostra uma mensagem que diz claramente o que fazer.
+      if(recon.reason === 'schema_version_too_new'){
+        lastWriteRefusedReason = 'schema_version_too_new';
+        setSyncStatus(false, 'este Atlas precisa ser atualizado — a nuvem já está numa versão mais nova (recarregue a página / limpe o cache antes de continuar). Nada foi perdido: sua edição ficou salva só neste dispositivo.');
+        syncPushPending = true;
+        return;
+      }
       setSyncStatus(false, 'não foi possível confirmar a nuvem antes de enviar — tentando de novo em seguida.');
       syncPushPending = true;
       return;
@@ -3398,13 +3633,25 @@ function deepStableEqual(a, b){
      sectionOrder/siteOrder/imageTombstones) — ex.: o JSON já parseado de
      ATLAS_CANONICO_LIMPO_1216_116_FINAL.json. NUNCA lido de DATA/REVIEW/
      SRS globais.
+   PROTEÇÃO 095C — payload.lesionRevisions/lesionMerges/lesionTombstones/
+     reviewProgress/reviewOverride/reviewUpdatedAt/orderUpdatedAt são
+     OPCIONAIS (o formato canônico original nunca os teve). Omitido: o
+     restore PRESERVA o que já existe na nuvem (lido na mesma transação da
+     revisão — nunca apaga histórico que esta ferramenta nem conhece).
+     Presente (mesmo `{}`): SUBSTITUI, com os mesmos helpers de sharding/
+     codec de writeShardedState (lesionRevisions grande vai pra pedaços
+     próprios, igual ao fluxo normal). stateSchemaVersion sempre
+     STATE_SCHEMA_VERSION (nunca mais 4 fixo).
    opts.expectedRemoteRevision (obrigatório): revisão que a nuvem PRECISA
      estar antes da escrita — sem merge/retry se não bater.
    opts.expected (opcional): overrides pra validateCanonicalPayload.
    opts.updateGlobalsOnSuccess (default true): só depois de um sucesso
      TOTALMENTE confirmado (escrita + releitura + comparação estrutural +
      revalidação), atualiza DATA/REVIEW/SRS/SESSIONLOG/sectionOrder/
-     siteOrder/IMAGE_TOMBSTONES globais com o snapshot — nunca antes. */
+     siteOrder/IMAGE_TOMBSTONES/LESION_MERGES/LESION_TOMBSTONES/
+     REVIEW_PROGRESS/REVIEW_OVERRIDE/REVIEW_STAMPS/ORDER_STAMPS (e
+     LESION_REVISIONS, só quando restaurado explicitamente) globais —
+     nunca antes. */
 async function restoreCanonicalStateToCloud(payload, opts){
   const o = opts || {};
   if(typeof o.expectedRemoteRevision !== 'number'){
@@ -3434,6 +3681,41 @@ async function restoreCanonicalStateToCloud(payload, opts){
         return { ok:false, stage:'chunk_size', reason:'chunk_too_large' };
       }
     }
+
+    // PROTEÇÃO 095C — LESION_REVISIONS e as demais estruturas de 084/089/
+    // 090/091c/094 NUNCA fizeram parte do formato canônico desta ferramenta
+    // (o JSON de restauração — ex.: ATLAS_CANONICO_LIMPO_1216_116_FINAL.json
+    // — é anterior a todas elas). Comportamento INTENCIONAL e documentado:
+    // se `payload` não trouxer um desses campos explicitamente, o restore
+    // PRESERVA o que já existe na nuvem (lido dentro da MESMA transação da
+    // revisão, sem gap) — nunca zera/apaga silenciosamente histórico que
+    // esta ferramenta nem sabia que existia. Se `payload` trouxer o campo
+    // (uso explícito, inclusive para testes), ele SUBSTITUI, usando os
+    // MESMOS helpers de sharding/codec de writeShardedState — nunca uma
+    // segunda implementação divergente.
+    const hasOwn = (key) => payload[key] && typeof payload[key]==='object' && !Array.isArray(payload[key]);
+    const explicitLesionRevisions = hasOwn('lesionRevisions') ? stripUndefinedDeep(payload.lesionRevisions) : null;
+    const explicitLesionMerges = hasOwn('lesionMerges') ? stripUndefinedDeep(payload.lesionMerges) : null;
+    const explicitLesionTombstones = hasOwn('lesionTombstones') ? stripUndefinedDeep(payload.lesionTombstones) : null;
+    const explicitReviewProgress = hasOwn('reviewProgress') ? stripUndefinedDeep(payload.reviewProgress) : null;
+    const explicitReviewOverride = hasOwn('reviewOverride') ? stripUndefinedDeep(payload.reviewOverride) : null;
+    const explicitReviewUpdatedAt = hasOwn('reviewUpdatedAt') ? stripUndefinedDeep(payload.reviewUpdatedAt) : null;
+    const explicitOrderUpdatedAt = hasOwn('orderUpdatedAt') ? stripUndefinedDeep(payload.orderUpdatedAt) : null;
+
+    // Se for substituir lesionRevisions explicitamente, calcula os pedaços
+    // ANTES da transação (melhor esforço — igual a writeShardedState: como
+    // o restore nunca mescla com o remoto, aqui o tamanho final já é
+    // definitivo, não só um limite inferior).
+    let localLesionRevisionsShards = null;
+    if(explicitLesionRevisions){
+      localLesionRevisionsShards = splitLesionRevisionsIntoShards(explicitLesionRevisions);
+      for(let i=0;i<localLesionRevisionsShards.length;i++){
+        if(!checkChunkSize(localLesionRevisionsShards[i], `revisões de lesão — pedaço ${i+1}/${localLesionRevisionsShards.length}`)){
+          return { ok:false, stage:'chunk_size', reason:'lesion_revisions_chunk_too_large' };
+        }
+      }
+    }
+
     const metaPayload = {
       review: snapshot.review,
       srs: snapshot.srs,
@@ -3442,7 +3724,7 @@ async function restoreCanonicalStateToCloud(payload, opts){
       siteOrder: snapshot.siteOrder,
       tombstones: snapshot.tombstones,
       chunkCount: chunks.length,
-      stateSchemaVersion: 4,
+      stateSchemaVersion: STATE_SCHEMA_VERSION, // PROTEÇÃO 095C — nunca mais 4 fixo (ver regra do Firestore)
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     if(!checkChunkSize(metaPayload, 'documento principal (restore canônico)')){
@@ -3451,8 +3733,16 @@ async function restoreCanonicalStateToCloud(payload, opts){
 
     let committedRevision = null;
     let previousChunkCount = 0;
+    let previousLesionRevisionsChunkCount = 0;
+    let committedLesionRevisionsChunkCount = 0;
+    // Capturados dentro da transação (leitura fresca, mesma revisão do
+    // commit) — usados depois, fora da transação, só pra verificação.
+    let finalLesionMerges, finalLesionTombstones, finalReviewProgress,
+      finalReviewOverride, finalReviewUpdatedAt, finalOrderUpdatedAt;
     try{
       await withFirebaseTimeout(fbDb.runTransaction(async (tx)=>{
+        // FASE DE LEITURA — tudo antes de qualquer tx.set (mesma ordem
+        // exigida de writeShardedState, auditoria PROTEÇÃO 095 item 2).
         const metaSnap = await tx.get(FB_META_REF());
         const serverRevision = metaSnap.exists ? (Number((metaSnap.data()||{})[CLOUD_REVISION_FIELD]) || 0) : 0;
         if(serverRevision !== o.expectedRemoteRevision){
@@ -3461,11 +3751,53 @@ async function restoreCanonicalStateToCloud(payload, opts){
           err.serverRevision = serverRevision;
           throw err;
         }
-        previousChunkCount = metaSnap.exists ? (Number((metaSnap.data()||{}).chunkCount) || 0) : 0;
+        const remoteMetaRaw = metaSnap.exists ? (metaSnap.data()||{}) : {};
+        previousChunkCount = Number(remoteMetaRaw.chunkCount) || 0;
+        previousLesionRevisionsChunkCount = Number(remoteMetaRaw.lesionRevisionsChunkCount) || 0;
+
+        let finalLesionRevisionsShardsEncoded, finalLesionRevisionsChunkCount;
+        if(explicitLesionRevisions){
+          finalLesionRevisionsShardsEncoded = localLesionRevisionsShards.map(s => structuralSnapshotProgressToFirestore(s));
+          finalLesionRevisionsChunkCount = finalLesionRevisionsShardsEncoded.length;
+        }else{
+          // Preserva: nem precisa reler os pedaços de verdade (não serão
+          // reescritos) — só a CONTAGEM, pra meta continuar apontando pro
+          // que já existe de verdade (nenhum pedaço órfão, nenhum "aponta
+          // pra pedaço inexistente").
+          finalLesionRevisionsShardsEncoded = [];
+          finalLesionRevisionsChunkCount = previousLesionRevisionsChunkCount;
+        }
+
+        finalLesionMerges = normalizeLesionMerges(explicitLesionMerges || remoteMetaRaw.lesionMerges);
+        finalLesionTombstones = normalizeLesionTombstones(explicitLesionTombstones || remoteMetaRaw.lesionTombstones);
+        finalReviewProgress = normalizeReviewProgress(explicitReviewProgress || remoteMetaRaw.reviewProgress);
+        finalReviewOverride = normalizeReviewOverrides(explicitReviewOverride || remoteMetaRaw.reviewOverride);
+        finalReviewUpdatedAt = normalizeReviewStamps(explicitReviewUpdatedAt || remoteMetaRaw.reviewUpdatedAt);
+        finalOrderUpdatedAt = normalizeOrderStamps(explicitOrderUpdatedAt || remoteMetaRaw.orderUpdatedAt);
+
         const nextRevision = serverRevision + 1;
-        tx.set(FB_META_REF(), {...metaPayload, [CLOUD_REVISION_FIELD]: nextRevision});
+        const firestoreMeta = {
+          ...metaPayload,
+          reviewProgress: finalReviewProgress, // PROTEÇÃO 090
+          reviewOverride: finalReviewOverride, // PROTEÇÃO 090
+          reviewUpdatedAt: finalReviewUpdatedAt, // PROTEÇÃO 089
+          orderUpdatedAt: finalOrderUpdatedAt, // PROTEÇÃO 085
+          lesionMerges: finalLesionMerges, // PROTEÇÃO 091c
+          lesionTombstones: finalLesionTombstones, // PROTEÇÃO 094
+          lesionRevisionsChunkCount: finalLesionRevisionsChunkCount, // PROTEÇÃO 095
+          [CLOUD_REVISION_FIELD]: nextRevision
+        };
+
+        // FASE DE ESCRITA — só agora, depois de toda leitura acima.
+        tx.set(FB_META_REF(), firestoreMeta);
         for(let i=0;i<chunks.length;i++) tx.set(FB_CHUNK_REF(i), {items: chunks[i]});
+        if(explicitLesionRevisions){
+          for(let i=0;i<finalLesionRevisionsShardsEncoded.length;i++){
+            tx.set(FB_LESION_REVISIONS_CHUNK_REF(i), {entries: finalLesionRevisionsShardsEncoded[i]});
+          }
+        }
         committedRevision = nextRevision;
+        committedLesionRevisionsChunkCount = finalLesionRevisionsChunkCount;
       }), 20000, 'restore canônico (transação)');
     }catch(e){
       if(e && e.code === 'canonical_restore_revision_mismatch'){
@@ -3481,6 +3813,16 @@ async function restoreCanonicalStateToCloud(payload, opts){
         try{ await FB_CHUNK_REF(i).delete(); }catch(_e){}
       }
     }
+    // PROTEÇÃO 095C — mesma limpeza para pedaços de lesionRevisions, SÓ
+    // quando o restore de fato substituiu explicitamente (preservar nunca
+    // encolhe — a contagem final é a mesma de antes, então esta condição é
+    // sempre falsa nesse caso, por construção).
+    if(previousLesionRevisionsChunkCount > committedLesionRevisionsChunkCount){
+      for(let i=committedLesionRevisionsChunkCount;i<previousLesionRevisionsChunkCount;i++){
+        try{ await FB_LESION_REVISIONS_CHUNK_REF(i).delete(); }catch(_e){}
+      }
+    }
+    window.__lastKnownLesionRevisionsChunkCount = committedLesionRevisionsChunkCount;
 
     // Releitura independente do servidor — NÃO usa readShardedState() (que
     // gravaria lastKnownCloudRevision global antes da hora); leitura
@@ -3518,6 +3860,37 @@ async function restoreCanonicalStateToCloud(payload, opts){
       return { ok:false, stage:'post_write_verification', reason:'revalidação pós-escrita falhou', failures: revalidation.failures };
     }
 
+    // PROTEÇÃO 095C — verificação pós-escrita das estruturas preservadas/
+    // substituídas, com os MESMOS decoders de leitura normal (nunca uma
+    // segunda implementação divergente de readShardedState).
+    const verifyLesionRevisionsChunkCount = Number(verifyMeta.lesionRevisionsChunkCount) || 0;
+    if(verifyLesionRevisionsChunkCount !== committedLesionRevisionsChunkCount){
+      return { ok:false, stage:'post_write_verification', reason:'lesionRevisionsChunkCount pós-escrita não bate', expected:committedLesionRevisionsChunkCount, actual:verifyLesionRevisionsChunkCount };
+    }
+    let verifyLesionRevisions = {};
+    if(explicitLesionRevisions){
+      const lrChunkSnaps = await Promise.all(
+        Array.from({length:verifyLesionRevisionsChunkCount}, (_,i)=> withFirebaseTimeout(FB_LESION_REVISIONS_CHUNK_REF(i).get({source:'server'}), 20000, `restore canônico (verificação revisões ${i+1})`))
+      );
+      lrChunkSnaps.forEach(snap=>{
+        if(snap.exists){
+          const entries = (snap.data()||{}).entries;
+          if(entries && typeof entries==='object' && !Array.isArray(entries)) Object.assign(verifyLesionRevisions, structuralSnapshotProgressFromFirestore(entries));
+        }
+      });
+      if(!deepStableEqual(verifyLesionRevisions, explicitLesionRevisions)){
+        return { ok:false, stage:'post_write_verification', reason:'LESION_REVISIONS pós-escrita não bate com o que foi restaurado (comparação estrutural falhou)' };
+      }
+    }
+    if(!deepStableEqual(normalizeLesionMerges(verifyMeta.lesionMerges), finalLesionMerges) ||
+       !deepStableEqual(normalizeLesionTombstones(verifyMeta.lesionTombstones), finalLesionTombstones) ||
+       !deepStableEqual(normalizeReviewProgress(verifyMeta.reviewProgress), finalReviewProgress) ||
+       !deepStableEqual(normalizeReviewOverrides(verifyMeta.reviewOverride), finalReviewOverride) ||
+       !deepStableEqual(normalizeReviewStamps(verifyMeta.reviewUpdatedAt), finalReviewUpdatedAt) ||
+       !deepStableEqual(normalizeOrderStamps(verifyMeta.orderUpdatedAt), finalOrderUpdatedAt)){
+      return { ok:false, stage:'post_write_verification', reason:'estrutura preservada/restaurada (lesionMerges/lesionTombstones/reviewProgress/reviewOverride/reviewUpdatedAt/orderUpdatedAt) não bate após a escrita' };
+    }
+
     // Só agora, com TUDO confirmado (escrita + releitura + comparação
     // estrutural + revalidação), atualiza os globais — nunca antes.
     if(o.updateGlobalsOnSuccess !== false){
@@ -3528,8 +3901,16 @@ async function restoreCanonicalStateToCloud(payload, opts){
       sectionOrder = JSON.parse(JSON.stringify(snapshot.sectionOrder));
       siteOrder = JSON.parse(JSON.stringify(snapshot.siteOrder));
       IMAGE_TOMBSTONES = JSON.parse(JSON.stringify(snapshot.tombstones));
+      if(explicitLesionRevisions) LESION_REVISIONS = JSON.parse(JSON.stringify(explicitLesionRevisions)); // PROTEÇÃO 095C
+      LESION_MERGES = JSON.parse(JSON.stringify(finalLesionMerges));
+      LESION_TOMBSTONES = JSON.parse(JSON.stringify(finalLesionTombstones));
+      REVIEW_PROGRESS = JSON.parse(JSON.stringify(finalReviewProgress));
+      REVIEW_OVERRIDE = JSON.parse(JSON.stringify(finalReviewOverride));
+      REVIEW_STAMPS = JSON.parse(JSON.stringify(finalReviewUpdatedAt));
+      ORDER_STAMPS = JSON.parse(JSON.stringify(finalOrderUpdatedAt));
       lastKnownCloudRevision = committedRevision;
       window.__lastKnownChunkCount = chunks.length;
+      window.__lastKnownLesionRevisionsChunkCount = committedLesionRevisionsChunkCount;
     }
 
     return { ok:true, revision: committedRevision, records: snapshot.data.length };
@@ -3883,7 +4264,20 @@ function openNewDeviceBootstrapModal(){
    nada disso mudou). */
 async function adoptRemoteStateForNewDevice(){
   if(canonicalRestoreInProgress) return;
-  const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'carregar catálogo da nuvem (dispositivo novo)');
+  let remote;
+  try{
+    remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'carregar catálogo da nuvem (dispositivo novo)');
+  }catch(e){
+    // PROTEÇÃO 095C — schema remoto mais novo que este Atlas entende: não
+    // adota NADA (DATA/REVIEW/SRS/etc continuam como já estavam — o SEED
+    // local, neste fluxo), não inicia push, só avisa com clareza.
+    if(e && e.code === 'schema_version_too_new'){
+      setSyncStatus(false, 'este Atlas precisa ser atualizado — a nuvem já está numa versão mais nova (recarregue a página / limpe o cache antes de continuar).');
+      try{ toast('⚠ Atualize o Atlas antes de continuar — a nuvem já está numa versão mais nova.'); }catch(_e2){}
+      return;
+    }
+    throw e;
+  }
   if(!remote) return; // nuvem nunca escrita — mantém o SEED que já estava em DATA
   // PROTEÇÃO 094 — tombstones de lesão ANTES do filtro de DATA abaixo: um
   // dispositivo novo nunca pode herdar uma lesão já excluída em outro.
@@ -5084,6 +5478,13 @@ async function reconcileBeforePush(reason){
     const noOp = deepStableEqual(localSnapshot, remoteSnapshot);
     return { ok:true, preservedCloudOnly: r.preservedCloudOnly, noOp };
   }catch(e){
+    // PROTEÇÃO 095C — distingue o motivo pra pushToFirebaseNow() poder
+    // mostrar uma mensagem clara (não a genérica de "tentando de novo") e
+    // pra nunca tentar escrever quando a causa é incompatibilidade de
+    // versão, não uma falha transitória de rede.
+    if(e && e.code === 'schema_version_too_new'){
+      return { ok:false, reason:'schema_version_too_new', error: e.message };
+    }
     return { ok:false, reason:'read_failed', error:(e && e.message) || String(e) };
   }finally{
     fbSyncing = false;

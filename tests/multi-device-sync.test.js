@@ -178,6 +178,9 @@ const lesionMergesModule091c = html.slice(html.indexOf("const LESION_MERGES_KEY 
 // por isQuarantinedSeedId/reconcileStateWithRemote/adoptRemoteStateForNewDevice/
 // writeShardedState/readShardedState/loadData (ver index.html).
 const lesionTombstonesModule094 = html.slice(html.indexOf("const LESION_TOMBSTONES_KEY = 'atlas:lesionTombstones';"), html.indexOf('function isQuarantinedSeedId(id){'));
+// PROTEÇÃO 095 — sharding determinístico por bytes de LESION_REVISIONS
+// (ver index.html: writeShardedState/readShardedState consultam).
+const splitLesionRevisionsIntoShardsFn = extractFunction(html, 'splitLesionRevisionsIntoShards');
 // PROTEÇÃO 085 — ordem de seções/sítios com carimbo de reordenação manual.
 const orderFns085 = ['normalizeOrderStamps', 'loadOrderStamps', 'saveOrderStamps', 'markSectionOrderManual',
   'markSiteOrderManual', 'markRestoredOrderManual', 'dedupeOrderList', 'isAutoSectionOrder', 'isAutoSiteList',
@@ -286,13 +289,27 @@ function makeFakeCloud() {
         delete: async () => { store.delete(key); }
       };
     },
+    // PROTEÇÃO 095 — pedaços de lesionRevisions: mesmo mecanismo dos pedaços
+    // de DATA acima, prefixo de chave próprio (namespace separado).
+    FB_LESION_REVISIONS_CHUNK_REF: (i) => {
+      const key = 'lr_chunk_' + i;
+      return {
+        __kind: 'lrchunk', __i: i,
+        set: async (payload) => { store.set(key, payload); },
+        get: async () => {
+          const data = store.get(key);
+          return { exists: !!data, data: () => data };
+        },
+        delete: async () => { store.delete(key); }
+      };
+    },
     // ALTERAÇÃO 070: writeShardedState() real escreve dentro de UMA
     // transação (tx.get/tx.set) — este mock opera no MESMO `store`
     // compartilhado, então a verificação de revisão feita por
     // writeShardedState() (dentro da própria função extraída, real) vale
     // de verdade entre os "dispositivos" do teste.
     runTransaction: async (fn) => {
-      const subKeyOf = (ref) => (ref.__kind === 'meta' ? 'main' : (ref.__kind === 'sub' ? ('sub/' + ref.__sub + '/' + ref.__id) : ('chunk_' + ref.__i)));
+      const subKeyOf = (ref) => (ref.__kind === 'meta' ? 'main' : (ref.__kind === 'sub' ? ('sub/' + ref.__sub + '/' + ref.__id) : (ref.__kind === 'lrchunk' ? ('lr_chunk_' + ref.__i) : ('chunk_' + ref.__i))));
       const tx = {
         get: async (ref) => {
           const data = store.get(subKeyOf(ref));
@@ -328,6 +345,26 @@ function makeFakeCloud() {
     peekChunkItems(i) {
       const chunk = store.get('chunk_' + i);
       return chunk && Array.isArray(chunk.items) ? chunk.items : [];
+    },
+    // PROTEÇÃO 095 — lesionRevisions sai do meta (formato novo: pedaços
+    // lr_chunk_i); reconstrói por completo, igual readShardedState faz,
+    // com fallback pro campo legado embutido quando ausente. Mesma
+    // convenção dos outros peek* acima: devolve o payload CRU (sem decodificar
+    // o codec de progresso embutido no snapshot — mesma convenção de
+    // peekMeta().reviewProgress, usado cru em outros testes deste arquivo).
+    peekLesionRevisions() {
+      const main = store.get('main');
+      if (!main) return {};
+      const chunkCount = Number(main.lesionRevisionsChunkCount) || 0;
+      if (chunkCount > 0) {
+        const out = {};
+        for (let i = 0; i < chunkCount; i++) {
+          const chunk = store.get('lr_chunk_' + i);
+          if (chunk && chunk.entries && typeof chunk.entries === 'object') Object.assign(out, chunk.entries);
+        }
+        return out;
+      }
+      return (main.lesionRevisions && typeof main.lesionRevisions === 'object') ? main.lesionRevisions : {};
     }
   };
 }
@@ -361,6 +398,7 @@ function makeDevice(cloud, { seed = [] } = {}) {
     syncDirty: false,
     SYNC_DIRTY_KEY: 'atlas:syncDirty',
     CLOUD_REVISION_FIELD: 'revision',
+    STATE_SCHEMA_VERSION: 5, // PROTEÇÃO 095B
     lastKnownCloudRevision: null, // null = nunca lido com sucesso nesta sessão (mesmo estado inicial do app real)
     lastWriteRefusedReason: null,
     lastRevisionConflictAt: null,
@@ -377,6 +415,7 @@ function makeDevice(cloud, { seed = [] } = {}) {
     DATA_CHUNK_SIZE: 150,
     FB_META_REF: cloud.FB_META_REF,
     FB_CHUNK_REF: cloud.FB_CHUNK_REF,
+    FB_LESION_REVISIONS_CHUNK_REF: cloud.FB_LESION_REVISIONS_CHUNK_REF, // PROTEÇÃO 095
     withFirebaseTimeout: (p) => p,
     // Espelha o essencial da setSyncStatus real (sem DOM): sucesso limpa o
     // pendente, falha marca — é exatamente esse estado que a barreira de
@@ -518,6 +557,8 @@ function makeDevice(cloud, { seed = [] } = {}) {
     function __setLesionMerges091c(v){ LESION_MERGES = v; }
     let lastWriteStaleImagesBlocked = 0;
     ${gateStaleImagesFn.source}
+    const LESION_REVISIONS_SHARD_TARGET_BYTES = 700*1024;
+    ${splitLesionRevisionsIntoShardsFn.source}
     ${writeShardedStateFn.source}
     ${writeShardedStateWithConflictRetryFn.source}
     ${writeShardedStateSerializedFn.source}
@@ -682,8 +723,9 @@ test('PONTE ESTRUTURAL RECOVERY E2E: executed local falha 1x, retry confirma, ba
   assert.equal(a.context.syncPushPending, false, 'sucesso limpa o pendente (banner some)');
   // 9+10+11. Nuvem com executed + keeper, sem remove.
   const meta = cloud.peekMeta();
-  assert.equal(meta.lesionRevisions[RID].structuralPlan.status, 'executed');
-  assert.equal(meta.lesionRevisions[RID].structuralExecution.executionId, 'exec_t1');
+  const cloudRevsE2E = cloud.peekLesionRevisions(); // PROTEÇÃO 095 — pedaços, não mais o meta
+  assert.equal(cloudRevsE2E[RID].structuralPlan.status, 'executed');
+  assert.equal(cloudRevsE2E[RID].structuralExecution.executionId, 'exec_t1');
   assert.deepEqual(Array.from(cloud.peekChunkItems(0)).map((e) => e.id).sort(), ['seed_206']);
   // 12. Reboot no mesmo device continua executed.
   await a.boot();
@@ -691,11 +733,18 @@ test('PONTE ESTRUTURAL RECOVERY E2E: executed local falha 1x, retry confirma, ba
   // Quarentena fiel à produção (isQuarantinedSeedId consulta LESION_MERGES):
   // id fundido nunca volta pelo SEED nem por PC desatualizado.
   a.context.isQuarantinedSeedId = (id) => !!(a.context.LESION_MERGES && Object.prototype.hasOwnProperty.call(a.context.LESION_MERGES, id));
-  // 13. Remoto pré-execução (accepted + seed_575 de volta, revisão igual) não vence.
+  // 13. Remoto pré-execução (accepted + seed_575 de volta, revisão igual) não
+  // vence. Simula um device PRÉ-095 (nunca soube de pedaços): grava
+  // lesionRevisions embutido no meta e OMITE lesionRevisionsChunkCount —
+  // exatamente o formato legado que readShardedState() precisa continuar
+  // aceitando.
+  const staleRevsE2E = JSON.parse(JSON.stringify(cloudRevsE2E));
+  staleRevsE2E[RID].structuralPlan.status = 'accepted';
+  staleRevsE2E[RID].structuralPlan.decidedAt = '2026-09-27T00:01:00.000Z';
+  delete staleRevsE2E[RID].structuralExecution;
   const oldMeta = JSON.parse(JSON.stringify(meta));
-  oldMeta.lesionRevisions[RID].structuralPlan.status = 'accepted';
-  oldMeta.lesionRevisions[RID].structuralPlan.decidedAt = '2026-09-27T00:01:00.000Z';
-  delete oldMeta.lesionRevisions[RID].structuralExecution;
+  delete oldMeta.lesionRevisionsChunkCount;
+  oldMeta.lesionRevisions = staleRevsE2E;
   const oldChunk = JSON.parse(JSON.stringify(Array.from(cloud.peekChunkItems(0))));
   oldChunk.push(makeSeedEntry({ id: 'seed_575', name: 'Teratoma cístico maduro' }));
   await cloud.FB_META_REF().set(oldMeta);
@@ -2511,8 +2560,10 @@ function makeRestoreContext(cloud) {
     fbDb: { runTransaction: cloud.runTransaction },
     FB_META_REF: cloud.FB_META_REF,
     FB_CHUNK_REF: cloud.FB_CHUNK_REF,
+    FB_LESION_REVISIONS_CHUNK_REF: cloud.FB_LESION_REVISIONS_CHUNK_REF, // PROTEÇÃO 095C
     DATA_CHUNK_SIZE: 150,
     CLOUD_REVISION_FIELD: 'revision',
+    STATE_SCHEMA_VERSION: 5, // PROTEÇÃO 095B/095C
     canonicalRestoreInProgress: false,
     withFirebaseTimeout: (p) => p,
     firebase: { firestore: { FieldValue: { serverTimestamp: () => 'SERVER_TS' } } },
@@ -2522,6 +2573,10 @@ function makeRestoreContext(cloud) {
     // payload de restore.
     DATA: [], REVIEW: {}, SRS: {}, SESSIONLOG: {}, sectionOrder: [], siteOrder: {},
     IMAGE_TOMBSTONES: {}, lastKnownCloudRevision: null,
+    // PROTEÇÃO 095C — globais que o restore passa a poder atualizar
+    // (preservados/restaurados), com o mesmo raciocínio dos de cima.
+    LESION_REVISIONS: null, LESION_MERGES: {}, LESION_TOMBSTONES: {},
+    REVIEW_PROGRESS: {}, REVIEW_OVERRIDE: {}, REVIEW_STAMPS: {}, ORDER_STAMPS: {},
     window: {},
     console
   });
@@ -2540,6 +2595,16 @@ function makeRestoreContext(cloud) {
     ${validateCanonicalPayloadFn.source}
     ${canonicalJsonStringFn.source}
     ${deepStableEqualFn.source}
+    // PROTEÇÃO 095C — dependências reais do novo trecho de
+    // restoreCanonicalStateToCloud (preservar/substituir lesionRevisions e
+    // demais estruturas de 084/085/089/090/091c/094, com os MESMOS helpers
+    // de writeShardedState — nunca uma segunda implementação divergente).
+    const LESION_REVISIONS_SHARD_TARGET_BYTES = 700*1024;
+    ${splitLesionRevisionsIntoShardsFn.source}
+    ${reviewFns089}
+    ${structuralSyncFns}
+    ${orderFns085}
+    ${lesionMergesModule091c}
     ${restoreCanonicalStateToCloudFn.source}
   `;
   new vm.Script(engine).runInContext(context);
@@ -3564,7 +3629,7 @@ async function userRevisionAction084(device, mutate) {
   assert.equal(device.context.syncDirty, true, 'ação do usuário precisa marcar dirty');
   await device.context.pushToFirebaseNow();
 }
-const cloudRevs084 = (cloud) => JSON.parse(JSON.stringify((cloud.peekMeta() || {}).lesionRevisions || {}));
+const cloudRevs084 = (cloud) => JSON.parse(JSON.stringify(cloud.peekLesionRevisions() || {})); // PROTEÇÃO 095 — pedaços, não mais o meta
 
 test('PROTEÇÃO 084 - PC A cria revisão -> nuvem recebe; PC B (já inicializado) abre e recebe SEM marcar dirty nem escrever', async () => {
   const cloud = makeFakeCloud();
@@ -4197,7 +4262,7 @@ test('PROTEÇÃO 091c - PC antigo gravou REVIEW/revisão do id fundido na nuvem 
   const meta = cloud.peekMeta();
   assert.equal(Object.prototype.hasOwnProperty.call(meta.review, 'seed_2'), false, 'sem chave órfã no REVIEW da nuvem');
   assert.equal(meta.review.seed_1, 2, 'estado de estudo do PC antigo chega ao keeper');
-  assert.equal(meta.lesionRevisions.R9.lesionId, 'seed_1', 'revisão remota redirecionada');
+  assert.equal(cloud.peekLesionRevisions().R9.lesionId, 'seed_1', 'revisão remota redirecionada'); // PROTEÇÃO 095
   assert.deepEqual(cloudIds091c(cloud), ['seed_1', 'seed_3']);
 });
 
