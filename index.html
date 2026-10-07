@@ -26751,7 +26751,7 @@ async function copyManualActionAiBatch(reviewIds){
    imagens, ownership, altPlacements, tombstones, Cloudinary ou sync além do
    saveLesionRevisions() (mesmo contrato das demais ações da Central, que só
    persiste a fila). A execução real fica para a Fase 3. */
-const STRUCTURAL_PLAN_TYPES = ['merge_duplicates','remove_additional_section_placement','transfer_images','add_clinical_cases','unresolved','no_action'];
+const STRUCTURAL_PLAN_TYPES = ['merge_duplicates','remove_additional_section_placement','transfer_images','add_clinical_cases','update_content','unresolved','no_action'];
 const STRUCTURAL_PLAN_ENVELOPE_KEYS = ['type','version','generatedAt','resolutions'];
 function structuralPlanError(reviewId, reason, detail){
   return { reviewId: reviewId||null, valid:false, reason, detail: detail||null };
@@ -26784,6 +26784,18 @@ function structuralPlanResolveImage(lesion, imageId){
   }
   return null;
 }
+/* GUARDA SEMÂNTICA de update_content — seed_N sozinho NUNCA é identidade
+   suficiente: já tivemos um caso real em que os mesmos registros tinham
+   seed_1030/seed_500 no SEED local e seed_968/seed_483 no DATA vivo
+   publicado. Compara nome+seção+site EXATOS (sem normalizar/aproximar —
+   divergência de verdade deve rejeitar, nunca silenciosamente "quase
+   igual"). Chamada tanto na validação de importação quanto de novo,
+   imediatamente antes de mutar, na execução — nunca lê humanOverride, que
+   nunca pode contornar esta checagem. */
+function structuralPlanIdentityMismatch(lesion, expected){
+  if(!lesion || !expected) return true;
+  return lesion.name!==expected.name || lesion.s!==expected.section || lesion.site!==expected.site;
+}
 function structuralPlanKnownIds(review, source){
   // IDs que a Ponte 1 apresentou como source/candidato: pertinência conhecida.
   // Nunca afirma duplicidade — só permite referenciar sem override.
@@ -26813,6 +26825,7 @@ function validateStructuralResolution(raw){
     remove_additional_section_placement:['reviewId','resolutionType','lesionId','placement','reasoning','humanOverride'],
     transfer_images:['reviewId','resolutionType','fromLesionId','toLesionId','imageIds','reasoning','humanOverride'],
     add_clinical_cases:['reviewId','resolutionType','lesionId','clinicalCases','reasoning','humanOverride'],
+    update_content:['reviewId','resolutionType','lesionId','expectedIdentity','fields','reasoning','humanOverride'],
     unresolved:['reviewId','resolutionType','reason','reasoning'],
     no_action:['reviewId','resolutionType','reasoning']
   }[type];
@@ -26906,6 +26919,35 @@ function validateStructuralResolution(raw){
       cases.push(Object.assign({}, c));
     }
     return { reviewId:r.reviewId, valid:true, type, lesionId:lesion.id, lesionName:lesion.name, clinicalCases:cases, reasoning, humanOverride:!!r.humanOverride };
+  }
+  if(type==='update_content'){
+    // GUARDA SEMÂNTICA OBRIGATÓRIA — ver structuralPlanIdentityMismatch.
+    // humanOverride NUNCA é lido aqui: não existe forma de contornar esta
+    // checagem por este campo.
+    const identity = r.expectedIdentity;
+    if(!identity || typeof identity!=='object' || Array.isArray(identity)) return fail('expectedIdentity_missing');
+    for(const k of Object.keys(identity))
+      if(['name','section','site'].indexOf(k)<0) return fail('expectedIdentity_unknown_field', k);
+    const idName = structuralPlanString(identity.name, false);
+    const idSection = structuralPlanString(identity.section, false);
+    const idSite = structuralPlanString(identity.site, false);
+    if(idName===null) return fail('expectedIdentity_name_missing');
+    if(idSection===null) return fail('expectedIdentity_section_missing');
+    if(idSite===null) return fail('expectedIdentity_site_missing');
+    // A revisão (quando já tem lesão associada) precisa apontar pra MESMA
+    // lesão do plano — nunca resolve o pedido de uma revisão apontando pra
+    // outra lesão qualquer.
+    if(typeof review.lesionId==='string' && review.lesionId && review.lesionId!==r.lesionId)
+      return fail('review_lesion_mismatch', review.lesionId+' != '+r.lesionId);
+    const lesion = structuralPlanLesion(r.lesionId);
+    if(!lesion) return fail('lesion_not_found', r.lesionId);
+    const expected = { name:idName, section:idSection, site:idSite };
+    if(structuralPlanIdentityMismatch(lesion, expected))
+      return fail('identity_mismatch', { expected, actual:{ name:lesion.name, section:lesion.s, site:lesion.site } });
+    const check = validateProposedChanges(r.fields);
+    if(!check.valid) return fail(check.reason);
+    return { reviewId:r.reviewId, valid:true, type, lesionId:lesion.id, lesionName:lesion.name,
+      expectedIdentity:expected, fields:check.changes, reasoning, humanOverride:!!r.humanOverride };
   }
   if(type==='unresolved'){
     if(structuralPlanString(r.reason, false)===null) return fail('reason_missing');
@@ -27189,6 +27231,8 @@ function structuralResolutionToRaw(v){
     return Object.assign(base, { resolutionType:'transfer_images', fromLesionId:v.fromLesionId, toLesionId:v.toLesionId, imageIds:v.imageIds });
   if(v.type==='add_clinical_cases')
     return Object.assign(base, { resolutionType:'add_clinical_cases', lesionId:v.lesionId, clinicalCases:v.clinicalCases });
+  if(v.type==='update_content')
+    return Object.assign(base, { resolutionType:'update_content', lesionId:v.lesionId, expectedIdentity:v.expectedIdentity, fields:v.fields });
   if(v.type==='unresolved')
     return Object.assign(base, { resolutionType:'unresolved', reason:v.reason });
   if(v.type==='no_action') return Object.assign(base, { resolutionType:'no_action' });
@@ -27376,6 +27420,23 @@ function dryRunStructuralPlan(reviewId){
     base.executes = true;
     return base;
   }
+  if(v.type==='update_content'){
+    const lesion = need(v.lesionId);
+    if(base.conflicts.length) return Object.assign(base, { ok:false, reason:'dry_conflicts' });
+    // Repete a guarda semântica no dry-run (prévia + portão pré-execução) —
+    // nunca confia só na validação feita na importação; lesão pode ter
+    // mudado desde então. humanOverride nunca contorna isto.
+    if(structuralPlanIdentityMismatch(lesion, v.expectedIdentity)){
+      base.conflicts.push({ kind:'identity_mismatch', lesionId:lesion.id });
+      return Object.assign(base, { ok:false, reason:'dry_conflicts' });
+    }
+    base.keeper = { id:lesion.id, name:lesion.name }; base.affectedLesionIds = [lesion.id];
+    const fields = v.fields || {};
+    for(const k of Object.keys(fields)) base.fieldChanges.push({ field:k, from:lesion[k]===undefined?null:lesion[k], to:fields[k] });
+    base.operations = ['update_lesion_fields'];
+    base.executes = true;
+    return base;
+  }
   return Object.assign(base, { ok:false, reason:'unknown_type' });
 }
 function structuralSnapshotLesions(ids){
@@ -27481,6 +27542,7 @@ async function executeStructuralPlan(reviewId){
     else if(v.type==='remove_additional_section_placement') structuralApplyRemovePlacement(v, now);
     else if(v.type==='transfer_images') structuralApplyTransferImages(v, dry, now);
     else if(v.type==='add_clinical_cases') structuralApplyAddCases(v, now);
+    else if(v.type==='update_content') structuralApplyUpdateContent(v, now);
     else return await recordFailure('nothing_to_execute');
     // Pós-condições: keeper existe; remove sumiu (merge); imagens preservadas.
     const keeperAfter = v.keeperId ? structuralPlanLesion(v.keeperId) : (v.lesionId ? structuralPlanLesion(v.lesionId) : (v.toLesionId ? structuralPlanLesion(v.toLesionId) : null));
@@ -27680,6 +27742,20 @@ function structuralApplyAddCases(v, now){
     item.origin = 'structural-plan'; item.createdAt = now; item.updatedAt = now;
     lesion.clinicalCases.push(item);
   });
+  lesion._userUpdatedAt = now;
+}
+/* update_content — overwrite SÓ das chaves presentes em fields (já restrito
+   à allowlist de validateProposedChanges: name/notes/classification/tags/
+   enTerm/clinicalTags). Nunca toca id/images/links/clinicalCases/
+   radiologicSigns/classificationSchemes/altPlacements/s/site. Repete a
+   guarda semântica (nome+seção+site) IMEDIATAMENTE antes de mutar — última
+   linha de defesa, sem excecão por humanOverride (nem é lido aqui). */
+function structuralApplyUpdateContent(v, now){
+  const lesion = structuralPlanLesion(v.lesionId);
+  if(!lesion) throw new Error('lesion_missing');
+  if(structuralPlanIdentityMismatch(lesion, v.expectedIdentity)) throw new Error('identity_mismatch');
+  const fields = v.fields || {};
+  Object.keys(fields).forEach(k=>{ lesion[k] = fields[k]; });
   lesion._userUpdatedAt = now;
 }
 async function rollbackStructuralExecution(reviewId){
@@ -28225,6 +28301,15 @@ function structuralPlanPreviewHtml(v){
       '<div>Casos: '+(v.clinicalCases||[]).map(c=>esc(c.title||c.sourceUrl||'?')).join('; ')+'</div>' +
       (v.reasoning?'<div><b>Justificativa da IA:</b> '+esc(v.reasoning)+'</div>':'') + '</div>';
   }
+  if(v.type==='update_content'){
+    const f = v.fields || {}, id = v.expectedIdentity || {};
+    const rows = Object.keys(f).map(k=>'<li>'+esc(k)+': '+esc(Array.isArray(f[k])?f[k].join(', '):String(f[k])).slice(0,300)+'</li>');
+    return head('Atualizar conteúdo (PLANO — não executado)', v.reviewId) +
+      '<div>Lesão: '+esc(v.lesionId)+' — '+esc(v.lesionName)+'</div>' +
+      '<div><b>Identidade exigida:</b> '+esc(id.name)+' · '+esc(id.section)+' › '+esc(id.site)+'</div>' +
+      '<div><b>CAMPOS QUE SERIAM ALTERADOS:</b><ul>'+rows.join('')+'</ul></div>' +
+      (v.reasoning?'<div><b>Justificativa da IA:</b> '+esc(v.reasoning)+'</div>':'') + '</div>';
+  }
   if(v.type==='unresolved'){
     return head('⚠️ Sem resolução estrutural segura', v.reviewId) +
       '<div><b>Motivo:</b> '+esc(v.reason)+'</div>' +
@@ -28528,6 +28613,9 @@ function structuralHistoryCardHtml(r){
   else if(v.type==='add_clinical_cases')
     detail = '<div><b>Lesão:</b> '+esc(v.lesionId)+' — '+esc(v.lesionName||'')+'</div>' +
       '<div><b>Casos adicionados:</b> '+(Array.isArray(v.clinicalCases)?v.clinicalCases.length:0)+'</div>';
+  else if(v.type==='update_content')
+    detail = '<div><b>Lesão:</b> '+esc(v.lesionId)+' — '+esc(v.lesionName||'')+'</div>' +
+      '<div><b>Campos alterados:</b> '+esc(Object.keys(v.fields||{}).join(', '))+'</div>';
   return '<div class="review-center-row-main">' +
     '<div class="review-center-row-title">'+esc((keep&&keep.name)||v.keeperName||v.lesionName||v.toLesionName||r.lesionId||r.id)+'</div>' +
     '<div class="review-center-row-meta">'+head+' ('+esc(v.type||r.structuralPlan.type||'?')+')</div>' +
