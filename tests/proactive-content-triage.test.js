@@ -69,7 +69,7 @@ const FN_NAMES = [
   'triageClassificationApplicable', 'triageClassificationReasons', 'triageClinicalTagsReasons', 'triageRichImagesWeakNotesReasons',
   'evaluateLesionForTriage', 'scanCatalogForTriage', 'createTriageReviewBatch',
   'tokenizeExternalTitle', 'normalizeExternalTitle', 'classifyClassificationCompatibility',
-  'hasActiveLesionReview', 'reviewScope', 'createLesionReview', 'genLesionReviewId', 'pushLesionReviewHistory'
+  'hasActiveLesionReview', 'hasAcceptedLesionReviewWithSolution', 'reviewScope', 'createLesionReview', 'genLesionReviewId', 'pushLesionReviewHistory'
 ];
 const CONST_NAMES = [
   'TRIAGE_MIN_TAGS', 'TRIAGE_MIN_NOTES_CHARS', 'TRIAGE_MIN_NOTES_REMAINDER_TOKENS', 'TRIAGE_RICH_IMAGES_MIN',
@@ -378,6 +378,64 @@ test('14. lesão com revisão ativa NUNCA aparece como candidata (nunca duplica 
   const ctx = buildCtx({ data, lesionRevisions });
   const out = ctx.scanCatalogForTriage(data);
   assert.equal(out.length, 0);
+});
+
+/* ===================== 14b. accepted+solution não reaparece (auditoria 2026-10-07) ===================== */
+
+test('14b-A. accepted + solution => excluída da triagem (mesmo com lacunas objetivas reais)', () => {
+  const data = [lesion({ id: 'a', name: 'Zebra', notes: '', tags: [] })];
+  const lesionRevisions = { r1: { id: 'r1', scope: 'lesion', lesionId: 'a', status: 'accepted', solution: { summary: 'corrigido' } } };
+  const ctx = buildCtx({ data, lesionRevisions });
+  assert.equal(ctx.scanCatalogForTriage(data).length, 0);
+});
+
+test('14b-B. cancelled + solution preservada => CONTINUA aparecendo (nunca foi aplicada)', () => {
+  const data = [lesion({ id: 'a', name: 'Zebra', notes: '', tags: [] })];
+  const lesionRevisions = { r1: { id: 'r1', scope: 'lesion', lesionId: 'a', status: 'cancelled', solution: { summary: 'proposta descartada' } } };
+  const ctx = buildCtx({ data, lesionRevisions });
+  const out = ctx.scanCatalogForTriage(data);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].id, 'a');
+});
+
+test('14b-C. accepted SEM solution => CONTINUA aparecendo', () => {
+  const data = [lesion({ id: 'a', name: 'Zebra', notes: '', tags: [] })];
+  const lesionRevisions = { r1: { id: 'r1', scope: 'lesion', lesionId: 'a', status: 'accepted', solution: null } };
+  const ctx = buildCtx({ data, lesionRevisions });
+  const out = ctx.scanCatalogForTriage(data);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].id, 'a');
+});
+
+test('14b-D. revisão ativa/proposed continua excluída pelo filtro já existente (regressão)', () => {
+  const data = [lesion({ id: 'a', name: 'Zebra', notes: '', tags: [] })];
+  const lesionRevisions = { r1: { id: 'r1', scope: 'lesion', lesionId: 'a', status: 'proposed', solution: { summary: 'ainda não aplicada' } } };
+  const ctx = buildCtx({ data, lesionRevisions });
+  assert.equal(ctx.scanCatalogForTriage(data).length, 0);
+});
+
+test('14b-E. múltiplas revisões (uma rejected, outra accepted+solution) => excluída', () => {
+  const data = [lesion({ id: 'a', name: 'Zebra', notes: '', tags: [] })];
+  const lesionRevisions = {
+    r1: { id: 'r1', scope: 'lesion', lesionId: 'a', status: 'rejected', solution: null },
+    r2: { id: 'r2', scope: 'lesion', lesionId: 'a', status: 'accepted', solution: { summary: 'corrigido depois' } }
+  };
+  const ctx = buildCtx({ data, lesionRevisions });
+  assert.equal(ctx.scanCatalogForTriage(data).length, 0);
+});
+
+test('14b-F. scope global com o mesmo lesionId por acidente NUNCA exclui (mesma guarda de hasActiveLesionReview)', () => {
+  const data = [lesion({ id: 'a', name: 'Zebra', notes: '', tags: [] })];
+  const lesionRevisions = { r1: { id: 'r1', scope: 'global', lesionId: 'a', status: 'accepted', solution: { summary: 'x' } } };
+  const ctx = buildCtx({ data, lesionRevisions });
+  const out = ctx.scanCatalogForTriage(data);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].id, 'a');
+});
+
+test('14b-G. scanCatalogForTriage usa hasAcceptedLesionReviewWithSolution (estático)', () => {
+  const src = extractFunction(html, 'scanCatalogForTriage');
+  assert.match(src, /hasAcceptedLesionReviewWithSolution\(e\.id\)/, 'o novo filtro precisa estar realmente ligado ao scan, não só definido isolado');
 });
 
 test('15. cada motivo é explicável: todo código de reasons tem um label em TRIAGE_REASON_LABELS', () => {

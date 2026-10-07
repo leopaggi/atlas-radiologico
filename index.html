@@ -7437,6 +7437,19 @@ function hasActiveLesionReview(lesionId){
   if(!lesionId) return false;
   return Object.values(LESION_REVISIONS || {}).some(r=>r && reviewScope(r)==='lesion' && r.lesionId===lesionId && ACTIVE_LESION_REVIEW_STATUSES.includes(r.status)); // PROTEÇÃO 091: global nunca gera ⚠
 }
+/* Triagem proativa (auditoria 2026-10-07) — hasActiveLesionReview() não
+   cobre 'accepted' (status final, deliberadamente fora de
+   ACTIVE_LESION_REVIEW_STATUSES): uma lesão com proposta JÁ aceita e
+   aplicada reaparecia na triagem como se nunca tivesse sido revisada.
+   Critério deliberadamente estreito — só 'accepted' COM solution
+   preenchida conta; 'cancelled' preserva solution sem nunca ter aplicado
+   nada (ver cancelLesionReview) e precisa continuar voltando à triagem;
+   'accepted' sem solution (ex.: manual_action_required fechado sem
+   proposta textual) também continua elegível. */
+function hasAcceptedLesionReviewWithSolution(lesionId){
+  if(!lesionId) return false;
+  return Object.values(LESION_REVISIONS || {}).some(r=>r && reviewScope(r)==='lesion' && r.lesionId===lesionId && r.status==='accepted' && !!r.solution);
+}
 // PROTEÇÃO 091d — o ⚠ é um atalho: role="button" + tabindex (teclado);
 // o clique é tratado por handleLesionReviewWarningEvent (captura), que
 // impede o card/lista de abrir o detalhe por acidente.
@@ -19669,6 +19682,7 @@ function scanCatalogForTriage(catalog){
   for(const e of list){
     if(!e || !e.id) continue;
     if(typeof hasActiveLesionReview==='function' && hasActiveLesionReview(e.id)) continue;
+    if(typeof hasAcceptedLesionReviewWithSolution==='function' && hasAcceptedLesionReviewWithSolution(e.id)) continue;
     const { reasons, score } = evaluateLesionForTriage(e);
     if(!reasons.length) continue;
     out.push({ id: e.id, name: e.name || e.id, section: e.s || '', site: e.site || '', reasons, score });
