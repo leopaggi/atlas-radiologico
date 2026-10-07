@@ -19091,6 +19091,7 @@ function openPendingReviewsModal(){
       <div class="modal-actions" style="justify-content:flex-start;">
         <button type="button" class="btn btn-ghost" id="pending-reviews-new">+ Nova pendência</button>
         <button type="button" class="btn btn-ghost" id="pending-reviews-triage">🔎 Triagem proativa</button>
+        <button type="button" class="btn btn-ghost" id="pending-reviews-auto-triage" title="Processa a triagem proativa inteira em lotes de 20, sem listar candidatas uma a uma.">⚙️ Processar triagens automaticamente</button>
         <button type="button" class="btn btn-primary" id="ai-pipeline-run">🤖 Analisar pendências com IA</button>
         <button type="button" class="btn btn-ghost" id="pending-reviews-batch-ai-manual" title="Fluxo manual antigo (copiar prompt, colar na IA, importar JSON) — fallback se o servidor IA local não estiver disponível.">📋 preparar manualmente</button>
       </div>
@@ -19163,6 +19164,8 @@ function openPendingReviewsModal(){
   ov.querySelector('#pending-reviews-new').onclick = ()=> openNewReviewRequestModal(afterQueueChange); // PROTEÇÃO 091
   const triageBtn = ov.querySelector('#pending-reviews-triage');
   if(triageBtn) triageBtn.onclick = ()=> openProactiveTriageModal(afterQueueChange);
+  const autoTriageBtn = ov.querySelector('#pending-reviews-auto-triage');
+  if(autoTriageBtn) autoTriageBtn.onclick = ()=> openAutomaticTriagePipelineModal();
   if(batchBtn) batchBtn.hidden = getBatchEligibleReviews().length===0;
   if(manualBtn) manualBtn.hidden = getBatchEligibleReviews().length===0;
   wireAiPipelineRunButton(batchBtn, ov.querySelector('#ai-pipeline-status'), {
@@ -19387,6 +19390,91 @@ function createTriageReviewBatch(candidates){
   }
   return { created, skipped };
 }
+
+// Reentrância — mesmo padrão de AI_PIPELINE_RUN_IN_FLIGHT. Nunca persistido.
+let AUTO_TRIAGE_RUN_IN_FLIGHT = false;
+
+/* Orquestrador do processamento AUTOMÁTICO em lote da triagem proativa —
+   existe pra resolver o caso de ~1000+ candidatas, onde "Selecionar todas"
+   em openProactiveTriageModal trava a UI (ver comentário ali: a lista
+   inteira é montada de uma vez como innerHTML, um <label> + checkbox + spans
+   por candidata). Esta função NUNCA monta/seleciona elementos DOM — opera
+   direto sobre scanCatalogForTriage(DATA) (array puro) e processa em fatias
+   de até AI_PIPELINE_BATCH_LIMIT (20): cria os pedidos de revisão da fatia
+   (createTriageReviewBatch, que já evita duplicata via hasActiveLesionReview)
+   e só então chama runAiSolutionPipeline pra essa mesma fatia. Nunca chama
+   authorizeAndApplyReviewSolution/approveAppliedReviewSolution/
+   rollbackAppliedReviewSolution/executeStructuralPlan/
+   rollbackStructuralExecution/importReviewAiSolution/processReviewAiBatchItem
+   — só as funções já usadas pelo pipeline manual, nunca toca DATA/SEED.
+   Checkpoint SEM estrutura nova: cada candidata que ganha revisão ativa sai
+   de scanCatalogForTriage nas PRÓXIMAS chamadas (LESION_REVISIONS já
+   persistido via saveLesionRevisions, chamado por createLesionReview/
+   runAiSolutionPipeline) — um reload ou uma nova chamada simplesmente
+   recomeça do que falta, nunca reprocessa o que já tem revisão, nunca usa
+   seed_N pra controlar progresso. Pausa (opts.shouldPause) só é checada
+   ENTRE fatias, nunca no meio de uma gravação. Erro numa fatia PARA o
+   processamento ali (preserva tudo já concluído; nunca tenta a mesma fatia
+   de novo sozinho) — um novo clique do usuário retoma do estado persistido. */
+async function runAutomaticTriagePipeline(opts){
+  const o = opts || {};
+  const batchSize = Math.max(1, Math.min(AI_PIPELINE_BATCH_LIMIT, Number(o.batchSize) || AI_PIPELINE_BATCH_LIMIT));
+  const shouldPause = typeof o.shouldPause==='function' ? o.shouldPause : ()=>false;
+  const onProgress = typeof o.onProgress==='function' ? o.onProgress : ()=>{};
+  if(AUTO_TRIAGE_RUN_IN_FLIGHT) return { ok:false, reason:'already_running' };
+  AUTO_TRIAGE_RUN_IN_FLIGHT = true;
+  try{
+    const candidates = scanCatalogForTriage(DATA);
+    const total = candidates.length;
+    onProgress({ phase:'start', total });
+    if(total===0) return { ok:true, paused:false, total:0, processed:0, batches:[], created:0, skipped:0, proposed:0, noChange:0, needsHumanReview:0, errors:0 };
+
+    const batches = [];
+    let processed = 0, createdTotal = 0, skippedTotal = 0, proposedTotal = 0, noChangeTotal = 0, needsHumanTotal = 0, errorTotal = 0;
+
+    for(let i=0; i<candidates.length; i += batchSize){
+      if(shouldPause()){
+        onProgress({ phase:'paused', total, processed });
+        return { ok:true, paused:true, total, processed, batches, created:createdTotal, skipped:skippedTotal, proposed:proposedTotal, noChange:noChangeTotal, needsHumanReview:needsHumanTotal, errors:errorTotal };
+      }
+      const chunk = candidates.slice(i, i+batchSize);
+      const batchIndex = batches.length;
+      onProgress({ phase:'batch_start', total, processed, batchIndex, batchSize:chunk.length });
+
+      const { created, skipped } = createTriageReviewBatch(chunk);
+      createdTotal += created.length; skippedTotal += skipped.length;
+
+      let aiResult = null;
+      if(created.length > 0){
+        try{
+          aiResult = await runAiSolutionPipeline({ limit: batchSize, provider: o.provider,
+            onProgress: (p)=> onProgress(Object.assign({ phase:'ai_'+p.phase, total, processed, batchIndex }, p)) });
+        }catch(e){
+          aiResult = { ok:false, reason:'exception', detail:String((e&&e.message)||e) };
+        }
+      }
+      processed += chunk.length;
+      batches.push({ index:batchIndex, size:chunk.length, created:created.length, skipped:skipped.length, ai:aiResult });
+
+      if(aiResult && aiResult.ok){
+        proposedTotal += aiResult.proposed||0; noChangeTotal += aiResult.noChange||0;
+        needsHumanTotal += aiResult.needsHumanReview||0; errorTotal += aiResult.errors||0;
+      }
+      onProgress({ phase:'batch_done', total, processed, batchIndex, created:created.length, skipped:skipped.length, ai:aiResult });
+
+      if(aiResult && !aiResult.ok){
+        onProgress({ phase:'batch_error', total, processed, batchIndex, reason:aiResult.reason });
+        return { ok:true, paused:false, stoppedOnError:true, lastError:aiResult, total, processed, batches, created:createdTotal, skipped:skippedTotal, proposed:proposedTotal, noChange:noChangeTotal, needsHumanReview:needsHumanTotal, errors:errorTotal };
+      }
+    }
+
+    onProgress({ phase:'done', total, processed });
+    return { ok:true, paused:false, total, processed, batches, created:createdTotal, skipped:skippedTotal, proposed:proposedTotal, noChange:noChangeTotal, needsHumanReview:needsHumanTotal, errors:errorTotal };
+  } finally {
+    AUTO_TRIAGE_RUN_IN_FLIGHT = false;
+  }
+}
+
 /* UI — lista candidatas com motivos, seleção múltipla, e um único botão que
    cria os pedidos de revisão do lote escolhido. Mesmo padrão visual do
    resto do Centro de Revisões (.review-center-modal/.review-batch-row/
@@ -19469,6 +19557,77 @@ function openProactiveTriageModal(onCreated){
     toast(created.length ? (created.length + ' pedido(s) de revisão criado(s) — use "🤖 Analisar pendências com IA" pra gerar o lote.') : ('Nenhum pedido criado (' + ((skipped[0] && skipped[0].reason) || 'erro') + ').'));
     close();
     if(typeof onCreated==='function') onCreated();
+  };
+}
+
+/* UI LEVE para runAutomaticTriagePipeline — ao contrário de
+   openProactiveTriageModal acima, NUNCA monta um elemento por candidata
+   (nem na abertura, nem durante o processamento): só alguns nós fixos
+   (contador/texto de progresso), atualizados por onProgress. O total de
+   candidatas é só um número (scanCatalogForTriage(DATA).length), nunca uma
+   lista renderizada. Resolve o travamento/OOM de "Selecionar todas" com
+   ~1000+ candidatas sem precisar mudar openProactiveTriageModal (que
+   continua existindo, intacta, pro uso manual candidata-a-candidata). */
+function openAutomaticTriagePipelineModal(){
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  let running = false, pausedRequested = false;
+  const close = ()=>{
+    if(running){ toast('Aguarde o lote atual terminar antes de fechar (a pausa acontece entre lotes).'); return; }
+    ov.remove(); document.removeEventListener('keydown', closeOnEsc);
+  };
+  ov.onclick = e=>{ if(e.target===ov) close(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) close(); };
+  document.addEventListener('keydown', closeOnEsc);
+  const totalNow = scanCatalogForTriage(DATA).length;
+  ov.innerHTML = `
+    <div class="modal review-center-modal">
+      <h2>⚙️ Processar triagens automaticamente</h2>
+      <div class="modal-sub">processa a triagem proativa em lotes de ${AI_PIPELINE_BATCH_LIMIT}, sem listar candidatas uma a uma — nenhuma alteração no catálogo; só gera propostas, como no fluxo manual.</div>
+      <div class="modal-sub" id="auto-triage-total">${totalNow} candidata(s) com lacunas objetivas aguardando.</div>
+      <div class="modal-sub" id="auto-triage-progress"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-primary" id="auto-triage-start" ${totalNow?'':'disabled'}>Processar triagens automaticamente</button>
+        <button type="button" class="btn btn-ghost" id="auto-triage-pause" hidden>Pausar</button>
+        <button type="button" class="btn btn-ghost" id="auto-triage-close">fechar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const startBtn = ov.querySelector('#auto-triage-start');
+  const pauseBtn = ov.querySelector('#auto-triage-pause');
+  const progressEl = ov.querySelector('#auto-triage-progress');
+  ov.querySelector('#auto-triage-close').onclick = close;
+  if(!isAiPipelineProviderConfigured()){
+    startBtn.disabled = true;
+    startBtn.title = 'Servidor IA local não iniciado.';
+  }
+  startBtn.onclick = async ()=>{
+    running = true; pausedRequested = false;
+    startBtn.disabled = true; pauseBtn.hidden = false; pauseBtn.disabled = false; pauseBtn.textContent = 'Pausar';
+    pauseBtn.onclick = ()=>{ pausedRequested = true; pauseBtn.disabled = true; pauseBtn.textContent = 'pausando (entre lotes)…'; };
+    const res = await runAutomaticTriagePipeline({
+      shouldPause: ()=> pausedRequested,
+      onProgress: (p)=>{
+        if(p.phase==='start') progressEl.textContent = 'Iniciando — ' + p.total + ' candidata(s).';
+        else if(p.phase==='batch_start') progressEl.textContent = 'Lote ' + (p.batchIndex+1) + ' — processados ' + p.processed + ' / ' + p.total;
+        else if(p.phase==='batch_done') progressEl.textContent = 'Processados ' + p.processed + ' / ' + p.total + ' — lote ' + (p.batchIndex+1) + ' concluído.';
+        else if(p.phase==='batch_error') progressEl.textContent = 'Parado no lote ' + (p.batchIndex+1) + ' (erro: ' + (p.reason||'erro') + '). Progresso anterior preservado — clique novamente pra retomar.';
+        else if(p.phase==='paused') progressEl.textContent = 'Pausado — processados ' + p.processed + ' / ' + p.total + '. Clique novamente pra continuar.';
+        else if(p.phase==='done') progressEl.textContent = 'Concluído — ' + p.processed + ' / ' + p.total + ' processados.';
+      }
+    });
+    running = false; pausedRequested = false;
+    pauseBtn.hidden = true; pauseBtn.disabled = false; pauseBtn.textContent = 'Pausar';
+    const remaining = scanCatalogForTriage(DATA).length;
+    ov.querySelector('#auto-triage-total').textContent = remaining + ' candidata(s) com lacunas objetivas aguardando.';
+    startBtn.disabled = !isAiPipelineProviderConfigured() || remaining===0;
+    if(res.ok && res.total>0){
+      progressEl.innerHTML = progressEl.textContent +
+        ' · ' + res.proposed + ' proposta(s) · ' + res.noChange + ' sem alteração · ' + res.errors + ' erro(s). Nenhuma alteração no catálogo foi aplicada.' +
+        (res.proposed>0 ? ' <button type="button" class="btn btn-ghost auto-triage-open-solutions">Abrir Soluções</button>' : '');
+      const openBtn = progressEl.querySelector('.auto-triage-open-solutions');
+      if(openBtn) openBtn.onclick = ()=>{ close(); openReadySolutionsModal(); };
+    }
   };
 }
 
