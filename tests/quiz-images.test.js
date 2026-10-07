@@ -496,7 +496,7 @@ test('PREVIEW QUADRO: ampliar/lightbox recebe a MESMA src local do pending (e a 
   // aceita parâmetros opcionais (navImages/startIndex/onNavigate), não usados
   // aqui, mantendo o comportamento antigo (sem setas/contador) intacto.
   assert.match(src, /item\.querySelector\('\.img-gallery-thumb'\)\.onclick = \(\)=> openImageLightbox\(src, img\.label\);/);
-  assert.match(html, /function openImageLightbox\(src, description, navImages, startIndex, onNavigate\)\{/);
+  assert.match(html, /function openImageLightbox\(src, description, navImages, startIndex, onNavigate, resolveClinicalCase\)\{/);
 });
 
 test('PREVIEW QUADRO: callback do Quiz registra a blob URL do quadro e NÃO faz upload', () => {
