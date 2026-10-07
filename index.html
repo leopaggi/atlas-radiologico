@@ -3104,6 +3104,170 @@ async function readShardedState(ms=15000){
     lesionRevisions: combinedLesionRevisions }; // PROTEÇÃO 095 — já reconstruído por completo, pedaços ou legado
 }
 
+/* ============================================================
+   BLOCO A — NOVA COLEÇÃO DE LESION_REVISIONS (infraestrutura aditiva)
+   ------------------------------------------------------------
+   Caminho novo: atlas_state/main/lesionRevisions/{reviewId} — doc id é
+   SEMPRE o reviewId (nunca seed_N/lesionId: a chave de LESION_REVISIONS já
+   é a identidade canônica em todo o código, isso não muda aqui).
+   IMPORTANTE: nada abaixo substitui ou altera o pipeline real
+   (writeShardedState/readShardedState/reconcileBeforePush/pushToFirebase
+   continuam exatamente como antes — nenhum deles chama nada deste bloco, e
+   nada deste bloco chama nenhum deles). Esta subcoleção não é lida nem
+   escrita por nenhum caminho de produção ainda; existe só para permitir
+   testar a migração e a validação 1:1 isoladamente, antes de qualquer
+   decisão de cutover (fora de escopo deste bloco).
+   ============================================================ */
+function getLesionRevisionsCollectionRef(){
+  return FB_META_REF().collection('lesionRevisions');
+}
+// Leitura isolada dos pedaços LEGADOS (mesmo formato que readShardedState()
+// já reconstrói), mas sem nenhum efeito colateral — não toca
+// lastKnownCloudRevision nem window.__lastKnownLesionRevisionsChunkCount,
+// nem lê/afeta DATA ou o restante do documento principal. Só leitura.
+async function readLegacyLesionRevisionsChunks(ms=15000){
+  const metaSnap = await withFirebaseTimeout(FB_META_REF().get({source:'server'}), ms, 'ler meta (lesionRevisions legado)');
+  if(!metaSnap.exists) return {};
+  const meta = metaSnap.data() || {};
+  const chunkCount = Number(meta.lesionRevisionsChunkCount)||0;
+  if(chunkCount > 0){
+    const snaps = await Promise.all(Array.from({length:chunkCount}, (_,i)=>
+      withFirebaseTimeout(FB_LESION_REVISIONS_CHUNK_REF(i).get({source:'server'}), ms, 'ler revisões de lesão legado '+(i+1)+'/'+chunkCount)));
+    const out = {};
+    snaps.forEach(s=>{
+      if(s.exists){
+        const entries = (s.data()||{}).entries;
+        if(entries && typeof entries==='object' && !Array.isArray(entries)) Object.assign(out, structuralSnapshotProgressFromFirestore(entries));
+      }
+    });
+    return out;
+  }
+  if(meta.lesionRevisions && typeof meta.lesionRevisions==='object' && !Array.isArray(meta.lesionRevisions)){
+    return structuralSnapshotProgressFromFirestore(meta.lesionRevisions);
+  }
+  return {};
+}
+async function readLesionRevisionsCollection(ms=15000){
+  const snap = await withFirebaseTimeout(getLesionRevisionsCollectionRef().get({source:'server'}), ms, 'ler coleção lesionRevisions');
+  const out = {};
+  snap.forEach(doc=>{ out[doc.id] = doc.data(); });
+  return out;
+}
+async function writeLesionRevisionDocument(reviewId, review, ms=15000){
+  if(!reviewId || typeof reviewId!=='string') throw new Error('reviewId inválido');
+  await withFirebaseTimeout(getLesionRevisionsCollectionRef().doc(reviewId).set(stripUndefinedDeep(review)), ms, 'gravar lesionRevisions/'+reviewId);
+}
+// Grava em lotes de até 500 (limite do Firestore para WriteBatch — não é
+// transação: atomicidade só dentro de cada lote, aceitável aqui porque a
+// operação é aditiva/idempotente e pode ser re-executada com segurança.
+const LESION_REVISIONS_COLLECTION_BATCH_LIMIT = 500;
+async function writeLesionRevisionBatch(entries, ms=15000){
+  const col = getLesionRevisionsCollectionRef();
+  const groups = [];
+  for(let i=0;i<entries.length;i+=LESION_REVISIONS_COLLECTION_BATCH_LIMIT) groups.push(entries.slice(i, i+LESION_REVISIONS_COLLECTION_BATCH_LIMIT));
+  let written = 0;
+  for(const group of groups){
+    const batch = fbDb.batch();
+    for(const entry of group){
+      const reviewId = entry && entry.reviewId;
+      if(!reviewId || typeof reviewId!=='string') throw new Error('reviewId inválido: '+reviewId);
+      batch.set(col.doc(reviewId), stripUndefinedDeep(entry.review));
+    }
+    await withFirebaseTimeout(batch.commit(), ms, 'gravar lote de lesionRevisions ('+group.length+' docs)');
+    written += group.length;
+  }
+  return { written, batchCount: groups.length };
+}
+// Leitura com fallback — tenta a coleção nova; se vazia/ausente, cai pros
+// pedaços legados. NUNCA mistura os dois formatos (um ou outro, nunca uma
+// união) e NUNCA escreve nada. `source` informa qual dos dois foi usado.
+// Nenhum call site de produção foi trocado por esta função ainda.
+async function readLesionRevisionsWithFallback(ms=15000){
+  const fromCollection = await readLesionRevisionsCollection(ms);
+  if(Object.keys(fromCollection).length) return { lesionRevisions: fromCollection, source:'collection' };
+  const legacy = await readLegacyLesionRevisionsChunks(ms);
+  return { lesionRevisions: legacy, source:'legacy_chunks' };
+}
+// MIGRADOR ONE-SHOT — existe só para ser chamado explicitamente (nunca no
+// boot, nunca por nenhum fluxo automático). Fonte de verdade: SEMPRE
+// LESION_REVISIONS em memória deste dispositivo — nunca mescla com o
+// legado (a comparação com os pedaços legados é só leitura/diagnóstico).
+// NUNCA chama reconcileBeforePush/writeShardedState/mergeLesionRevisions/
+// pushToFirebase, e nunca toca DATA/REVIEW/SRS/main/chunks antigos — só
+// lê o documento principal (pra achar os pedaços legados, a título de
+// comparação) e escreve exclusivamente na subcoleção lesionRevisions.
+async function migrateLesionRevisionsLocalToCollection(opts){
+  const options = opts || {};
+  const ms = options.ms || 15000;
+  const source = LESION_REVISIONS || {};
+  const localIds = Object.keys(source);
+
+  let legacyComparison = null;
+  if(options.compareToLegacy !== false){
+    try{
+      const legacy = await readLegacyLesionRevisionsChunks(ms);
+      const legacyIds = Object.keys(legacy);
+      legacyComparison = {
+        legacyCount: legacyIds.length,
+        onlyInLegacy: legacyIds.filter(id => !Object.prototype.hasOwnProperty.call(source, id)),
+        onlyInLocal: localIds.filter(id => !Object.prototype.hasOwnProperty.call(legacy, id))
+      };
+    }catch(e){
+      legacyComparison = { error: (e && e.message) || String(e) };
+    }
+  }
+
+  const existing = await readLesionRevisionsCollection(ms);
+  const conflicts = [];
+  const toWrite = [];
+  let alreadyPresent = 0;
+  for(const reviewId of localIds){
+    const localRecord = source[reviewId];
+    if(Object.prototype.hasOwnProperty.call(existing, reviewId)){
+      if(canonicalJsonString(localRecord) === canonicalJsonString(existing[reviewId])){ alreadyPresent++; continue; }
+      conflicts.push({ reviewId, local:localRecord, remote:existing[reviewId] }); // nunca sobrescrito silenciosamente
+      continue;
+    }
+    toWrite.push({ reviewId, review: localRecord });
+  }
+
+  const result = toWrite.length ? await writeLesionRevisionBatch(toWrite, ms) : { written:0, batchCount:0 };
+
+  return {
+    ok: conflicts.length === 0,
+    totalLocal: localIds.length,
+    writtenNow: result.written,
+    batchCount: result.batchCount,
+    alreadyPresent,
+    conflicts,
+    legacyComparison
+  };
+}
+// VALIDADOR 1:1 — read-only, nunca escreve nada (nem na coleção nova nem
+// em LESION_REVISIONS local). Compara o mapa local com o publicado na
+// coleção nova e reporta a divergência exata, nunca só "diferente".
+async function validateLesionRevisionCollectionAgainstLocal(ms=15000){
+  const source = LESION_REVISIONS || {};
+  const localIds = Object.keys(source);
+  const remote = await readLesionRevisionsCollection(ms);
+  const remoteIds = Object.keys(remote);
+  const localSet = new Set(localIds), remoteSet = new Set(remoteIds);
+  const missingIds = localIds.filter(id => !remoteSet.has(id));
+  const extraIds = remoteIds.filter(id => !localSet.has(id));
+  const differentIds = [];
+  let equalCount = 0;
+  for(const id of localIds){
+    if(!remoteSet.has(id)) continue;
+    if(canonicalJsonString(source[id]) === canonicalJsonString(remote[id])) equalCount++;
+    else differentIds.push(id);
+  }
+  return {
+    ok: missingIds.length===0 && extraIds.length===0 && differentIds.length===0,
+    localCount: localIds.length, remoteCount: remoteIds.length, equalCount,
+    missingIds, extraIds, differentIds
+  };
+}
+
 /* envia o estado atual pra nuvem (com pequeno atraso pra juntar mudanças rápidas em uma escrita só) */
 function pushToFirebase(){
   // ALTERAÇÃO 069/071 (2026-09-23) — enquanto o app ainda está carregando

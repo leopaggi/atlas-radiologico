@@ -830,17 +830,67 @@ test('backup/export inclui LESION_REVISIONS (estaticamente, no botão de exporta
   assert.match(exportBlock, /lesionRevisions:\s*LESION_REVISIONS/, 'o backup exportado precisa incluir lesionRevisions (inclui attempts/snapshots, é o mesmo objeto)');
 });
 
-test('backup/import restaura LESION_REVISIONS (estaticamente, no handler de importação)', () => {
+// Extrai o corpo completo de um handler de evento a partir do '{' que abre
+// o callback, por contagem de chaves (nunca uma janela de tamanho fixo —
+// handlers crescem com o tempo; uma janela fixa já quebrou aqui uma vez
+// antes do saveLesionRevisions() real sair do range checado, e voltou a
+// quebrar de novo quando o handler cresceu mais — ver histórico deste
+// teste). Mesmo padrão já usado em outros arquivos de teste deste projeto
+// (ex.: tests/structural-plan-update-content.test.js, fn()).
+function sliceEventHandlerBody(source, marker) {
+  const idx = source.indexOf(marker);
+  assert.notEqual(idx, -1, 'marcador do handler não encontrado: ' + marker);
+  const open = source.indexOf('{', idx);
+  assert.notEqual(open, -1, 'corpo do handler não encontrado: ' + marker);
+  let depth = 0, quote = '', esc = false, line = false, block = false;
+  for (let i = open; i < source.length; i++) {
+    const c = source[i], n = source[i + 1];
+    if (line) { if (c === '\n') line = false; continue; }
+    if (block) { if (c === '*' && n === '/') { block = false; i++; } continue; }
+    if (quote) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === quote) quote = ''; continue; }
+    if (c === '/' && n === '/') { line = true; i++; continue; }
+    if (c === '/' && n === '*') { block = true; i++; continue; }
+    if (c === "'" || c === '"' || c === '`') { quote = c; continue; }
+    if (c === '{') depth++; else if (c === '}') { depth--; if (depth === 0) return source.slice(idx, i + 1); }
+  }
+  throw new Error('handler não fechado: ' + marker);
+}
+
+test('backup/import restaura LESION_REVISIONS (handler completo por contagem de chaves, sem janela fixa)', () => {
   const marker = "document.getElementById('import-file').addEventListener('change', async (ev)=>";
-  const start = html.indexOf(marker);
-  assert.notEqual(start, -1, 'handler de importação não encontrado');
-  const importBlock = html.slice(start, start + 5000); // 079: comentário de quarentena empurrou o marcador; 091c: união do mapa de fusão (+141)
+  const importBlock = sliceEventHandlerBody(html, marker);
   assert.match(
     importBlock,
     /LESION_REVISIONS\s*=\s*\(parsed\.lesionRevisions/,
     'a importação de backup completo precisa restaurar lesionRevisions'
   );
   assert.match(importBlock, /await saveLesionRevisions\(\);/, 'a importação precisa persistir lesionRevisions restaurado');
+  // Ordem importa: restaurar e SÓ DEPOIS persistir — nunca o inverso (gravaria
+  // o estado anterior, perdendo a importação).
+  const assignIdx = importBlock.search(/LESION_REVISIONS\s*=\s*\(parsed\.lesionRevisions/);
+  const saveIdx = importBlock.indexOf('await saveLesionRevisions();');
+  assert.ok(assignIdx >= 0 && saveIdx > assignIdx, 'saveLesionRevisions() precisa vir DEPOIS de restaurar LESION_REVISIONS, nunca antes');
+});
+
+// Diagnóstico (NÃO é correção): confirma que structuralExecution viaja
+// inteiro no backup (é só um campo do objeto de revisão, exportado por
+// completo — ver teste acima de btn-export), mas documenta uma lacuna real:
+// quando a Fase 3B externaliza o snapshot (snapshotStorage==='external'),
+// o CONTEÚDO pesado do snapshot mora em snapshotStore (subcoleção separada
+// do Firestore) — o botão "Salvar backup" nunca lê essa subcoleção, então
+// o JSON exportado carrega só a referência (snapshotRef), não o snapshot
+// em si. Isto não é corrigido aqui — só registrado.
+test('DIAGNÓSTICO (lacuna conhecida, não corrigida): backup exporta a referência do snapshot externalizado, não o conteúdo', () => {
+  const marker = "document.getElementById('btn-export').onclick = async ()=>";
+  const exportHandlerBody = sliceEventHandlerBody(html, marker);
+  // structuralExecution não precisa de menção própria: viaja dentro do
+  // objeto de revisão inteiro (lesionRevisions: LESION_REVISIONS, já
+  // provado no teste de export acima) — a lacuna real é snapshotStore
+  // nunca ser lido por este handler.
+  assert.match(exportHandlerBody, /lesionRevisions:\s*LESION_REVISIONS/, 'structuralExecution viaja dentro do objeto de revisão completo');
+  assert.doesNotMatch(exportHandlerBody, /snapshotStore/, 'lacuna conhecida: o handler de export nunca lê snapshotStore — snapshots externalizados (snapshotStorage==="external") não têm o conteúdo incluído no backup, só a referência (snapshotRef)');
+  // Ancora que o mecanismo de externalização é real no código (não hipotético):
+  assert.match(html, /snapshotStorage\s*===\s*['"]external['"]/, 'a externalização de snapshot (Fase 3B) precisa continuar existindo no código para esta lacuna ser real');
 });
 
 test('loadData() carrega LESION_REVISIONS no boot (estaticamente)', () => {
