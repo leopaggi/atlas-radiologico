@@ -1,5 +1,17 @@
 # Diario de desenvolvimento
 
+## Pivô do transporte IA para backend Node local
+
+Preservada functions/ e separado seu núcleo de análise da autenticação
+callable. Novo local-ai-server/ atende saúde e análise só no loopback, sem
+Firebase Auth, com CORS restrito e chave apenas em .env ignorado no Git.
+Frontend faz health-check antes de habilitar o botão; nenhum fallback mock.
+O pipeline clínico e a decisão humana não mudaram. Nenhuma chave real foi
+cadastrada, nenhum lote real analisado, nenhum stage/commit/push/deploy feito.
+Testes: servidor HTTP 8/8, provider local 6/6, pipeline 21/21 e núcleo/callable
+preservado 19/19. O servidor estático temporário foi protegido contra servir
+.env/backend e também restringido ao loopback.
+
 ## Etapa I — integração Firebase/OpenAI, somente implementação local
 
 Criado o backend de análise autenticado, com segredo no Secret Manager,

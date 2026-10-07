@@ -1,5 +1,46 @@
 # Atlas Radiológico
 
+### IA local — transporte ativo (sem deploy/commit nesta entrega)
+
+Usar Node 22+ instalado. `functions/` permanece, mas a UI não usa callable
+nem Functions SDK nesta etapa. O servidor local reutiliza o núcleo de análise
+em functions/review-analysis.js sem carregar SDK Firebase. Somente proposals.
+
+Comandos PowerShell a partir da pasta do projeto:
+
+```powershell
+npm.cmd --prefix local-ai-server install --ignore-scripts --no-audit --no-fund
+if (-not (Test-Path 'local-ai-server/.env')) { Copy-Item 'local-ai-server/.env.example' 'local-ai-server/.env' }
+notepad.exe 'local-ai-server/.env'
+# No Notepad: OPENAI_API_KEY=<sua chave>, salvar; nunca colar no Console do Atlas.
+npm.cmd --prefix local-ai-server start
+```
+
+Em outro terminal:
+
+```powershell
+Invoke-RestMethod -Uri 'http://127.0.0.1:8787/health'
+npm.cmd --prefix local-ai-server test
+node --test tests/ai-local-provider.test.js tests/ai-solution-pipeline.test.js
+```
+
+Para testar o frontend modificado antes de publicar, use o servidor estático
+mínimo do próprio repositório (`scripts/serve-local.js`): serve somente
+arquivos estáticos, bloqueia `.env`/`.git`/`functions/`/`local-ai-server/` e
+liga só no loopback:
+
+```powershell
+node scripts/serve-local.js
+```
+
+Abrir `http://localhost:8000/index.html`, autenticar no Atlas, abrir Soluções e
+aguardar health-check. Se iniciou a IA depois de abrir o modal, reabrir Soluções
+após 5 segundos ou chamar `await refreshReviewAiLocalProvider(true)` (só saúde).
+Clique Gerar soluções com IA: até 20 pendências mais antigas, sem autoaplicar.
+Chrome pode pedir permissão de acesso à rede local: autorizar para o Atlas.
+GET /health retorna {ok:true}, mas não testa a chave nem o acesso ao modelo.
+Disponibilidade de gpt-6.1-sol precisa ser confirmada pela primeira análise real.
+
 ### Integração real de IA — Etapa I (sem deploy nesta entrega)
 
 Atlas → callable Firebase `analyzeAtlasReviewBatch` → OpenAI Responses →

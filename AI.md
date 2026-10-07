@@ -1,5 +1,17 @@
 # AI.md — instruções para assistentes de IA (Claude, DeepSeek, ChatGPT, etc.)
 
+## Pivô IA local — transporte ativo, sem publicação
+
+O adapter ativo agora é `REVIEW_AI_LOCAL_PROVIDER`, HTTP em
+`http://127.0.0.1:8787`. Só habilita após GET /health; falha desabilita o botão
+e a análise revalida saúde antes de POST /analyze-review-batch. Não existe
+fallback para mock ou Functions. `functions/` foi preservado; seu núcleo
+puro `createBatchAnalyzer` é compartilhado com o servidor local (validações,
+Responses/JSON Schema/modelo iguais). Servidor liga APENAS em 127.0.0.1, CORS
+permite https://leopaggi.github.io e localhost de desenvolvimento; sem Firebase
+Auth nesse transporte. Chave lida somente de local-ai-server/.env, ignorada
+pelo Git, nunca recebida do frontend. Aprovação humana e limite 20 mantidos.
+
 ## Etapa I — callable OpenAI (implementada localmente, sem deploy)
 
 `functions/index.js` exporta somente `analyzeAtlasReviewBatch` (2nd gen,

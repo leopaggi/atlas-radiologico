@@ -411,8 +411,8 @@ test('SEM DELETE REMOTO: Functions serve somente à análise IA, nunca ao delete
   assert.doesNotMatch(html, /requestCloudinaryAssetDeletion/);
   assert.doesNotMatch(html, /hasSecureCloudinaryIdentifier/);
   assert.doesNotMatch(html, /deleteCloudinaryAsset/);
-  assert.match(html, /firebase-functions-compat/);
-  assert.match(html, /httpsCallable\('analyzeAtlasReviewBatch'/);
+  assert.doesNotMatch(html, /firebase-functions-compat/);
+  assert.match(html, /REVIEW_AI_LOCAL_ENDPOINT/);
 });
 
 test('SEM SEGREDO: o frontend não contém CLOUDINARY_API_SECRET nem api_secret', () => {

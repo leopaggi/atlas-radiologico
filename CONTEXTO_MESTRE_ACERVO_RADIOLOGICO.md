@@ -8,6 +8,13 @@ uma cópia antiga e o repositório, o repositório e o código valem.
 
 ## ESTADO OPERACIONAL ATUAL
 
+**Pivô rápido IA local (base real 50917a6, working tree inicialmente limpa):**
+transporte Functions deixou de ser ativo; functions/ permanece no repo e o
+núcleo puro é reutilizado pelo novo servidor local 127.0.0.1:8787.
+`REVIEW_AI_LOCAL_PROVIDER` usa saúde + POST, sem API key no frontend.
+Limite 20 e pipeline de propostas mantidos. Chave futura somente em
+local-ai-server/.env (Git ignore). Nenhum lote real/chave/publicação executado.
+
 **Etapa I — backend callable OpenAI implementado, aguardando revisão/deploy:**
 base real `812705a`, working tree inicialmente limpa. Não existiam config
 Firebase/Functions locais, embora o projeto do app seja `atlas-radiologico`.
