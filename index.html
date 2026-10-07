@@ -562,6 +562,11 @@ body{
 .lesion-hover-preview-meta{font-size:12px;color:var(--muted-2);margin-bottom:6px;}
 .lesion-hover-preview-tags{margin:8px 0;display:flex;flex-wrap:wrap;gap:4px;}
 .lesion-hover-preview-notes{margin-top:10px;padding-top:8px;border-top:1px solid var(--line);white-space:pre-wrap;color:var(--muted);}
+/* Rótulo discreto "VERSÃO ATUAL"/"PRÉVIA DA PROPOSTA" — só aparece quando o
+   call site passa opts.label (ver lesionHoverPreviewHtml); nenhum preview
+   existente ganha isto por padrão. */
+.lesion-hover-preview-label{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);margin-bottom:4px;}
+.lesion-hover-preview-label-accent{color:var(--teal);}
 .review-history-request{font-size:12.5px;color:var(--muted);margin:4px 0 14px;line-height:1.4;}
 .review-history-list{display:flex;flex-direction:column;gap:8px;}
 .review-history-item{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius);padding:9px 12px;}
@@ -618,6 +623,18 @@ body{
 .review-fields-diff-row b{color:var(--text);}
 .review-fields-diff-from{color:var(--muted-2);text-decoration:line-through;}
 .review-fields-diff-to{color:var(--teal);font-weight:600;}
+/* notes proposta (Padrão:/Diferenciais-chave:) — só separação visual; o
+   destaque (::first-line, > strong, .notes-differential-item strong) já vem
+   de .detail-notes, reaproveitada aqui sem nenhuma regra nova de realce. */
+.review-fields-diff-notes-from{margin-bottom:4px;}
+.review-fields-diff-notes-to b{display:block;margin-bottom:2px;}
+.review-fields-diff-notes-body{margin-top:2px;padding-top:6px;border-top:1px solid var(--line);}
+/* Prévia compacta dos campos propostos (aba Propostas) — card não fica
+   "enorme" por padrão com dezenas/centenas de propostas; "ver proposta
+   completa" alterna pra .review-proposal-full-diff (mesmo renderFieldChangesHtml). */
+.review-proposal-compact-preview{margin-top:6px;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;align-items:center;gap:4px;}
+.review-proposal-compact-empty{color:var(--muted-2);font-style:italic;}
+.review-proposal-full-diff{margin-top:4px;}
 .audit-modal{max-width:760px;}
 .audit-list{display:flex;flex-direction:column;gap:8px;margin-top:14px;max-height:420px;overflow-y:auto;}
 .audit-row{
@@ -5777,7 +5794,10 @@ function escAttr(v){ return String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&q
 function esc(v){ return escAttr(v); }
 /* lrev — realce visual do bloco "Diferenciais-chave:" dentro de `notes`
    (convenção de texto livre já usada em ~2200 lesões: "Padrão: ...\n
-   Diferenciais-chave: item1 (explicação); item2 (explicação); ..."). SÓ
+   Diferenciais-chave: item1 (explicação); item2 (explicação); ..."). Também
+   reconhece "item — explicação" (travessão, U+2014) como 2º formato válido
+   de separador nome/explicação — sem converter nem migrar nenhuma nota
+   existente, só reconhecendo o que já estiver no texto ao renderizar. SÓ
    apresentação — nunca toca o texto armazenado, nunca salva HTML/Markdown.
    Escapa TUDO primeiro via esc() e só então decide onde entram <strong>/
    <div>; nenhum HTML vindo dos dados é interpretado (o conteúdo malicioso
@@ -5787,19 +5807,28 @@ function esc(v){ return escAttr(v); }
    único, reaproveitado em todo lugar que mostra `notes` (detalhe da lesão e
    Quiz pós-resposta — o lightbox mostra só a legenda da IMAGEM, nunca
    `notes` da lesão, então não se aplica ali). */
-// Divide por ";" respeitando profundidade de parênteses — um ";" DENTRO da
-// explicação de um item (ex.: "Item (causa A; causa B)") nunca quebra esse
-// item em dois; só ";" fora de qualquer parêntese separa itens de verdade.
+// Quebra de linha SEMPRE separa itens (convenção nova: 1 diferencial por
+// linha, montada deterministicamente pelo backend — ver
+// buildNotesFromStructured em functions/review-analysis.js, nunca a IA
+// decidindo a quebra). Dentro de cada linha, ";" respeitando profundidade de
+// parênteses continua separando itens (convenção antiga, ~1014 lesões reais
+// num só parágrafo): um ";" DENTRO da explicação de um item (ex.: "Item
+// (causa A; causa B)") nunca quebra esse item em dois; só ";" fora de
+// qualquer parêntese separa itens de verdade. Nenhuma lesão real hoje tem
+// newline dentro da seção de diferenciais — para essas, o resultado é
+// idêntico a antes (uma única "linha", dividida só por ";").
 function splitDifferentialItems(section){
   const items = [];
-  let depth = 0, current = '';
-  for(const ch of section){
-    if(ch === '(') depth += 1;
-    else if(ch === ')') depth = Math.max(0, depth - 1);
-    if(ch === ';' && depth === 0){ items.push(current); current = ''; continue; }
-    current += ch;
+  for(const line of section.split('\n')){
+    let depth = 0, current = '';
+    for(const ch of line){
+      if(ch === '(') depth += 1;
+      else if(ch === ')') depth = Math.max(0, depth - 1);
+      if(ch === ';' && depth === 0){ items.push(current); current = ''; continue; }
+      current += ch;
+    }
+    if(current.trim()) items.push(current);
   }
-  if(current.trim()) items.push(current);
   return items.map(s=>s.trim()).filter(Boolean);
 }
 function notesDifferentialsHtml(notes){
@@ -5819,9 +5848,14 @@ function notesDifferentialsHtml(notes){
   if(!items.length) return esc(raw);
   const itemsHtml = items.map(item=>{
     const parenIdx = item.indexOf('(');
-    const name = parenIdx===-1 ? '' : item.slice(0, parenIdx).trim();
+    // "Nome — explicação" (travessão, U+2014) é um 2º formato aceito, além do
+    // histórico "Nome (explicação)" — nunca converte/migra notes existentes,
+    // só reconhece o separador já presente no texto na hora de renderizar.
+    const dashIdx = item.indexOf('—');
+    const sepIdx = parenIdx===-1 ? dashIdx : (dashIdx===-1 ? parenIdx : Math.min(parenIdx, dashIdx));
+    const name = sepIdx===-1 ? '' : item.slice(0, sepIdx).trim();
     if(!name) return `<div class="notes-differential-item">${esc(item)}</div>`;
-    const rest = item.slice(parenIdx);
+    const rest = item.slice(sepIdx);
     return `<div class="notes-differential-item"><strong>${esc(name)}</strong> ${esc(rest)}</div>`;
   }).join('');
   return `${esc(before)}<strong>${esc(marker)}</strong>${itemsHtml}${esc(after)}`;
@@ -18173,11 +18207,34 @@ function describeLesionReviewFieldChanges(fromObj, toObj, fields){
     to: formatLesionReviewFieldValue(toObj ? toObj[f] : undefined)
   }));
 }
+// notes pode ser multi-linha estruturada (Padrão:/Diferenciais-chave:) — o
+// "de → para" numa linha só (igual aos demais campos) colapsa as quebras.
+// Reaproveita o MESMO renderer do detalhe da lesão (notesDifferentialsHtml)
+// pra mostrar a PROPOSTA NOVA com a hierarquia completa (Padrão/Diferenciais
+// em destaque, nome do diagnóstico em <strong>, bloco por diferencial) —
+// nenhum parser novo; o "de" (atual) fica compacto, pois a lesão atual já é
+// visível via "ver lesão"/hover (ver wireLesionHoverPreview), sem precisar
+// duplicar aqui.
 function renderFieldChangesHtml(rows){
   if(!rows.length) return '';
-  return `<div class="review-fields-diff">${rows.map(r=>`
-    <div class="review-fields-diff-row"><b>${r.label}:</b> <span class="review-fields-diff-from">${String(r.from).replace(/</g,'&lt;')}</span> → <span class="review-fields-diff-to">${String(r.to).replace(/</g,'&lt;')}</span></div>
-  `).join('')}</div>`;
+  return `<div class="review-fields-diff">${rows.map(r=>{
+    if(r.field === 'notes'){
+      return `<div class="review-fields-diff-row review-fields-diff-notes">
+        <div class="review-fields-diff-notes-from"><b>${r.label} atual:</b> <span class="review-fields-diff-from">${esc(r.from)}</span></div>
+        <div class="review-fields-diff-notes-to"><b>${r.label} proposta:</b></div>
+        <div class="detail-notes review-fields-diff-notes-body">${r.to === '—' ? '—' : notesDifferentialsHtml(r.to)}</div>
+      </div>`;
+    }
+    return `<div class="review-fields-diff-row"><b>${r.label}:</b> <span class="review-fields-diff-from">${String(r.from).replace(/</g,'&lt;')}</span> → <span class="review-fields-diff-to">${String(r.to).replace(/</g,'&lt;')}</span></div>`;
+  }).join('')}</div>`;
+}
+/* Prévia COMPACTA dos campos propostos (aba Propostas) — só os rótulos dos
+   campos, nunca o conteúdo (evita renderizar notes inteira por padrão numa
+   lista com dezenas/centenas de propostas). renderFieldChangesHtml (acima)
+   continua sendo o único renderer do diff completo — só exibido ao expandir. */
+function compactProposalFieldsHtml(rows){
+  if(!rows.length) return '<span class="review-proposal-compact-empty">(nenhum campo alterado)</span>';
+  return rows.map(r=>`<span class="mini-tag">${esc(r.label)}</span>`).join('');
 }
 
 function reviewCenterLesionMeta(lesionId, review){
@@ -18199,6 +18256,11 @@ function reviewCenterLesionMeta(lesionId, review){
    continua abrindo o detalhe completo exatamente como antes. */
 let lesionHoverPreviewEl = null;
 let lesionHoverPreviewLesionId = null;
+// Chave de "qual preview está aberto" — por padrão é o próprio lesionId
+// (comportamento de sempre). "✨ proposta" usa uma chave distinta por
+// revisão (ver renderProposedList) pra nunca ser confundida com "👁 atual"
+// da MESMA lesão (mesmo lesionId, conteúdo diferente).
+let lesionHoverPreviewKey = null;
 let lesionHoverOpenTimer = null;
 let lesionHoverCloseTimer = null;
 let lesionHoverEscHandler = null;
@@ -18215,15 +18277,29 @@ function lesionHoverSupported(){
     return !!window.matchMedia('(hover: hover), (pointer: fine)').matches;
   }catch(_e){ return true; }
 }
-function lesionHoverPreviewHtml(e){
+// opts.label (opcional): rótulo discreto no topo do card — "VERSÃO ATUAL" ou
+// "PRÉVIA DA PROPOSTA" (ver openReadySolutionsModal/renderProposedList).
+// Nenhum call site existente passa opts, então nenhum deles ganha rótulo —
+// comportamento visual 100% inalterado nos demais usos deste mesmo preview.
+function lesionHoverPreviewHtml(e, opts){
+  const o = opts || {};
   const tags = (Array.isArray(e.tags)?e.tags:[]).map(t=>`<span class="mini-tag match">${esc(t)}</span>`).join('');
   const ct = (Array.isArray(e.clinicalTags)?e.clinicalTags:[]).map(t=>`<span class="mini-tag clinical">${esc(t)}</span>`).join('');
-  return `<h3>${esc(e.name)}</h3>` +
+  const label = o.label ? `<div class="lesion-hover-preview-label${o.labelAccent?' lesion-hover-preview-label-accent':''}">${esc(o.label)}</div>` : '';
+  return label + `<h3>${esc(e.name)}</h3>` +
     `<div class="lesion-hover-preview-meta">${esc(e.s)} · ${esc(e.site)}</div>` +
     (e.classification?`<div class="lesion-hover-preview-meta">🏷 ${esc(e.classification)}</div>`:'') +
     (e.enTerm?`<div class="lesion-hover-preview-meta">EN: ${esc(e.enTerm)}</div>`:'') +
     ((tags||ct)?`<div class="lesion-hover-preview-tags">${tags}${ct}</div>`:'') +
     `<div class="lesion-hover-preview-notes">${e.notes ? notesDifferentialsHtml(e.notes) : 'sem anotações ainda.'}</div>`;
+}
+/* Prévia da PROPOSTA ("✨ proposta", hover) — cópia em memória da lesão
+   atual com proposedChanges sobreposto; NUNCA toca DATA, nunca grava nada.
+   Campos não alterados pela proposta permanecem exatamente como na lesão
+   atual (Object.assign não inventa nem apaga nenhum campo não listado em
+   proposedChanges — images/altPlacements/id/s/site etc. vêm intactos). */
+function previewLesionWithProposedChanges(lesion, proposedChanges){
+  return Object.assign({}, lesion||{}, (proposedChanges && typeof proposedChanges==='object') ? proposedChanges : {});
 }
 function positionLesionHoverPreview(el, anchor){
   const margin = 12, width = 480;
@@ -18258,16 +18334,22 @@ function closeLesionHoverPreview(){
   if(lesionHoverClickAwayHandler){ try{ document.removeEventListener('click', lesionHoverClickAwayHandler, true); }catch(_e){} lesionHoverClickAwayHandler = null; }
   if(lesionHoverPreviewEl){ try{ lesionHoverPreviewEl.remove(); }catch(_e){} lesionHoverPreviewEl = null; }
   lesionHoverPreviewLesionId = null;
+  lesionHoverPreviewKey = null;
 }
-function openLesionHoverPreview(anchorBtn, lesionId){
+// opts (todos opcionais, nenhum call site existente passa nada — 100%
+// inalterados): lesion (objeto já pronto pra renderizar, pula o lookup em
+// DATA — usado pela prévia "✨ proposta"); label/labelAccent (ver
+// lesionHoverPreviewHtml); previewKey (ver lesionHoverPreviewKey acima).
+function openLesionHoverPreview(anchorBtn, lesionId, opts){
   // Somente um preview por vez; lesão inexistente = sem preview, sem crash.
   closeLesionHoverPreview();
   if(!anchorBtn || !lesionId) return false;
-  const lesion = DATA.find(x=>x && x.id===lesionId);
+  const o = opts || {};
+  const lesion = o.lesion || DATA.find(x=>x && x.id===lesionId);
   if(!lesion) return false;
   const el = document.createElement('div');
   el.className = 'lesion-hover-preview';
-  el.innerHTML = lesionHoverPreviewHtml(lesion);
+  el.innerHTML = lesionHoverPreviewHtml(lesion, { label:o.label, labelAccent:o.labelAccent });
   el.addEventListener('mouseenter', ()=>{
     if(lesionHoverCloseTimer){ try{ clearTimeout(lesionHoverCloseTimer); }catch(_e){} lesionHoverCloseTimer = null; }
   });
@@ -18279,6 +18361,7 @@ function openLesionHoverPreview(anchorBtn, lesionId){
   positionLesionHoverPreview(el, anchorBtn);
   lesionHoverPreviewEl = el;
   lesionHoverPreviewLesionId = lesionId;
+  lesionHoverPreviewKey = o.previewKey || lesionId;
   lesionHoverEscHandler = (ev)=>{ if(ev && ev.key==='Escape') closeLesionHoverPreview(); };
   document.addEventListener('keydown', lesionHoverEscHandler);
   lesionHoverClickAwayHandler = (ev)=>{
@@ -18287,14 +18370,15 @@ function openLesionHoverPreview(anchorBtn, lesionId){
   document.addEventListener('click', lesionHoverClickAwayHandler, true);
   return true;
 }
-function wireLesionHoverPreview(btn, lesionId){
+function wireLesionHoverPreview(btn, lesionId, opts){
   // Sem hover confiável (touch): mantém só o clique atual, sem listeners.
   if(!lesionHoverSupported() || !btn || !lesionId) return;
+  const key = (opts && opts.previewKey) || lesionId;
   btn.addEventListener('mouseenter', ()=>{
     if(lesionHoverCloseTimer){ try{ clearTimeout(lesionHoverCloseTimer); }catch(_e){} lesionHoverCloseTimer = null; }
-    if(lesionHoverPreviewEl && lesionHoverPreviewLesionId===lesionId) return;
+    if(lesionHoverPreviewEl && lesionHoverPreviewKey===key) return;
     if(lesionHoverOpenTimer){ try{ clearTimeout(lesionHoverOpenTimer); }catch(_e){} }
-    try{ lesionHoverOpenTimer = setTimeout(()=>{ lesionHoverOpenTimer = null; openLesionHoverPreview(btn, lesionId); }, LESION_HOVER_OPEN_DELAY); }catch(_e){}
+    try{ lesionHoverOpenTimer = setTimeout(()=>{ lesionHoverOpenTimer = null; openLesionHoverPreview(btn, lesionId, opts); }, LESION_HOVER_OPEN_DELAY); }catch(_e){}
   });
   btn.addEventListener('mouseleave', ()=>{
     if(lesionHoverOpenTimer){ try{ clearTimeout(lesionHoverOpenTimer); }catch(_e){} lesionHoverOpenTimer = null; }
@@ -19570,6 +19654,11 @@ function openReadySolutionsModal(){
   tabBtnApplied.onclick = ()=> showTab('applied');
 
   const closeAllAndCleanup = ()=>{ closeOverlay(); document.removeEventListener('keydown', closeOnEsc); };
+  // "ver proposta completa"/"recolher" (aba Propostas) — só em memória,
+  // enquanto ESTE modal estiver aberto; nunca persistido (fecha o modal,
+  // esquece). Fica fora de renderProposedList pra sobreviver a re-renders
+  // da lista (ex.: depois de autorizar/rejeitar outra revisão).
+  const expandedProposalIds = new Set();
 
   const renderProposedList = ()=>{
     const reviews = getProposedSolutions();
@@ -19622,6 +19711,8 @@ function openReadySolutionsModal(){
       const isNoChange = !!(r.solution && r.solution.kind==='no_change'); // pipeline de IA: provável falso positivo
       const changes = (r.solution && r.solution.proposedChanges) || {};
       const diffRows = isNoChange ? [] : describeLesionReviewFieldChanges(meta.lesion, changes, Object.keys(changes));
+      const hasChanges = Object.keys(changes).length > 0;
+      const isExpanded = expandedProposalIds.has(r.id);
       const row = document.createElement('div');
       row.className = 'review-center-row' + (isNoChange ? ' review-center-row-no-change' : '');
       row.innerHTML = `
@@ -19630,10 +19721,14 @@ function openReadySolutionsModal(){
           <div class="review-center-row-meta">${meta.sub?meta.sub+' · ':''}proposta em ${when}</div>
           <div class="review-center-row-request"><b>Pedido:</b> ${(r.requestText||'').replace(/</g,'&lt;')}</div>
           <div class="review-center-row-solution"><b>${isNoChange ? 'Conclusão da IA' : 'Solução proposta'}:</b> ${((r.solution&&r.solution.text)||'').replace(/</g,'&lt;')}</div>
-          ${renderFieldChangesHtml(diffRows)}
+          ${hasChanges ? `
+          <div class="review-proposal-compact-preview">Campos propostos: ${compactProposalFieldsHtml(diffRows)}</div>
+          <button type="button" class="btn btn-ghost review-toggle-diff">${isExpanded ? 'recolher' : 'ver proposta completa'}</button>
+          <div class="review-proposal-full-diff" ${isExpanded ? '' : 'hidden'}>${renderFieldChangesHtml(diffRows)}</div>` : ''}
         </div>
         <div class="review-center-row-actions">
-          ${meta.found?'<button type="button" class="btn btn-ghost review-open-lesion">ver lesão</button>':''}
+          ${meta.found?'<button type="button" class="btn btn-ghost review-open-lesion-current" title="Versão atual, como está hoje em DATA">👁 atual</button>':''}
+          ${(meta.found && hasChanges)?'<button type="button" class="btn btn-ghost review-open-lesion-proposed" title="Prévia de como a lesão ficaria SE esta proposta fosse autorizada — nada é alterado">✨ proposta</button>':''}
           <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}${reviewResolveButtonHtml(r)}
           ${isNoChange
             ? '<button type="button" class="btn btn-primary review-confirm-no-change">✓ Confirmar sem alteração</button>'
@@ -19641,10 +19736,30 @@ function openReadySolutionsModal(){
           <button type="button" class="btn btn-ghost review-reject-proposal">✕ Rejeitar</button>
           <button type="button" class="btn btn-ghost review-cancel-request">✕ Cancelar pedido</button>
         </div>`;
+      const toggleBtn = row.querySelector('.review-toggle-diff');
+      if(toggleBtn){
+        const fullDiffEl = row.querySelector('.review-proposal-full-diff');
+        toggleBtn.onclick = ()=>{
+          const nowExpanded = !expandedProposalIds.has(r.id);
+          if(nowExpanded) expandedProposalIds.add(r.id); else expandedProposalIds.delete(r.id);
+          fullDiffEl.hidden = !nowExpanded;
+          toggleBtn.textContent = nowExpanded ? 'recolher' : 'ver proposta completa';
+        };
+      }
       if(meta.found){
-        const openLesionBtn = row.querySelector('.review-open-lesion');
-        openLesionBtn.onclick = ()=>{ closeLesionHoverPreview(); closeAllAndCleanup(); openDetail(meta.lesion.id); };
-        wireLesionHoverPreview(openLesionBtn, meta.lesion.id); // mesmo preview hover de "ver lesão corrigida"/"Validar correção"
+        const currentBtn = row.querySelector('.review-open-lesion-current');
+        currentBtn.onclick = ()=>{ closeLesionHoverPreview(); closeAllAndCleanup(); openDetail(meta.lesion.id); };
+        wireLesionHoverPreview(currentBtn, meta.lesion.id, { label:'VERSÃO ATUAL' }); // mesmo preview hover de "ver lesão corrigida"/"Validar correção"
+        const proposedBtn = row.querySelector('.review-open-lesion-proposed');
+        if(proposedBtn){
+          // Chave própria por revisão (nunca o lesionId sozinho) — "atual" e
+          // "proposta" da MESMA lesão nunca são tratadas como "já aberto,
+          // não reabrir" uma pela outra (ver lesionHoverPreviewKey).
+          const previewKey = 'proposed:' + r.id;
+          const previewOpts = { lesion: previewLesionWithProposedChanges(meta.lesion, changes), label:'PRÉVIA DA PROPOSTA', labelAccent:true, previewKey };
+          proposedBtn.onclick = ()=>{ openLesionHoverPreview(proposedBtn, meta.lesion.id, previewOpts); }; // toque/teclado: mesmo preview, sem precisar de hover
+          wireLesionHoverPreview(proposedBtn, meta.lesion.id, previewOpts);
+        }
       }
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
       const pEditBtn = row.querySelector('.review-edit-request'); // PROTEÇÃO 091d

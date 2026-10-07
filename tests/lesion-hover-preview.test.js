@@ -454,6 +454,91 @@ test('21. critério (texto entre parênteses) visualmente separado do nome — n
   assert.doesNotMatch(out, /<strong>A \(critério um/, 'o critério nunca entra dentro do <strong>');
 });
 
+/* ---------- "Nome — explicação" (travessão): 2º formato, além de "(" ---------- */
+
+test('21b. formato antigo com parênteses continua funcionando sem nenhuma mudança (compatibilidade total)', () => {
+  const ctx = makeCtx([LESION]);
+  const out = vm.runInContext('notesDifferentialsHtml(DATA[0].notes)', ctx);
+  assert.match(out, /<strong>A<\/strong> \(critério um\)/);
+  assert.match(out, /<strong>B<\/strong> \(critério dois\)/);
+});
+
+test('21c. formato novo "Nome — explicação" (travessão) passa a funcionar: nome em <strong>, explicação em texto normal, bloco próprio', () => {
+  const dashLesion = Object.assign({}, LESION, {
+    notes: 'Padrão: achado típico.\nDiferenciais-chave: Diagnóstico A — descrição breve; Diagnóstico B — outra descrição.'
+  });
+  const ctx = makeCtx([dashLesion]);
+  const out = vm.runInContext('notesDifferentialsHtml(DATA[0].notes)', ctx);
+  assert.match(out, /<div class="notes-differential-item"><strong>Diagnóstico A<\/strong> — descrição breve<\/div>/);
+  assert.match(out, /<div class="notes-differential-item"><strong>Diagnóstico B<\/strong> — outra descrição\.<\/div>/);
+  const items = out.match(/<div class="notes-differential-item">/g) || [];
+  assert.equal(items.length, 2, 'cada diferencial em bloco próprio, igual ao formato de parênteses');
+});
+
+test('21d. prosa sem separador (nem "(" nem "—") continua sem quebrar: nenhum <strong> novo, texto só escapado em bloco próprio', () => {
+  const proseLesion = Object.assign({}, LESION, {
+    notes: 'Padrão: achado típico.\nDiferenciais-chave: menos comum neste contexto clínico; ainda assim considerar.'
+  });
+  const ctx = makeCtx([proseLesion]);
+  const out = vm.runInContext('notesDifferentialsHtml(DATA[0].notes)', ctx);
+  assert.doesNotMatch(out, /<strong>menos|<strong>ainda/, 'sem "(" ou "—" no item, nenhum nome é inventado/destacado');
+  const items = out.match(/<div class="notes-differential-item">/g) || [];
+  assert.equal(items.length, 2, 'ainda quebra em bloco por item (";"), só sem negrito de nome');
+});
+
+// Referência congelada da notesDifferentialsHtml ANTERIOR a esta correção
+// (só reconhecia "(" como separador nome/explicação) — usada só para provar,
+// contra os dados reais, que a versão nova produz saída idêntica sempre que
+// o separador novo ("—") não aparece ANTES de um "(" dentro do item (caso
+// que, nos dados reais de hoje, não ocorre nenhuma vez).
+const LEGACY_NOTES_DIFFERENTIALS_SRC = `
+function notesDifferentialsHtml_legacy(notes){
+  const raw = String(notes || '');
+  const marker = 'Diferenciais-chave:';
+  const idx = raw.indexOf(marker);
+  if(idx === -1) return esc(raw);
+  const before = raw.slice(0, idx);
+  const afterMarker = idx + marker.length;
+  const blank = raw.slice(afterMarker).search(/\\n\\s*\\n/);
+  const sectionEnd = blank === -1 ? raw.length : afterMarker + blank;
+  const section = raw.slice(afterMarker, sectionEnd).trim();
+  const after = raw.slice(sectionEnd);
+  const items = splitDifferentialItems(section);
+  if(!items.length) return esc(raw);
+  const itemsHtml = items.map(item=>{
+    const parenIdx = item.indexOf('(');
+    const name = parenIdx===-1 ? '' : item.slice(0, parenIdx).trim();
+    if(!name) return \`<div class="notes-differential-item">\${esc(item)}</div>\`;
+    const rest = item.slice(parenIdx);
+    return \`<div class="notes-differential-item"><strong>\${esc(name)}</strong> \${esc(rest)}</div>\`;
+  }).join('');
+  return \`\${esc(before)}<strong>\${esc(marker)}</strong>\${itemsHtml}\${esc(after)}\`;
+}`;
+
+test('21e. não migra/converte as notas reais existentes: todas as lesões do SEED com "Diferenciais-chave:" renderizam IDÊNTICO à versão anterior à correção (0 casos reais de travessão antes de "(" hoje)', () => {
+  const seedMatch = /const SEED = (\[.*?\]);/s.exec(html);
+  assert.ok(seedMatch, 'SEED precisa ser localizável no index.html');
+  const seed = JSON.parse(seedMatch[1]);
+  const withDiff = seed.filter(l => typeof l.notes === 'string' && l.notes.includes('Diferenciais-chave:'));
+  assert.ok(withDiff.length > 900, 'sanity check: ainda existem ~1.014 lesões reais com Diferenciais-chave:');
+  const ctx = makeCtx(withDiff);
+  vm.runInContext(LEGACY_NOTES_DIFFERENTIALS_SRC, ctx);
+  for (let i = 0; i < withDiff.length; i++) {
+    const current = vm.runInContext(`notesDifferentialsHtml(DATA[${i}].notes)`, ctx);
+    const legacy = vm.runInContext(`notesDifferentialsHtml_legacy(DATA[${i}].notes)`, ctx);
+    assert.equal(current, legacy, `lesão "${withDiff[i].name}" (${withDiff[i].id}) rendeu diferente da versão anterior — não deveria, pois nenhuma nota real usa travessão`);
+  }
+});
+
+test('21f. detalhe da lesão, preview por hover e Quiz pós-resposta continuam chamando o MESMO renderer (notesDifferentialsHtml) — nenhum parser novo por lugar', () => {
+  const detailBody = extractFunction(html, 'openDetail').body;
+  assert.match(detailBody, /notesDifferentialsHtml\(e\.notes\)/, 'detalhe da lesão usa o mesmo helper');
+  const quizSrc = html.slice(html.indexOf('function renderDetail(){'), html.indexOf('function renderDetail(){') + 600);
+  assert.match(quizSrc, /notesDifferentialsHtml\(e\.notes\)/, 'Quiz pós-resposta usa o mesmo helper');
+  const previewBody = extractFunction(html, 'lesionHoverPreviewHtml').body;
+  assert.match(previewBody, /notesDifferentialsHtml\(e\.notes\)/, 'preview por hover usa o mesmo helper');
+});
+
 test('22. notes SEM "Diferenciais-chave:" dentro do preview continua normal (só escapado, nenhuma marcação nova)', () => {
   const plain = Object.assign({}, LESION, { notes: 'lesão óssea benigna clássica' });
   const ctx = makeCtx([plain]);

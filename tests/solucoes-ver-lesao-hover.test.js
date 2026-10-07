@@ -61,25 +61,39 @@ const proposedListSrc = readySolutionsSrc.slice(
   readySolutionsSrc.indexOf('const renderAppliedList')
 );
 
-test('ESTÁTICO: botão "ver lesão" da aba Propostas agora usa wireLesionHoverPreview (mesmo mecanismo já existente)', () => {
-  assert.match(proposedListSrc, /class="btn btn-ghost review-open-lesion">ver lesão<\/button>/, 'botão "ver lesão" precisa continuar existindo');
-  assert.match(proposedListSrc, /wireLesionHoverPreview\(\s*openLesionBtn\s*,\s*meta\.lesion\.id\s*\)/,
-    'precisa reaproveitar wireLesionHoverPreview com o id da lesão da própria proposta');
+test('ESTÁTICO: botão "👁 atual" da aba Propostas usa wireLesionHoverPreview com a LESÃO REAL (sem override), rotulada "VERSÃO ATUAL"', () => {
+  assert.match(proposedListSrc, /class="btn btn-ghost review-open-lesion-current"/, 'botão "👁 atual" precisa existir');
+  assert.match(proposedListSrc, /wireLesionHoverPreview\(\s*currentBtn\s*,\s*meta\.lesion\.id\s*,\s*\{\s*label:'VERSÃO ATUAL'\s*\}\s*\)/,
+    'reaproveita wireLesionHoverPreview com o id real da lesão, sem "lesion:" override — sempre a versão atual em DATA');
 });
 
-test('ESTÁTICO: clique continua abrindo só o detalhe (nunca autoriza/rejeita/resolve/fecha scroll) — comportamento de clique preservado', () => {
-  assert.match(proposedListSrc, /openLesionBtn\.onclick\s*=\s*\(\)\s*=>\s*\{\s*closeLesionHoverPreview\(\);\s*closeAllAndCleanup\(\);\s*openDetail\(meta\.lesion\.id\);\s*\}/);
-  // O onclick do "ver lesão" (isolado por slice até o próximo querySelector
-  // de histórico) não pode conter nenhuma das ações humanas da proposta.
-  const onclickBlock = proposedListSrc.slice(proposedListSrc.indexOf('openLesionBtn.onclick'), proposedListSrc.indexOf("querySelector('.review-open-history')"));
+test('ESTÁTICO: clique em "👁 atual" continua abrindo só o detalhe (nunca autoriza/rejeita/resolve/fecha scroll) — comportamento de clique preservado', () => {
+  assert.match(proposedListSrc, /currentBtn\.onclick\s*=\s*\(\)\s*=>\s*\{\s*closeLesionHoverPreview\(\);\s*closeAllAndCleanup\(\);\s*openDetail\(meta\.lesion\.id\);\s*\}/);
+  const onclickBlock = proposedListSrc.slice(proposedListSrc.indexOf('currentBtn.onclick'), proposedListSrc.indexOf("querySelector('.review-open-history')"));
   for (const forbidden of ['authorizeAndApplyReviewSolution', 'rejectProposedReviewSolution', 'confirmNoChangeReviewSolution', 'wireReviewResolveButton', 'runAiSolutionPipeline']) {
-    assert.ok(!onclickBlock.includes(forbidden), 'onclick do "ver lesão" não pode chamar ' + forbidden);
+    assert.ok(!onclickBlock.includes(forbidden), 'onclick de "👁 atual" não pode chamar ' + forbidden);
   }
 });
 
-test('ESTÁTICO: só UMA chamada de wireLesionHoverPreview para o botão "ver lesão" desta aba (sem wiring duplicado)', () => {
-  const matches = proposedListSrc.match(/wireLesionHoverPreview\(\s*openLesionBtn\s*,/g) || [];
+test('ESTÁTICO: só UMA chamada de wireLesionHoverPreview para "👁 atual" desta aba (sem wiring duplicado)', () => {
+  const matches = proposedListSrc.match(/wireLesionHoverPreview\(\s*currentBtn\s*,/g) || [];
   assert.equal(matches.length, 1);
+});
+
+test('ESTÁTICO: botão "✨ proposta" existe só quando há changes, usa uma CÓPIA (lesion: override) com proposedChanges, nunca authorizeAndApplyReviewSolution', () => {
+  assert.match(proposedListSrc, /class="btn btn-ghost review-open-lesion-proposed"/);
+  assert.match(proposedListSrc, /lesion:\s*previewLesionWithProposedChanges\(meta\.lesion,\s*changes\)/,
+    'a prévia da proposta precisa ser uma CÓPIA com proposedChanges sobreposto, nunca a lesão real direto');
+  assert.match(proposedListSrc, /label:'PRÉVIA DA PROPOSTA'/);
+  const proposedBlock = proposedListSrc.slice(proposedListSrc.indexOf('const proposedBtn'), proposedListSrc.indexOf("row.querySelector('.review-open-history')"));
+  for (const forbidden of ['authorizeAndApplyReviewSolution', 'saveData', 'saveLesionRevisions', 'rejectProposedReviewSolution']) {
+    assert.ok(!proposedBlock.includes(forbidden), 'wiring de "✨ proposta" não pode chamar ' + forbidden);
+  }
+});
+
+test('ESTÁTICO: "👁 atual" e "✨ proposta" usam chaves de preview DISTINTAS (nunca uma "já aberto" bloqueia a outra na mesma lesão)', () => {
+  assert.match(proposedListSrc, /previewKey\s*=\s*'proposed:'\s*\+\s*r\.id/);
+  assert.doesNotMatch(proposedListSrc, /wireLesionHoverPreview\(\s*currentBtn[^)]*previewKey/, '"atual" usa a chave padrão (o próprio lesionId), não previewKey');
 });
 
 // ===========================================================================
@@ -141,6 +155,7 @@ function makeFakeEl(tag) {
   };
   return el;
 }
+const PREVIEW_LESION_COPY_SRC = extractFunction(html, 'previewLesionWithProposedChanges').source;
 function makeHoverCtx(lesions, clickSpy) {
   const timers = makeFakeTimers();
   const docListeners = {};
@@ -155,19 +170,23 @@ function makeHoverCtx(lesions, clickSpy) {
   };
   const anchor = makeFakeEl('button');
   anchor.getBoundingClientRect = () => ({ left: 100, right: 200, top: 50, bottom: 70 });
-  // "ver lesão" tem onclick próprio, independente do hover — simula o clique
+  // "👁 atual" tem onclick próprio, independente do hover — simula o clique
   // real do botão chamando o spy (prova que hover não dispara clique).
   anchor.onclick = clickSpy || (() => {});
+  // 2º anchor — "✨ proposta" da MESMA lesão (ver testes de chave distinta/
+  // nenhum preview duplicado entre os dois botões).
+  const anchor2 = makeFakeEl('button');
+  anchor2.getBoundingClientRect = () => ({ left: 100, right: 200, top: 50, bottom: 70 });
   const context = {
     console: { error: () => {}, log: () => {}, info: () => {}, warn: () => {} },
     DATA: lesions, LESION_REVISIONS: {}, document,
     window: { innerWidth: 1024, innerHeight: 768, matchMedia: () => ({ matches: true }) },
     setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
-    __timers: timers, __anchor: anchor
+    __timers: timers, __anchor: anchor, __anchor2: anchor2
   };
   vm.createContext(context);
   const deps = ['splitDifferentialItems', 'notesDifferentialsHtml'].map((n) => extractFunction(html, n).source).join('\n');
-  vm.runInContext(ESC_SRC + '\n' + PREVIEW_STATE_SRC + '\n' + deps + '\n' + PREVIEW_SRC, context, { filename: 'solucoes-hover.js' });
+  vm.runInContext(ESC_SRC + '\n' + PREVIEW_STATE_SRC + '\n' + deps + '\n' + PREVIEW_LESION_COPY_SRC + '\n' + PREVIEW_SRC, context, { filename: 'solucoes-hover.js' });
   return context;
 }
 function canonicalize(value) {
@@ -223,4 +242,74 @@ test('COMPORTAMENTAL: só mouseenter/mouseleave são usados pelo wiring — nunc
   assert.equal(ctx.__anchor.listenerCount('mouseleave'), 1);
   assert.equal(ctx.__anchor.listenerCount('click'), 0, 'hover nunca escuta click');
   assert.equal(typeof ctx.__anchor.onclick, 'function', 'onclick original do botão continua intocado (não foi sobrescrito pelo wiring de hover)');
+});
+
+/* ---------- "👁 atual" vs "✨ proposta" — mesma lesão, conteúdos diferentes ---------- */
+
+const PROPOSED_CHANGES = {
+  notes: 'Padrão: achado reescrito pela IA.\n\nDiferenciais-chave:\nCraniofaringioma — calcificações.\nMeningioma — realce intenso.',
+  tags: ['nova-tag'], enTerm: 'new proposal term'
+};
+
+test('previewLesionWithProposedChanges: campos alterados vêm da proposta; campos NÃO alterados permanecem exatamente como na lesão atual', () => {
+  const ctx = makeHoverCtx([LESION]);
+  const merged = vm.runInContext('previewLesionWithProposedChanges(DATA[0], ' + JSON.stringify(PROPOSED_CHANGES) + ')', ctx);
+  assert.equal(merged.notes, PROPOSED_CHANGES.notes);
+  assert.deepEqual(Array.from(merged.tags), PROPOSED_CHANGES.tags);
+  assert.equal(merged.enTerm, PROPOSED_CHANGES.enTerm);
+  // nunca alterados pela proposta: idênticos à lesão atual
+  assert.equal(merged.id, LESION.id);
+  assert.equal(merged.name, LESION.name);
+  assert.equal(merged.s, LESION.s);
+  assert.equal(merged.site, LESION.site);
+  assert.deepEqual(Array.from(merged.clinicalTags), LESION.clinicalTags);
+});
+
+test('previewLesionWithProposedChanges NUNCA muta a lesão original (DATA permanece intacta)', () => {
+  const ctx = makeHoverCtx([LESION]);
+  const before = fp(ctx, 'DATA');
+  vm.runInContext('previewLesionWithProposedChanges(DATA[0], ' + JSON.stringify(PROPOSED_CHANGES) + ')', ctx);
+  assert.equal(fp(ctx, 'DATA'), before);
+});
+
+test('COMPORTAMENTAL: hover "👁 atual" mostra a LESÃO REAL (notes antigas) com rótulo "VERSÃO ATUAL"', () => {
+  const ctx = makeHoverCtx([LESION]);
+  vm.runInContext('wireLesionHoverPreview(__anchor, "' + LESION.id + '", {label:"VERSÃO ATUAL"})', ctx);
+  ctx.__anchor.fire('mouseenter'); ctx.__timers.fire(300);
+  const html2 = ctx.document._appended[0].innerHTML;
+  assert.match(html2, /VERSÃO ATUAL/);
+  assert.match(html2, /nota curta/, 'mostra a notes ATUAL (da lesão real em DATA)');
+});
+
+test('COMPORTAMENTAL: hover "✨ proposta" mostra a CÓPIA com proposedChanges (notes/tags/enTerm novos), rotulada "PRÉVIA DA PROPOSTA" — nunca altera DATA', () => {
+  const ctx = makeHoverCtx([LESION]);
+  const merged = vm.runInContext('previewLesionWithProposedChanges(DATA[0], ' + JSON.stringify(PROPOSED_CHANGES) + ')', ctx);
+  ctx.__merged = merged;
+  const dataBefore = fp(ctx, 'DATA');
+  vm.runInContext('wireLesionHoverPreview(__anchor2, "' + LESION.id + '", {lesion:__merged, label:"PRÉVIA DA PROPOSTA", labelAccent:true, previewKey:"proposed:r1"})', ctx);
+  ctx.__anchor2.fire('mouseenter'); ctx.__timers.fire(300);
+  const html2 = ctx.document._appended[0].innerHTML;
+  assert.match(html2, /PRÉVIA DA PROPOSTA/);
+  assert.match(html2, /<strong>Diferenciais-chave:<\/strong>/, 'notes propostas estruturadas renderizam com notesDifferentialsHtml');
+  assert.match(html2, /<strong>Craniofaringioma<\/strong> — calcificações\./);
+  assert.doesNotMatch(html2, /nota curta/, 'nunca mostra a notes antiga nesta prévia');
+  assert.equal(fp(ctx, 'DATA'), dataBefore, 'DATA permanece bit-a-bit igual depois do hover da proposta');
+});
+
+test('COMPORTAMENTAL: "👁 atual" e "✨ proposta" da MESMA lesão nunca se bloqueiam um ao outro (chaves distintas) — nenhum preview duplicado', () => {
+  const ctx = makeHoverCtx([LESION]);
+  const merged = vm.runInContext('previewLesionWithProposedChanges(DATA[0], ' + JSON.stringify(PROPOSED_CHANGES) + ')', ctx);
+  ctx.__merged = merged;
+  vm.runInContext('wireLesionHoverPreview(__anchor, "' + LESION.id + '", {label:"VERSÃO ATUAL"})', ctx);
+  vm.runInContext('wireLesionHoverPreview(__anchor2, "' + LESION.id + '", {lesion:__merged, label:"PRÉVIA DA PROPOSTA", previewKey:"proposed:r1"})', ctx);
+  ctx.__anchor.fire('mouseenter'); ctx.__timers.fire(300);
+  assert.equal(ctx.document._appended.length, 1, '"atual" abriu normalmente');
+  assert.match(ctx.document._appended[0].innerHTML, /VERSÃO ATUAL/);
+  ctx.__anchor2.fire('mouseenter'); ctx.__timers.fire(300);
+  // closeLesionHoverPreview() some aqui dentro de openLesionHoverPreview —
+  // só 1 card no DOM a qualquer momento, mas o 2º hover TROCOU o conteúdo
+  // (nunca foi ignorado por já achar que "esta lesão" já estava aberta).
+  const cards = ctx.document._appended.filter((el) => !el.removed);
+  assert.equal(cards.length, 1, 'nenhum preview duplicado — sempre um por vez');
+  assert.match(cards[0].innerHTML, /PRÉVIA DA PROPOSTA/, 'o hover da proposta realmente abriu — não foi bloqueado pela chave de "atual"');
 });
