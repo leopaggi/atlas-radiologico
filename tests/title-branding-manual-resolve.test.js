@@ -137,6 +137,10 @@ function reviewCtx(data) {
     storage: { async get() { throw new Error('nf'); }, async set() {} },
     DATA: data || [], saveData: () => { ctx.saveDataCalls += 1; }, saveDataCalls: 0,
     markSyncDirty: async () => {}, pushToFirebase: () => {},
+    // Bloco B — saveLesionRevisions() (dentro de reviewModule) chama estas
+    // 3 funções (dirty-tracking/push incremental); vivem fora deste slice
+    // do módulo — stub no-op, mesmo espírito de markSyncDirty acima.
+    markLesionReviewDirty: () => {}, persistDirtyLesionReviewIds: async () => {}, pushLesionReviewsIncremental: () => {},
     document: { getElementById: (id) => els[id] || null, querySelectorAll: () => [] }
   };
   vm.createContext(ctx);

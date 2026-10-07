@@ -150,7 +150,15 @@ function applyCtx(fixture, opts) {
   const context = {
     console, Date, Math, JSON, Object, Array, storage, __backing: backing, __stats: stats, __fakeDocs: fakeDocs,
     fbDb: {}, FB_META_REF: () => ({ collection: fakeDb.collection }), navigator: { onLine: true },
-    markSyncDirty: async () => { stats.dirties++; }, pushToFirebase: () => { stats.pushes++; }
+    markSyncDirty: async () => { stats.dirties++; }, pushToFirebase: () => { stats.pushes++; },
+    // Bloco B — saveLesionRevisions() real (extraída acima) agora depende
+    // destes; fora do escopo desta fase (compactação de snapshot), por isso
+    // stubs simples, mesmo espírito de markSyncDirty/pushToFirebase acima.
+    DIRTY_LESION_REVIEW_IDS: new Set(),
+    markLesionReviewDirty: () => {},
+    persistDirtyLesionReviewIds: async () => {},
+    pushLesionReviewsIncremental: () => { stats.pushes++; },
+    foldLesionMergesIntoGlobals: () => ({ changed: false, folded: [], movedImages: 0 })
   };
   vm.createContext(context);
   vm.runInContext("const LESION_REVISIONS_KEY = 'atlas:lesionRevisions';", context);
@@ -418,8 +426,11 @@ test('5B-21 conflito remoto impede metadata compactada de chegar ao sync', async
   doc.payloadJson = JSON.stringify(payload);
   const res = await ctx.applySnapshotMigrationCompaction({ expected: expectedFor(ctx), dryRunOnly: true });
   assert.equal(res.ok, false, 'aborta antes de compactar');
-  // e a transação jamais sobrescreve: pin estático do abort
-  assert.match(fn('writeShardedState'), /err\.code = 'snapshot_content_conflict'/, 'tx aborta em divergência');
+  // e a transação jamais sobrescreve: pin estático do abort — Bloco B
+  // moveu a publicação/conflito de snapshot de writeShardedState() para
+  // writeLesionReviewIncremental() (por documento, nunca mais o lote
+  // inteiro de LESION_REVISIONS).
+  assert.match(fn('writeLesionReviewIncremental'), /err\.code = 'snapshot_content_conflict'/, 'tx aborta em divergência');
 });
 
 // ---------- leitores pós-compact com flag FALSE ----------
@@ -461,6 +472,16 @@ function reviewCtxB(opts) {
   context.syncDirtyCalls = 0; context.pushCalls = 0;
   context.markSyncDirty = async () => { context.syncDirtyCalls += 1; };
   context.pushToFirebase = () => { context.pushCalls += 1; };
+  // Bloco B — mesmos stubs de tests/lesion-review.test.js (fora do escopo
+  // desta fase 5B).
+  context.DIRTY_LESION_REVIEW_IDS = new Set();
+  context.markLesionReviewDirty = (ids) => {
+    const arr = Array.isArray(ids) ? ids : [ids];
+    for (const id of arr) { if (id && typeof id === 'string') context.DIRTY_LESION_REVIEW_IDS.add(id); }
+  };
+  context.persistDirtyLesionReviewIds = async () => {};
+  context.pushLesionReviewsIncremental = () => { context.pushCalls += 1; };
+  context.foldLesionMergesIntoGlobals = () => ({ changed: false, folded: [], movedImages: 0 });
   vm.createContext(context);
   vm.runInContext(moduleSourceB, context, { filename: 'lesion-review-5b.js' });
   vm.runInContext(canonSrcB + '\n' + heavySourceB, context, { filename: 'lesion-review-5b-heavy.js' });

@@ -55,16 +55,27 @@ function sliceBetween(start, end) {
 // BLOCO A inteiro, como um único trecho contíguo (é exatamente como foi
 // inserido no index.html) — evita extrair 8 funções uma a uma à mão.
 const BLOCO_A_START = 'function getLesionRevisionsCollectionRef(){';
-const BLOCO_A_END = '/* envia o estado atual pra nuvem';
+// Termina ANTES do comentário do Bloco B (que vive logo depois, no mesmo
+// trecho contíguo) — sem isso, a checagem estática S-U abaixo falsamente
+// acusaria o Bloco A de "chamar" writeShardedState() só porque o texto
+// aparece dentro de um COMENTÁRIO explicativo do Bloco B, não uma chamada.
+const BLOCO_A_END = '/* ============================================================\r\n   BLOCO B —';
 const blocoASource = sliceBetween(BLOCO_A_START, BLOCO_A_END);
 
 const withFirebaseTimeoutFn = extractFunction(html, 'withFirebaseTimeout');
 const stripUndefinedDeepFn = extractFunction(html, 'stripUndefinedDeep');
 const canonicalJsonStringFn = extractFunction(html, 'canonicalJsonString');
 const structuralSnapshotProgressFromFirestoreFn = extractFunction(html, 'structuralSnapshotProgressFromFirestore');
+// Bug real encontrado e corrigido nesta rodada: writeLesionRevisionDocument/
+// writeLesionRevisionBatch/readLesionRevisionsCollection agora também
+// codificam/decodificam progresso embutido (mesmo codec de sempre) antes de
+// cruzar a fronteira da nuvem — sem isto, uma revisão com snapshot inline
+// (flag OFF) carregando tuplas [t,ok,graded] faria o Firestore real rejeitar
+// a escrita (array dentro de array).
+const structuralSnapshotProgressToFirestoreFn = extractFunction(html, 'structuralSnapshotProgressToFirestore');
 
 const fullSource = [withFirebaseTimeoutFn.source, stripUndefinedDeepFn.source, canonicalJsonStringFn.source,
-  structuralSnapshotProgressFromFirestoreFn.source, blocoASource].join('\n');
+  structuralSnapshotProgressFromFirestoreFn.source, structuralSnapshotProgressToFirestoreFn.source, blocoASource].join('\n');
 
 // Firestore falso — só o suficiente para o Bloco A. Note que o ref de chunk
 // legado NÃO expõe `.set`/`.delete`: se alguma função do Bloco A tentasse
@@ -196,6 +207,23 @@ test('F. structuralExecution preservado', async () => {
   ctx.LESION_REVISIONS = { lrev_x1: r };
   await ctx.migrateLesionRevisionsLocalToCollection();
   assert.equal(JSON.stringify(ctx.__cloud.collectionDocs.get('lrev_x1').structuralExecution), JSON.stringify(r.structuralExecution));
+});
+
+// BUG REAL encontrado e corrigido nesta rodada: snapshot INLINE (flag OFF —
+// structuralExecution.beforeSnapshot embutido, sem externalização) carrega
+// reviewProgress como tuplas [t,ok,graded] — Firestore recusa array dentro
+// de array. writeLesionRevisionDocument/writeLesionRevisionBatch/
+// readLesionRevisionsCollection precisam codificar/decodificar (mesmo codec
+// de sempre) ao cruzar a fronteira da nuvem, exatamente como writeShardedState/
+// readShardedState/writeLesionReviewIncremental já fazem. ESTÁTICO (não
+// dinâmico): o codec completo (normalizeReviewProgress/replayAutoReview/...)
+// já é exercitado a fundo por tests/lesion-revisions-sharding.test.js
+// (teste J) — aqui só se prova que o NOVO caminho (Bloco A) também o chama,
+// sem duplicar toda aquela cadeia de extração.
+test('F2. ESTÁTICO (BUG FIX): leitura/escrita da coleção nova codificam/decodificam progresso embutido', () => {
+  assert.match(extractFunction(html, 'writeLesionRevisionDocument').source, /structuralSnapshotProgressToFirestore\(/, 'write de 1 documento precisa codificar antes do .set');
+  assert.match(extractFunction(html, 'writeLesionRevisionBatch').source, /structuralSnapshotProgressToFirestore\(/, 'write em lote precisa codificar antes do batch.set');
+  assert.match(extractFunction(html, 'readLesionRevisionsCollection').source, /structuralSnapshotProgressFromFirestore\(/, 'leitura da coleção precisa decodificar de volta pra tupla');
 });
 
 // ===========================================================================

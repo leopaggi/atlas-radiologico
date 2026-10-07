@@ -93,6 +93,11 @@ const normalizeExternalTitleFn = extractFunction(html, 'normalizeExternalTitle')
 // 1:1, sem passar por mergeEntryNonDestructive/syncFromFirebase.
 const adoptRemoteFn = extractFunction(html, 'adoptRemoteStateForNewDevice');
 const readShardedStateFn = extractFunction(html, 'readShardedState');
+// Bloco B — readShardedState() lê a coleção nova por documento como fonte
+// primária de lesionRevisions (fallback pros pedaços legados só quando
+// ela vem vazia); as duas funções do Bloco A precisam entrar no motor.
+const getLesionRevisionsCollectionRefFn = extractFunction(html, 'getLesionRevisionsCollectionRef');
+const readLesionRevisionsCollectionFn = extractFunction(html, 'readLesionRevisionsCollection');
 const normalizeTombstoneMapFn = extractFunction(html, 'normalizeTombstoneMap');
 // PROTEÇÃO 089 — estado manual de estudo com carimbo (funções reais).
 const reviewFns089 = ['normalizeReviewStamps', 'saveReviewStamps', 'mergeReviewByRecency',
@@ -477,7 +482,7 @@ test('loadData() real: dispositivo NOVO (storage.get lança) aciona o bootstrap 
       loadLesionTombstones: async () => {},
       loadPendingLocalImageAdds: async () => {}, // ALTERAÇÃO 079d
       IMAGE_TOMBSTONES: {},
-      loadLesionRevisions: async () => {}, loadClassificationReviewDecisions: async () => {},
+      loadLesionRevisions: async () => {}, loadDirtyLesionReviewIds: async () => {}, loadClassificationReviewDecisions: async () => {},
       saveReview: async () => {}, saveSRS: async () => {},
       createSafetySnapshot: () => null,
       applyAltPlacementsAudit20260918: async () => false,
@@ -497,6 +502,7 @@ test('loadData() real: dispositivo NOVO (storage.get lança) aciona o bootstrap 
       // ALTERACAO 068 (2026-09-23): dispositivo JA inicializado (storage.get
       // NAO lanca) agora puxa a nuvem automaticamente — ver asserts abaixo.
       syncFromFirebase: async () => { calls.push('syncFromFirebase'); },
+      DIRTY_LESION_REVIEW_IDS: new Set(), pushLesionReviewsIncremental: () => {},
       renderAll: () => { calls.push('renderAll'); },
       console: { error: () => {}, info: () => {}, log: () => {}, warn: () => {} }
     });
@@ -572,7 +578,7 @@ test('loadData() real: reload DEPOIS do bootstrap não repete o fluxo (storage j
       // PROTEÇÃO 094: loadData() real também carrega o tombstone de lesão (stub, mesmo padrão).
       loadLesionTombstones: async () => {},
       loadPendingLocalImageAdds: async () => {}, // ALTERAÇÃO 079d
-      loadLesionRevisions: async () => {}, loadClassificationReviewDecisions: async () => {},
+      loadLesionRevisions: async () => {}, loadDirtyLesionReviewIds: async () => {}, loadClassificationReviewDecisions: async () => {},
       saveReview: async () => {}, saveSRS: async () => {}, createSafetySnapshot: () => null,
       applyAltPlacementsAudit20260918: async () => false, applyClassificationAudit20260918: async () => false,
       upgradeDescriptionsV169: async () => {}, upgradeDescriptionsV170: async () => {},
@@ -592,6 +598,7 @@ test('loadData() real: reload DEPOIS do bootstrap não repete o fluxo (storage j
       // SÓ roda quando o dispositivo já é considerado inicializado, ou seja,
       // a partir do 2º loadData()) é verificado abaixo separadamente.
       syncFromFirebase: async () => { syncCalls.push('syncFromFirebase'); },
+      DIRTY_LESION_REVIEW_IDS: new Set(), pushLesionReviewsIncremental: () => {},
       renderAll: () => {},
       console: { error: () => {}, info: () => {}, log: () => {}, warn: () => {} }
     });
@@ -755,7 +762,13 @@ function makeAdoptContext({ localData, remoteMeta, remoteChunks } = {}) {
     lastKnownCloudRevision: null,
     window: {},
     withFirebaseTimeout: (p) => p,
-    FB_META_REF: () => ({ get: async () => ({ exists: !!store.meta, data: () => store.meta }) }),
+    FB_META_REF: () => ({
+      get: async () => ({ exists: !!store.meta, data: () => store.meta }),
+      // Bloco B — nenhum teste deste arquivo escreve na coleção nova:
+      // sempre vazia, cai no fallback legado (remoteMeta.lesionRevisions),
+      // mesmo comportamento de antes do Bloco B.
+      collection: () => ({ get: async () => ({ forEach: () => {} }) })
+    }),
     FB_CHUNK_REF: (i) => ({ get: async () => ({ exists: i < store.chunks.length, data: () => ({ items: store.chunks[i] }) }) }),
     storage: {
       get: async (key) => { if (Object.prototype.hasOwnProperty.call(backing, key)) return { value: backing[key] }; throw new Error('not found: ' + key); },
@@ -769,6 +782,8 @@ function makeAdoptContext({ localData, remoteMeta, remoteChunks } = {}) {
     ${isValidTombFn2.source}
     ${normalizeTombstoneMapFn.source}
     ${saveTombFn2.source}
+    ${getLesionRevisionsCollectionRefFn.source}
+    ${readLesionRevisionsCollectionFn.source}
     ${readShardedStateFn.source}
     const LESION_REVISIONS_KEY = 'atlas:lesionRevisions';
     let LESION_REVISIONS = {};

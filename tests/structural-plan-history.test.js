@@ -34,7 +34,7 @@ const names = ['canonicalJsonString', 'pushLesionReviewHistory',
   'structuralPlanLesion', 'structuralClone', 'structuralLesionIndex', 'structuralMapHas',
   'structuralSnapshotLesions', 'structuralSnapshotMaps', 'structuralRestoreSnapshots',
   'rollbackStructuralExecution', 'getEffectiveStructuralStatus', 'getManualActionSolutions', 'getStructuralHistorySolutions',
-  'structuralHistoryCardHtml', 'structuralExecutionDetailsHtml', 'mergeLesionRevisions'];
+  'structuralHistoryCardHtml', 'structuralExecutionDetailsHtml', 'mergeOneLesionReviewPair', 'mergeLesionRevisions'];
 const src = names.map(fn).join('\n');
 const execConsts = html.slice(
   html.indexOf('const STRUCTURAL_EXECUTOR_VERSION = '),

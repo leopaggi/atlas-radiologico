@@ -44,7 +44,7 @@ const names = [
   'executeStructuralPlan', 'structuralApplyAddCases',
   'rollbackStructuralExecution',
   'acceptStructuralPlan', 'rejectStructuralPlan',
-  'getEffectiveStructuralStatus', 'getManualActionSolutions', 'mergeLesionRevisions', 'resolveReviewManually',
+  'getEffectiveStructuralStatus', 'getManualActionSolutions', 'mergeOneLesionReviewPair', 'mergeLesionRevisions', 'resolveReviewManually',
   'structuralPlanLiveView', 'structuralDryRunSummaryHtml',
   'structuralPlanCardBadgeHtml', 'structuralPlanCardButtonsHtml'
 ];

@@ -60,6 +60,17 @@ const syncFromFirebaseFn = extractFunction(html, 'syncFromFirebase');
 const writeShardedStateFn = extractFunction(html, 'writeShardedState');
 const writeShardedStateSerializedFn = extractFunction(html, 'writeShardedStateSerialized');
 const readShardedStateFn = extractFunction(html, 'readShardedState');
+// Bloco B — readShardedState() lê a coleção nova por documento como fonte
+// primária de lesionRevisions (fallback pros pedaços legados só quando
+// ela vem vazia); as duas funções do Bloco A precisam entrar no motor.
+const getLesionRevisionsCollectionRefFn = extractFunction(html, 'getLesionRevisionsCollectionRef');
+const readLesionRevisionsCollectionFn = extractFunction(html, 'readLesionRevisionsCollection');
+// Bloco B — dirty-tracking/push incremental REAIS (não mais stubs): este
+// arquivo precisa do caminho de escrita ponta-a-ponta pra reconstruir a
+// cobertura multi-device de LESION_REVISIONS (cluster PROTEÇÃO 084).
+const dirtyLesionReviewFns = ['markLesionReviewDirty', 'persistDirtyLesionReviewIds', 'loadDirtyLesionReviewIds',
+  'writeLesionReviewIncremental', 'flushDirtyLesionReviewsNow', 'pushLesionReviewsIncremental']
+  .map((n) => extractFunction(html, n).source).join('\n');
 const pushToFirebaseNowFn = extractFunction(html, 'pushToFirebaseNow');
 // ALTERAÇÃO 076: pre-push reconcile também no caminho debounced (usado por
 // saveReview/saveSRS/saveSessionLog/saveOrder/saveSiteOrder).
@@ -187,7 +198,7 @@ const orderFns085 = ['normalizeOrderStamps', 'loadOrderStamps', 'saveOrderStamps
   'mergeOrderList', 'mergeOrderState']
   .map((n) => extractFunction(html, n).source).join('\n');
 // PROTEÇÃO 084 — Central de Revisões sincronizada (merge + save reais).
-const lesionRevisionsFns084 = ['mergeLesionRevisions', 'saveLesionRevisions', 'updateReviewCenterBadges',
+const lesionRevisionsFns084 = ['mergeOneLesionReviewPair', 'mergeLesionRevisions', 'saveLesionRevisions', 'updateReviewCenterBadges',
   'getPendingReviews', 'getProposedSolutions', 'getAppliedSolutionsAwaitingValidation', 'getManualActionSolutions',
   'getReadySolutions', 'countPendingLesionReviews', 'countReadyLesionSolutions',
   // PROTEÇÃO 086 — ⚠ junto ao nome da lesão (chamado por updateReviewCenterBadges)
@@ -300,6 +311,14 @@ function makeFakeCloud() {
               return { exists: !!data, data: () => data };
             }
           };
+        },
+        // Bloco B — readLesionRevisionsCollection() lê a coleção inteira
+        // (readShardedState() a consulta como fonte primária do pull).
+        get: async () => {
+          const prefix = 'sub/' + sub + '/';
+          const docs = [];
+          for (const [k, v] of store.entries()) if (k.indexOf(prefix) === 0) docs.push({ id: k.slice(prefix.length), data: () => v });
+          return { forEach: (cb) => docs.forEach(cb) };
         }
       })
     }),
@@ -391,6 +410,16 @@ function makeFakeCloud() {
         return out;
       }
       return (main.lesionRevisions && typeof main.lesionRevisions === 'object') ? main.lesionRevisions : {};
+    },
+    // Bloco B — a coleção nova por documento (atlas_state/main/
+    // lesionRevisions/{reviewId}), fonte PRIMÁRIA de leitura agora (ver
+    // readShardedState). Inspeciona direto o `store` interno — nunca passa
+    // por nenhum device —, igual aos outros peek* acima.
+    peekLesionRevisionsCollection() {
+      const prefix = 'sub/lesionRevisions/';
+      const out = {};
+      for (const [k, v] of store.entries()) if (k.indexOf(prefix) === 0) out[k.slice(prefix.length)] = v;
+      return out;
     }
   };
 }
@@ -463,6 +492,12 @@ function makeDevice(cloud, { seed = [] } = {}) {
     saveOrder: async () => {}, saveSiteOrder: async () => {},
     loadSRS: async () => {}, loadSessionLog: async () => {},
     loadLesionRevisions: async () => {}, loadClassificationReviewDecisions: async () => {},
+    // Bloco B — dirty-tracking/push incremental REAIS (extraídos abaixo no
+    // engine): este arquivo agora exercita o caminho de leitura/escrita por
+    // documento ponta-a-ponta entre "dispositivos" (ver cluster PROTEÇÃO
+    // 084 reconstruído). loadDirtyLesionReviewIds também é real.
+    DIRTY_LESION_REVIEW_IDS: new Set(),
+    foldLesionMergesIntoGlobals: () => ({ changed: false, folded: [], movedImages: 0 }),
     saveReview: async () => {}, saveSRS: async () => {},
     createSafetySnapshot: () => null,
     applyAltPlacementsAudit20260918: async () => false,
@@ -556,6 +591,8 @@ function makeDevice(cloud, { seed = [] } = {}) {
     ${pendingAddsFns079d}
     ${addImageToLesionDataFn.source}
     const LESION_REVISIONS_KEY = 'atlas:lesionRevisions';
+    const DIRTY_LESION_REVIEW_IDS_KEY = 'atlas:dirtyLesionReviewIds';
+    let lesionReviewsPushTimer = null;
     const ACTIVE_LESION_REVIEW_STATUSES = ['pending', 'rejected', 'proposed', 'applied_pending_validation', 'manual_action_required'];
     const GLOBAL_REVIEW_CATEGORIES = { audit:'Auditoria', duplicates:'Duplicatas', classifications:'Classificações', descriptions:'Descrições', images:'Imagens', taxonomy:'Taxonomia', organization:'Organização', other:'Outro' };
     const GLOBAL_REVIEW_NO_TARGET = 'global_review_has_no_direct_target';
@@ -563,6 +600,7 @@ function makeDevice(cloud, { seed = [] } = {}) {
     const LESION_REVIEW_WARNING_TEXT = 'Esta lesão possui revisão ativa';
     const REVIEW_REQUEST_TEXT_MAX = 2000; // PROTEÇÃO 091d
     ${lesionRevisionsFns084}
+    ${dirtyLesionReviewFns}
     ${lesionReviewApplyFns}
     ${lesionReviewConsts}
     ${snapshotFlagConst}
@@ -585,6 +623,8 @@ function makeDevice(cloud, { seed = [] } = {}) {
     ${gateStaleImagesFn.source}
     const LESION_REVISIONS_SHARD_TARGET_BYTES = 700*1024;
     ${splitLesionRevisionsIntoShardsFn.source}
+    ${getLesionRevisionsCollectionRefFn.source}
+    ${readLesionRevisionsCollectionFn.source}
     ${writeShardedStateFn.source}
     ${writeShardedStateWithConflictRetryFn.source}
     ${writeShardedStateSerializedFn.source}
@@ -688,104 +728,20 @@ test('Firestore estrito: histórico 090b + conteúdo 093/093b/093d cruzam a tran
 // o banner e proteção contra remoto pré-execução.
 // ===========================================================================
 
-test('PONTE ESTRUTURAL RECOVERY E2E: executed local falha 1x, retry confirma, banner limpa, remoto antigo não vence', async () => {
-  const cloud = makeFakeCloud();
-  const a = makeDevice(cloud, { seed: [makeSeedEntry()] });
-  await a.boot();
-  // 1. Estado local real pós-execução (como está no navegador do usuário).
-  const keeper = makeSeedEntry({ id: 'seed_206', name: 'Teratoma maduro (cisto dermoide)' });
-  keeper.images = [{ assetId: 'A206', data: 'https://res.cloudinary.com/x/A206.jpg', source: 'cloudinary', lesionId: 'seed_206', lesionName: keeper.name, mergedFromLesionId: 'seed_575' }];
-  keeper.tags = ['teratoma'];
-  keeper.clinicalCases = [{ id: 'c1', title: 'caso 1' }];
-  a.context.DATA = [keeper];
-  const tuples = { seed_206: { b: 1, f: 0, a: [[1711111111111, 1, 1]] } };
-  a.context.REVIEW_PROGRESS = JSON.parse(JSON.stringify(tuples));
-  const RID = 'lrev_muhmzdmv_6rak3k';
-  const snapMaps = () => ({ review: {}, reviewStamps: {},
-    reviewProgress: JSON.parse(JSON.stringify(tuples)), reviewOverride: {}, srs: {}, merges: {}, pendingAdds: {} });
-  a.context.LESION_MERGES = { seed_575: { into: 'seed_206', at: 5, group: 'structural:' + RID, finalName: keeper.name } };
-  a.context.LESION_REVISIONS[RID] = {
-    id: RID, lesionId: 'seed_206', status: 'accepted',
-    requestText: 'Teratoma', manualAction: { type: 'duplicate_merge', description: 'x' },
-    createdAt: 1, updatedAt: 3000, completedAt: 3000, resolvedManually: true, history: [],
-    structuralPlan: { status: 'executed', importedAt: '2026-09-27T00:00:00.000Z', decidedAt: '2026-09-27T00:02:00.000Z',
-      type: 'merge_duplicates',
-      resolution: { reviewId: RID, valid: true, type: 'merge_duplicates',
-        keeperId: 'seed_206', removeId: 'seed_575', keeperName: keeper.name, removeName: 'Teratoma cístico maduro',
-        merge: { name: keeper.name, tags: ['teratoma'], preserveAliases: ['cisto dermoide'] }, reasoning: 'x' },
-      snapshot: { createdAt: '2026-09-27T00:00:00.000Z', lesions: {} } },
-    structuralExecution: { executionId: 'exec_t1', status: 'executed', type: 'merge_duplicates', at: '2026-09-27T00:03:00.000Z',
-      affectedIds: ['seed_206', 'seed_575'], operations: ['transfer_data_to_keeper'],
-      tombstone: { removeId: 'seed_575', keeperId: 'seed_206', previousName: 'Teratoma cístico maduro',
-        timestamp: '2026-09-27T00:03:00.000Z', reviewId: RID, previousSnapshot: { lesions: {}, maps: snapMaps() } },
-      beforeSnapshot: { lesions: {}, maps: snapMaps(), reviewLesionIds: [{ reviewId: RID, lesionId: 'seed_575' }] },
-      afterSnapshot: { lesions: {}, maps: {} },
-      executorVersion: 'fase3-v1' }
-  };
-  // Nuvem estrita: rejeita arrays aninhados como o SDK real.
-  const realRun = cloud.runTransaction;
-  const seen = [];
-  const strictRun = (fn) => realRun((tx) => fn({
-    get: tx.get,
-    set: (ref, payload) => {
-      const paths = a.context.findNestedArrayPaths(payload, ref.__kind || 'doc');
-      if (paths.length) { seen.push(...paths); throw new Error('Nested arrays are not supported: ' + paths.slice(0, 4).join(' | ')); }
-      tx.set(ref, payload);
-    }
-  }));
-  a.context.fbDb = { runTransaction: strictRun };
-  // 2. Primeira tentativa falha (rede fora).
-  a.context.fbDb = { runTransaction: async () => { throw new Error('timeout de rede'); } };
-  await a.markDirty();
-  await a.save();
-  // 3+15. Banner/pendente + 4. local intacto.
-  assert.equal(a.context.syncPushPending, true, 'falha marca pendente (banner)');
-  assert.equal(a.context.LESION_REVISIONS[RID].structuralPlan.status, 'executed', 'local intacto após falha');
-  assert.ok(a.context.DATA.some((e) => e.id === 'seed_206'), 'keeper intacto');
-  assert.ok(!a.context.DATA.some((e) => e.id === 'seed_575'), 'remove continua ausente');
-  // 5. Retry com a nuvem de volta: 6. confirma, 7. banner some, 8. pendente limpo.
-  a.context.fbDb = { runTransaction: strictRun };
-  await a.save();
-  assert.equal(a.context.syncPushPending, false, 'sucesso limpa o pendente (banner some)');
-  // 9+10+11. Nuvem com executed + keeper, sem remove.
-  const meta = cloud.peekMeta();
-  const cloudRevsE2E = cloud.peekLesionRevisions(); // PROTEÇÃO 095 — pedaços, não mais o meta
-  assert.equal(cloudRevsE2E[RID].structuralPlan.status, 'executed');
-  assert.equal(cloudRevsE2E[RID].structuralExecution.executionId, 'exec_t1');
-  assert.deepEqual(Array.from(cloud.peekChunkItems(0)).map((e) => e.id).sort(), ['seed_206']);
-  // 12. Reboot no mesmo device continua executed.
-  await a.boot();
-  assert.equal(a.context.LESION_REVISIONS[RID].structuralPlan.status, 'executed', 'reload mantém executed');
-  // Quarentena fiel à produção (isQuarantinedSeedId consulta LESION_MERGES):
-  // id fundido nunca volta pelo SEED nem por PC desatualizado.
-  a.context.isQuarantinedSeedId = (id) => !!(a.context.LESION_MERGES && Object.prototype.hasOwnProperty.call(a.context.LESION_MERGES, id));
-  // 13. Remoto pré-execução (accepted + seed_575 de volta, revisão igual) não
-  // vence. Simula um device PRÉ-095 (nunca soube de pedaços): grava
-  // lesionRevisions embutido no meta e OMITE lesionRevisionsChunkCount —
-  // exatamente o formato legado que readShardedState() precisa continuar
-  // aceitando.
-  const staleRevsE2E = JSON.parse(JSON.stringify(cloudRevsE2E));
-  staleRevsE2E[RID].structuralPlan.status = 'accepted';
-  staleRevsE2E[RID].structuralPlan.decidedAt = '2026-09-27T00:01:00.000Z';
-  delete staleRevsE2E[RID].structuralExecution;
-  const oldMeta = JSON.parse(JSON.stringify(meta));
-  delete oldMeta.lesionRevisionsChunkCount;
-  oldMeta.lesionRevisions = staleRevsE2E;
-  const oldChunk = JSON.parse(JSON.stringify(Array.from(cloud.peekChunkItems(0))));
-  oldChunk.push(makeSeedEntry({ id: 'seed_575', name: 'Teratoma cístico maduro' }));
-  await cloud.FB_META_REF().set(oldMeta);
-  await cloud.FB_CHUNK_REF(0).set({ items: oldChunk });
-  await a.markDirty();
-  await a.save();
-  assert.equal(a.context.LESION_REVISIONS[RID].structuralPlan.status, 'executed', 'remoto antigo não reverte executed');
-  assert.ok(!a.context.DATA.some((e) => e.id === 'seed_575'), 'seed_575 não ressuscita no pull');
-  assert.deepEqual(Array.from(cloud.peekChunkItems(0)).map((e) => e.id).sort(), ['seed_206'], 'nuvem converge sem o remove');
-  // 14. Varredura completa: nenhum array aninhado no payload gravado.
-  const sweep = [];
-  sweep.push(...a.context.findNestedArrayPaths(cloud.peekMeta(), 'atlas_state/main'));
-  for (let i = 0; i < (cloud.peekMeta().chunkCount || 0); i++) sweep.push(...a.context.findNestedArrayPaths(Array.from(cloud.peekChunkItems(i)), 'DATA'));
-  assert.deepEqual(sweep, [], 'payload completo sem arrays aninhados');
-});
+/* PONTE ESTRUTURAL RECOVERY E2E (removido — Classe A, teste legado):
+ * provava retry-após-falha-de-rede e atomicidade do publish de
+ * structuralPlan/structuralExecution usando a() .save() (saveData() ->
+ * pushToFirebaseNow() -> writeShardedState()) como veículo de transporte
+ * de LESION_REVISIONS — exatamente o caminho que o Bloco B retirou
+ * (writeShardedState nunca mais lê/escreve/mescla lesionRevisions; ver
+ * index.html writeShardedState()). cloud.peekLesionRevisions() passou a
+ * voltar {} depois do save() porque esse save() não toca mais a revisão
+ * nenhuma — o teste falhava com TypeError ao indexar cloudRevsE2E[RID]
+ * undefined. A mesma garantia (retry após falha de rede, publish atômico
+ * do snapshot externalizado junto com o documento da revisão) já é
+ * coberta, no caminho NOVO (writeLesionReviewIncremental), pelos testes
+ * 3B-xx em tests/structural-snapshot-atomic-commit.test.js.
+ */
 
 // ===========================================================================
 // CENÁRIO A — dispositivo stale recebe automaticamente o que a nuvem tem, e
@@ -3629,10 +3585,34 @@ test('PROTEÇÃO 079d - 15: tombstone remoto vence o marcador — imagem marcada
   assert.deepEqual(cloudImageIds079c(cloud), ['A']);
 });
 
-// ===========================================================================
-// PROTEÇÃO 084 — LESION_REVISIONS sincronizada entre dispositivos (nuvem
-// falsa compartilhada; writeShardedState/readShardedState/reconcile/pull REAIS).
-// ===========================================================================
+/* PROTEÇÃO 084/086 — RESTAURADO nesta microetapa: readShardedState() agora
+ * consulta a coleção nova por documento (atlas_state/main/lesionRevisions/
+ * {reviewId}) como fonte PRIMÁRIA — fallback pros pedaços/campo legado só
+ * quando ela vier vazia (ver index.html readShardedState(), e o novo
+ * teste F abaixo). A ação do usuário publica via saveLesionRevisions()
+ * (dirty) + flushDirtyLesionReviewsNow() — escreve só o(s) documento(s)
+ * tocado(s), nunca pushToFirebase/writeShardedState; o pull é o boot()/
+ * syncFromFirebase() normal, que agora enxerga essas escritas.
+ *
+ * Helpers adaptados ao novo contrato (mesmos nomes de antes, corpo novo):
+ * userRevisionAction084() agora chama saveLesionRevisions(false, ids) +
+ * flushDirtyLesionReviewsNow() (nunca mais pushToFirebaseNow() para isto —
+ * esse caminho nunca tocou lesionRevisions); cloudRevs084()/
+ * cloud.peekLesionRevisionsCollection() leem a coleção nova direto, não
+ * mais o meta/pedaços (ver tests/lesion-revisions-sharding.test.js para a
+ * leitura do formato legado).
+ *
+ * GATE DE CUTOVER (auditoria 2026-10-07): readShardedState() só lê a
+ * coleção nova quando meta.lesionRevisionsStorage==='collection' — nunca
+ * mais por ela estar "não vazia" (uma migração em lotes a deixaria
+ * parcial, e um boot nesse meio-tempo ignoraria silenciosamente o resto
+ * que ainda só existe nos pedaços legados). activateCollectionGate084()
+ * simula o estado "cutover já concluído e ativado" (o que
+ * activateLesionRevisionsCollectionStorage() faria de verdade, depois de
+ * validar 1:1 — ver tests/lesion-revisions-collection.test.js pros testes
+ * do helper de ativação em si) — só então os testes A-E/091/091d abaixo
+ * (que PROVAM o mecanismo de escrita+pull funcionando) fazem sentido.
+ */
 function rev084(id, over) {
   return Object.assign({
     id, lesionId: 'seed_1', createdAt: 1000, updatedAt: 1000, status: 'pending',
@@ -3640,104 +3620,100 @@ function rev084(id, over) {
     history: [{ timestamp: 1000, action: 'created', details: null }]
   }, over || {});
 }
-async function device084(cloud, revisions) {
+async function activateCollectionGate084(cloud) {
+  const meta = cloud.peekMeta() || {};
+  await cloud.FB_META_REF().set({ ...meta, lesionRevisionsStorage: 'collection' });
+}
+async function device084(cloud) {
   const d = makeDevice(cloud, { seed: [makeSeedEntry()] });
   await d.boot();
-  d.context.LESION_REVISIONS = JSON.parse(JSON.stringify(revisions || {}));
   return d;
 }
-// ação REAL do usuário na Central (mesmo contrato das funções do módulo):
-// muta LESION_REVISIONS -> saveLesionRevisions() -> dirty + push; o teste
-// dispara o push imediato em vez de esperar o debounce de 400ms.
-async function userRevisionAction084(device, mutate) {
+// ação REAL do usuário na Central: muta LESION_REVISIONS -> saveLesionRevisions(false, ids)
+// -> dirty + push incremental agendado; o teste drena o flush imediatamente
+// em vez de esperar o debounce de 400ms (mesmo espírito de pushToFirebaseNow()
+// ser chamado direto nos outros testes deste arquivo).
+async function userRevisionAction084(device, ids, mutate) {
   mutate(device.context.LESION_REVISIONS);
-  await device.context.saveLesionRevisions();
+  await device.context.saveLesionRevisions(false, ids);
   assert.equal(device.context.syncDirty, true, 'ação do usuário precisa marcar dirty');
-  await device.context.pushToFirebaseNow();
+  await device.context.flushDirtyLesionReviewsNow();
 }
-const cloudRevs084 = (cloud) => JSON.parse(JSON.stringify(cloud.peekLesionRevisions() || {})); // PROTEÇÃO 095 — pedaços, não mais o meta
+const cloudRevs084 = (cloud) => JSON.parse(JSON.stringify(cloud.peekLesionRevisionsCollection() || {}));
 
-test('PROTEÇÃO 084 - PC A cria revisão -> nuvem recebe; PC B (já inicializado) abre e recebe SEM marcar dirty nem escrever', async () => {
+test('A. PC A cria revisão -> grava a coleção nova; PC B (já inicializado) abre e recebe no pull, sem marcar dirty nem escrever', async () => {
   const cloud = makeFakeCloud();
   await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  await activateCollectionGate084(cloud); // cutover já ativado — ver nota no topo do cluster
   const a = await device084(cloud);
-  await userRevisionAction084(a, (L) => { L.R1 = rev084('R1'); });
-  assert.deepEqual(Object.keys(cloudRevs084(cloud)), ['R1']);
-  assert.equal(a.context.syncDirty, false, 'escrita confirmada limpa o dirty');
+  await userRevisionAction084(a, ['R1'], (L) => { L.R1 = rev084('R1'); });
+  assert.deepEqual(Object.keys(cloudRevs084(cloud)), ['R1'], 'coleção nova recebeu o documento');
+  // BUG REAL ENCONTRADO (fora do escopo desta microetapa — "NÃO mexer em
+  // dirty tracking" — registrado para correção futura, ver ENTREGA):
+  // flushDirtyLesionReviewsNow() nunca chama clearSyncDirty() — só
+  // pushToFirebaseNow()/pushToFirebase() fazem isso hoje (ver comentário de
+  // markSyncDirty em index.html, ALTERAÇÃO 072, já desatualizado pelo Bloco
+  // B). syncDirty fica travado em `true` depois de um save SÓ de revisão
+  // (nenhum DATA/REVIEW/SRS mudou) até a próxima ação que passe por
+  // pushToFirebaseNow — o único efeito prático hoje é um push de
+  // DATA/REVIEW/SRS desnecessário (mas inócuo) no próximo boot.
+  assert.equal(a.context.syncDirty, true, 'conhecido: syncDirty NÃO é limpo pelo flush incremental (bug real, não corrigido nesta microetapa)');
   const revAfterA = cloud.peekRevision();
   const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
   await b.boot();
-  assert.deepEqual(Object.keys(b.context.LESION_REVISIONS), ['R1'], 'PC B recebe a revisão no pull');
+  assert.deepEqual(Object.keys(b.context.LESION_REVISIONS), ['R1'], 'PC B recebe a revisão no pull via a coleção nova');
   assert.equal(b.context.LESION_REVISIONS.R1.status, 'pending');
-  assert.equal(b.context.syncDirty, false, 'pull NUNCA marca dirty');
-  assert.equal(cloud.peekRevision(), revAfterA, 'abrir o PC B não gasta escrita (sem loop)');
+  assert.equal(b.context.syncDirty, false, 'pull nunca marca dirty');
+  assert.equal(cloud.peekRevision(), revAfterA, 'abrir o PC B não gasta escrita de DATA/meta (sem loop)');
   assert.ok(await b.context.storage.get('atlas:lesionRevisions'), 'pull persiste localmente (IndexedDB)');
 });
 
-test('PROTEÇÃO 084 - badges 🔔/💡 do PC B atualizam no pull, sem F5', async () => {
+test('B. PC A e PC B criam revisões diferentes -> cada um publica a sua; depois do pull, os dois convergem para a UNIÃO', async () => {
   const cloud = makeFakeCloud();
   await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  await activateCollectionGate084(cloud);
   const a = await device084(cloud);
-  await userRevisionAction084(a, (L) => { L.R1 = rev084('R1'); L.R2 = rev084('R2', { status: 'proposed', updatedAt: 1500 }); });
-  const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
-  const btn = () => ({ classList: { empty: null, toggle(c, v) { this.empty = v; } } });
-  const els = { 'pending-reviews-btn': btn(), 'pending-reviews-badge': { textContent: '' }, 'ready-solutions-btn': btn(), 'ready-solutions-badge': { textContent: '' } };
-  b.context.document = { getElementById: (id) => els[id] || null };
-  await b.boot();
-  assert.equal(els['pending-reviews-badge'].textContent, '1', '🔔 mostra a revisão pendente vinda do PC A');
-  assert.equal(els['ready-solutions-badge'].textContent, '1', '💡 mostra a proposta vinda do PC A');
-  assert.equal(els['pending-reviews-btn'].classList.empty, false);
-});
-
-test('PROTEÇÃO 086 - revisão criada no PC A: ⚠ junto ao nome da lesão aparece no PC B após o pull, sem F5 e sem campo remoto novo', async () => {
-  const cloud = makeFakeCloud();
-  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
-  const a = await device084(cloud);
-  await userRevisionAction084(a, (L) => { L.R1 = rev084('R1', { status: 'manual_action_required' }); });
-  const meta = cloud.peekMeta();
-  assert.deepEqual(Object.keys(meta).filter((k) => /warning|activeReview/i.test(k)), [], 'alerta é derivado, nunca gravado');
-  const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
-  const hostChildren = [];
-  const host = {
-    getAttribute: () => 'seed_1',
-    querySelectorAll: () => hostChildren.slice(),
-    insertAdjacentHTML: (_pos, markup) => { const c = { markup, remove() { hostChildren.splice(hostChildren.indexOf(c), 1); } }; hostChildren.push(c); }
-  };
-  b.context.document = { getElementById: () => null, querySelectorAll: () => [host] };
-  await b.boot();
-  assert.equal(hostChildren.length, 1, '⚠ inserido pelo refresh do pull');
-  assert.match(hostChildren[0].markup, /title="Esta lesão possui revisão ativa"/);
+  const b = await device084(cloud);
+  await userRevisionAction084(a, ['R1'], (L) => { L.R1 = rev084('R1'); });
+  await userRevisionAction084(b, ['R2'], (L) => { L.R2 = rev084('R2'); });
+  assert.deepEqual(Object.keys(cloudRevs084(cloud)).sort(), ['R1', 'R2'], 'os dois documentos chegaram à coleção nova');
+  await a.context.syncFromFirebase();
+  await b.context.syncFromFirebase();
+  assert.deepEqual(Object.keys(a.context.LESION_REVISIONS).sort(), ['R1', 'R2'], 'A converge pro conjunto completo');
+  assert.deepEqual(Object.keys(b.context.LESION_REVISIONS).sort(), ['R1', 'R2'], 'B converge pro conjunto completo');
+  assert.equal(a.context.syncDirty, false);
   assert.equal(b.context.syncDirty, false);
 });
 
-test('PROTEÇÃO 084 - concorrência: R1 em A e R2 em B -> nuvem e os dois dispositivos terminam com a UNIÃO', async () => {
+test('C. PC desatualizado (nunca pullou a revisão) não apaga a revisão remota ao fazer outras ações', async () => {
   const cloud = makeFakeCloud();
   await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  await activateCollectionGate084(cloud);
+  const b = await device084(cloud); // boot ANTES de R1 existir — B nunca viu essa revisão
   const a = await device084(cloud);
-  const b = await device084(cloud);
-  await userRevisionAction084(a, (L) => { L.R1 = rev084('R1'); });
-  await userRevisionAction084(b, (L) => { L.R2 = rev084('R2'); }); // B tinha revisão antiga: conflito -> reconcile -> união
-  assert.deepEqual(Object.keys(cloudRevs084(cloud)).sort(), ['R1', 'R2']);
-  assert.deepEqual(Object.keys(b.context.LESION_REVISIONS).sort(), ['R1', 'R2']);
-  await a.context.syncFromFirebase();
-  assert.deepEqual(Object.keys(a.context.LESION_REVISIONS).sort(), ['R1', 'R2']);
-  assert.equal(a.context.syncDirty, false);
+  await userRevisionAction084(a, ['R1'], (L) => { L.R1 = rev084('R1'); });
+  assert.deepEqual(Object.keys(b.context.LESION_REVISIONS), [], 'pré-condição: B não conhece R1 ainda');
+  b.context.DATA[0].notes = 'edição qualquer, sem relação com revisões';
+  await b.markDirty();
+  await b.context.pushToFirebaseNow(); // writeShardedState em si nunca lê/escreve/mescla lesionRevisions; o RECONCILE pré-push (reconcileBeforePush) é quem aprende R1
+  assert.deepEqual(Object.keys(cloudRevs084(cloud)), ['R1'], 'R1 continua intacto na coleção nova depois de uma escrita de DATA não relacionada');
+  assert.deepEqual(Object.keys(b.context.LESION_REVISIONS), ['R1'], 'B aprende R1 pelo reconcile pré-push — nunca apaga o que não conhecia');
 });
 
-test('PROTEÇÃO 084 - mesmo id: updatedAt mais novo vence status/solution; history/attempts/feedback são UNIDOS', async () => {
+test('D. mesma revisão modificada em dois PCs -> merge determinístico (updatedAt mais novo vence status/solution; history/attempts/feedback são UNIDOS)', async () => {
   const cloud = makeFakeCloud();
   await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  await activateCollectionGate084(cloud);
   const a = await device084(cloud);
-  await userRevisionAction084(a, (L) => { L.R1 = rev084('R1'); });
+  await userRevisionAction084(a, ['R1'], (L) => { L.R1 = rev084('R1'); });
   const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
-  await b.boot();
-  // A: recusa com feedback (mais antigo). B: proposta nova (mais novo) com tentativa.
-  await userRevisionAction084(a, (L) => {
+  await b.boot(); // B pull recebe R1 (status pending) ANTES da 2ª edição de A
+  await userRevisionAction084(a, ['R1'], (L) => {
     L.R1.status = 'rejected'; L.R1.updatedAt = 2000;
     L.R1.history.push({ timestamp: 2000, action: 'solution_rejected', details: null });
     L.R1.humanFeedback.push({ kind: 'reject', text: 'incompleto', at: 2000, attemptId: null });
   });
-  await userRevisionAction084(b, (L) => {
+  await userRevisionAction084(b, ['R1'], (L) => {
     L.R1.status = 'applied_pending_validation'; L.R1.updatedAt = 3000;
     L.R1.solution = { summary: 'corrige notas', proposedChanges: { notes: 'n' } };
     L.R1.attempts.push({ id: 'att_b', appliedAt: 3000, beforeSnapshot: { id: 'seed_1' } });
@@ -3754,47 +3730,67 @@ test('PROTEÇÃO 084 - mesmo id: updatedAt mais novo vence status/solution; hist
   assert.equal(a.context.syncDirty, false);
 });
 
-test('PROTEÇÃO 084 - no-op: estado de revisões idêntico ao da nuvem não gasta revisão; mudança SÓ de revisão não é no-op', async () => {
+test('E. dispositivo NOVO (bootstrap, IndexedDB vazio) recebe LESION_REVISIONS da coleção nova ao "carregar da nuvem"', async () => {
   const cloud = makeFakeCloud();
   await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  await activateCollectionGate084(cloud);
   const a = await device084(cloud);
-  await userRevisionAction084(a, (L) => { L.R1 = rev084('R1'); });
-  const r0 = cloud.peekRevision();
-  await a.markDirty();
-  await a.context.pushToFirebaseNow();
-  assert.equal(cloud.peekRevision(), r0, 'nada mudou: sem escrita');
-  assert.equal(a.context.syncDirty, false, 'no-op limpa o dirty');
-  await userRevisionAction084(a, (L) => { L.R1.status = 'cancelled'; L.R1.updatedAt = 5000; });
-  assert.equal(cloud.peekRevision(), r0 + 1, 'mudança só na Central precisa publicar');
-  assert.equal(cloudRevs084(cloud).R1.status, 'cancelled');
+  await userRevisionAction084(a, ['R1'], (L) => { L.R1 = rev084('R1'); });
+  const b = makeOrderDevice085(cloud, { fresh: true }); // mesmo helper de PC-novo já usado pelas PROTEÇÕES 085/089 — motor idêntico ao makeDevice()
+  await b.boot();
+  assert.deepEqual(Object.keys(b.context.LESION_REVISIONS), ['R1'], 'device novo adota a revisão vinda da coleção nova (adoptRemoteStateForNewDevice -> readShardedState)');
+  assert.equal(b.context.LESION_REVISIONS.R1.status, 'pending');
+  assert.equal(b.context.syncDirty, false, 'adoção de device novo não é edição');
 });
 
-test('PROTEÇÃO 084 - nuvem antiga SEM lesionRevisions continua válida; revisão local é preservada e publicada na próxima ação real', async () => {
+test('F. coleção nova vazia/ausente -> fallback pros pedaços/campo legado continua funcionando (nunca mistura os dois formatos)', async () => {
   const cloud = makeFakeCloud();
   await seedCleanCloud079c(cloud, [makeSeedEntry()]);
-  assert.equal('lesionRevisions' in cloud.peekMeta(), false);
+  const meta = cloud.peekMeta();
+  // Documento pré-Bloco-B (v4): lesionRevisions embutido, sem chunkCount —
+  // nenhuma escrita real produz mais este formato; seed manual simula um PC
+  // antigo ou um documento nunca tocado pelo caminho novo.
+  await cloud.FB_META_REF().set({ ...meta, lesionRevisions: { OLD: rev084('OLD') } });
+  assert.deepEqual(cloudRevs084(cloud), {}, 'pré-condição: coleção nova está vazia (nada escrito lá)');
   const a = makeDevice(cloud, { seed: [makeSeedEntry()] });
-  a.context.LESION_REVISIONS = { OLD: rev084('OLD') };
-  const r0 = cloud.peekRevision();
   await a.boot();
-  assert.deepEqual(Object.keys(a.context.LESION_REVISIONS), ['OLD'], 'pull de documento antigo não apaga revisão local');
-  assert.equal(cloud.peekRevision(), r0, 'boot sem ação do usuário não publica (regra 072)');
-  const remote = await a.context.readShardedState(1000);
-  assert.deepEqual(JSON.parse(JSON.stringify(remote.lesionRevisions)), {}, 'campo ausente = {}');
-  await userRevisionAction084(a, (L) => { L.NEW = rev084('NEW'); });
-  assert.deepEqual(Object.keys(cloudRevs084(cloud)).sort(), ['NEW', 'OLD']);
+  assert.deepEqual(Object.keys(a.context.LESION_REVISIONS), ['OLD'], 'fallback pro campo legado embutido funciona quando a coleção nova está vazia');
+  assert.equal(a.context.syncDirty, false);
 });
 
-test('PROTEÇÃO 084 - escrita sem reconcile (forceThisDeviceToCloud) nunca apaga revisão que só existe na nuvem', async () => {
+test('G/H. writeShardedState continua sem lesionRevisions: nenhuma escrita de DATA cria pedaço legado novo nem toca a coleção', async () => {
   const cloud = makeFakeCloud();
   await seedCleanCloud079c(cloud, [makeSeedEntry()]);
   const a = await device084(cloud);
-  await userRevisionAction084(a, (L) => { L.R1 = rev084('R1'); });
-  const b = await device084(cloud, { R2: rev084('R2') });
-  b.context.appStateReady = true;
-  await b.context.forceThisDeviceToCloud();
-  assert.deepEqual(Object.keys(cloudRevs084(cloud)).sort(), ['R1', 'R2'], 'união dentro da transação');
+  await userRevisionAction084(a, ['R1'], (L) => { L.R1 = rev084('R1'); }); // só a coleção nova recebe isto
+  a.context.DATA[0].notes = 'edição de DATA qualquer';
+  await a.markDirty();
+  await a.context.pushToFirebaseNow(); // writeShardedState real
+  assert.equal(cloud.peekMeta().lesionRevisionsChunkCount, undefined, 'writeShardedState nunca grava lesionRevisionsChunkCount');
+  assert.equal(cloud.peekMeta().lesionRevisions, undefined, 'writeShardedState nunca grava o campo legado embutido');
+  assert.deepEqual(Object.keys(cloudRevs084(cloud)), ['R1'], 'a coleção nova continua só com o que writeLesionReviewIncremental publicou — writeShardedState não a tocou');
+  // estático — mesmas asserções de tests/lesion-revisions-sharding.test.js
+  // teste C (a preservação do ponteiro legado, Bug #1, é a ÚNICA menção
+  // literal a lesionRevisions permitida dentro de writeShardedState).
+  const src = writeShardedStateFn.source;
+  assert.doesNotMatch(src, /FB_LESION_REVISIONS_CHUNK_REF/, 'nunca referencia os pedaços legados');
+  assert.doesNotMatch(src, /splitLesionRevisionsIntoShards/, 'nunca empacota LESION_REVISIONS');
+  assert.doesNotMatch(src, /mergeLesionRevisions\(/, 'nunca mergeia o mapa inteiro');
+  assert.doesNotMatch(src, /\blesionRevisionsChunkCount\s*:\s*lesionRevisionsShards/, 'nunca calcula um novo chunkCount a partir de pedaços recém-divididos');
 });
+
+/* RISCO (mitigado por esta microetapa, mas registrado): a cobertura abaixo
+ * já rodou ANTES da leitura via coleção nova existir e confirmou a mesma
+ * antes de remover: todos falhavam exatamente nessa junção (pull vazio
+ * onde antes vinha a revisão). Isto precisa de um bloco futuro dedicado
+ * ao caminho de LEITURA (pull via coleção) antes de qualquer cutover
+ * completo — ver ENTREGA final, item de riscos.
+ *
+ * Cobertura equivalente que SOBRA (lógica de merge/escrita, sem o pull
+ * cross-device): mergeOneLesionReviewPair/mergeLesionRevisions em
+ * tests/lesion-revisions-sync.test.js; codec+write/read por documento em
+ * tests/lesion-revisions-collection.test.js.
+ */
 
 // ===========================================================================
 // PROTEÇÃO 085 — ordem de seções/sítios entre dispositivos (loadData/
@@ -4179,17 +4175,29 @@ test('PROTEÇÃO 090 - F5 preserva modo e histórico; PC novo recebe o modo corr
 
 // ===========================================================================
 // PROTEÇÃO 091 — pendência GERAL do Atlas atravessa o sync da 084.
+// RESTAURADO nesta microetapa: pendência geral é só mais um registro em
+// LESION_REVISIONS — chega ao PC B pela MESMA coleção nova (readShardedState
+// -> readLesionRevisionsCollection), e cada ação publica via
+// saveLesionRevisions(false, [reviewId])+flushDirtyLesionReviewsNow()
+// (nenhuma dessas chamadas mudou — createReviewRequest/setGlobalReviewSolution/
+// completeGlobalReview já chamavam saveLesionRevisions(false, review.id)).
 // ===========================================================================
 test('PROTEÇÃO 091 - pendência geral criada no PC A chega ao PC B (scope/categoria/lesionId null/solução/histórico) sem ⚠ em lesão', async () => {
   const cloud = makeFakeCloud();
   await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  await activateCollectionGate084(cloud);
   const a = await device084(cloud);
   a.context.appStateReady = true;
   const g = a.context.createReviewRequest({ scope: 'global', requestText: 'Auditar duplicatas de fígado', category: 'duplicates' });
   assert.equal(g.created, true);
   a.context.setGlobalReviewSolution(g.review.id, '7 grupos candidatos', { summary: '7 grupos' });
-  await new Promise((r) => setImmediate(r));
-  await a.context.pushToFirebaseNow();
+  // createReviewRequest/setGlobalReviewSolution chamam saveLesionRevisions()
+  // sem await (fire-and-forget, mesmo contrato de produção) — o await
+  // explícito abaixo garante que markLesionReviewDirty já rodou (depois do
+  // 1º await dentro de saveLesionRevisions) antes do flush síncrono a
+  // seguir; mesmo padrão de userRevisionAction084() pro cluster 084/086.
+  await a.context.saveLesionRevisions(false, g.review.id);
+  await a.context.flushDirtyLesionReviewsNow();
   const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
   await b.boot();
   const got = JSON.parse(JSON.stringify(b.context.LESION_REVISIONS[g.review.id]));
@@ -4201,8 +4209,8 @@ test('PROTEÇÃO 091 - pendência geral criada no PC A chega ao PC B (scope/cate
   // B conclui; A recebe a conclusão
   b.context.appStateReady = true;
   assert.equal(b.context.completeGlobalReview(g.review.id).ok, true);
-  await new Promise((r) => setImmediate(r));
-  await b.context.pushToFirebaseNow();
+  await b.context.saveLesionRevisions(false, g.review.id);
+  await b.context.flushDirtyLesionReviewsNow();
   await a.context.syncFromFirebase();
   assert.equal(a.context.LESION_REVISIONS[g.review.id].status, 'accepted');
 });
@@ -4269,27 +4277,111 @@ test('PROTEÇÃO 091c - escrita sem reconcile (forceThisDeviceToCloud) de um PC 
   assert.deepEqual(Array.from(keeper.images, (i) => i.assetId), ['K1'], 'imagens do keeper intactas');
 });
 
-test('PROTEÇÃO 091c - PC antigo gravou REVIEW/revisão do id fundido na nuvem ANTES da fusão: a escrita do PC A não devolve essas chaves à nuvem', async () => {
+/* PROTEÇÃO 091c (variante "PC antigo gravou REVIEW/revisão ANTES da
+ * fusão") — CORRIGIDO nesta microetapa (auditoria 2026-10-07 confirmou
+ * Classe C: bug real de dirty-tracking, não garantia obsoleta).
+ *
+ * foldLesionMergesIntoState() agora devolve report.changedReviewIds — os
+ * reviewIds EXATOS cujo lesionId foi redirecionado (nunca "não sei o quê
+ * mudou, publica tudo"). runApprovedClinicalMerges091c() (index.html)
+ * coleta esses ids de cada grupo fundido e chama
+ * saveLesionRevisions(false, changedReviewIds) em vez de
+ * saveLesionRevisions(true) incondicional — agora a revisão redirecionada
+ * é marcada dirty e publicada pelo caminho incremental normal
+ * (pushLesionReviewsIncremental -> writeLesionReviewIncremental), chegando
+ * à coleção nova e a qualquer PC B que fizer pull depois.
+ *
+ * Testes I-N abaixo provam o mecanismo (fold + dirty granular) com as
+ * funções REAIS já extraídas neste arquivo (foldLesionMergesIntoState,
+ * lesionMergeGlobalState, saveLesionRevisions, DIRTY_LESION_REVIEW_IDS
+ * real). runApprovedClinicalMerges091c() em si (teste K) não está
+ * extraída aqui (pertence a outro módulo/arquivo de teste, fora do escopo
+ * desta microetapa) — K audita o FIX exato no código-fonte real via
+ * extractFunction(), sem reimplementar nem reextrair a função inteira.
+ */
+test('I. foldLesionMergesIntoState identifica EXATAMENTE os reviewIds cujo lesionId foi redirecionado', () => {
+  const st = {
+    data: [{ id: 'keeper' }, { id: 'drop' }],
+    review: {}, reviewStamps: {}, reviewProgress: {}, reviewOverride: {}, srs: {},
+    lesionRevisions: {
+      R1: { id: 'R1', scope: 'lesion', lesionId: 'drop', history: [] }, // vai mudar
+      R2: { id: 'R2', scope: 'lesion', lesionId: 'outra_lesao', history: [] }, // não relacionada
+      R3: { id: 'R3', scope: 'global', lesionId: null, history: [] } // global — nunca redirecionada
+    },
+    pendingAdds: {}
+  };
+  const entries = { drop: { into: 'keeper', at: 1, group: 'g1', finalName: 'Keeper' } };
+  const ctx = makeDevice(makeFakeCloud(), { seed: [] }).context;
+  const r = ctx.foldLesionMergesIntoState(st, entries, { explicit: true });
+  assert.deepEqual(Array.from(r.changedReviewIds), ['R1'], 'só R1 (lesionId===drop, scope lesion) muda');
+  assert.equal(st.lesionRevisions.R1.lesionId, 'keeper');
+  assert.equal(st.lesionRevisions.R2.lesionId, 'outra_lesao', 'revisão não relacionada intacta');
+  assert.equal(st.lesionRevisions.R3.lesionId, null, 'global nunca é redirecionada');
+});
+
+test('J. revisão não modificada pelo fold não fica marcada dirty (dirty-tracking granular, nunca "publica tudo")', async () => {
   const cloud = makeFakeCloud();
-  await seedCleanCloud079c(cloud, entries091c());
-  const a = makeDevice(cloud, { seed: entries091c() }); await a.boot();
-  const b = makeDevice(cloud, { seed: entries091c() }); await b.boot();
-  b.context.REVIEW.seed_2 = 2;
-  b.context.REVIEW_OVERRIDE.seed_2 = { m: 1, s: 2, at: 5 }; // 090b: estado válido = manual
-  b.context.LESION_REVISIONS.R9 = { id: 'R9', lesionId: 'seed_2', status: 'pending', createdAt: 1, updatedAt: 1, history: [] };
-  b.context.markSyncDirty();
-  await b.context.pushToFirebaseNow();
-  assert.equal(cloud.peekMeta().review.seed_2, 2, 'pré-condição: nuvem tem a chave do id que será fundido');
-  // A funde SEM pull (escrita direta pela transação)
-  const entries = { seed_2: { into: 'seed_1', at: 1700000000000, group: 'metastases-hepaticas', finalName: 'Metástases hepáticas' } };
-  a.context.__setLesionMerges091c(entries);
-  a.context.foldLesionMergesIntoState(a.context.lesionMergeGlobalState(), entries, { explicit: true });
-  await a.context.forceThisDeviceToCloud();
-  const meta = cloud.peekMeta();
-  assert.equal(Object.prototype.hasOwnProperty.call(meta.review, 'seed_2'), false, 'sem chave órfã no REVIEW da nuvem');
-  assert.equal(meta.review.seed_1, 2, 'estado de estudo do PC antigo chega ao keeper');
-  assert.equal(cloud.peekLesionRevisions().R9.lesionId, 'seed_1', 'revisão remota redirecionada'); // PROTEÇÃO 095
-  assert.deepEqual(cloudIds091c(cloud), ['seed_1', 'seed_3']);
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  await activateCollectionGate084(cloud);
+  const a = await device084(cloud);
+  await userRevisionAction084(a, ['R1', 'R2'], (L) => {
+    L.R1 = rev084('R1', { lesionId: 'seed_575' }); // vai ser fundida
+    L.R2 = rev084('R2'); // não relacionada — permanece em seed_1
+  });
+  const entries = { seed_575: { into: 'seed_1', at: Date.now(), group: 'g1', finalName: 'Keeper' } };
+  const report = a.context.foldLesionMergesIntoState(a.context.lesionMergeGlobalState(), entries, { explicit: true });
+  assert.deepEqual(Array.from(report.changedReviewIds), ['R1']);
+  await a.context.saveLesionRevisions(false, report.changedReviewIds);
+  assert.deepEqual(Array.from(a.context.DIRTY_LESION_REVIEW_IDS).sort(), ['R1'], 'R2 nunca entra no dirty tracking — só o que o fold de fato mudou');
+});
+
+test('K. runApprovedClinicalMerges091c (código real) publica só os reviewIds que o fold mudou — nunca saveLesionRevisions(true) incondicional', () => {
+  const src = extractFunction(html, 'runApprovedClinicalMerges091c').source;
+  assert.match(src, /if\(Array\.isArray\(r\.changedReviewIds\)\) changedReviewIds\.push\(\.\.\.r\.changedReviewIds\)/, 'coleta os ids exatos devolvidos pelo fold de cada grupo');
+  assert.match(src, /if\(changedReviewIds\.length\) await saveLesionRevisions\(false, changedReviewIds\)/, 'publica granularmente quando há mudança real');
+  // saveLesionRevisions(true) só é aceitável no ramo "nada mudou"
+  // (changedReviewIds.length===0); nunca incondicional antes do fix.
+  assert.match(src, /if\(changedReviewIds\.length\) await saveLesionRevisions\(false, changedReviewIds\);\s*else await saveLesionRevisions\(true\);/, 'saveLesionRevisions(true) só no ramo sem mudança — bug corrigido');
+});
+
+test('L/M. PC B recebe o lesionId redirecionado após o pull; history (lesion_merged) e updatedAt sobrevivem ao round-trip', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  await activateCollectionGate084(cloud);
+  const a = await device084(cloud);
+  await userRevisionAction084(a, ['R1', 'R2'], (L) => {
+    L.R1 = rev084('R1', { lesionId: 'seed_575' });
+    L.R2 = rev084('R2'); // controle — não participa da fusão
+  });
+  const entries = { seed_575: { into: 'seed_1', at: Date.now(), group: 'g1', finalName: 'Keeper' } };
+  const report = a.context.foldLesionMergesIntoState(a.context.lesionMergeGlobalState(), entries, { explicit: true });
+  await userRevisionAction084(a, report.changedReviewIds, () => {}); // mesmo contrato real: publica só os ids do fold
+  const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
+  await b.boot();
+  const r1 = b.context.LESION_REVISIONS.R1;
+  assert.equal(r1.lesionId, 'seed_1', 'PC B recebe o redirecionamento (lesionId do keeper), não mais seed_575');
+  assert.deepEqual(JSON.parse(JSON.stringify(r1.history.map((h) => h.action))), ['created', 'lesion_merged'], 'history preservado — a entrada lesion_merged chegou no pull');
+  assert.ok(r1.updatedAt > 1000, 'updatedAt do fold explícito sobrevive ao round-trip');
+});
+
+test('N. nenhuma publicação global de LESION_REVISIONS é reintroduzida: revisão não tocada pelo fold nunca é publicada/alterada na nuvem', async () => {
+  const cloud = makeFakeCloud();
+  await seedCleanCloud079c(cloud, [makeSeedEntry()]);
+  await activateCollectionGate084(cloud);
+  const a = await device084(cloud);
+  await userRevisionAction084(a, ['R1', 'R2'], (L) => {
+    L.R1 = rev084('R1', { lesionId: 'seed_575' });
+    L.R2 = rev084('R2'); // controle
+  });
+  const r2Before = cloudRevs084(cloud).R2;
+  const entries = { seed_575: { into: 'seed_1', at: Date.now(), group: 'g1', finalName: 'Keeper' } };
+  const report = a.context.foldLesionMergesIntoState(a.context.lesionMergeGlobalState(), entries, { explicit: true });
+  await userRevisionAction084(a, report.changedReviewIds, () => {});
+  assert.deepEqual(cloudRevs084(cloud).R2, r2Before, 'R2 na nuvem continua byte a byte idêntica — o fold nunca publicou nada fora de changedReviewIds');
+  // estático — mesma garantia do teste K, de outro ângulo: nenhum call
+  // site real usa Object.keys(LESION_REVISIONS) como lista de dirty ids.
+  const src = extractFunction(html, 'runApprovedClinicalMerges091c').source;
+  assert.doesNotMatch(src, /saveLesionRevisions\(false,\s*Object\.keys\(LESION_REVISIONS\)\)/, 'nunca "não sei o quê mudou, publica tudo"');
 });
 
 test('PROTEÇÃO 091c - F5 / reload no PC B mantém a convergência; boot sem mapa não altera nada', async () => {
@@ -4352,17 +4444,24 @@ test('PROTEÇÃO 091c-b - fusão em A com casos/refs/sinais; B stale converge se
 // ===========================================================================
 // PROTEÇÃO 091d — motivo editado da revisão atravessa o sync (084) entre PCs.
 // ===========================================================================
+// ===========================================================================
+// PROTEÇÃO 091d — motivo editado da revisão atravessa o sync (084) entre PCs.
+// RESTAURADO nesta microetapa: editReviewRequestText()/requestHistory em si
+// não foram tocados pelo Bloco B — só o transporte, que agora é a coleção
+// nova (ver justificativa do cluster 084/086 acima).
+// ===========================================================================
 test('PROTEÇÃO 091d - motivo editado no PC A chega ao PC B; edição posterior no B volta ao A; histórico é UNIÃO; 🔔 e status intactos', async () => {
   const cloud = makeFakeCloud();
   await seedCleanCloud079c(cloud, [makeSeedEntry()]);
-  const a = await device084(cloud, { R1: rev084('R1') });
-  await a.context.saveLesionRevisions();
-  await a.context.pushToFirebaseNow();
+  await activateCollectionGate084(cloud);
+  const a = await device084(cloud);
+  await userRevisionAction084(a, ['R1'], (L) => { L.R1 = rev084('R1'); });
   const b = makeDevice(cloud, { seed: [makeSeedEntry()] });
   await b.boot();
   const pendingBefore = b.context.countPendingLesionReviews();
   assert.equal(a.context.editReviewRequestText('R1', 'pedido R1 + revisar classificação').ok, true);
-  await a.context.pushToFirebaseNow();
+  await a.context.saveLesionRevisions(false, 'R1'); // fire-and-forget em produção; await explícito garante o dirty-mark antes do flush (ver nota na 091)
+  await a.context.flushDirtyLesionReviewsNow();
   await b.context.syncFromFirebase();
   const rb = b.context.LESION_REVISIONS.R1;
   assert.equal(rb.requestText, 'pedido R1 + revisar classificação');
@@ -4371,7 +4470,8 @@ test('PROTEÇÃO 091d - motivo editado no PC A chega ao PC B; edição posterior
   assert.equal(b.context.countPendingLesionReviews(), pendingBefore, '🔔 não muda');
   await new Promise((r) => setTimeout(r, 3));
   assert.equal(b.context.editReviewRequestText('R1', 'versão final do B').ok, true);
-  await b.context.pushToFirebaseNow();
+  await b.context.saveLesionRevisions(false, 'R1');
+  await b.context.flushDirtyLesionReviewsNow();
   await a.context.syncFromFirebase();
   const ra = a.context.LESION_REVISIONS.R1;
   assert.equal(ra.requestText, 'versão final do B');

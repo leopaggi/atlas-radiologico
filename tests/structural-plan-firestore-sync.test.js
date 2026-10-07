@@ -35,7 +35,7 @@ function fn(name) {
   throw new Error('função não fechada ' + name);
 }
 
-const names = ['canonicalJsonString', 'stripUndefinedDeep', 'mergeLesionRevisions',
+const names = ['canonicalJsonString', 'stripUndefinedDeep', 'mergeOneLesionReviewPair', 'mergeLesionRevisions',
   'normalizeReviewProgress', 'normalizeReviewProgressEntry', 'foldReviewProgress', 'normalizeReviewAttempts',
   'reviewProgressToFirestore', 'reviewProgressFromFirestore',
   'structuralSnapshotWalkMaps', 'structuralSnapshotProgressToFirestore', 'structuralSnapshotProgressFromFirestore',

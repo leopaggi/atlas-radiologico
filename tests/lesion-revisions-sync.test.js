@@ -44,6 +44,7 @@ function extractFunction(source, name) {
 const ctx = vm.createContext({});
 vm.runInContext([
   extractFunction(html, 'canonicalJsonString'),
+  extractFunction(html, 'mergeOneLesionReviewPair'),
   extractFunction(html, 'mergeLesionRevisions')
 ].join('\n'), ctx);
 const plain = (v) => JSON.parse(JSON.stringify(v));
@@ -147,17 +148,23 @@ test('084 MERGE: puro — não muta as entradas; idempotente (merge(m,m) === m)'
 // Amarrações estáticas do pipeline (garante que cada ponto do sync participa)
 // ---------------------------------------------------------------------------
 
-test('095 PIPELINE: writeShardedState calcula pedaços de lesionRevisions SOBRE O ESTADO MESCLADO e nunca mais embute o campo no meta', () => {
+test('BLOCO B/095 PIPELINE: writeShardedState NUNCA MAIS lê/mergeia/shardeia/escreve lesionRevisions — preserva o ponteiro legado intacto', () => {
+  // Bloco B (retomada): o contrato testado aqui ANTES (writeShardedState
+  // calculava pedaços de LESION_REVISIONS dentro da própria transação) foi
+  // retirado por desenho — sync de revisão passou a ser por documento, em
+  // writeLesionReviewIncremental() (ver tests/lesion-revisions-collection.test.js
+  // e tests/structural-snapshot-atomic-commit.test.js). Este teste prova o
+  // NOVO contrato: desacoplamento total + preservação do ponteiro legado
+  // (cobertura comportamental completa, incluindo o bug encontrado e
+  // corrigido nesta rodada, está em tests/lesion-revisions-sharding.test.js,
+  // testes C/D — aqui fica só a amarração estática, para não duplicar).
   const src = extractFunction(html, 'writeShardedState');
-  assert.match(src, /lesionRevisions:\s*stripUndefinedDeep\(LESION_REVISIONS \|\| \{\}\)/, 'local ainda carregado em memória (collectPendingSnapshotRefs, fold de merges)');
-  assert.match(src, /mergeLesionRevisions\((?:metaPayloadBase|txBase)\.lesionRevisions,\s*remoteMeta\.lesionRevisions\)/, 'merge local∪remoto continua DENTRO da transação, antes do sharding');
-  assert.match(src, /splitLesionRevisionsIntoShards\(writeLesionRevisions\)/, 'pedaços calculados sobre o JÁ MESCLADO (só pode crescer)');
-  assert.match(src, /lesionRevisionsShardsEncoded\s*=\s*lesionRevisionsShards\.map\(s\s*=>\s*structuralSnapshotProgressToFirestore\(s\)\)/, 'pedaços passam pelo codec de progresso ANTES de qualquer checagem/escrita');
-  assert.match(src, /checkChunkSize\(\s*lesionRevisionsShardDocs\[i\],\s*`revisões de lesão/, 'checagem autoritativa roda sobre o ENVELOPE {entries} JÁ CODIFICADO (payload real), nunca sobre o pedaço cru — com label próprio (não mais a mensagem de imagem/Cloudinary)');
-  assert.match(src, /lesionRevisionsChunkCount:\s*lesionRevisionsShards\.length/, 'meta passa a guardar só a CONTAGEM de pedaços');
-  assert.match(src, /delete metaPayload\.lesionRevisions/, 'o campo embutido nunca mais é publicado — substituição total do .set() some com ele');
-  assert.match(src, /tx\.set\(FB_LESION_REVISIONS_CHUNK_REF\(i\),\s*lesionRevisionsShardDocs\[i\]\)/, 'cada pedaço (envelope {entries} já codificado, o MESMO objeto já checado por checkChunkSize) é escrito em seu próprio documento, na MESMA transação atômica do meta/DATA');
-  assert.doesNotMatch(src, /firestoreMeta\s*=\s*\{\.\.\.metaPayload,[^}]*lesionRevisions:/, 'firestoreMeta não reintroduz o campo embutido');
+  assert.doesNotMatch(src, /\bmergeLesionRevisions\(/, 'nunca mais mergeia o mapa inteiro de revisões');
+  assert.doesNotMatch(src, /splitLesionRevisionsIntoShards/, 'nunca mais empacota revisões em pedaços');
+  assert.doesNotMatch(src, /FB_LESION_REVISIONS_CHUNK_REF/, 'nunca mais referencia os pedaços de revisão');
+  assert.doesNotMatch(src, /structuralSnapshotProgressToFirestore|structuralSnapshotProgressFromFirestore/, 'nunca mais codifica/decodifica progresso embutido de revisão');
+  assert.match(src, /lesionRevisionsChunkCount\s*=\s*remoteMeta\.lesionRevisionsChunkCount/, 'PRESERVA o ponteiro legado (contagem de pedaços) lido do remoto — nunca o apaga numa escrita de outra coisa (bug real corrigido, ver 095-sharding teste D)');
+  assert.match(src, /metaPayload\.lesionRevisions\s*=\s*remoteMeta\.lesionRevisions/, 'PRESERVA o campo embutido legado (se existir) lido do remoto — idem');
 });
 
 test('095 PIPELINE: readShardedState aceita formato legado (campo embutido) OU novo (pedaços), nunca os dois', () => {
@@ -196,20 +203,24 @@ test('084 PIPELINE: reconcile/persist/no-op/pull/adoção de device novo cobrem 
   assert.match(extractFunction(html, 'restoreSafetySnapshot'), /await saveLesionRevisions\(true\)/);
 });
 
-test('084 PIPELINE: ação do usuário marca dirty e agenda push; internal só persiste', async () => {
-  const calls = { dirty: 0, push: 0, set: 0 };
+test('BLOCO B/084 PIPELINE: ação do usuário marca dirty e agenda push incremental (nunca pushToFirebase); internal só persiste', async () => {
+  const calls = { dirty: 0, push: 0, set: 0, markedDirtyIds: null, fold: 0 };
   const c = vm.createContext({
     LESION_REVISIONS: { R1: rev('R1') },
     storage: { set: async () => { calls.set += 1; } },
     markSyncDirty: async () => { calls.dirty += 1; },
-    pushToFirebase: () => { calls.push += 1; },
+    pushToFirebase: () => { throw new Error('saveLesionRevisions NUNCA mais pode chamar pushToFirebase (Bloco B)'); },
+    foldLesionMergesIntoGlobals: () => { calls.fold += 1; return { changed: false }; },
+    markLesionReviewDirty: (ids) => { calls.markedDirtyIds = ids; },
+    persistDirtyLesionReviewIds: async () => {},
+    pushLesionReviewsIncremental: () => { calls.push += 1; },
     console
   });
   vm.runInContext("const LESION_REVISIONS_KEY='atlas:lesionRevisions';\n" + extractFunction(html, 'saveLesionRevisions'), c);
   await c.saveLesionRevisions(true);
-  assert.deepEqual(calls, { dirty: 0, push: 0, set: 1 });
-  await c.saveLesionRevisions();
-  assert.deepEqual(calls, { dirty: 1, push: 1, set: 2 });
+  assert.deepEqual(calls, { dirty: 0, push: 0, set: 1, markedDirtyIds: null, fold: 1 }, 'internal=true só persiste local (ainda converge fusões antes) — nunca marca dirty nem agenda push');
+  await c.saveLesionRevisions(false, 'R1');
+  assert.deepEqual(calls, { dirty: 1, push: 1, set: 2, markedDirtyIds: 'R1', fold: 2 }, 'ação real marca o reviewId sujo, dirty geral e agenda o push incremental — nunca pushToFirebase');
 });
 
 test('084 AUDITORIA: buildSyncAudit/readCloudAuditFromServer contam as revisões da nuvem (storesRevisions=true)', () => {

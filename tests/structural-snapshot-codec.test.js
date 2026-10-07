@@ -252,7 +252,10 @@ test('3C-11 copySnapshotMigrationItem usa o mesmo caminho seguro', async () => {
 });
 
 test('3C-12 transaction usa o envelope encoded (nunca o lógico cru)', () => {
-  const tx = fn('writeShardedState');
+  // Bloco B — a publicação de snapshot (Fase 3B/3C) mudou de
+  // writeShardedState() para writeLesionReviewIncremental() (por
+  // documento/reviewId, nunca mais o lote inteiro).
+  const tx = fn('writeLesionReviewIncremental');
   assert.match(tx, /pendingSnapshotDocs\[snapshotId\]/, 'tx.set usa o doc pré-codificado');
   assert.match(tx, /encodeSnapshotRecordForFirestore\(/, 'codificação antes do commit');
   assert.doesNotMatch(tx, /tx\.set\(structuralSnapshotFirestoreRef\(snapshotId\), localRecord\)/, 'nenhum set cru na transação');
@@ -290,9 +293,9 @@ test('3C-15 remoto divergente continua conflito (nunca sobrescreve)', async () =
 });
 
 test('3C-16 dois snapshots na mesma transaction: all-or-none com envelope', () => {
-  const tx = fn('writeShardedState');
-  const metaSet = 'tx.set(FB_META_REF(), firestoreMeta)';
-  assert.equal(tx.split('tx.set(FB_META_REF()').length - 1, 1, 'um único commit da metadata');
+  const tx = fn('writeLesionReviewIncremental');
+  const metaSet = 'tx.set(ref, stripUndefinedDeep(mergedForFirestore))';
+  assert.equal(tx.split('tx.set(ref,').length - 1, 1, 'um único commit da metadata');
   assert.ok(tx.indexOf('for(const snapshotId of finalPendingIds){') < tx.indexOf(metaSet), 'snapshots decididos antes da metadata');
   assert.ok(tx.indexOf('pendingSnapshotDocs[snapshotId]') < tx.indexOf(metaSet), 'envelope encoded antes da metadata');
 });
@@ -320,6 +323,16 @@ function reviewCtx3C(opts) {
   context.syncDirtyCalls = 0; context.pushCalls = 0;
   context.markSyncDirty = async () => { context.syncDirtyCalls += 1; };
   context.pushToFirebase = () => { context.pushCalls += 1; };
+  // Bloco B — mesmos stubs de tests/lesion-review.test.js (fora do escopo
+  // desta fase 3C).
+  context.DIRTY_LESION_REVIEW_IDS = new Set();
+  context.markLesionReviewDirty = (ids) => {
+    const arr = Array.isArray(ids) ? ids : [ids];
+    for (const id of arr) { if (id && typeof id === 'string') context.DIRTY_LESION_REVIEW_IDS.add(id); }
+  };
+  context.persistDirtyLesionReviewIds = async () => {};
+  context.pushLesionReviewsIncremental = () => { context.pushCalls += 1; };
+  context.foldLesionMergesIntoGlobals = () => ({ changed: false, folded: [], movedImages: 0 });
   vm.createContext(context);
   vm.runInContext(moduleSource, context, { filename: 'lesion-review-module-3c.js' });
   vm.runInContext(canonSrc + '\n' + heavySource, context, { filename: 'lesion-review-module-3c-heavy.js' });
@@ -370,6 +383,6 @@ test('3C-19 nenhuma migração automática, flag ON (Fase 6)', () => {
 
 test('3C-20 nenhum call site produtivo faz .set de snapshot lógico cru', () => {
   assert.doesNotMatch(fn('saveSnapshotToFirestore'), /\.set\((record|localRecord|built\.record)\)/, 'writer central só persiste envelope');
-  assert.doesNotMatch(fn('writeShardedState'), /, localRecord\)/, 'transação sem record cru');
+  assert.doesNotMatch(fn('writeLesionReviewIncremental'), /, localRecord\)/, 'transação sem record cru');
   assert.equal(html.split('.set(built.record)').length - 1, 0, 'nenhum .set(built.record) no app');
 });

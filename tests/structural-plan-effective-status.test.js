@@ -57,7 +57,7 @@ const names = ['normalizeExternalTitle', 'normalizeRadiopaediaCaseTitle', 'token
   'getEffectiveStructuralStatus', 'getManualActionSolutions', 'getStructuralHistorySolutions',
   'structuralPlanCardBadgeHtml', 'structuralPlanCardButtonsHtml', 'structuralPlanStatusRowHtml',
   'structuralPlanPreviewHtml', 'structuralPlanLiveView', 'resolveReviewManually',
-  'mergeLesionRevisions',
+  'mergeOneLesionReviewPair', 'mergeLesionRevisions',
   'imageOwnerIdV1', 'assertManualImageOwnershipChange', 'canChangeImageOwnership'];
 const src = names.map(fn).join('\n');
 const consts = html.slice(html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = '), html.indexOf('// Tokens relevantes:', html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = ')));

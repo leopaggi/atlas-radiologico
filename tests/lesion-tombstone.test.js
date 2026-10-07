@@ -138,7 +138,7 @@ const orderFns085 = ['normalizeOrderStamps', 'loadOrderStamps', 'saveOrderStamps
   'markSiteOrderManual', 'markRestoredOrderManual', 'dedupeOrderList', 'isAutoSectionOrder', 'isAutoSiteList',
   'mergeOrderList', 'mergeOrderState']
   .map((n) => extractFunction(html, n).source).join('\n');
-const lesionRevisionsFns084 = ['mergeLesionRevisions', 'saveLesionRevisions', 'updateReviewCenterBadges',
+const lesionRevisionsFns084 = ['mergeOneLesionReviewPair', 'mergeLesionRevisions', 'saveLesionRevisions', 'updateReviewCenterBadges',
   'getPendingReviews', 'getProposedSolutions', 'getAppliedSolutionsAwaitingValidation', 'getManualActionSolutions',
   'getReadySolutions', 'countPendingLesionReviews', 'countReadyLesionSolutions',
   'hasActiveLesionReview', 'lesionReviewWarningHtml', 'refreshLesionReviewWarnings',
@@ -157,6 +157,11 @@ const writeShardedStateFn = extractFunction(html, 'writeShardedState');
 const writeShardedStateWithConflictRetryFn = extractFunction(html, 'writeShardedStateWithConflictRetry');
 const writeShardedStateSerializedFn = extractFunction(html, 'writeShardedStateSerialized');
 const readShardedStateFn = extractFunction(html, 'readShardedState');
+// Bloco B — readShardedState() agora lê a coleção nova por documento como
+// fonte primária de lesionRevisions (fallback pros pedaços legados só
+// quando ela vem vazia); precisa das duas funções do Bloco A no motor.
+const getLesionRevisionsCollectionRefFn = extractFunction(html, 'getLesionRevisionsCollectionRef');
+const readLesionRevisionsCollectionFn = extractFunction(html, 'readLesionRevisionsCollection');
 const pushToFirebaseNowFn = extractFunction(html, 'pushToFirebaseNow');
 const pushToFirebaseFn = extractFunction(html, 'pushToFirebase');
 const saveDataFn = extractFunction(html, 'saveData');
@@ -200,6 +205,15 @@ function makeFakeCloud() {
             set: async (payload) => { store.set(subKey, payload); },
             get: async () => { const data = store.get(subKey); return { exists: !!data, data: () => data }; }
           };
+        },
+        // Bloco B — readLesionRevisionsCollection() lê a coleção inteira
+        // (nenhum teste deste arquivo escreve nela: sempre vazia, cai no
+        // fallback legado — mesmo comportamento de antes do Bloco B).
+        get: async () => {
+          const prefix = 'sub/' + sub + '/';
+          const docs = [];
+          for (const [k, v] of store.entries()) if (k.indexOf(prefix) === 0) docs.push({ id: k.slice(prefix.length), data: () => v });
+          return { forEach: (cb) => docs.forEach(cb) };
         }
       })
     }),
@@ -296,7 +310,14 @@ function makeDevice(cloud, { initialCatalog = [] } = {}) {
     ensureInc: (e) => { if (typeof e.inc !== 'number') e.inc = 1; },
     saveOrder: async () => {}, saveSiteOrder: async () => {},
     loadSRS: async () => {}, loadSessionLog: async () => {},
-    loadLesionRevisions: async () => {}, loadClassificationReviewDecisions: async () => {},
+    loadLesionRevisions: async () => {}, loadDirtyLesionReviewIds: async () => {}, loadClassificationReviewDecisions: async () => {},
+    // Bloco B — mesmos stubs usados em tests/lesion-revisions-sharding.test.js
+    // (fora do escopo deste arquivo, que testa tombstone de lesão).
+    DIRTY_LESION_REVIEW_IDS: new Set(),
+    markLesionReviewDirty: () => {},
+    persistDirtyLesionReviewIds: async () => {},
+    pushLesionReviewsIncremental: () => {},
+    foldLesionMergesIntoGlobals: () => ({ changed: false, folded: [], movedImages: 0 }),
     saveReview: async () => {}, saveSRS: async () => {},
     createSafetySnapshot: () => null,
     applyAltPlacementsAudit20260918: async () => false,
@@ -415,6 +436,8 @@ function makeDevice(cloud, { initialCatalog = [] } = {}) {
     ${gateStaleImagesFn.source}
     const LESION_REVISIONS_SHARD_TARGET_BYTES = 700*1024; // PROTEÇÃO 095
     ${splitLesionRevisionsIntoShardsFn.source}
+    ${getLesionRevisionsCollectionRefFn.source}
+    ${readLesionRevisionsCollectionFn.source}
     ${writeShardedStateFn.source}
     ${writeShardedStateWithConflictRetryFn.source}
     ${writeShardedStateSerializedFn.source}

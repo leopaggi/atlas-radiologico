@@ -46,7 +46,7 @@ const names = ['normalizeExternalTitle', 'normalizeRadiopaediaCaseTitle', 'token
   'structuralPlanPreviewHtml', 'structuralExecutionId', 'structuralClone',
   'dryRunStructuralPlan', 'structuralPlanLiveView',
   'structuralPlanCardBadgeHtml', 'structuralPlanCardButtonsHtml',
-  'getEffectiveStructuralStatus', 'getManualActionSolutions', 'mergeLesionRevisions'];
+  'getEffectiveStructuralStatus', 'getManualActionSolutions', 'mergeOneLesionReviewPair', 'mergeLesionRevisions'];
 const consts = html.slice(html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = '), html.indexOf('// Tokens relevantes:', html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = ')));
 const mapping = html.slice(html.indexOf('const STRUCTURAL_REVIEW_CANDIDATE_NAMES = '), html.indexOf('function structuralReviewPick('));
 const planTypes = html.slice(html.indexOf('const STRUCTURAL_PLAN_TYPES = '), html.indexOf('function structuralPlanError('));
@@ -225,7 +225,7 @@ test('16. plano não fica só em variável local do modal', () => {
   // r.structuralPlan + persiste); accept lê o vivo.
   const importSrc = fn('importStructuralResolutionBatch');
   assert.match(importSrc, /persistValidatedStructuralPlan\(v,/);
-  assert.match(importSrc, /await saveLesionRevisions\(\)/);
+  assert.match(importSrc, /await saveLesionRevisions\(false, imported\)/); // Bloco B — Classe B: só os reviewIds que receberam plano
   const persistSrc = fn('persistValidatedStructuralPlan');
   assert.match(persistSrc, /r\.structuralPlan = \{/);
   assert.match(persistSrc, /r\.updatedAt = /);

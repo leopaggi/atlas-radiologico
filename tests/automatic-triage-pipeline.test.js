@@ -74,6 +74,12 @@ function buildTestContext(opts) {
   context.saveData = () => { context.saveDataCalls.push(Date.now()); };
   context.markSyncDirty = async () => {};
   context.pushToFirebase = () => {};
+  // Bloco B — saveLesionRevisions() (dentro do moduleSource) chama estas 3
+  // funções (dirty-tracking/push incremental); vivem fora deste slice do
+  // módulo — stub no-op, mesmo espírito de markSyncDirty acima.
+  context.markLesionReviewDirty = () => {};
+  context.persistDirtyLesionReviewIds = async () => {};
+  context.pushLesionReviewsIncremental = () => {};
   vm.createContext(context);
   vm.runInContext(moduleSource, context, { filename: 'automatic-triage-pipeline-module.js' });
   vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;', context);

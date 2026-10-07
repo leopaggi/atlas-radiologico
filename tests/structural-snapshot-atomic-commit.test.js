@@ -34,8 +34,13 @@ function fn(name) {
   throw new Error('função não fechada ' + name);
 }
 
-const txSrc = fn('writeShardedState');
-const META_SET = 'tx.set(FB_META_REF(), firestoreMeta)';
+// Bloco B — a atomicidade snapshot+metadata (Fase 3B) foi movida de
+// writeShardedState() para writeLesionReviewIncremental(): a publicação de
+// snapshot agora é por documento/reviewId, nunca mais para o lote inteiro
+// de LESION_REVISIONS. Mesma lógica, mesmos nomes de variável/loop — só o
+// alvo da extração estática muda.
+const txSrc = fn('writeLesionReviewIncremental');
+const META_SET = 'tx.set(ref, stripUndefinedDeep(mergedForFirestore))';
 const SNAP_SET = 'tx.set(structuralSnapshotFirestoreRef(snapshotId), pendingSnapshotDocs[snapshotId])';
 
 // ---------- 1/2/3/13/14 — a transação atômica (estático) ----------
@@ -56,7 +61,7 @@ test('3B-02 snapshot indisponível aborta ANTES do commit da metadata', () => {
 });
 
 test('3B-03 um único commit da metadata, após o loop de snapshots (falha no meio = nada comita)', () => {
-  const occurrences = txSrc.split('tx.set(FB_META_REF()').length - 1;
+  const occurrences = txSrc.split('tx.set(ref,').length - 1;
   assert.equal(occurrences, 1, 'a metadata só pode ser comitada uma vez por transação');
   const loopIdx = txSrc.indexOf('for(const snapshotId of finalPendingIds){');
   const metaIdx = txSrc.indexOf(META_SET);
@@ -208,6 +213,16 @@ function reviewCtx(opts) {
   context.syncDirtyCalls = 0; context.pushCalls = 0;
   context.markSyncDirty = async () => { context.syncDirtyCalls += 1; };
   context.pushToFirebase = () => { context.pushCalls += 1; };
+  // Bloco B — mesmos stubs de tests/lesion-review.test.js (fora do escopo
+  // desta fase 3B).
+  context.DIRTY_LESION_REVIEW_IDS = new Set();
+  context.markLesionReviewDirty = (ids) => {
+    const arr = Array.isArray(ids) ? ids : [ids];
+    for (const id of arr) { if (id && typeof id === 'string') context.DIRTY_LESION_REVIEW_IDS.add(id); }
+  };
+  context.persistDirtyLesionReviewIds = async () => {};
+  context.pushLesionReviewsIncremental = () => { context.pushCalls += 1; };
+  context.foldLesionMergesIntoGlobals = () => ({ changed: false, folded: [], movedImages: 0 });
   vm.createContext(context);
   vm.runInContext(moduleSource, context, { filename: 'lesion-review-module-3b.js' });
   vm.runInContext(canonSrc + '\n' + heavySource, context, { filename: 'lesion-review-module-3b-heavy.js' });
@@ -348,7 +363,7 @@ test('3B-16 falha de cache local estrutural aborta sem executed inválido', asyn
 test('3B-18 nenhum call site produtivo chama saveSnapshotToFirestore fora da transação', () => {
   const occurrences = html.split('saveSnapshotToFirestore(').length - 1;
   assert.equal(occurrences, 2, 'esperado: definição + 1 uso na migração futura (atual: ' + occurrences + ')');
-  for (const name of ['executeStructuralPlan', 'authorizeAndApplyReviewSolution', 'applyReviewAiSuggestedPlacement', 'importReviewAiSolution', 'processReviewAiBatchItem', 'importReviewAiBatch', 'writeShardedState']) {
+  for (const name of ['executeStructuralPlan', 'authorizeAndApplyReviewSolution', 'applyReviewAiSuggestedPlacement', 'importReviewAiSolution', 'processReviewAiBatchItem', 'importReviewAiBatch', 'writeShardedState', 'writeLesionReviewIncremental']) {
     assert.doesNotMatch(fn(name), /saveSnapshotToFirestore\(/, name + ' não pode chamar saveSnapshotToFirestore fora da transação');
   }
   assert.match(fn('copySnapshotMigrationItem'), /saveSnapshotToFirestore\(/, 'o único uso permanece na migração futura documentada');

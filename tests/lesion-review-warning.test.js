@@ -44,6 +44,10 @@ function buildContext(hosts) {
     storage: { async get() { throw new Error('nf'); }, async set() {} },
     DATA: [{ id: 'seed_1', name: 'L1' }, { id: 'seed_2', name: 'L2' }],
     saveData: () => {}, markSyncDirty: async () => {}, pushToFirebase: () => {},
+    // Bloco B — saveLesionRevisions() (dentro do moduleSource) chama estas
+    // 3 funções (dirty-tracking/push incremental); vivem fora deste slice
+    // do módulo — stub no-op, mesmo espírito de markSyncDirty acima.
+    markLesionReviewDirty: () => {}, persistDirtyLesionReviewIds: async () => {}, pushLesionReviewsIncremental: () => {},
     document: {
       getElementById: () => null,
       querySelectorAll: (sel) => { assert.equal(sel, '[data-review-warning-host]'); return hosts; }

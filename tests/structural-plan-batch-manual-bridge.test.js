@@ -55,7 +55,7 @@ const names = ['normalizeExternalTitle', 'normalizeRadiopaediaCaseTitle', 'token
   'reviewDifferentialsSection', 'hasStructuredDifferentials', 'hasLegacyGenericDifferentials', 'reviewAiDifferentialsGate',
   'getEffectiveStructuralStatus', 'getManualActionSolutions',
   'structuralPlanCardDecideHtml', 'structuralPlanPreviewHtml', 'structuralPlanStatusRowHtml',
-  'mergeLesionRevisions',
+  'mergeOneLesionReviewPair', 'mergeLesionRevisions',
   // Caminho REAL do lote (o que estava faltando a ponte):
   'normalizeReviewAiBatchJson', 'parseReviewAiBatchJson', 'processReviewAiBatchItem', 'importReviewAiBatch'];
 const consts = html.slice(html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = '), html.indexOf('// Tokens relevantes:', html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = ')));

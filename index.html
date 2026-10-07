@@ -2329,14 +2329,21 @@ const CLOUD_REVISION_FIELD = 'revision';
 // PROTEÇÃO 095B — barreira de versão de schema do documento principal.
 // v4 = PRÉ-095 (LESION_REVISIONS embutido no meta). v5 = PÓS-095
 // (LESION_REVISIONS em pedaços próprios, lesionRevisionsChunkCount no
-// meta). Um cliente < 5 NUNCA deve conseguir sobrescrever um documento já
-// migrado pra 5 (reintroduziria o campo legado e orfanizaria os pedaços —
-// ver PROTEÇÃO 095, teste P). A defesa tem DUAS camadas independentes:
-// 1) regra do Firestore (servidor, cobre clientes desatualizados que nem
-//    rodam este código); 2) o guard abaixo em writeShardedState (cliente
-//    atual, cobre o caso simétrico: nunca escrever por cima de uma versão
-//    de schema MAIOR que a que este código entende).
-const STATE_SCHEMA_VERSION = 5;
+// meta). v6 = PÓS-BLOCO-B (writeShardedState PARA de ler/mergear/escrever
+// lesion_revisions_chunk_* — LESION_REVISIONS passa a sincronizar só pelo
+// caminho incremental por documento, atlas_state/main/lesionRevisions/
+// {reviewId}; os pedaços v5 continuam existindo só como fallback de
+// LEITURA legado, nunca mais escritos). Um cliente < 6 NUNCA deve
+// conseguir sobrescrever um documento já migrado pra 6 — se um cliente v5
+// escrevesse por cima, voltaria a gravar lesion_revisions_chunk_* (seu
+// único caminho conhecido) com um estado cada vez mais desatualizado em
+// relação à coleção nova, que ele nem lê. A defesa tem DUAS camadas
+// independentes: 1) regra do Firestore (servidor, cobre clientes
+// desatualizados que nem rodam este código); 2) o guard abaixo em
+// writeShardedState (cliente atual, cobre o caso simétrico: nunca
+// escrever por cima de uma versão de schema MAIOR que a que este código
+// entende). Nenhum mecanismo novo — mesma barreira que já protegia v4→v5.
+const STATE_SCHEMA_VERSION = 6;
 let lastKnownCloudRevision = null; // null = nunca lido com sucesso nesta sessão
 let lastWriteRefusedReason = null; // 'device_bootstrap_pending'|'chunk_too_large'|'no_known_revision'|'cloud_revision_conflict'|'canonical_restore_in_progress'|'snapshot_content_conflict'|'snapshot_unavailable_for_commit'|'schema_version_too_new'|null
 let lastRevisionConflictAt = null; // Date.now() do último conflito de revisão detectado (diagnóstico)
@@ -2660,65 +2667,24 @@ async function writeShardedState(ms=15000){
     // principal (pequenos, sem binário), protegidos pela mesma transação/
     // revisão de todo o resto.
     tombstones: stripUndefinedDeep(IMAGE_TOMBSTONES),
-    // PROTEÇÃO 084 — Central de Revisões + Soluções: mantida aqui em
-    // memória (collectPendingSnapshotRefs, clone pro fold de merges) mas
-    // NUNCA mais viaja embutida no documento principal — ver PROTEÇÃO 095
-    // (splitLesionRevisionsIntoShards) logo abaixo; unida ao remoto dentro
-    // da transação, então nenhum caminho de escrita apaga revisão alheia.
-    lesionRevisions: stripUndefinedDeep(LESION_REVISIONS || {}),
+    // Bloco B — LESION_REVISIONS NÃO participa mais deste documento nem
+    // desta transação (nem lido, nem mergeado, nem escrito aqui). Sincroniza
+    // exclusivamente por writeLesionReviewIncremental(), um documento por
+    // reviewId em atlas_state/main/lesionRevisions/{reviewId}. Os pedaços
+    // lesion_revisions_chunk_* (PROTEÇÃO 095) continuam existindo só como
+    // fallback de LEITURA legado (ver readShardedState/readLegacyLesionRevisionsChunks)
+    // — nunca mais escritos a partir daqui.
     lesionMerges: normalizeLesionMerges(LESION_MERGES), // PROTEÇÃO 091c
     lesionTombstones: normalizeLesionTombstones(LESION_TOMBSTONES), // PROTEÇÃO 094
     chunkCount: chunks.length,
-    stateSchemaVersion: STATE_SCHEMA_VERSION, // PROTEÇÃO 095B — v5 = LESION_REVISIONS em pedaços próprios
+    stateSchemaVersion: STATE_SCHEMA_VERSION, // PROTEÇÃO 095B — v6 = Bloco B (ver comentário da constante)
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
-  // PROTEÇÃO 095 — checagem local (pré-transação, melhor esforço: o merge
-  // com o remoto só pode CRESCER o conteúdo, então a checagem AUTORITATIVA
-  // é repetida dentro da transação depois do merge) — lesionRevisions sai
-  // do objeto checado como "documento principal" (ele nunca mais viaja
-  // embutido) e ganha sua própria checagem por pedaço, com label distinto
-  // (nunca mais a mensagem genérica de imagem/Cloudinary para este caso).
-  const metaPayloadBaseNoRevisions = { ...metaPayloadBase };
-  delete metaPayloadBaseNoRevisions.lesionRevisions;
-  if(!checkChunkSize(metaPayloadBaseNoRevisions, 'documento principal (revisão/SRS/histórico)')){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
-  const localLesionRevisionsShards = splitLesionRevisionsIntoShards(metaPayloadBase.lesionRevisions);
-  for(let i=0;i<localLesionRevisionsShards.length;i++){
-    if(!checkChunkSize(localLesionRevisionsShards[i], `revisões de lesão — pedaço ${i+1}/${localLesionRevisionsShards.length}`)){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
-  }
-
-  // Fase 3B — snapshots externos que este dispositivo ainda não confirmou
-  // publicados na nuvem (flag OFF hoje: sempre []). Lidos do cache local
-  // ANTES da transação (leitura local não entra no read-set do Firestore);
-  // o CONTEÚDO vai pra dentro da mesma transação do documento principal
-  // logo abaixo — nunca uma segunda transação, nunca fire-and-forget.
-  const pendingSnapshotIds = await collectPendingSnapshotRefs(metaPayloadBase.lesionRevisions);
-  const pendingSnapshotRecords = {};
-  for(const snapshotId of pendingSnapshotIds){
-    const cached = await getSnapshotFromLocalCache(snapshotId);
-    if(cached.ok) pendingSnapshotRecords[snapshotId] = cached.record;
-    // Ausente do cache local: fica undefined aqui de propósito — a
-    // transação abaixo VAI exigir isso e abortar com
-    // 'snapshot_unavailable_for_commit' se for realmente necessário pra
-    // publicar, em vez de publicar a metadata sem o snapshot.
-  }
-  // Fase 3C — Firestore recusa nested arrays como valores nativos (erro real
-  // invalid-argument no primeiro COPY). Codifica cada snapshot pendente para
-  // o envelope Firestore-safe ANTES da transação; falha aqui recusa o commit
-  // como indisponível (sem taxonomia nova de erro).
-  const pendingSnapshotDocs = {};
-  for(const snapshotId of pendingSnapshotIds){
-    const localRecord = pendingSnapshotRecords[snapshotId];
-    if(!localRecord) continue; // ausência decidida dentro da transação
-    const encoded = encodeSnapshotRecordForFirestore(localRecord);
-    if(!encoded.ok){ lastWriteRefusedReason = 'snapshot_unavailable_for_commit'; return false; }
-    pendingSnapshotDocs[snapshotId] = encoded.doc;
-  }
+  if(!checkChunkSize(metaPayloadBase, 'documento principal (revisão/SRS/histórico)')){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
 
   let committedRevision = null;
   let committedStaleImagesBlocked = 0;
   let committedPayloadData = null;
-  let committedSnapshotIds = [];
-  let committedLesionRevisionsChunkCount = 0; // PROTEÇÃO 095
   try{
     await withFirebaseTimeout(fbDb.runTransaction(async (tx)=>{
       const metaSnap = await tx.get(FB_META_REF());
@@ -2748,11 +2714,6 @@ async function writeShardedState(ms=15000){
       // transitória: vale para TODO caminho (push, debounce, editor,
       // manual, force, trailing push, retry de conflito).
       let remoteMeta = metaSnap.exists ? (metaSnap.data()||{}) : {}; // let: 091c aplica o mapa numa cópia
-      // Ponte estrutural: decodifica o progresso embutido no snapshot da
-      // execução (objetos {t,ok,graded} → tuplas) para o merge comparar no
-      // mesmo formato local e nunca gravar forma remota na memória viva.
-      if(remoteMeta && typeof remoteMeta==='object' && !Array.isArray(remoteMeta) && remoteMeta.lesionRevisions)
-        remoteMeta = { ...remoteMeta, lesionRevisions: structuralSnapshotProgressFromFirestore(remoteMeta.lesionRevisions) };
       const remoteChunkCount = Number(remoteMeta.chunkCount)||0;
       let remoteData = [];
       if(remoteChunkCount > 0){
@@ -2763,30 +2724,6 @@ async function writeShardedState(ms=15000){
         });
       }else if(Array.isArray(remoteMeta.data)){
         remoteData = remoteMeta.data;
-      }
-      // PROTEÇÃO 095 — lesionRevisions remoto: pedaços (formato novo) OU o
-      // campo legado já decodificado acima (formato antigo) — nunca os
-      // dois juntos. Leitura DENTRO da mesma transação (mesmo motivo do
-      // chunking de DATA acima): um PC que ainda não sabe da migração só
-      // aprende do conteúdo remoto aqui, nunca grava um estado incompleto
-      // por cima de revisões que só existem nos pedaços da nuvem.
-      const remoteLesionRevisionsChunkCount = Number(remoteMeta.lesionRevisionsChunkCount)||0;
-      if(remoteLesionRevisionsChunkCount > 0){
-        const remoteLRChunkSnaps = await Promise.all(Array.from({length:remoteLesionRevisionsChunkCount}, (_,i)=> tx.get(FB_LESION_REVISIONS_CHUNK_REF(i))));
-        const remoteLesionRevisions = {};
-        remoteLRChunkSnaps.forEach(cs=>{
-          const entries = cs && cs.exists ? (cs.data()||{}).entries : null;
-          if(entries && typeof entries==='object' && !Array.isArray(entries)) Object.assign(remoteLesionRevisions, structuralSnapshotProgressFromFirestore(entries));
-        });
-        remoteMeta = { ...remoteMeta, lesionRevisions: remoteLesionRevisions };
-      }
-      // Fase 3B — leitura dos docs de snapshot pendentes DENTRO da mesma
-      // transação, ainda na fase de leitura (Firestore exige todo tx.get
-      // antes de qualquer tx.set). A decisão de escrever/conflitar/pular
-      // cada um só é tomada depois, na fase de escrita — aqui só se lê.
-      const snapshotReadResults = {};
-      for(const snapshotId of pendingSnapshotIds){
-        snapshotReadResults[snapshotId] = await tx.get(structuralSnapshotFirestoreRef(snapshotId));
       }
       // PROTEÇÃO 091c — mapa de fusão: união local ∪ remoto e aplicado ao
       // payload E à base remota DENTRO da transação (PC desatualizado nunca
@@ -2804,21 +2741,26 @@ async function writeShardedState(ms=15000){
       let txData = cleanData, txBase = metaPayloadBase, txPending = pendingAddsSnapshot;
       if(Object.keys(writeMerges).length){
         const clone = v => JSON.parse(JSON.stringify(v || {}));
+        // Bloco B — lesionRevisions NÃO entra mais aqui: foldLesionMergesIntoState
+        // lida com a ausência graciosamente (st.lesionRevisions||{} vazio), e o
+        // redirecionamento de review.lesionId em caso de merge já é garantido
+        // pela chamada de foldLesionMergesIntoGlobals() no topo desta função E
+        // em saveLesionRevisions() (Bloco B) — nunca dependeu de viajar aqui.
         const st = { data: JSON.parse(JSON.stringify(cleanData)), review: clone(metaPayloadBase.review), reviewStamps: clone(metaPayloadBase.reviewUpdatedAt),
           reviewProgress: clone(metaPayloadBase.reviewProgress), reviewOverride: clone(metaPayloadBase.reviewOverride), srs: clone(metaPayloadBase.srs),
-          lesionRevisions: clone(metaPayloadBase.lesionRevisions), pendingAdds: clone(pendingAddsSnapshot) };
+          pendingAdds: clone(pendingAddsSnapshot) };
         if(foldLesionMergesIntoState(st, writeMerges).changed){
           txData = st.data; txPending = st.pendingAdds;
-          txBase = { ...metaPayloadBase, review: st.review, reviewUpdatedAt: st.reviewStamps, reviewProgress: st.reviewProgress, reviewOverride: st.reviewOverride, srs: st.srs, lesionRevisions: st.lesionRevisions };
+          txBase = { ...metaPayloadBase, review: st.review, reviewUpdatedAt: st.reviewStamps, reviewProgress: st.reviewProgress, reviewOverride: st.reviewOverride, srs: st.srs };
         }
         const rst = { data: JSON.parse(JSON.stringify(remoteData)) };
         if(foldLesionMergesIntoState(rst, writeMerges).changed) remoteData = rst.data;
         // meta remoto (cópia): chaves de id fundido escritas por PC antigo
-        // não voltam à nuvem pelo merge de REVIEW/progresso/override/revisões.
+        // não voltam à nuvem pelo merge de REVIEW/progresso/override.
         const rm = { data: [], review: clone(remoteMeta.review), reviewStamps: clone(remoteMeta.reviewUpdatedAt), reviewProgress: reviewProgressFromFirestore(remoteMeta.reviewProgress),
-          reviewOverride: clone(remoteMeta.reviewOverride), lesionRevisions: clone(remoteMeta.lesionRevisions) };
+          reviewOverride: clone(remoteMeta.reviewOverride) };
         if(foldLesionMergesIntoState(rm, writeMerges).changed){
-          remoteMeta = { ...remoteMeta, review: rm.review, reviewUpdatedAt: rm.reviewStamps, reviewProgress: rm.reviewProgress, reviewOverride: rm.reviewOverride, lesionRevisions: rm.lesionRevisions };
+          remoteMeta = { ...remoteMeta, review: rm.review, reviewUpdatedAt: rm.reviewStamps, reviewProgress: rm.reviewProgress, reviewOverride: rm.reviewOverride };
         }
       }
       // PROTEÇÃO 094 — tombstones de LESÃO: união local ∪ remoto DENTRO da
@@ -2838,26 +2780,6 @@ async function writeShardedState(ms=15000){
         ? gateStaleLocalOnlyImagesForWrite(txData, remoteData, writeTombstones, txPending)
         : gateStaleLocalOnlyImagesForWrite(txData, txData, writeTombstones, txPending);
       const gatedChunks = splitIntoChunks(gated.data, DATA_CHUNK_SIZE);
-      // PROTEÇÃO 084 — união local ∪ remoto por reviewId (nunca apaga uma
-      // revisão que só existe na nuvem, nem em syncThisDeviceToCloud/force).
-      const writeLesionRevisions = stripUndefinedDeep(mergeLesionRevisions(txBase.lesionRevisions, remoteMeta.lesionRevisions));
-      // PROTEÇÃO 095 — pedaços calculados sobre o estado JÁ MESCLADO: o
-      // merge só pode CRESCER (união de history/attempts/humanFeedback,
-      // nunca encolhe), então só aqui — depois do merge, dentro da MESMA
-      // transação — a checagem de tamanho por pedaço é autoritativa.
-      // IMPORTANTE: a checagem precisa rodar sobre o PAYLOAD REAL enviado
-      // (envelope {entries:...} JÁ codificado por structuralSnapshotProgressToFirestore
-      // — tuplas [t,ok,graded] virando objetos {t,ok,graded} podem AUMENTAR
-      // o tamanho), nunca sobre o objeto cru de revisões: checar o objeto
-      // cru subestimaria pedaços com progresso embutido grande no snapshot.
-      const lesionRevisionsShards = splitLesionRevisionsIntoShards(writeLesionRevisions);
-      const lesionRevisionsShardsEncoded = lesionRevisionsShards.map(s => structuralSnapshotProgressToFirestore(s));
-      const lesionRevisionsShardDocs = lesionRevisionsShardsEncoded.map(entries => ({entries}));
-      for(let i=0;i<lesionRevisionsShardDocs.length;i++){
-        if(!checkChunkSize(lesionRevisionsShardDocs[i], `revisões de lesão — pedaço ${i+1}/${lesionRevisionsShardDocs.length}`)){
-          const err = new Error('pedaço de revisões de lesão grande demais'); err.code = 'chunk_too_large'; throw err;
-        }
-      }
       // PROTEÇÃO 085 — ordem: merge por carimbo também DENTRO da transação
       // (nenhum caminho de escrita grava default/ordem velha por cima de uma
       // ordem remota mais nova — nem syncThisDeviceToCloud/force).
@@ -2874,9 +2796,25 @@ async function writeShardedState(ms=15000){
       const writeOverride = mergeReviewOverrides(txBase.reviewOverride, remoteMeta.reviewOverride);
       const metaPayload = {...txBase, lesionMerges: writeMerges, lesionTombstones: writeLesionTombstones, review: stripUndefinedDeep(materializeReviewState(writeReview.review, writeProgress, writeOverride)), reviewUpdatedAt: writeReview.stamps,
         reviewProgress: writeProgress, reviewOverride: writeOverride, tombstones: stripUndefinedDeep(writeTombstones),
-        sectionOrder: writeOrder.sectionOrder, siteOrder: writeOrder.siteOrder, orderUpdatedAt: writeOrder.stamps, chunkCount: gatedChunks.length,
-        lesionRevisionsChunkCount: lesionRevisionsShards.length}; // PROTEÇÃO 095 — substitui o campo embutido lesionRevisions (herdado de txBase pelo spread acima)
-      delete metaPayload.lesionRevisions; // nunca mais publicado embutido — ver pedaços abaixo
+        sectionOrder: writeOrder.sectionOrder, siteOrder: writeOrder.siteOrder, orderUpdatedAt: writeOrder.stamps, chunkCount: gatedChunks.length};
+      // Bloco B — CRÍTICO: tx.set() substitui o documento INTEIRO; sem isto,
+      // o ponteiro pros pedaços legados (lesionRevisionsChunkCount) ou o
+      // campo embutido antigo (lesionRevisions) seriam APAGADOS da nuvem na
+      // PRÓXIMA escrita qualquer (ex.: editar uma lesão), mesmo os pedaços
+      // em si continuando lá, órfãos e inacessíveis — violaria "chunks
+      // antigos permanecem fallback read-only". Carrega adiante EXATAMENTE
+      // o que já estava no documento remoto (bytes crus, nunca decodificado/
+      // recodificado aqui — writeShardedState não entende mais este campo,
+      // só preserva).
+      if(Object.prototype.hasOwnProperty.call(remoteMeta, 'lesionRevisionsChunkCount')) metaPayload.lesionRevisionsChunkCount = remoteMeta.lesionRevisionsChunkCount;
+      if(Object.prototype.hasOwnProperty.call(remoteMeta, 'lesionRevisions')) metaPayload.lesionRevisions = remoteMeta.lesionRevisions;
+      // GATE DE CUTOVER (auditoria 2026-10-07) — mesmo motivo exato do
+      // preserva acima: sem isto, a PRIMEIRA escrita de DATA/REVIEW/SRS
+      // depois de activateLesionRevisionsCollectionStorage() ter marcado
+      // lesionRevisionsStorage:'collection' apagaria esse campo e devolveria
+      // readShardedState() silenciosamente pro fallback legado — reabrindo
+      // exatamente o risco de leitura parcial que o gate existe pra fechar.
+      if(Object.prototype.hasOwnProperty.call(remoteMeta, 'lesionRevisionsStorage')) metaPayload.lesionRevisionsStorage = remoteMeta.lesionRevisionsStorage;
       if(!checkChunkSize(metaPayload, 'documento principal (revisão/SRS/histórico)')){
         const err = new Error('documento principal grande demais');
         err.code = 'chunk_too_large';
@@ -2884,14 +2822,10 @@ async function writeShardedState(ms=15000){
       }
       // Só a representação do histórico 090 cruza a fronteira: as tentativas
       // continuam tuplas no IndexedDB/backup/Quiz, mas objetos no Firestore.
-      // PROTEÇÃO 095 — lesionRevisions NÃO entra mais aqui (nem decodificado
-      // nem no payload): vai pros pedaços próprios (lesionRevisionsShardsEncoded),
-      // já codificados acima, cada um escrito em seu próprio documento.
       const firestoreMeta = {...metaPayload, reviewProgress: reviewProgressToFirestore(writeProgress),
         [CLOUD_REVISION_FIELD]: nextRevision};
       const nested = findNestedArrayPaths(firestoreMeta, 'atlas_state/main');
       nested.push(...findNestedArrayPaths(gated.data, 'DATA'));
-      lesionRevisionsShardsEncoded.forEach((s,i)=> nested.push(...findNestedArrayPaths(s, 'lesion_revisions_chunk_'+i)));
       if(nested.length){
         const err = new Error('Arrays aninhados no payload Firestore: ' + nested.join(', '));
         err.code = 'firestore_nested_arrays';
@@ -2900,51 +2834,13 @@ async function writeShardedState(ms=15000){
       if(!checkChunkSize(firestoreMeta, 'documento principal (revisão/SRS/histórico)')){
         const err = new Error('documento principal grande demais'); err.code = 'chunk_too_large'; throw err;
       }
-      // Fase 3B — fase de ESCRITA do snapshot store, dentro da MESMA
-      // transação do documento principal: só agora que writeLesionRevisions
-      // (o que de fato vai pro firestoreMeta) é definitivo, decide-se quais
-      // refs externos realmente precisam ir pra nuvem nesta rodada. Nunca
-      // publica a metadata (tx.set abaixo) sem que o snapshot correspondente
-      // já exista remotamente OU seja criado aqui mesmo — ambos ou nenhum.
-      const finalPendingIds = collectExternalSnapshotRefs(writeLesionRevisions).filter(id => pendingSnapshotIds.includes(id));
-      for(const snapshotId of finalPendingIds){
-        const localRecord = pendingSnapshotRecords[snapshotId];
-        const remoteSnap = snapshotReadResults[snapshotId];
-        if(remoteSnap && remoteSnap.exists){
-          const remoteFp = (remoteSnap.data()||{}).fingerprint;
-          if(localRecord){
-            if(remoteFp !== localRecord.fingerprint){
-              const err = new Error('snapshot já existe remotamente com conteúdo diferente: ' + snapshotId);
-              err.code = 'snapshot_content_conflict';
-              throw err; // nunca sobrescrever silenciosamente; nunca publicar a metadata sobre um conflito
-            }
-            // já existe remotamente e bate — nada a escrever, só confirmar sincronizado depois do commit.
-          }
-          // Eco de outro PC (remote existe, cache local ausente neste
-          // dispositivo): satisfeito sem escrever — este dispositivo só está
-          // republicando metadata que já veio da nuvem. O rollback sob demanda
-          // busca da nuvem via getSnapshotFromStore (cache-first) quando precisar.
-        }else{
-          if(!localRecord){
-            const err = new Error('snapshot referenciado não está disponível localmente para publicar atomicamente: ' + snapshotId);
-            err.code = 'snapshot_unavailable_for_commit';
-            throw err; // nunca publicar metadata externalizada sem o snapshot correspondente
-          }
-          tx.set(structuralSnapshotFirestoreRef(snapshotId), pendingSnapshotDocs[snapshotId]); // envelope encoded Fase 3C — MESMA transação do documento principal
-        }
-      }
       tx.set(FB_META_REF(), firestoreMeta);
-      committedSnapshotIds = finalPendingIds.slice();
-      for(let i=0;i<lesionRevisionsShardDocs.length;i++){ // PROTEÇÃO 095 — mesmo objeto já checado acima
-        tx.set(FB_LESION_REVISIONS_CHUNK_REF(i), lesionRevisionsShardDocs[i]);
-      }
       for(let i=0;i<gatedChunks.length;i++){
         tx.set(FB_CHUNK_REF(i), {items: gatedChunks[i]});
       }
       committedRevision = nextRevision;
       committedStaleImagesBlocked = gated.blocked;
       committedPayloadData = gated.data;
-      committedLesionRevisionsChunkCount = lesionRevisionsShardsEncoded.length; // PROTEÇÃO 095
     }), ms, 'gravar estado (transação com verificação de revisão)');
   }catch(e){
     if(e && e.code === 'chunk_too_large'){ lastWriteRefusedReason = 'chunk_too_large'; return false; }
@@ -2959,30 +2855,12 @@ async function writeShardedState(ms=15000){
       setSyncStatus(false, 'a nuvem mudou desde a última leitura — reconciliando antes de tentar de novo.');
       return false;
     }
-    // Fase 3B — a transação INTEIRA não comita (Firestore é tudo-ou-nada):
-    // nem o documento principal nem o snapshot foram publicados. O estado
-    // local não muda; o próximo ciclo de sync tenta de novo. Nunca publica
-    // metadata externalizada sem o snapshot correspondente.
-    if(e && e.code === 'snapshot_content_conflict'){
-      lastWriteRefusedReason = 'snapshot_content_conflict';
-      setSyncStatus(false, 'conflito: um snapshot de execução/tentativa já existe na nuvem com conteúdo diferente — sincronização bloqueada até revisão manual.');
-      return false;
-    }
-    if(e && e.code === 'snapshot_unavailable_for_commit'){
-      lastWriteRefusedReason = 'snapshot_unavailable_for_commit';
-      setSyncStatus(false, 'sincronização pendente: um snapshot referenciado ainda não está disponível neste dispositivo — tentando de novo em seguida.');
-      return false;
-    }
     throw e; // outros erros (rede/timeout/pedaço grande) sobem normalmente, como antes
   }
 
   lastKnownCloudRevision = committedRevision;
   lastWriteRefusedReason = null;
   lastWriteStaleImagesBlocked = committedStaleImagesBlocked;
-  // Fase 3B — só marca sincronizado DEPOIS do commit confirmado (nunca
-  // antes): se a transação falhar, o catch acima já retornou, e esta
-  // linha nunca executa — o próximo ciclo revarre e tenta de novo.
-  for(const snapshotId of committedSnapshotIds){ await markSnapshotSynced(snapshotId); }
   // ALTERAÇÃO 079d — escrita CONFIRMADA: o remoto agora contém exatamente
   // o payload gravado; só as imagens marcadas que estão nele saem da lista
   // de pendentes (erro/conflito/recusa nunca chegam aqui).
@@ -2997,17 +2875,11 @@ async function writeShardedState(ms=15000){
     }
   }
   window.__lastKnownChunkCount = chunks.length;
-  // PROTEÇÃO 095 — mesma limpeza para pedaços de lesionRevisions que
-  // sobraram de uma rodada anterior maior (ex.: revisões antigas resolvidas/
-  // consolidadas reduziram o total). Fora da transação de propósito — mesmo
-  // raciocínio já usado acima para os pedaços de DATA.
-  const prevLesionRevisionsChunkCount = Number(window.__lastKnownLesionRevisionsChunkCount || 0);
-  if(prevLesionRevisionsChunkCount > committedLesionRevisionsChunkCount){
-    for(let i=committedLesionRevisionsChunkCount;i<prevLesionRevisionsChunkCount;i++){
-      try{ await FB_LESION_REVISIONS_CHUNK_REF(i).delete(); }catch(_e){}
-    }
-  }
-  window.__lastKnownLesionRevisionsChunkCount = committedLesionRevisionsChunkCount;
+  // Bloco B — NENHUMA limpeza de lesion_revisions_chunk_* a partir daqui:
+  // esta função não escreve mais esses pedaços, então nunca "encolhem" por
+  // causa dela. Os pedaços legados ficam congelados, servindo só de
+  // fallback de leitura (readShardedState/readLegacyLesionRevisionsChunks)
+  // — nunca apagados automaticamente.
   return true;
 }
 /* Lê o documento principal + todos os pedaços, e junta tudo de volta num
@@ -3066,31 +2938,42 @@ async function readShardedState(ms=15000){
     combinedData = meta.data;
   }
 
-  // PROTEÇÃO 095 — lesionRevisions: pedaços (formato novo) OU campo legado
-  // embutido (formato antigo) — nunca os dois. Mesma convenção de
-  // chunkCount>0 que DATA já usa acima; único ponto de leitura remota
-  // (adoptRemoteStateForNewDevice, reconcileStateWithRemote via
-  // syncFromFirebase/reconcileBeforePush e auditoria consomem o resultado
-  // já reconstruído por completo — nenhum precisa saber se veio de pedaços
-  // ou do campo legado).
-  const lesionRevisionsChunkCount = Number(meta.lesionRevisionsChunkCount)||0;
-  window.__lastKnownLesionRevisionsChunkCount = lesionRevisionsChunkCount;
+  // Bloco B — GATE EXPLÍCITO DE CUTOVER (auditoria 2026-10-07): a coleção
+  // nova por documento (atlas_state/main/lesionRevisions/{reviewId} —
+  // Bloco A) só se torna a fonte de leitura depois que
+  // activateLesionRevisionsCollectionStorage validar 1:1 e gravar
+  // lesionRevisionsStorage:'collection' no meta — NUNCA por "coleção
+  // não-vazia". O migrador one-shot (ver migrateLesionRevisionsLocalToCollection,
+  // abaixo) grava em lotes de até 500 (não atômico entre lotes); decidir pela fonte só por
+  // vazio/não-vazio faria um boot no meio da migração ler uma coleção
+  // PARCIAL e ignorar o restante, que ainda só existe nos pedaços legados.
+  // Qualquer valor ausente ou diferente de 'collection' = 'legacy': a
+  // coleção nova é completamente ignorada (mesmo que já tenha documentos)
+  // até o gate ser explicitamente ativado.
   let combinedLesionRevisions = {};
-  if(lesionRevisionsChunkCount > 0){
-    const lrChunkSnaps = await Promise.all(
-      Array.from({length:lesionRevisionsChunkCount}, (_,i)=> withFirebaseTimeout(FB_LESION_REVISIONS_CHUNK_REF(i).get({source:'server'}), ms, `ler revisões de lesão ${i+1}/${lesionRevisionsChunkCount}`))
-    );
-    lrChunkSnaps.forEach(snap=>{
-      if(snap.exists){
-        const entries = (snap.data()||{}).entries;
-        if(entries && typeof entries==='object' && !Array.isArray(entries)) Object.assign(combinedLesionRevisions, structuralSnapshotProgressFromFirestore(entries));
-      }
-    });
-  }else if(meta.lesionRevisions && typeof meta.lesionRevisions==='object' && !Array.isArray(meta.lesionRevisions)){
-    // Compatibilidade: documento antigo (pré-095) ainda não migrado.
-    // PROTEÇÃO 084 — documento antigo sem o campo = {} (compatível).
-    // Ponte estrutural: progresso embutido no snapshot volta a tuplas aqui.
-    combinedLesionRevisions = structuralSnapshotProgressFromFirestore(meta.lesionRevisions);
+  if(meta.lesionRevisionsStorage === 'collection'){
+    combinedLesionRevisions = await readLesionRevisionsCollection(ms);
+    window.__lastKnownLesionRevisionsChunkCount = 0; // coleção nova é a fonte — pedaços legados (se existirem) ficam ignorados nesta leitura
+  }else{
+    // PROTEÇÃO 095 — pedaços (formato v5) OU campo legado embutido (v4).
+    const lesionRevisionsChunkCount = Number(meta.lesionRevisionsChunkCount)||0;
+    window.__lastKnownLesionRevisionsChunkCount = lesionRevisionsChunkCount;
+    if(lesionRevisionsChunkCount > 0){
+      const lrChunkSnaps = await Promise.all(
+        Array.from({length:lesionRevisionsChunkCount}, (_,i)=> withFirebaseTimeout(FB_LESION_REVISIONS_CHUNK_REF(i).get({source:'server'}), ms, `ler revisões de lesão ${i+1}/${lesionRevisionsChunkCount}`))
+      );
+      lrChunkSnaps.forEach(snap=>{
+        if(snap.exists){
+          const entries = (snap.data()||{}).entries;
+          if(entries && typeof entries==='object' && !Array.isArray(entries)) Object.assign(combinedLesionRevisions, structuralSnapshotProgressFromFirestore(entries));
+        }
+      });
+    }else if(meta.lesionRevisions && typeof meta.lesionRevisions==='object' && !Array.isArray(meta.lesionRevisions)){
+      // Compatibilidade: documento antigo (pré-095) ainda não migrado.
+      // PROTEÇÃO 084 — documento antigo sem o campo = {} (compatível).
+      // Ponte estrutural: progresso embutido no snapshot volta a tuplas aqui.
+      combinedLesionRevisions = structuralSnapshotProgressFromFirestore(meta.lesionRevisions);
+    }
   }
 
   return { data: combinedData, review: meta.review, srs: meta.srs, sessionLog: meta.sessionLog,
@@ -3150,12 +3033,16 @@ async function readLegacyLesionRevisionsChunks(ms=15000){
 async function readLesionRevisionsCollection(ms=15000){
   const snap = await withFirebaseTimeout(getLesionRevisionsCollectionRef().get({source:'server'}), ms, 'ler coleção lesionRevisions');
   const out = {};
+  // Mesmo codec de sempre — ver readShardedState/writeLesionReviewIncremental:
+  // progresso embutido (caminho inline, flag OFF) precisa decodificar de
+  // volta pra tupla ao cruzar a fronteira da nuvem.
   snap.forEach(doc=>{ out[doc.id] = doc.data(); });
-  return out;
+  return structuralSnapshotProgressFromFirestore(out);
 }
 async function writeLesionRevisionDocument(reviewId, review, ms=15000){
   if(!reviewId || typeof reviewId!=='string') throw new Error('reviewId inválido');
-  await withFirebaseTimeout(getLesionRevisionsCollectionRef().doc(reviewId).set(stripUndefinedDeep(review)), ms, 'gravar lesionRevisions/'+reviewId);
+  const encoded = structuralSnapshotProgressToFirestore({ [reviewId]: review })[reviewId];
+  await withFirebaseTimeout(getLesionRevisionsCollectionRef().doc(reviewId).set(stripUndefinedDeep(encoded)), ms, 'gravar lesionRevisions/'+reviewId);
 }
 // Grava em lotes de até 500 (limite do Firestore para WriteBatch — não é
 // transação: atomicidade só dentro de cada lote, aceitável aqui porque a
@@ -3171,7 +3058,10 @@ async function writeLesionRevisionBatch(entries, ms=15000){
     for(const entry of group){
       const reviewId = entry && entry.reviewId;
       if(!reviewId || typeof reviewId!=='string') throw new Error('reviewId inválido: '+reviewId);
-      batch.set(col.doc(reviewId), stripUndefinedDeep(entry.review));
+      // Mesmo codec — ver nota acima (progresso embutido nunca pode viajar
+      // como array dentro de array).
+      const encoded = structuralSnapshotProgressToFirestore({ [reviewId]: entry.review })[reviewId];
+      batch.set(col.doc(reviewId), stripUndefinedDeep(encoded));
     }
     await withFirebaseTimeout(batch.commit(), ms, 'gravar lote de lesionRevisions ('+group.length+' docs)');
     written += group.length;
@@ -3266,6 +3156,185 @@ async function validateLesionRevisionCollectionAgainstLocal(ms=15000){
     localCount: localIds.length, remoteCount: remoteIds.length, equalCount,
     missingIds, extraIds, differentIds
   };
+}
+/* ATIVAÇÃO DO GATE DE CUTOVER (auditoria 2026-10-07) — NUNCA chamada
+   automaticamente por nenhum fluxo de boot/pull/push; existe só para ser
+   disparada explicitamente (ferramenta administrativa/console), depois de
+   confirmar que o migrador one-shot (migrateLesionRevisionsLocalToCollection)
+   terminou. Valida
+   1:1 ANTES de tocar no meta — se a validação falhar (ou divergir de
+   qualquer forma), nada é escrito e o motivo exato volta no resultado. A
+   escrita em si troca SÓ lesionRevisionsStorage, dentro de uma transação
+   que relê o documento inteiro primeiro: tx.set() substitui o documento
+   INTEIRO (mesmo mecanismo de writeShardedState/writeLesionReviewIncremental),
+   então preservar os demais campos aqui é obrigatório, não cosmético —
+   sem isso, ativar o gate apagaria review/srs/sectionOrder/etc. */
+async function activateLesionRevisionsCollectionStorage(ms=15000){
+  const validation = await validateLesionRevisionCollectionAgainstLocal(ms);
+  const valid = validation.ok === true
+    && validation.localCount === validation.remoteCount
+    && validation.missingIds.length === 0
+    && validation.extraIds.length === 0
+    && validation.differentIds.length === 0;
+  if(!valid) return { ok:false, reason:'validation_failed', validation };
+  let activated = false;
+  await withFirebaseTimeout(fbDb.runTransaction(async (tx)=>{
+    const snap = await tx.get(FB_META_REF());
+    if(!snap.exists) return; // nuvem nunca escrita — nada a ativar
+    const remoteMeta = snap.data() || {};
+    if(remoteMeta.lesionRevisionsStorage === 'collection'){ activated = true; return; } // já ativado (idempotente)
+    tx.set(FB_META_REF(), { ...remoteMeta, lesionRevisionsStorage: 'collection' });
+    activated = true;
+  }), ms, 'ativar lesionRevisionsStorage=collection');
+  return { ok: activated, reason: activated ? null : 'remote_meta_missing', validation };
+}
+
+/* ============================================================
+   BLOCO B — SINCRONIZAÇÃO INCREMENTAL POR DOCUMENTO
+   ------------------------------------------------------------
+   DIRTY_LESION_REVIEW_IDS é a única fonte de verdade de "o que precisa
+   ser publicado": todo call site que muda uma revisão passa o(s)
+   reviewId(s) exatos para saveLesionRevisions() — nunca um fallback de
+   "não sei o quê mudou, publica tudo". writeLesionReviewIncremental()
+   lê/mescla/escreve SÓ o documento da revisão tocada
+   (atlas_state/main/lesionRevisions/{reviewId}) — nunca
+   writeShardedState, nunca os pedaços legados lesion_revisions_chunk_*,
+   nunca DATA/REVIEW/SRS. Falha em UM reviewId mantém só ELE sujo (os
+   demais, já confirmados, saem do Set) — sem estado parcial inseguro.
+   ============================================================ */
+const DIRTY_LESION_REVIEW_IDS_KEY = 'atlas:dirtyLesionReviewIds';
+let DIRTY_LESION_REVIEW_IDS = new Set();
+function markLesionReviewDirty(reviewIdOrIds){
+  const ids = Array.isArray(reviewIdOrIds) ? reviewIdOrIds : [reviewIdOrIds];
+  for(const id of ids){ if(id && typeof id==='string') DIRTY_LESION_REVIEW_IDS.add(id); }
+}
+async function persistDirtyLesionReviewIds(){
+  try{ await storage.set(DIRTY_LESION_REVIEW_IDS_KEY, JSON.stringify(Array.from(DIRTY_LESION_REVIEW_IDS)), false); }
+  catch(_e){}
+}
+// Carregado no boot (loadData) — sobrevive a reload/offline, mesma camada
+// storage de LESION_REVISIONS/syncDirty.
+async function loadDirtyLesionReviewIds(){
+  try{
+    const r = await storage.get(DIRTY_LESION_REVIEW_IDS_KEY, false);
+    const arr = JSON.parse(r.value);
+    DIRTY_LESION_REVIEW_IDS = new Set(Array.isArray(arr) ? arr.filter(x=>typeof x==='string') : []);
+  }catch(_e){ DIRTY_LESION_REVIEW_IDS = new Set(); }
+}
+/* Escreve/mescla UMA revisão em atlas_state/main/lesionRevisions/{reviewId}.
+   Concorrência: lê o remoto da MESMA revisão, decide por updatedAt/JSON
+   canônico (mergeOneLesionReviewPair — a mesma regra de mergeLesionRevisions,
+   fatorada para operar num par, nunca no mapa inteiro) e une history/
+   attempts/humanFeedback/requestHistory sem duplicar. Publica também,
+   nesta MESMA transação, qualquer snapshot externalizado (Fase 3B) que
+   SÓ ESTA revisão referencia e que ainda não foi confirmado sincronizado
+   — lógica movida de writeShardedState() (Bloco B), agora por documento
+   em vez de para o lote inteiro de LESION_REVISIONS. */
+async function writeLesionReviewIncremental(reviewId, ms=15000){
+  const local = LESION_REVISIONS[reviewId];
+  if(!local) return { ok:true, skipped:true, reason:'local_missing' };
+  const ref = getLesionRevisionsCollectionRef().doc(reviewId);
+
+  const pendingSnapshotIds = await collectPendingSnapshotRefs({ [reviewId]: local });
+  const pendingSnapshotRecords = {};
+  for(const snapshotId of pendingSnapshotIds){
+    const cached = await getSnapshotFromLocalCache(snapshotId);
+    if(cached.ok) pendingSnapshotRecords[snapshotId] = cached.record;
+  }
+  const pendingSnapshotDocs = {};
+  for(const snapshotId of pendingSnapshotIds){
+    const localRecord = pendingSnapshotRecords[snapshotId];
+    if(!localRecord) continue; // ausência decidida dentro da transação, como antes (Fase 3B)
+    const encoded = encodeSnapshotRecordForFirestore(localRecord);
+    if(!encoded.ok){ const err = new Error('snapshot indisponível para commit'); err.code = 'snapshot_unavailable_for_commit'; throw err; }
+    pendingSnapshotDocs[snapshotId] = encoded.doc;
+  }
+
+  let committedSnapshotIds = [];
+  let mergedResult = local;
+  await withFirebaseTimeout(fbDb.runTransaction(async (tx)=>{
+    const remoteSnap = await tx.get(ref);
+    const remoteRaw = (remoteSnap.exists && remoteSnap.data() && typeof remoteSnap.data()==='object') ? remoteSnap.data() : null;
+    // Mesmo codec de sempre (ver readShardedState/writeShardedState antigos)
+    // — Firestore não aceita array dentro de array; progresso embutido em
+    // structuralExecution/tombstone (caminho inline, flag OFF) precisa ir e
+    // voltar pela fronteira da nuvem como objeto {t,ok,graded}, nunca tupla.
+    const remote = remoteRaw ? structuralSnapshotProgressFromFirestore({ [reviewId]: remoteRaw })[reviewId] : null;
+    const merged = remote ? mergeOneLesionReviewPair(local, remote) : local;
+    const snapshotReadResults = {};
+    for(const snapshotId of pendingSnapshotIds) snapshotReadResults[snapshotId] = await tx.get(structuralSnapshotFirestoreRef(snapshotId));
+    const finalPendingIds = collectExternalSnapshotRefs({ [reviewId]: merged }).filter(id=>pendingSnapshotIds.includes(id));
+    for(const snapshotId of finalPendingIds){
+      const localRecord = pendingSnapshotRecords[snapshotId];
+      const remoteSnapshotSnap = snapshotReadResults[snapshotId];
+      if(remoteSnapshotSnap && remoteSnapshotSnap.exists){
+        const remoteFp = (remoteSnapshotSnap.data()||{}).fingerprint;
+        if(localRecord){
+          if(remoteFp !== localRecord.fingerprint){
+            const err = new Error('snapshot já existe remotamente com conteúdo diferente: ' + snapshotId);
+            err.code = 'snapshot_content_conflict';
+            throw err; // nunca sobrescrever silenciosamente; nunca publicar o doc sobre um conflito
+          }
+          // já existe remotamente e bate — nada a escrever, só confirmar sincronizado depois do commit.
+        }
+        // Eco de outro PC (remote existe, cache local ausente neste
+        // dispositivo): satisfeito sem escrever — este dispositivo só está
+        // republicando metadata que já veio da nuvem.
+      }else{
+        if(!localRecord){
+          const err = new Error('snapshot referenciado não está disponível localmente para publicar atomicamente: ' + snapshotId);
+          err.code = 'snapshot_unavailable_for_commit';
+          throw err;
+        }
+        tx.set(structuralSnapshotFirestoreRef(snapshotId), pendingSnapshotDocs[snapshotId]);
+      }
+    }
+    const mergedForFirestore = structuralSnapshotProgressToFirestore({ [reviewId]: merged })[reviewId];
+    tx.set(ref, stripUndefinedDeep(mergedForFirestore));
+    committedSnapshotIds = finalPendingIds.slice();
+    mergedResult = merged; // local em memória continua com tuplas — só o payload Firestore é codificado
+  }), ms, 'gravar lesionRevisions/'+reviewId);
+  for(const snapshotId of committedSnapshotIds) await markSnapshotSynced(snapshotId);
+  return { ok:true, merged:mergedResult };
+}
+/* Drena DIRTY_LESION_REVIEW_IDS: tenta escrever cada reviewId sujo, UM a
+   UM. Sucesso remove o id do Set (persistido); falha mantém SÓ aquele id
+   sujo (os já confirmados não voltam a ficar pendentes) — nunca um estado
+   parcial inseguro: cada documento é sua própria unidade atômica. */
+async function flushDirtyLesionReviewsNow(ms=15000){
+  if(canonicalRestoreInProgress) return { ok:false, reason:'canonical_restore_in_progress', written:0, failed:[] };
+  if(!fbDb) return { ok:false, reason:'offline', written:0, failed:[] };
+  const ids = Array.from(DIRTY_LESION_REVIEW_IDS);
+  if(!ids.length) return { ok:true, written:0, failed:[] };
+  const failed = [];
+  let written = 0;
+  for(const reviewId of ids){
+    try{
+      const res = await writeLesionReviewIncremental(reviewId, ms);
+      if(res.merged) LESION_REVISIONS[reviewId] = res.merged;
+      DIRTY_LESION_REVIEW_IDS.delete(reviewId);
+      written++;
+    }catch(e){
+      failed.push({ reviewId, error:(e && e.message) || String(e) }); // fica dirty — próxima tentativa tenta de novo
+    }
+  }
+  await persistDirtyLesionReviewIds();
+  if(written) try{ await storage.set(LESION_REVISIONS_KEY, JSON.stringify(LESION_REVISIONS), false); }catch(_e){}
+  setSyncStatus(failed.length===0, failed.length ? ('sincronização de revisão pendente — ' + failed.length + ' revisão(ões) tentando de novo em seguida.') : undefined);
+  return { ok:failed.length===0, written, failed };
+}
+let lesionReviewsPushTimer = null;
+// Debounced, mesmo espírito de pushToFirebase() — mas NUNCA chama
+// writeShardedState/pushToFirebase: escreve só os documentos sujos.
+function pushLesionReviewsIncremental(){
+  if(!appStateReady) return;
+  if(canonicalRestoreInProgress) return;
+  if(!fbDb) return; // offline — DIRTY_LESION_REVIEW_IDS fica persistido; próxima chamada real tenta de novo
+  clearTimeout(lesionReviewsPushTimer);
+  lesionReviewsPushTimer = setTimeout(async ()=>{
+    try{ await flushDirtyLesionReviewsNow(); }
+    catch(e){ console.error('[Atlas] falha ao sincronizar revisões por documento (fica pendente, tenta de novo depois).', e); }
+  }, 400);
 }
 
 /* envia o estado atual pra nuvem (com pequeno atraso pra juntar mudanças rápidas em uma escrita só) */
@@ -3387,6 +3456,9 @@ async function pushToFirebaseNow(){
 if(typeof window !== 'undefined' && typeof window.addEventListener === 'function'){
   window.addEventListener('online', ()=>{
     if(syncPushPending && appStateReady && !deviceBootstrapPending) pushToFirebaseNow();
+    // Bloco B — retry independente para revisões sujas (nunca depende do
+    // pipeline antigo de DATA/REVIEW/SRS).
+    if(DIRTY_LESION_REVIEW_IDS.size && appStateReady && !deviceBootstrapPending) pushLesionReviewsIncremental();
   });
 }
 
@@ -3989,6 +4061,13 @@ async function restoreCanonicalStateToCloud(payload, opts){
           lesionRevisionsChunkCount: finalLesionRevisionsChunkCount, // PROTEÇÃO 095
           [CLOUD_REVISION_FIELD]: nextRevision
         };
+        // GATE DE CUTOVER (auditoria 2026-10-07) — mesma preservação exata
+        // de writeShardedState(): tx.set() substitui o documento INTEIRO;
+        // sem isto, um restore canônico depois de
+        // activateLesionRevisionsCollectionStorage() ter marcado
+        // lesionRevisionsStorage:'collection' apagaria esse campo e
+        // devolveria readShardedState() pro fallback legado silenciosamente.
+        if(Object.prototype.hasOwnProperty.call(remoteMetaRaw, 'lesionRevisionsStorage')) firestoreMeta.lesionRevisionsStorage = remoteMetaRaw.lesionRevisionsStorage;
 
         // FASE DE ESCRITA — só agora, depois de toda leitura acima.
         tx.set(FB_META_REF(), firestoreMeta);
@@ -6899,12 +6978,25 @@ async function loadLesionRevisions(){
 // saveSRS: sem `internal` = ação REAL do usuário (marca dirty + push
 // debounced com reconcile); `internal=true` = só persiste localmente (pull,
 // restauração manual de snapshot) — nunca gera loop de publicação.
-async function saveLesionRevisions(internal){
+// Bloco B — segundo parâmetro OBRIGATÓRIO em todo call site real (não
+// internal): o(s) reviewId(s) que de fato mudaram. Nunca um fallback
+// "não sei o quê mudou" — cada chamador sabe exatamente qual(is)
+// revisão(ões) tocou (auditoria completa feita call site a call site).
+async function saveLesionRevisions(internal, dirtyReviewIds){
+  // PROTEÇÃO 091c — mesma convergência já feita no topo do pipeline antigo
+  // de escrita do catálogo (ver comentário lá): sem isto, um reviewId cujo
+  // lesionId foi fundido em outro dispositivo só seria redirecionado na
+  // próxima vez que DATA/REVIEW/SRS fossem salvos — o que não acontece mais
+  // automaticamente aqui, já que esta função nunca mais dispara aquele
+  // pipeline.
+  try{ foldLesionMergesIntoGlobals(); }catch(_e){}
   try{ await storage.set(LESION_REVISIONS_KEY, JSON.stringify(LESION_REVISIONS), false); }
   catch(e){ console.error('storage error', e); }
   if(internal) return;
-  await markSyncDirty();
-  pushToFirebase();
+  markLesionReviewDirty(dirtyReviewIds);
+  await persistDirtyLesionReviewIds();
+  await markSyncDirty(); // mantém o sinal legado de "algo pendente" (ALTERAÇÃO 072) para diagnóstico/boot
+  pushLesionReviewsIncremental(); // Bloco B — nunca mais o pipeline antigo de escrita do catálogo a partir daqui
 }
 /* PROTEÇÃO 084 — merge determinístico local × remoto, por reviewId. Nunca
    apaga: só-local fica, só-remoto é adotado. Mesmo id nos dois lados: o
@@ -6913,9 +7005,11 @@ async function saveLesionRevisions(internal){
    history/attempts/humanFeedback são UNIDOS sem duplicar (ordem do vencedor
    preservada, itens só do outro lado acrescentados e ordenados de forma
    estável pelo próprio timestamp). Ausente/inválido = {} (estados antigos). */
-function mergeLesionRevisions(localRevs, remoteRevs){
-  const norm = v => (v && typeof v==='object' && !Array.isArray(v)) ? v : {};
-  const local = norm(localRevs), remote = norm(remoteRevs);
+/* Mescla UM par local/remoto da MESMA revisão (nunca o mapa inteiro) —
+   extraído de mergeLesionRevisions (refactor puro, mesmo comportamento)
+   para ser reaproveitado também pela escrita incremental por documento
+   (Bloco B — writeLesionReviewIncremental). Pura; nunca muta l/r. */
+function mergeOneLesionReviewPair(l, r){
   const clone = v => JSON.parse(JSON.stringify(v));
   const unionBy = (winArr, loseArr, keyFn, tsFn) => {
     const a = Array.isArray(winArr) ? winArr : [];
@@ -6927,6 +7021,64 @@ function mergeLesionRevisions(localRevs, remoteRevs){
       .sort((p,q)=> ((Number(tsFn(p.x))||0) - (Number(tsFn(q.x))||0)) || (p.i - q.i))
       .map(p=>p.x);
   };
+  const lt = Number(l.updatedAt)||0, rt = Number(r.updatedAt)||0;
+  const localWins = lt !== rt ? lt > rt : canonicalJsonString(l) >= canonicalJsonString(r);
+  const win = localWins ? l : r, lose = localWins ? r : l;
+  const merged = clone(win);
+  if(Array.isArray(win.history) || Array.isArray(lose.history)){
+    merged.history = unionBy(win.history, lose.history,
+      h => (h && h.timestamp) + '|' + (h && h.action), h => h && h.timestamp);
+  }
+  if(Array.isArray(win.attempts) || Array.isArray(lose.attempts)){
+    merged.attempts = unionBy(win.attempts, lose.attempts,
+      a => (a && a.id) ? 'id:' + a.id : 'raw:' + canonicalJsonString(a), a => a && a.appliedAt);
+  }
+  if(Array.isArray(win.humanFeedback) || Array.isArray(lose.humanFeedback)){
+    merged.humanFeedback = unionBy(win.humanFeedback, lose.humanFeedback,
+      f => (f && (f.at != null ? f.at : f.timestamp)) + '|' + (f && f.text),
+      f => f && (f.at != null ? f.at : f.timestamp));
+  }
+  // PROTEÇÃO 091d — motivo do pedido: a edição MAIS RECENTE vence por
+  // carimbo PRÓPRIO (requestTextUpdatedAt), independente de quem venceu
+  // status/solução; requestHistory é UNIDO sem duplicar (edições feitas em
+  // PCs diferentes nunca se perdem).
+  const lrt = Number(l.requestTextUpdatedAt)||0, rrt = Number(r.requestTextUpdatedAt)||0;
+  if(lrt || rrt){
+    const src = lrt !== rrt ? (lrt > rrt ? l : r) : win;
+    merged.requestText = src.requestText;
+    merged.requestTextUpdatedAt = Math.max(lrt, rrt);
+  }
+  if(Array.isArray(win.requestHistory) || Array.isArray(lose.requestHistory)){
+    merged.requestHistory = unionBy(win.requestHistory, lose.requestHistory,
+      h => (h && h.at) + '|' + (h && h.action) + '|' + (h && h.text), h => h && h.at);
+  }
+  // Ponte estrutural — plano e execução têm carimbo PRÓPRIO (precedente
+  // 091d): a decisão mais nova vence independente do updatedAt da revisão,
+  // para uma edição concorrente (ex.: outro PC mexeu no requestText com
+  // updatedAt maior) nunca apagar um plano importado/aceito/executado.
+  // Sem plano/execução dos dois lados, vale o winner como antes.
+  const planTime = p=>{
+    if(!p || typeof p!=='object') return -1;
+    const t1 = Date.parse(p.importedAt||''), t2 = Date.parse(p.decidedAt||'');
+    return Math.max(isNaN(t1)?0:t1, isNaN(t2)?0:t2);
+  };
+  if(lose.structuralPlan && typeof lose.structuralPlan==='object'
+    && planTime(lose.structuralPlan) > planTime(win.structuralPlan))
+    merged.structuralPlan = clone(lose.structuralPlan);
+  const execTime = e=>{
+    if(!e || typeof e!=='object') return -1;
+    const t1 = Date.parse(e.at||''), t2 = Date.parse(e.rolledbackAt||'');
+    return Math.max(isNaN(t1)?0:t1, isNaN(t2)?0:t2);
+  };
+  if(lose.structuralExecution && typeof lose.structuralExecution==='object'
+    && execTime(lose.structuralExecution) > execTime(win.structuralExecution))
+    merged.structuralExecution = clone(lose.structuralExecution);
+  return merged;
+}
+function mergeLesionRevisions(localRevs, remoteRevs){
+  const norm = v => (v && typeof v==='object' && !Array.isArray(v)) ? v : {};
+  const local = norm(localRevs), remote = norm(remoteRevs);
+  const clone = v => JSON.parse(JSON.stringify(v));
   const out = {};
   const ids = new Set([...Object.keys(local), ...Object.keys(remote)]);
   for(const id of ids){
@@ -6934,59 +7086,7 @@ function mergeLesionRevisions(localRevs, remoteRevs){
     const lOk = l && typeof l==='object' && !Array.isArray(l);
     const rOk = r && typeof r==='object' && !Array.isArray(r);
     if(!lOk || !rOk){ const solo = lOk ? l : (rOk ? r : (l !== undefined ? l : r)); out[id] = clone(solo); continue; }
-    const lt = Number(l.updatedAt)||0, rt = Number(r.updatedAt)||0;
-    const localWins = lt !== rt ? lt > rt : canonicalJsonString(l) >= canonicalJsonString(r);
-    const win = localWins ? l : r, lose = localWins ? r : l;
-    const merged = clone(win);
-    if(Array.isArray(win.history) || Array.isArray(lose.history)){
-      merged.history = unionBy(win.history, lose.history,
-        h => (h && h.timestamp) + '|' + (h && h.action), h => h && h.timestamp);
-    }
-    if(Array.isArray(win.attempts) || Array.isArray(lose.attempts)){
-      merged.attempts = unionBy(win.attempts, lose.attempts,
-        a => (a && a.id) ? 'id:' + a.id : 'raw:' + canonicalJsonString(a), a => a && a.appliedAt);
-    }
-    if(Array.isArray(win.humanFeedback) || Array.isArray(lose.humanFeedback)){
-      merged.humanFeedback = unionBy(win.humanFeedback, lose.humanFeedback,
-        f => (f && (f.at != null ? f.at : f.timestamp)) + '|' + (f && f.text),
-        f => f && (f.at != null ? f.at : f.timestamp));
-    }
-    // PROTEÇÃO 091d — motivo do pedido: a edição MAIS RECENTE vence por
-    // carimbo PRÓPRIO (requestTextUpdatedAt), independente de quem venceu
-    // status/solução; requestHistory é UNIDO sem duplicar (edições feitas em
-    // PCs diferentes nunca se perdem).
-    const lrt = Number(l.requestTextUpdatedAt)||0, rrt = Number(r.requestTextUpdatedAt)||0;
-    if(lrt || rrt){
-      const src = lrt !== rrt ? (lrt > rrt ? l : r) : win;
-      merged.requestText = src.requestText;
-      merged.requestTextUpdatedAt = Math.max(lrt, rrt);
-    }
-    if(Array.isArray(win.requestHistory) || Array.isArray(lose.requestHistory)){
-      merged.requestHistory = unionBy(win.requestHistory, lose.requestHistory,
-        h => (h && h.at) + '|' + (h && h.action) + '|' + (h && h.text), h => h && h.at);
-    }
-    // Ponte estrutural — plano e execução têm carimbo PRÓPRIO (precedente
-    // 091d): a decisão mais nova vence independente do updatedAt da revisão,
-    // para uma edição concorrente (ex.: outro PC mexeu no requestText com
-    // updatedAt maior) nunca apagar um plano importado/aceito/executado.
-    // Sem plano/execução dos dois lados, vale o winner como antes.
-    const planTime = p=>{
-      if(!p || typeof p!=='object') return -1;
-      const t1 = Date.parse(p.importedAt||''), t2 = Date.parse(p.decidedAt||'');
-      return Math.max(isNaN(t1)?0:t1, isNaN(t2)?0:t2);
-    };
-    if(lose.structuralPlan && typeof lose.structuralPlan==='object'
-      && planTime(lose.structuralPlan) > planTime(win.structuralPlan))
-      merged.structuralPlan = clone(lose.structuralPlan);
-    const execTime = e=>{
-      if(!e || typeof e!=='object') return -1;
-      const t1 = Date.parse(e.at||''), t2 = Date.parse(e.rolledbackAt||'');
-      return Math.max(isNaN(t1)?0:t1, isNaN(t2)?0:t2);
-    };
-    if(lose.structuralExecution && typeof lose.structuralExecution==='object'
-      && execTime(lose.structuralExecution) > execTime(win.structuralExecution))
-      merged.structuralExecution = clone(lose.structuralExecution);
-    out[id] = merged;
+    out[id] = mergeOneLesionReviewPair(l, r);
   }
   return out;
 }
@@ -7130,7 +7230,7 @@ function createReviewRequest(opts){
   };
   pushLesionReviewHistory(review, 'created', { requestText: text, scope: 'global', category: review.category });
   LESION_REVISIONS[review.id] = review;
-  saveLesionRevisions();
+  saveLesionRevisions(false, review.id);
   updateReviewCenterBadges();
   return { created:true, reason:null, review };
 }
@@ -7152,7 +7252,7 @@ function setGlobalReviewSolution(reviewId, solutionText, meta){
   review.status = 'proposed';
   review.updatedAt = Date.now();
   pushLesionReviewHistory(review, 'solution_proposed', { solution: review.solution });
-  saveLesionRevisions();
+  saveLesionRevisions(false, reviewId);
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
 }
@@ -7166,7 +7266,7 @@ function completeGlobalReview(reviewId){
   review.updatedAt = Date.now();
   review.completedAt = review.updatedAt;
   pushLesionReviewHistory(review, 'global_completed', null);
-  saveLesionRevisions();
+  saveLesionRevisions(false, reviewId);
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
 }
@@ -7187,7 +7287,7 @@ function resolveReviewManually(reviewId){
   review.completedAt = review.updatedAt;
   review.resolvedManually = true;
   pushLesionReviewHistory(review, 'manually_resolved', { previousStatus });
-  saveLesionRevisions();
+  saveLesionRevisions(false, reviewId);
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
 }
@@ -7211,7 +7311,7 @@ function createLesionReview(lesionId, requestText){
   };
   pushLesionReviewHistory(review, 'created', { requestText: text });
   LESION_REVISIONS[review.id] = review;
-  saveLesionRevisions();
+  saveLesionRevisions(false, review.id);
   updateReviewCenterBadges();
   return { created:true, reason:null, review };
 }
@@ -7256,7 +7356,7 @@ function editReviewRequestText(reviewId, newText){
   review.requestTextUpdatedAt = now;
   review.history = Array.isArray(review.history) ? review.history : [];
   review.history.push({ timestamp: now, action:'request_edited', details:{ from: prev, to: text } });
-  saveLesionRevisions();
+  saveLesionRevisions(false, reviewId);
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
 }
@@ -7474,7 +7574,7 @@ function setReviewSolution(reviewId, solutionText, proposedChanges, meta){
   review.status = 'proposed';
   review.updatedAt = Date.now();
   pushLesionReviewHistory(review, 'solution_proposed', { solution });
-  saveLesionRevisions();
+  saveLesionRevisions(false, reviewId);
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
 }
@@ -7493,7 +7593,7 @@ function rejectProposedReviewSolution(reviewId, reasonText){
   review.rejectionReason = reason;
   pushHumanFeedback(review, 'proposal_rejected', reason, null);
   pushLesionReviewHistory(review, 'proposal_rejected', { reason, solution: review.solution });
-  saveLesionRevisions();
+  saveLesionRevisions(false, reviewId);
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
 }
@@ -7637,7 +7737,7 @@ function authorizeAndApplyReviewSolution(reviewId, opts){
           // snapshot. Re-persiste pelo caminho padrão (marca dirty + agenda
           // push — retry coerente; não duplica o attempt: o objeto já está
           // em review.attempts, só mudou de forma).
-          saveLesionRevisions();
+          saveLesionRevisions(false, reviewId);
         }catch(_e3){}
       };
       saveSnapshotToLocalCache(built.record).then(res=>{ if(!res || !res.ok) revertAttemptToInline(res && res.reason); }).catch(revertAttemptToInline);
@@ -7654,7 +7754,7 @@ function authorizeAndApplyReviewSolution(reviewId, opts){
   review.updatedAt = Date.now();
   pushLesionReviewHistory(review, 'changes_applied', { attemptId: attempt.id, changes: check.changes });
 
-  saveLesionRevisions();
+  saveLesionRevisions(false, reviewId);
   saveData();
   updateReviewCenterBadges();
   return { ok:true, reason:null, review, attempt };
@@ -7671,7 +7771,7 @@ function approveAppliedReviewSolution(reviewId){
   review.status = 'accepted';
   review.updatedAt = Date.now();
   pushLesionReviewHistory(review, 'application_approved', { attemptId: attempt ? attempt.id : null });
-  saveLesionRevisions();
+  saveLesionRevisions(false, reviewId);
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
 }
@@ -7731,7 +7831,7 @@ async function rollbackAppliedReviewSolution(reviewId, reasonText){
   pushHumanFeedback(review, 'rollback', reason, attempt.id);
   pushLesionReviewHistory(review, 'rollback_completed', { attemptId: attempt.id });
 
-  saveLesionRevisions();
+  saveLesionRevisions(false, reviewId);
   saveData();
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
@@ -7762,7 +7862,7 @@ function cancelLesionReview(reviewId, reason){
   review.cancelledBy = 'user';
   review.cancelReason = (reason||'').trim() || null;
   pushLesionReviewHistory(review, 'cancelled', { reason: review.cancelReason, previousStatus });
-  saveLesionRevisions();
+  saveLesionRevisions(false, reviewId);
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
 }
@@ -7798,7 +7898,7 @@ function flagManualActionRequired(reviewId, solutionText, reason, manualAction){
   review.updatedAt = Date.now();
   pushLesionReviewHistory(review, 'solution_proposed', { solution: review.solution });
   pushLesionReviewHistory(review, 'manual_action_required', { reason: review.manualActionReason, manualAction: ma });
-  saveLesionRevisions();
+  saveLesionRevisions(false, reviewId);
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
 }
@@ -7814,7 +7914,7 @@ function reopenManualActionReview(reviewId, reasonText){
   const reason = (reasonText||'').trim() || null;
   pushHumanFeedback(review, 'manual_return', reason, null);
   pushLesionReviewHistory(review, 'manual_action_reopened', reason ? { reason } : null);
-  saveLesionRevisions();
+  saveLesionRevisions(false, reviewId);
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
 }
@@ -7977,7 +8077,7 @@ function applyReviewAiSuggestedPlacement(reviewId, siteOverride){
           // snapshot. Re-persiste pelo caminho padrão (marca dirty + agenda
           // push — retry coerente; não duplica o attempt: o objeto já está
           // em review.attempts, só mudou de forma).
-          saveLesionRevisions();
+          saveLesionRevisions(false, reviewId);
         }catch(_e3){}
       };
       saveSnapshotToLocalCache(built.record).then(res=>{ if(!res || !res.ok) revertAttemptToInline(res && res.reason); }).catch(revertAttemptToInline);
@@ -7993,7 +8093,7 @@ function applyReviewAiSuggestedPlacement(reviewId, siteOverride){
   review.manualActionApplied = true;
   pushLesionReviewHistory(review, 'placement_applied', { attemptId: attempt.id, placement });
   pushLesionReviewHistory(review, 'changes_applied', { attemptId: attempt.id, placement });
-  saveLesionRevisions();
+  saveLesionRevisions(false, reviewId);
   saveData();
   updateReviewCenterBadges();
   return { ok:true, reason:null, review, attempt, placement };
@@ -8317,7 +8417,7 @@ function bridgeManualActionToStructuralPlan(reviewId){
   const pr = persistValidatedStructuralPlan(checked,
     { importedAt, importedNow:Date.now(), batchKey:structuralBatchKey([checked]), via:'ponte1-manualAction' });
   if(!pr.applied) return { bridged:false, reason:pr.skipped.reason, status:pr.skipped.status };
-  try{ saveLesionRevisions(); }catch(_e){}
+  try{ saveLesionRevisions(false, r.id); }catch(_e){}
   return { bridged:true, reason:null, keeperId:keeper.id, removeId:source.id,
     crossSectionOverride:checked.crossSectionOverride===true };
 }
@@ -8387,7 +8487,7 @@ function importReviewAiSolution(reviewId, rawText){
       pushLesionReviewHistory(review, 'solution_proposed', { solution: review.solution });
       pushLesionReviewHistory(review, 'manual_action_required', { reason:review.manualActionReason, manualAction:review.manualAction });
       const b = bridgeManualActionToStructuralPlan(reviewId);
-      try{ saveLesionRevisions(); }catch(_e){}
+      try{ saveLesionRevisions(false, reviewId); }catch(_e){}
       updateReviewCenterBadges();
       return { ok:true, applied:false, outcome:'manual_action_required', manualReason:review.manualActionReason, review,
         structuralPlan: b.bridged
@@ -8445,7 +8545,7 @@ function importGlobalReviewAiResult(review, parsed){
   if(result==='no_change'){
     review.lastAiAnalysis = { result:'no_change', summary, reasoning, at: Date.now() };
     review.updatedAt = Date.now();
-    saveLesionRevisions();
+    saveLesionRevisions(false, review.id);
     updateReviewCenterBadges();
     return { ok:true, applied:false, outcome:'no_change', review };
   }
@@ -8578,7 +8678,7 @@ function processReviewAiBatchItem(raw, seen){
   if(result==='no_change'){
     review.lastAiAnalysis = { result:'no_change', summary, reasoning, at: Date.now() };
     review.updatedAt = Date.now();
-    saveLesionRevisions();
+    saveLesionRevisions(false, reviewId);
     updateReviewCenterBadges();
     return { reviewId, status:'no_change', review };
   }
@@ -8716,7 +8816,7 @@ function setReviewNoChangeSolution(reviewId, solutionText, meta){
   review.status = 'proposed';
   review.updatedAt = Date.now();
   pushLesionReviewHistory(review, 'solution_proposed', { solution });
-  saveLesionRevisions();
+  saveLesionRevisions(false, reviewId);
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
 }
@@ -8732,7 +8832,7 @@ function confirmNoChangeReviewSolution(reviewId){
   review.status = 'accepted';
   review.updatedAt = Date.now();
   pushLesionReviewHistory(review, 'no_change_confirmed', null);
-  saveLesionRevisions();
+  saveLesionRevisions(false, reviewId);
   updateReviewCenterBadges();
   return { ok:true, reason:null, review };
 }
@@ -8878,17 +8978,17 @@ async function runAiSolutionPipeline(opts){
   const sentIds = new Set(eligible.map(r=>r.id));
   const now0 = Date.now();
   eligible.forEach(r=>{ r.aiPipeline = { state:'queued', batchId, queuedAt: now0 }; });
-  saveLesionRevisions();
+  saveLesionRevisions(false, eligible.map(r=>r.id));
 
   const packetBuilt = buildReviewAiBatchPacket(eligible.map(r=>r.id));
   if(!packetBuilt.ok){
     eligible.forEach(r=>{ r.aiPipeline = { state:'ai_error', batchId, error: packetBuilt.reason||'packet_failed' }; });
-    saveLesionRevisions();
+    saveLesionRevisions(false, eligible.map(r=>r.id));
     return { ok:false, batchId, total, reason: packetBuilt.reason||'packet_failed' };
   }
 
   eligible.forEach(r=>{ r.aiPipeline = { state:'processing', batchId, queuedAt: now0, startedAt: Date.now() }; });
-  saveLesionRevisions();
+  saveLesionRevisions(false, eligible.map(r=>r.id));
   onProgress({ phase:'processing', total, done:0 });
 
   let providerResponse;
@@ -8896,7 +8996,7 @@ async function runAiSolutionPipeline(opts){
     providerResponse = await provider.analyzeBatch(packetBuilt.packet);
   }catch(e){
     eligible.forEach(r=>{ r.aiPipeline = { state:'ai_error', batchId, error: String((e&&e.message)||e) }; });
-    saveLesionRevisions();
+    saveLesionRevisions(false, eligible.map(r=>r.id));
     return { ok:false, batchId, total, reason:'provider_error', detail: String((e&&e.message)||e) };
   }
   const rawResults = (providerResponse && Array.isArray(providerResponse.results)) ? providerResponse.results : [];
@@ -8938,7 +9038,7 @@ async function runAiSolutionPipeline(opts){
     }
   }
 
-  saveLesionRevisions();
+  saveLesionRevisions(false, eligible.map(r=>r.id));
   updateReviewCenterBadges();
 
   const summary = results.reduce((acc, it)=>{
@@ -10885,7 +10985,11 @@ function foldLesionMergesIntoState(st, merges, opts){
   const explicit = !!(opts && opts.explicit);
   const now = Date.now();
   const has = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
-  const report = { changed:false, folded:[], movedImages:0 };
+  // Correção 091c (auditoria 2026-10-07) — changedReviewIds: exatamente os
+  // reviewIds cujo r.lesionId foi redirecionado aqui, pra quem chamar poder
+  // marcar SÓ esses como dirty (saveLesionRevisions(false, ids)) — nunca
+  // "não sei o quê mudou, publica tudo".
+  const report = { changed:false, folded:[], movedImages:0, changedReviewIds:[] };
   const data = Array.isArray(st.data) ? st.data : [];
   for(const drop of Object.keys(M)){
     const keep = resolveLesionMergeTarget(drop, M);
@@ -10960,6 +11064,7 @@ function foldLesionMergesIntoState(st, merges, opts){
         r.history.push({ timestamp: now, action: 'lesion_merged', details: { from: drop, into: keep } });
         r.updatedAt = now;
       }
+      if(r.id) report.changedReviewIds.push(r.id); // Correção 091c — identidade exata do que mudou, pro dirty-tracking granular
       touched = true;
     }
     if(st.pendingAdds && has(st.pendingAdds, drop)){
@@ -10978,7 +11083,7 @@ function lesionMergeGlobalState(){
 // Convergência (boot, pull, pre-push, escrita): aplica o mapa conhecido ao
 // estado local. Idempotente — sem ids fundidos presentes, não faz nada.
 function foldLesionMergesIntoGlobals(opts){
-  if(!LESION_MERGES || !Object.keys(LESION_MERGES).length) return { changed:false, folded:[], movedImages:0 };
+  if(!LESION_MERGES || !Object.keys(LESION_MERGES).length) return { changed:false, folded:[], movedImages:0, changedReviewIds:[] };
   return foldLesionMergesIntoState(lesionMergeGlobalState(), LESION_MERGES, opts);
 }
 /* PROTEÇÃO 091c-b — imagem REAL para a regra do keeper: só asset persistido
@@ -11263,7 +11368,7 @@ function applyApprovedMergeGroup091c(st, row, at){
   const audit = auditLesionMergeOrphans(st, entries);
   const keeperImageKeys = new Set((keeper.images||[]).map(im=>imageIdentityKeys(im)[0]).filter(Boolean));
   const lostImages = [...expectedImages].filter(k=>!keeperImageKeys.has(k)).length;
-  return { entries, keeper, prevImages, report: { group: row.group, keeperId: row.keeperId, keeperReason: row.keeperReason, dropIds: row.dropIds, finalName: keeper.name, movedImages: f.movedImages, notesMode: row.notesAllSeed ? 'texto_final_aprovado' : 'fallback_notas_editadas', audit, lostImages } };
+  return { entries, keeper, prevImages, changedReviewIds: f.changedReviewIds, report: { group: row.group, keeperId: row.keeperId, keeperReason: row.keeperReason, dropIds: row.dropIds, finalName: keeper.name, movedImages: f.movedImages, notesMode: row.notesAllSeed ? 'texto_final_aprovado' : 'fallback_notas_editadas', audit, lostImages } };
 }
 /* Execução EXPLÍCITA (ação manual). Exige backup JSON recente e safety
    snapshot. ENSAIO primeiro numa cópia: se qualquer grupo deixar órfão ou
@@ -11287,13 +11392,25 @@ async function runApprovedClinicalMerges091c(opts){
   if(!snap) return { ok:false, reason:'snapshot_failed', plan };
   const countBefore = DATA.length;
   const executed = [];
+  // Correção 091c (auditoria 2026-10-07) — reviewIds EXATOS redirecionados
+  // pelo fold desta execução (nunca "não sei o quê mudou, publica tudo").
+  const changedReviewIds = [];
   for(const row of ready){
     const r = applyApprovedMergeGroup091c(lesionMergeGlobalState(), row, at);
     LESION_MERGES = mergeLesionMergeMaps(LESION_MERGES, r.entries);
     try{ markPendingLocalImageAdds(r.keeper.id, r.prevImages, r.keeper.images); }catch(_e){}
+    if(Array.isArray(r.changedReviewIds)) changedReviewIds.push(...r.changedReviewIds);
     executed.push(r.report);
   }
-  await saveReview(true); await saveSRS(true); await saveLesionRevisions(true); await saveLesionMerges(); await savePendingLocalImageAdds();
+  await saveReview(true); await saveSRS(true);
+  // PROTEÇÃO 091c — publica SÓ as revisões cujo lesionId o fold redirecionou
+  // (dirty-tracking granular; ver writeLesionReviewIncremental). Sem isso,
+  // o redirecionamento ficava só local e nunca chegava à coleção nova —
+  // um PC B que já conhecesse essa revisão continuava vendo o lesionId
+  // antigo (bug real, não corrigido antes desta auditoria).
+  if(changedReviewIds.length) await saveLesionRevisions(false, changedReviewIds);
+  else await saveLesionRevisions(true);
+  await saveLesionMerges(); await savePendingLocalImageAdds();
   await saveData(); // ação real do usuário: dirty + publicação (com reconcile e mapa)
   try{ renderAll(); }catch(_e){}
   return { ok: executed.every(x=>!x.audit.total && !x.lostImages), executed, plan, countBefore, countAfter: DATA.length, audit: auditLesionMergeOrphans(lesionMergeGlobalState(), LESION_MERGES) };
@@ -15725,6 +15842,7 @@ async function loadData(){
   await loadImageTombstones();
   await loadPendingLocalImageAdds(); // ALTERAÇÃO 079d
   await loadLesionRevisions();
+  await loadDirtyLesionReviewIds(); // Bloco B — reviewIds pendentes de sync sobrevivem a reload/offline
   await loadClassificationReviewDecisions();
   // PROTEÇÃO 091c — mapa de fusão: carrega e converge o estado local (idempotente;
   // só persiste se algo mudou — ex.: fusão recebida mas não aplicada localmente).
@@ -15805,6 +15923,10 @@ async function loadData(){
   if(!isNewLocalDevice){
     await syncFromFirebase();
   }
+  // Bloco B — retry independente de reviewIds que ficaram sujos numa
+  // sessão anterior (ex.: app fechado offline no meio do flush). Nunca
+  // passa por writeShardedState/pushToFirebase.
+  if(DIRTY_LESION_REVIEW_IDS.size) pushLesionReviewsIncremental();
   // ALTERAÇÃO 073 — convergência local por tombstone (ex.: boot offline ou
   // com tombstone já conhecido e imagem ainda presente): remove referências
   // tombstonadas do catálogo. Reconciliação: persiste local via save
@@ -17908,7 +18030,7 @@ function openForm(id, opts){
         const reviewResult = createLesionReview(entryId, reviewRequestText);
         // createLesionReview() já persiste e atualiza os badges (fire-and-forget);
         // este await extra só garante que a gravação termine antes de fechar o modal.
-        await saveLesionRevisions();
+        await saveLesionRevisions(false, reviewResult.review && reviewResult.review.id);
         if(reviewResult.reason==='duplicate'){
           toast('Já existe uma revisão pendente idêntica para esta lesão — não foi duplicada.');
         }
@@ -17919,7 +18041,7 @@ function openForm(id, opts){
     let externalAiReviewNotice = '';
     if(!existing && externalAiReviewInstruction){
       const aiRes = createExternalImportAiReview(entryId, externalAiReviewInstruction);
-      if(aiRes.ok) await saveLesionRevisions();
+      if(aiRes.ok) await saveLesionRevisions(false, aiRes.review && aiRes.review.id);
       externalAiReviewNotice = externalAiReviewResultMessage(aiRes);
     }
 
@@ -18592,7 +18714,7 @@ async function confirmAndResolveReviewManually(reviewId, onDone){
   if(!confirm(REVIEW_MANUAL_RESOLVE_CONFIRM)) return { ok:false, reason:'cancelled' };
   const res = resolveReviewManually(reviewId);
   if(res.ok){
-    await saveLesionRevisions();
+    await saveLesionRevisions(false, reviewId);
     toast('Revisão marcada como resolvida — nenhum dado da lesão foi alterado.');
     if(typeof onDone==='function') onDone();
   } else toast('Não foi possível concluir esta revisão (' + (res.reason||'erro') + ').');
@@ -18637,7 +18759,7 @@ function openEditReviewRequestModal(reviewId, onSaved){
       ov.querySelector('#rer-error').textContent = msg[res.reason] || ('Não foi possível salvar (' + res.reason + ').');
       return;
     }
-    await saveLesionRevisions();
+    await saveLesionRevisions(false, reviewId);
     cleanup();
     toast('Motivo da revisão atualizado.');
     if(typeof onSaved==='function') onSaved();
@@ -18814,7 +18936,7 @@ function openCancelReviewModal(reviewId, onCancelled){
     const res = cancelLesionReview(reviewId, reason);
     cleanup();
     if(res.ok){
-      await saveLesionRevisions();
+      await saveLesionRevisions(false, reviewId);
       toast('Pedido de revisão cancelado.');
       if(typeof onCancelled==='function') onCancelled();
     } else {
@@ -18898,7 +19020,7 @@ function openReviewAiBridgeModal(reviewId, onImported){
       return;
     }
     importBtn.disabled = true;
-    await saveLesionRevisions();
+    await saveLesionRevisions(false, reviewId);
     // PROTEÇÃO 091 — pendência geral: análise registrada (💡) ou ação manual;
     // nenhuma tela de validação de lesão (não há lesão alvo).
     if(res.outcome==='global_solution' || (res.outcome==='manual_action_required' && isGlobalReview(LESION_REVISIONS[reviewId]))){
@@ -18985,7 +19107,7 @@ function openApplyPlacementConfirmModal(reviewId, onApplied){
       toast(msgs[res.reason] || ('Não foi possível aplicar (' + (res.reason||'erro') + ').'));
       return;
     }
-    await saveLesionRevisions();
+    await saveLesionRevisions(false, reviewId);
     if(typeof renderAll==='function') renderAll();
     toast('Localização adicionada provisoriamente. Confira e escolha Manter ou Desfazer.');
     close();
@@ -19037,7 +19159,7 @@ function openManualActionModal(reviewId, opts){
     openReasonPromptModal(reviewId, async (reason)=>{
       const res = reopenManualActionReview(reviewId, reason);
       if(!res.ok){ toast('Não foi possível devolver a revisão (' + (res.reason||'erro') + ').'); return; }
-      await saveLesionRevisions();
+      await saveLesionRevisions(false, reviewId);
       toast('Revisão voltou para a fila de pendentes.');
       close();
       if(typeof cfg.onReopened==='function') cfg.onReopened();
@@ -19101,7 +19223,7 @@ function openReviewValidationModal(reviewId, opts){
   ov.querySelector('#review-validate-approve').onclick = async ()=>{
     const res = approveAppliedReviewSolution(reviewId);
     if(!res.ok){ toast('Não foi possível manter a correção (' + (res.reason||'erro') + ').'); return; }
-    await saveLesionRevisions();
+    await saveLesionRevisions(false, reviewId);
     toast('Correção mantida.');
     close();
     if(typeof cfg.onDecided==='function') cfg.onDecided('approved');
@@ -19110,7 +19232,7 @@ function openReviewValidationModal(reviewId, opts){
     openReasonPromptModal(reviewId, async (reason)=>{
       const res = await rollbackAppliedReviewSolution(reviewId, reason);
       if(!res.ok){ toast('Não foi possível desfazer a correção (' + (res.reason||'erro') + ').'); return; }
-      await saveLesionRevisions();
+      await saveLesionRevisions(false, reviewId);
       if(typeof renderAll==='function') renderAll();
       toast('Alteração desfeita — a lesão voltou ao estado anterior. Revisão reaberta.');
       close();
@@ -19187,7 +19309,7 @@ function openReviewAiBatchModal(onProcessed){
       return;
     }
     btn.disabled = true;
-    await saveLesionRevisions();
+    await saveLesionRevisions(false, res.items.map(it=>it.reviewId).filter(Boolean));
     if(typeof renderAll==='function') renderAll();
     close();
     if(typeof onProcessed==='function') onProcessed();
@@ -19887,7 +20009,7 @@ function openNewReviewRequestModal(onCreated){
     const res = createReviewRequest({ scope, lesionId: selectedLesionId, requestText: text, category: ov.querySelector('#nrr-category').value || null });
     if(res.reason==='duplicate'){ toast('Já existe uma pendência ativa idêntica — não foi duplicada.'); return; }
     if(!res.created){ toast('Não foi possível criar a pendência.'); return; }
-    await saveLesionRevisions();
+    await saveLesionRevisions(false, res.review && res.review.id);
     cleanup();
     toast(scope==='global' ? 'Pendência geral criada.' : 'Pendência da lesão criada.');
     if(typeof onCreated==='function') onCreated(res.review);
@@ -20056,12 +20178,12 @@ function openReadySolutionsModal(){
         wireReviewResolveButton(grow, r.id, renderBothLists); // PROTEÇÃO 091f
         grow.querySelector('.review-global-complete').onclick = async ()=>{
           const res = completeGlobalReview(r.id);
-          if(res.ok){ await saveLesionRevisions(); toast('Pendência concluída.'); renderBothLists(); }
+          if(res.ok){ await saveLesionRevisions(false, r.id); toast('Pendência concluída.'); renderBothLists(); }
         };
         grow.querySelector('.review-reject-proposal').onclick = ()=>{
           openReasonPromptModal(r.id, async (reason)=>{
             const res = rejectProposedReviewSolution(r.id, reason);
-            if(res.ok){ await saveLesionRevisions(); toast('Análise devolvida — a pendência voltou para o 🔔.'); renderBothLists(); }
+            if(res.ok){ await saveLesionRevisions(false, r.id); toast('Análise devolvida — a pendência voltou para o 🔔.'); renderBothLists(); }
           }, { title: '↩ Devolver / pedir nova análise', subtitle: 'O que faltou nesta análise? (opcional) — vira feedback para a próxima tentativa.', confirmLabel: '↩ devolver' });
         };
         grow.querySelector('.review-cancel-request').onclick = ()=> openCancelReviewModal(r.id, renderBothLists);
@@ -20128,7 +20250,7 @@ function openReadySolutionsModal(){
       if(isNoChange){
         row.querySelector('.review-confirm-no-change').onclick = async ()=>{
           const res = confirmNoChangeReviewSolution(r.id);
-          if(res.ok){ await saveLesionRevisions(); toast('Confirmado — nenhuma alteração necessária. Revisão encerrada.'); renderBothLists(); }
+          if(res.ok){ await saveLesionRevisions(false, r.id); toast('Confirmado — nenhuma alteração necessária. Revisão encerrada.'); renderBothLists(); }
           else toast('Não foi possível confirmar (' + (res.reason||'erro') + ').');
         };
       } else {
@@ -20139,7 +20261,7 @@ function openReadySolutionsModal(){
           // "Validar correções" nem trocar de aba automaticamente.
           const res = authorizeAndFinalizeReviewSolution(r.id);
           if(res.ok){
-            await saveLesionRevisions();
+            await saveLesionRevisions(false, r.id);
             renderAll(); // DATA mudou de verdade — mantém a grade/lista principal em dia
             toast('Correção aplicada e aprovada.');
             renderBothLists(); // atualiza contadores das abas; permanece em "Propostas"
@@ -20151,7 +20273,7 @@ function openReadySolutionsModal(){
       row.querySelector('.review-reject-proposal').onclick = ()=>{
         openReasonPromptModal(r.id, async (reason)=>{
           const res = rejectProposedReviewSolution(r.id, reason);
-          if(res.ok){ await saveLesionRevisions(); toast('Proposta recusada — a revisão voltou para pendentes.'); renderBothLists(); }
+          if(res.ok){ await saveLesionRevisions(false, r.id); toast('Proposta recusada — a revisão voltou para pendentes.'); renderBothLists(); }
         }, {
           title: '✕ Recusar proposta',
           subtitle: 'Por que esta proposta foi recusada? (opcional) — nada em DATA será alterado.',
@@ -20199,13 +20321,13 @@ function openReadySolutionsModal(){
       wireReviewResolveButton(row, r.id, renderBothLists); // PROTEÇÃO 091f
       row.querySelector('.review-approve').onclick = async ()=>{
         const res = approveAppliedReviewSolution(r.id);
-        if(res.ok){ await saveLesionRevisions(); toast('Correção mantida.'); renderBothLists(); }
+        if(res.ok){ await saveLesionRevisions(false, r.id); toast('Correção mantida.'); renderBothLists(); }
       };
       row.querySelector('.review-rollback').onclick = ()=>{
         openReasonPromptModal(r.id, async (reason)=>{
           const res = await rollbackAppliedReviewSolution(r.id, reason);
           if(res.ok){
-            await saveLesionRevisions();
+            await saveLesionRevisions(false, r.id);
             renderAll(); // rollback restaurou DATA — mantém a grade/lista principal em dia
             toast('Alteração desfeita — a lesão voltou ao estado anterior. Revisão reaberta.');
             renderBothLists();
@@ -20276,7 +20398,7 @@ function openReadySolutionsModal(){
         </div>`;
       row.querySelector('.review-manual-copy-one').onclick = ()=>copyManualActionAiBatch([r.id]);
       const completeBtn = row.querySelector('.review-global-complete');
-      if(completeBtn) completeBtn.onclick = async ()=>{ const res = completeGlobalReview(r.id); if(res.ok){ await saveLesionRevisions(); toast('Pendência concluída.'); renderBothLists(); } };
+      if(completeBtn) completeBtn.onclick = async ()=>{ const res = completeGlobalReview(r.id); if(res.ok){ await saveLesionRevisions(false, r.id); toast('Pendência concluída.'); renderBothLists(); } };
       const applyBtn = row.querySelector('.review-manual-apply-placement');
       if(applyBtn) applyBtn.onclick = ()=> openApplyPlacementConfirmModal(r.id, ()=>{ renderBothLists(); showTab('applied'); });
       const openBtn = row.querySelector('.review-manual-open');
@@ -20316,7 +20438,7 @@ function openReadySolutionsModal(){
       row.querySelector('.review-manual-reopen').onclick = ()=>{
         openReasonPromptModal(r.id, async (reason)=>{
           const res = reopenManualActionReview(r.id, reason);
-          if(res.ok){ await saveLesionRevisions(); toast('Revisão voltou para a fila de pendentes.'); renderBothLists(); showTab('applied'); }
+          if(res.ok){ await saveLesionRevisions(false, r.id); toast('Revisão voltou para a fila de pendentes.'); renderBothLists(); showTab('applied'); }
         }, {
           title: '↩ Devolver para revisões',
           subtitle: 'Algo a orientar a próxima tentativa da IA? (opcional) — fica salvo como feedback humano.',
@@ -21138,7 +21260,11 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
     await saveSessionLog();
     await saveOrder();
     await saveSiteOrder();
-    await saveLesionRevisions();
+    // Bloco B / Classe C — import completo substitui o mapa inteiro: marca
+    // TODOS os reviewIds restaurados como sujos explicitamente (nunca um
+    // fallback silencioso — é o próprio contrato desta ação, rara e
+    // sempre humana).
+    await saveLesionRevisions(false, Object.keys(LESION_REVISIONS));
     try{ await storage.set(RECOVERY_KEY,RECOVERY_VERSION,false); }catch(_e){}
 
     scope={section:null,site:null};
@@ -23544,7 +23670,7 @@ async function handleExternalLinkCaseClick(draft, lesionId, aiInstruction){
     let aiNotice = '';
     if (aiInstruction) { // PROTEÇÃO 091d — pendência REAL; nunca mexe nos campos da lesão
       const ai = createExternalImportAiReview(entry.id, aiInstruction);
-      if (ai.ok) await saveLesionRevisions();
+      if (ai.ok) await saveLesionRevisions(false, ai.review && ai.review.id);
       aiNotice = ' ' + externalAiReviewResultMessage(ai);
     }
     toast('Caso clínico vinculado a "' + entry.name + '".' + aiNotice);
@@ -27332,7 +27458,7 @@ async function importStructuralResolutionBatch(obj){
     if(pr.applied) imported.push(v.reviewId);
     else skipped.push(pr.skipped);
   }
-  await saveLesionRevisions();
+  await saveLesionRevisions(false, imported); // Classe B — só os reviewIds que de fato receberam um plano
   return { ok:true, reason:null, imported, skipped, batchKey, resolutions:checked.resolutions };
 }
 async function acceptStructuralPlan(reviewId){
@@ -27360,7 +27486,7 @@ async function acceptStructuralPlan(reviewId){
   r.updatedAt = Date.now();
   pushLesionReviewHistory(r, 'structural_plan_accepted', { type:r.structuralPlan.type,
     crossSectionOverride: (r.structuralPlan.resolution && r.structuralPlan.resolution.crossSectionOverride===true) || undefined });
-  await saveLesionRevisions();
+  await saveLesionRevisions(false, reviewId);
   return { ok:true, reason:null };
 }
 async function rejectStructuralPlan(reviewId){
@@ -27377,7 +27503,7 @@ async function rejectStructuralPlan(reviewId){
   r.structuralPlan.decidedAt = new Date().toISOString();
   r.updatedAt = Date.now(); // mesmo motivo do aceite: decisão local vence no merge 084
   pushLesionReviewHistory(r, 'structural_plan_rejected', { was });
-  await saveLesionRevisions();
+  await saveLesionRevisions(false, reviewId);
   return { ok:true, reason:null };
 }
 function structuralResolutionToRaw(v){
@@ -27434,7 +27560,7 @@ async function refreshStructuralPlan(reviewId){
   };
   r.updatedAt = Date.now();
   pushLesionReviewHistory(r, 'structural_plan_refreshed', { type:checked.type, refreshedAt });
-  await saveLesionRevisions();
+  await saveLesionRevisions(false, reviewId);
   return { ok:true, reason:null, resolution:checked };
 }
 
@@ -27697,7 +27823,7 @@ async function executeStructuralPlan(reviewId){
     try{ await structuralPersistAll(); }catch(_e){}
     r.structuralExecution = { executionId, status:'failed', reason, detail:detail||null, at:new Date().toISOString(), affectedIds:dry.affectedLesionIds.slice() };
     pushLesionReviewHistory(r, 'structural_plan_failed', { reason, executionId });
-    try{ await saveLesionRevisions(); }catch(_e){}
+    try{ await saveLesionRevisions(false, reviewId); }catch(_e){}
     delete STRUCTURAL_EXEC_IN_FLIGHT[reviewId];
     return { ok:false, reason, detail:detail||null, executionId };
   };
@@ -27745,9 +27871,10 @@ async function executeStructuralPlan(reviewId){
       // de onde ler o snapshot. Falha aqui aborta a execução inteira —
       // nunca marca "executed" com uma referência externa que não existe
       // em lugar nenhum. A publicação remota (Firestore) NÃO acontece
-      // aqui: fica a cargo exclusivo da transação atômica em
-      // writeShardedState(), disparada pelo saveLesionRevisions()/
-      // saveData() mais abaixo — nunca uma escrita solta e separada.
+      // aqui: fica a cargo exclusivo da transação atômica por documento em
+      // writeLesionReviewIncremental() (Bloco B), disparada pelo
+      // saveLesionRevisions()/resolveReviewManually() mais abaixo — nunca
+      // uma escrita solta e separada, e nunca mais writeShardedState().
       const built = buildAtlasSnapshotRecord({ kind:'structural_execution', reviewId, executionId, beforeSnapshot:before, afterSnapshot:after });
       if(!built.ok) return await recordFailure('snapshot_build_failed', built.reason);
       const cached = await saveSnapshotToLocalCache(built.record);
@@ -27967,7 +28094,7 @@ async function rollbackStructuralExecution(reviewId){
     if(r.status==='accepted'){ r.status = 'manual_action_required'; delete r.completedAt; r.resolvedManually = false; }
     r.updatedAt = Date.now(); // reabertura local vence cópia remota no merge 084
     pushLesionReviewHistory(r, 'structural_plan_rolled_back', { executionId:ex.executionId });
-    try{ await saveLesionRevisions(); }catch(_e){}
+    try{ await saveLesionRevisions(false, reviewId); }catch(_e){}
     return { ok:true, reason:null, executionId:ex.executionId };
   }finally{
     delete STRUCTURAL_EXEC_IN_FLIGHT[reviewId];
@@ -28406,7 +28533,9 @@ async function applySnapshotMigrationCompaction(opts){
   const backupInline = LESION_REVISIONS;
   LESION_REVISIONS = clone;
   try{
-    await saveLesionRevisions();
+    // Bloco B / Classe C — compactação troca o mapa inteiro de referência;
+    // marca TODOS os ids explicitamente (nenhum fallback silencioso).
+    await saveLesionRevisions(false, Object.keys(clone));
     // Confirma o resultado real (read-back): sem catch silencioso — qualquer
     // divergência restaura o original e retorna erro explícito.
     const reread = await storage.get(LESION_REVISIONS_KEY, false);
@@ -28416,10 +28545,12 @@ async function applySnapshotMigrationCompaction(opts){
     LESION_REVISIONS = backupInline;
     return fail('persist_failed', { detail:String((e && e.message) || e) });
   }
-  // Sync normal: saveLesionRevisions() já marcou dirty + agendou o push
-  // debounced; DATA não mudou, então saveData() não é necessário. A
-  // transação publica o main compactado; os snapshots já existem (no-op
-  // idempotente por fingerprint) e divergência aborta sem sobrescrever.
+  // Sync (Bloco B): saveLesionRevisions() já marcou TODOS os reviewIds
+  // compactados como sujos e agendou a escrita incremental por documento;
+  // DATA não mudou, então saveData() não é necessário. Cada documento
+  // publica seu próprio conteúdo compactado; snapshots externalizados já
+  // existem (no-op idempotente por fingerprint) e divergência aborta sem
+  // sobrescrever — nunca mais writeShardedState()/chunks legados aqui.
   const done = Object.assign({}, report, { ok:true, status:'compacted', persistedLocal:true, syncRequested:true });
   done.completedAt = new Date().toISOString();
   return done;

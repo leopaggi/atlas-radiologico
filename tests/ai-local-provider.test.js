@@ -16,6 +16,10 @@ function fixture(opts = {}) {
     document: { querySelectorAll: s => s==='#ai-pipeline-run' ? [button] : [], getElementById: () => null },
     storage: { get: async k => ({ value:disk[k] }), set: async (k,v) => { disk[k]=v; } },
     saveDataCalls:0, markSyncDirty:async()=>{}, pushToFirebase:()=>{},
+    // Bloco B — saveLesionRevisions() (dentro do moduleSource) chama estas
+    // 3 funções (dirty-tracking/push incremental); vivem fora deste slice
+    // do módulo — stub no-op, mesmo espírito de markSyncDirty acima.
+    markLesionReviewDirty: () => {}, persistDirtyLesionReviewIds: async () => {}, pushLesionReviewsIncremental: () => {},
     fetch: async (url, init) => {
       calls.push({ url, init });
       if(opts.offline || opts.failHealth && url.endsWith('/health')) throw new Error('offline');

@@ -47,7 +47,7 @@ const names = [
   'structuralApplyMerge', 'structuralPlanPreviewHtml', 'structuralPlanLiveView',
   'structuralPlanStatusRowHtml', 'structuralDryRunSummaryHtml',
   'getEffectiveStructuralStatus', 'structuralPlanCardBadgeHtml', 'structuralPlanCardButtonsHtml',
-  'resolveReviewManually', 'mergeLesionRevisions',
+  'resolveReviewManually', 'mergeOneLesionReviewPair', 'mergeLesionRevisions',
   'imageOwnerIdV1', 'assertManualImageOwnershipChange', 'canChangeImageOwnership'
 ];
 const src = names.map(fn).join('\n');

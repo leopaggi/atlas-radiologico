@@ -43,7 +43,7 @@ const names = ['normalizeExternalTitle', 'normalizeRadiopaediaCaseTitle', 'token
   'acceptStructuralPlan', 'rejectStructuralPlan',
   'getEffectiveStructuralStatus', 'getManualActionSolutions', 'getStructuralHistorySolutions',
   'getStructuralPlanBatches', 'structuralBatchCounts',
-  'structuralPlanCardDecideHtml', 'mergeLesionRevisions'];
+  'structuralPlanCardDecideHtml', 'mergeOneLesionReviewPair', 'mergeLesionRevisions'];
 const consts = html.slice(html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = '), html.indexOf('// Tokens relevantes:', html.indexOf('const EXTERNAL_IMPORT_STOPWORDS = ')));
 const mapping = html.slice(html.indexOf('const STRUCTURAL_REVIEW_CANDIDATE_NAMES = '), html.indexOf('function structuralReviewPick('));
 const planTypes = html.slice(html.indexOf('const STRUCTURAL_PLAN_TYPES = '), html.indexOf('function structuralPlanError('));

@@ -114,13 +114,13 @@ const renderQuizCardSource = extractFn(html, 'renderQuizCardIntegrated');
 test('SEGURANÇA ESTÁTICA: o módulo não lê/escreve REVIEW/SRS nem chama Firebase diretamente', () => {
   assert.doesNotMatch(moduleSource, /\bREVIEW\s*(=[^=]|\.\w|\[)/, 'não deve ler/escrever REVIEW (fluxo de estudo)');
   assert.doesNotMatch(moduleSource, /\bSRS\s*(=[^=]|\.\w|\[)/, 'não deve ler/escrever SRS (quiz)');
-  // PROTEÇÃO 084 — a fila agora sincroniza, mas SÓ pelo mesmo contrato de
-  // saveReview/saveSRS: saveLesionRevisions() (sem `internal`) marca dirty e
-  // agenda pushToFirebase(); nenhuma outra função do módulo chama Firebase,
-  // e nada no módulo acessa Firestore diretamente.
+  // Bloco B — a fila sincroniza por documento (nunca mais pushToFirebase/
+  // writeShardedState): saveLesionRevisions() (sem `internal`) marca o(s)
+  // reviewId(s) sujos e agenda pushLesionReviewsIncremental(); nenhuma outra
+  // função do módulo agenda sync, e nada no módulo acessa Firestore direto.
   const saveFn = extractFn(moduleSource, 'saveLesionRevisions');
-  assert.doesNotMatch(moduleSource.replace(saveFn, ''), /pushToFirebase/, 'só saveLesionRevisions() pode agendar o push — usa saveData() já existente quando muta DATA');
-  assert.match(saveFn, /if\(internal\) return;\s*await markSyncDirty\(\);\s*pushToFirebase\(\);/, 'push só depois do guard `internal`, com dirty marcado antes');
+  assert.doesNotMatch(moduleSource.replace(saveFn, ''), /pushLesionReviewsIncremental|pushToFirebase/, 'só saveLesionRevisions() pode agendar o push — usa saveData() já existente quando muta DATA');
+  assert.match(saveFn, /if\(internal\) return;\s*markLesionReviewDirty\(dirtyReviewIds\);\s*await persistDirtyLesionReviewIds\(\);\s*await markSyncDirty\(\);(?:[^\n]*)?\s*pushLesionReviewsIncremental\(\);/, 'push só depois do guard `internal`, com dirty marcado antes');
   assert.doesNotMatch(moduleSource, /\bfbDb\b|runTransaction|FB_META_REF|writeShardedState/, 'o módulo nunca acessa Firestore diretamente');
 });
 
@@ -199,6 +199,22 @@ function buildTestContext(opts) {
   context.pushCalls = 0;
   context.markSyncDirty = async () => { context.syncDirtyCalls += 1; };
   context.pushToFirebase = () => { context.pushCalls += 1; };
+  // Bloco B — stubs do contrato de sync incremental por documento (fora do
+  // escopo deste módulo: writeLesionReviewIncremental/Firestore vivem em
+  // tests/lesion-revisions-collection.test.js). foldLesionMergesIntoGlobals
+  // é puro/local (DATA/LESION_MERGES) e não pertence a este módulo também —
+  // stub no-op é suficiente aqui (nenhum teste deste arquivo usa fusão).
+  context.dirtyLesionReviewIdsCalls = [];
+  context.pushLesionReviewsIncrementalCalls = 0;
+  context.DIRTY_LESION_REVIEW_IDS = new Set();
+  context.markLesionReviewDirty = (ids) => {
+    const arr = Array.isArray(ids) ? ids : [ids];
+    for (const id of arr) { if (id && typeof id === 'string') context.DIRTY_LESION_REVIEW_IDS.add(id); }
+    context.dirtyLesionReviewIdsCalls.push(arr);
+  };
+  context.persistDirtyLesionReviewIds = async () => {};
+  context.pushLesionReviewsIncremental = () => { context.pushLesionReviewsIncrementalCalls += 1; };
+  context.foldLesionMergesIntoGlobals = () => ({ changed: false, folded: [], movedImages: 0 });
   if (opts.dom) {
     const makeBtn = () => ({ textContent: '', classList: { emptyState: null, toggle(cls, isEmpty) { this.emptyState = isEmpty; } } });
     const elements = {
@@ -864,11 +880,14 @@ test('backup/import restaura LESION_REVISIONS (handler completo por contagem de 
     /LESION_REVISIONS\s*=\s*\(parsed\.lesionRevisions/,
     'a importação de backup completo precisa restaurar lesionRevisions'
   );
-  assert.match(importBlock, /await saveLesionRevisions\(\);/, 'a importação precisa persistir lesionRevisions restaurado');
+  // Bloco B — import completo (Classe C) precisa marcar TODOS os reviewIds
+  // restaurados como sujos explicitamente (Object.keys(LESION_REVISIONS)),
+  // nunca a chamada sem argumento (isso deixaria tudo sem sincronizar).
+  assert.match(importBlock, /await saveLesionRevisions\(false,\s*Object\.keys\(LESION_REVISIONS\)\);/, 'a importação precisa persistir e marcar sujo todo o lesionRevisions restaurado');
   // Ordem importa: restaurar e SÓ DEPOIS persistir — nunca o inverso (gravaria
   // o estado anterior, perdendo a importação).
   const assignIdx = importBlock.search(/LESION_REVISIONS\s*=\s*\(parsed\.lesionRevisions/);
-  const saveIdx = importBlock.indexOf('await saveLesionRevisions();');
+  const saveIdx = importBlock.indexOf('await saveLesionRevisions(false, Object.keys(LESION_REVISIONS));');
   assert.ok(assignIdx >= 0 && saveIdx > assignIdx, 'saveLesionRevisions() precisa vir DEPOIS de restaurar LESION_REVISIONS, nunca antes');
 });
 

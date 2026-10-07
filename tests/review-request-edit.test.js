@@ -43,6 +43,9 @@ function buildCtx() {
     storage: { async get(k) { if (k in backing) return { value: backing[k] }; throw new Error('nf'); }, async set(k, v) { backing[k] = v; } },
     __backing: backing, DATA: [], saveData: () => {}, dirty: 0,
     markSyncDirty: async () => { ctx.dirty += 1; }, pushToFirebase: () => {},
+    // Bloco B — saveLesionRevisions() chama estas 3 funções (dirty-tracking/
+    // push incremental); stub no-op, mesmo espírito de markSyncDirty acima.
+    markLesionReviewDirty: () => {}, persistDirtyLesionReviewIds: async () => {}, pushLesionReviewsIncremental: () => {},
     toast: () => {},
     document: {
       getElementById: (id) => els[id] || null,

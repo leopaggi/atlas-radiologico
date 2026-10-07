@@ -34,7 +34,12 @@ function makeCtx() {
     storage: { async get(k) { if (k in backing) return { value: backing[k] }; throw new Error('nf'); }, async set(k, v) { backing[k] = v; } },
     __backing: backing,
     DATA: data, saveDataCalls: 0,
-    markSyncDirty: async () => {}, pushToFirebase: () => {}
+    markSyncDirty: async () => {}, pushToFirebase: () => {},
+    // Bloco B — saveLesionRevisions() (dentro do moduleSource) agora chama
+    // estas 3 funções (dirty-tracking/push incremental); fora do slice
+    // deste módulo (vivem antes de LESION_REVISIONS_KEY no index.html) —
+    // stub no-op, igual a markSyncDirty/pushToFirebase acima.
+    markLesionReviewDirty: () => {}, persistDirtyLesionReviewIds: async () => {}, pushLesionReviewsIncremental: () => {}
   };
   ctx.saveData = () => { ctx.saveDataCalls += 1; };
   vm.createContext(ctx);
