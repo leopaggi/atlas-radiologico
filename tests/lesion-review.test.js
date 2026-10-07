@@ -474,6 +474,135 @@ test('7) NOVA TENTATIVA após rollback: novo snapshot independente do anterior',
   assert.equal(secondApply.review.attempts[1].beforeSnapshot.classification, null, 'o segundo snapshot reflete o estado (já restaurado) ANTES da segunda aplicação, não o snapshot da primeira tentativa');
 });
 
+// ===========================================================================
+// APROVAÇÃO HUMANA ÚNICA — "✓ autorizar correção" na aba Propostas deixa de
+// exigir um 2º clique em "Validar correções" pra mesma decisão.
+// authorizeAndFinalizeReviewSolution() = authorizeAndApplyReviewSolution()
+// (1º aceite) + approveAppliedReviewSolution() (2º aceite) no mesmo clique —
+// reaproveita as duas funções oficiais já testadas acima, sem nenhuma
+// gravação de DATA/histórico nova.
+// ===========================================================================
+
+test('8) APROVAÇÃO ÚNICA: authorizeAndFinalizeReviewSolution() aplica os campos UMA ÚNICA VEZ e já finaliza como accepted', () => {
+  const lesion = makeLesion();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
+  const res = ctx.authorizeAndFinalizeReviewSolution(review.id);
+
+  assert.equal(res.ok, true);
+  assert.equal(res.review.status, 'accepted', 'pula applied_pending_validation — nunca fica "aguardando 2º aceite" de verdade');
+  assert.equal(ctx.DATA[0].classification, 'BIRADS', 'o campo foi aplicado em DATA');
+  assert.equal(ctx.DATA[0].name, lesion.name, 'só o campo autorizado muda');
+  assert.equal(res.review.attempts.length, 1, 'uma única tentativa — nunca aplica os campos duas vezes');
+  assert.ok(res.review.attempts[0].approvedAt, 'a mesma tentativa já sai aprovada');
+  assert.equal(ctx.saveDataCalls.length, 1, 'DATA só é persistida UMA vez (authorizeAndApplyReviewSolution); approveAppliedReviewSolution não toca DATA de novo');
+});
+
+test('8b) APROVAÇÃO ÚNICA: a proposta desaparece de "Propostas" E nunca aparece em "Validar correções"', () => {
+  const lesion = makeLesion();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
+  assert.equal(ctx.getProposedSolutions().length, 1, 'antes de autorizar: aparece em Propostas');
+
+  ctx.authorizeAndFinalizeReviewSolution(review.id);
+
+  assert.equal(ctx.getProposedSolutions().length, 0, 'some de Propostas');
+  assert.equal(ctx.getAppliedSolutionsAwaitingValidation().length, 0, 'NUNCA passa por Validar correções — nem transitoriamente, pela chamada síncrona');
+  assert.equal(ctx.countReadyLesionSolutions(), 0, 'contador de 💡 Soluções (que inclui Propostas) decrementa');
+});
+
+test('8c) APROVAÇÃO ÚNICA: histórico completo é criado (autorizado -> snapshot -> aplicado -> aprovado), na ordem', () => {
+  const lesion = makeLesion();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
+  const res = ctx.authorizeAndFinalizeReviewSolution(review.id);
+
+  const order = res.review.history.map(h => h.action);
+  const authIdx = order.indexOf('application_authorized');
+  const snapIdx = order.indexOf('before_snapshot_created');
+  const appliedIdx = order.indexOf('changes_applied');
+  const approvedIdx = order.indexOf('application_approved');
+  assert.ok(authIdx >= 0 && snapIdx >= 0 && appliedIdx >= 0 && approvedIdx >= 0, 'as 4 entradas de histórico das duas funções oficiais precisam existir');
+  assert.ok(authIdx < snapIdx && snapIdx < appliedIdx && appliedIdx < approvedIdx, 'ordem precisa ser: autorizado -> snapshot -> aplicado -> aprovado');
+});
+
+test('8d) APROVAÇÃO ÚNICA: rollback CONTINUA disponível e funcional para o fluxo clássico (authorizeAndApplyReviewSolution isolado, sem o novo combinador)', async () => {
+  const lesion = makeLesion();
+  const originalLesionSnapshot = JSON.parse(JSON.stringify(lesion));
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
+  // Fluxo clássico (ex.: importação manual) continua usando só o 1º aceite —
+  // nunca foi alterado por authorizeAndFinalizeReviewSolution() existir.
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  assert.equal(readGlobal(ctx, 'LESION_REVISIONS')[review.id].status, 'applied_pending_validation');
+
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'não serviu');
+  assert.equal(res.ok, true);
+  assert.equal(res.review.status, 'rejected');
+  const { _userUpdatedAt, ...restored } = serialize(ctx.DATA[0]);
+  const { _userUpdatedAt: _orig, ...orig } = originalLesionSnapshot;
+  assert.deepEqual(restored, orig, 'rollback continua restaurando exatamente o snapshot — mecanismo intacto');
+});
+
+test('8e) APROVAÇÃO ÚNICA: falha ao autorizar (ex.: proposedChanges inválido/ausente) não chama approveAppliedReviewSolution — nunca finaliza algo que não foi aplicado', () => {
+  const ctx = buildTestContext({ data: [makeLesion()] });
+  const { review } = ctx.createLesionReview('seed_1', 'pedido qualquer');
+  // Revisão ainda em pending (sem setReviewSolution) — authorizeAndApplyReviewSolution falha com not_proposed.
+  const res = ctx.authorizeAndFinalizeReviewSolution(review.id);
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'not_proposed');
+  assert.equal(readGlobal(ctx, 'LESION_REVISIONS')[review.id].status, 'pending', 'nada mudou — não foi autorizado nem finalizado');
+});
+
+test('8f) APROVAÇÃO ÚNICA: não afeta OUTRA revisão em manual_action_required (isolamento entre revisões)', () => {
+  const ctx = buildTestContext({ data: [makeLesion({ id: 'seed_1' }), makeLesion({ id: 'seed_2', name: 'Outra lesão' })] });
+  const manual = ctx.createLesionReview('seed_2', 'precisa de ação manual').review;
+  ctx.flagManualActionRequired(manual.id, 'não dá pra resolver automaticamente', 'campo fora da allowlist', { type: 'review_image', description: 'x' });
+  assert.equal(readGlobal(ctx, 'LESION_REVISIONS')[manual.id].status, 'manual_action_required');
+
+  const { review } = ctx.createLesionReview('seed_1', 'corrigir classificação');
+  ctx.setReviewSolution(review.id, 'aplicar BIRADS', { classification: 'BIRADS' });
+  ctx.authorizeAndFinalizeReviewSolution(review.id);
+
+  assert.equal(readGlobal(ctx, 'LESION_REVISIONS')[manual.id].status, 'manual_action_required', 'manual_action_required de OUTRA revisão não muda');
+  assert.equal(ctx.getManualActionSolutions().length, 1);
+});
+
+test('8g) APROVAÇÃO ÚNICA: rejeitar uma proposta diferente continua funcionando normalmente (sem interferência do novo combinador)', () => {
+  const ctx = buildTestContext({ data: [makeLesion({ id: 'seed_1' }), makeLesion({ id: 'seed_2', name: 'Outra lesão' })] });
+  const other = ctx.createLesionReview('seed_2', 'outro pedido').review;
+  ctx.setReviewSolution(other.id, 'ajustar tags', { tags: ['nova-tag'] });
+
+  const res = ctx.rejectProposedReviewSolution(other.id, 'não serve');
+  assert.equal(res.ok, true);
+  assert.equal(res.review.status, 'rejected');
+});
+
+test('ESTÁTICO: authorizeAndFinalizeReviewSolution() nunca cria revisão nova nem referencia DATA diretamente — só compõe as duas funções oficiais já existentes', () => {
+  const body = extractFn(moduleSource, 'authorizeAndFinalizeReviewSolution');
+  assert.doesNotMatch(body, /createLesionReview\(/);
+  assert.doesNotMatch(body, /\bDATA\b/, 'não toca DATA diretamente — delega inteiramente a authorizeAndApplyReviewSolution()');
+  assert.match(body, /authorizeAndApplyReviewSolution\(reviewId\)/);
+  assert.match(body, /approveAppliedReviewSolution\(reviewId\)/);
+});
+
+test('ESTÁTICO: NENHUMA autoaprovação — o pipeline de IA (setReviewSolution/applyAiPipelineResultToReview/runAiSolutionPipeline/runAutomaticTriagePipeline) nunca chama authorizeAndFinalizeReviewSolution', () => {
+  for (const name of ['setReviewSolution', 'applyAiPipelineResultToReview', 'runAiSolutionPipeline', 'runAutomaticTriagePipeline']) {
+    const re = new RegExp('(?:async\\s+)?function\\s+' + name + '\\s*\\(');
+    if (!re.test(html)) continue; // alguma dessas pode não estar no span deste módulo; checagem defensiva
+    const m = re.exec(html);
+    let depth = 0, i = html.indexOf('{', m.index);
+    const start = i;
+    for (; i < html.length; i += 1) { if (html[i] === '{') depth++; else if (html[i] === '}') { depth--; if (depth === 0) break; } }
+    const body = html.slice(start, i + 1);
+    assert.doesNotMatch(body, /authorizeAndFinalizeReviewSolution/, name + '() nunca pode chamar a aprovação humana única — só o clique explícito do usuário pode');
+  }
+});
+
 test('SEGURANÇA: proposedChanges inválido não é aceito e não altera DATA', () => {
   const lesion = makeLesion();
   const ctx = buildTestContext({ data: [lesion] });

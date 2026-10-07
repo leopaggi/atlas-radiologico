@@ -7512,6 +7512,26 @@ function approveAppliedReviewSolution(reviewId){
   return { ok:true, reason:null, review };
 }
 
+/* APROVAÇÃO HUMANA ÚNICA — "✓ autorizar correção" na aba Propostas. O
+   usuário já leu a proposta e o preview "✨ proposta" ali mesmo antes de
+   clicar; exigir depois um 2º clique em "Validar correções" pra mesma
+   decisão era dupla confirmação redundante. Aplica (1º aceite) e já
+   finaliza (2º aceite) no mesmo clique, reaproveitando EXATAMENTE
+   authorizeAndApplyReviewSolution/approveAppliedReviewSolution — nenhuma
+   gravação de DATA/histórico/snapshot nova, só a composição das duas já
+   existentes. NUNCA usada pelo fluxo de importação manual
+   (importReviewAiSolution/processReviewAiBatchItem): aquele cola JSON
+   colado de fora do app, sem o humano ter visto a prévia aqui dentro, então
+   continua propositalmente em applied_pending_validation — "Validar
+   correções" continua existindo e funcional pra esse caso. */
+function authorizeAndFinalizeReviewSolution(reviewId){
+  const applied = authorizeAndApplyReviewSolution(reviewId);
+  if(!applied.ok) return applied;
+  const finalized = approveAppliedReviewSolution(reviewId);
+  if(!finalized.ok) return finalized; // nunca deveria falhar (status recém-setado por applied.ok); nunca mascara erro
+  return { ok:true, reason:null, review: finalized.review };
+}
+
 /* SEGUNDO ACEITE — negado: "não funcionou, desfazer". Restaura a lesão
    EXATAMENTE a partir do beforeSnapshot daquela tentativa específica (nunca
    um snapshot de outra tentativa) e reabre a revisão em "rejected", pronta
@@ -19949,13 +19969,16 @@ function openReadySolutionsModal(){
         };
       } else {
         row.querySelector('.review-authorize').onclick = async ()=>{
-          const res = authorizeAndApplyReviewSolution(r.id);
+          // Aprovação humana ÚNICA: já leu a proposta/preview aqui na aba
+          // Propostas — aplica e finaliza no mesmo clique (ver
+          // authorizeAndFinalizeReviewSolution), sem exigir um 2º aceite em
+          // "Validar correções" nem trocar de aba automaticamente.
+          const res = authorizeAndFinalizeReviewSolution(r.id);
           if(res.ok){
             await saveLesionRevisions();
             renderAll(); // DATA mudou de verdade — mantém a grade/lista principal em dia
-            toast('Correção autorizada e aplicada. Aguardando validação.');
-            renderBothLists();
-            showTab('applied');
+            toast('Correção aplicada e aprovada.');
+            renderBothLists(); // atualiza contadores das abas; permanece em "Propostas"
           } else {
             toast('Não foi possível aplicar a correção (' + (res.reason||'erro') + ').');
           }
