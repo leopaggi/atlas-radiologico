@@ -29471,6 +29471,10 @@ function openStructuralPlanPreviewModalForReview(reviewId, onDone){
 function openStructuralPlanPreviewModal(validated, onDone){
   const ov = document.createElement('div');
   ov.className = 'overlay';
+  // z-index exclusivo deste overlay: pode ser aberto por cima do modal
+  // "Soluções disponíveis" (também .overlay, z-index 50 padrão), então
+  // precisa de prioridade visual sem alterar a classe global .overlay.
+  ov.style.zIndex = '60';
   ov.onclick = e=>{ if(e.target===ov) close(); };
   const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) close(); };
   // onDone re-renderiza a lista por trás do modal (card com 🟢/▶ logo após o

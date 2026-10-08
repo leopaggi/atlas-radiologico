@@ -226,3 +226,34 @@ test('card tem botão de prévia e modal re-renderiza ao fechar', () => {
   assert.match(html, /if\(typeof onDone==='function'\) onDone\(\)/);
   assert.doesNotMatch(html, /renderBothListsRef = null/);
 });
+
+test('overlay da prévia estrutural tem z-index acima do modal pai (sem alterar a classe global .overlay)', () => {
+  // Bug real: "Soluções disponíveis" (.overlay, z-index 50) permanece aberto
+  // atrás da prévia estrutural; a prévia também recebia z-index 50 da classe
+  // global e ficava encoberta. Correção mínima: só este overlay recebe um
+  // z-index maior via style inline — a classe .overlay global não muda.
+  // fn() não serve aqui: o corpo contém replace(/"/g,...) cuja regex literal
+  // (uma única aspa dupla) confunde o contador de chaves por quote. Como esta
+  // função é a última antes de </script>, basta um corte direto entre marcos.
+  const fnStart = html.indexOf('function openStructuralPlanPreviewModal(validated, onDone){');
+  assert.ok(fnStart !== -1, 'openStructuralPlanPreviewModal existe');
+  const overlayPreviewFn = html.slice(fnStart, html.indexOf('</script>', fnStart));
+  const zIndexMatch = overlayPreviewFn.match(/ov\.style\.zIndex\s*=\s*['"](\d+)['"]/);
+  assert.ok(zIndexMatch, 'openStructuralPlanPreviewModal define ov.style.zIndex');
+  const previewZIndex = Number(zIndexMatch[1]);
+
+  const overlayClassMatch = html.match(/\.overlay\{[^}]*z-index:\s*(\d+)/);
+  assert.ok(overlayClassMatch, 'classe global .overlay define z-index base');
+  const baseZIndex = Number(overlayClassMatch[1]);
+
+  assert.ok(previewZIndex > baseZIndex, 'prévia estrutural fica visualmente por cima do modal pai');
+
+  // A prévia não fecha nenhum outro overlay existente — ela só cria e anexa
+  // o seu próprio, nunca busca/mexe em outros `.overlay` já abertos.
+  assert.doesNotMatch(overlayPreviewFn, /document\.body\.querySelectorAll\(['"]\.overlay['"]\)/);
+
+  // openStructuralPlanPreviewModalForReview não fecha nada antes de abrir a
+  // prévia (preserva "Soluções disponíveis" por trás).
+  const forReviewFn = fn('openStructuralPlanPreviewModalForReview');
+  assert.doesNotMatch(forReviewFn, /close\(\)/, 'abrir a prévia a partir da revisão não fecha o modal pai');
+});
