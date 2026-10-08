@@ -59,9 +59,12 @@ const names = ['normalizeExternalTitle', 'tokenizeExternalTitle',
   'structuralApplyTransferImages', 'structuralApplyAddCases', 'structuralApplyUpdateContent',
   'rollbackStructuralExecution', 'resolveReviewManually',
   'structuralPlanPreviewHtml', 'structuralHistoryCardHtml', 'getEffectiveStructuralStatus',
-  'imageOwnerIdV1', 'assertManualImageOwnershipChange', 'canChangeImageOwnership', 'clinicalCaseIdentityKey'
+  'imageOwnerIdV1', 'assertManualImageOwnershipChange', 'canChangeImageOwnership', 'clinicalCaseIdentityKey',
+  // Auditoria 2026-10-08 — prévia detalhada ATUAL×PROPOSTO de update_content.
+  'structuralUpdateContentFieldDiffs', 'structuralPlanLiveView'
 ];
 const src = names.map(fn).join('\n');
+const fieldLabelsConst = html.slice(html.indexOf('const STRUCTURAL_UPDATE_CONTENT_FIELD_LABELS = '), html.indexOf('function structuralPlanPreviewHtml('));
 const planTypesConst = html.slice(html.indexOf('const STRUCTURAL_PLAN_TYPES = '), html.indexOf('function structuralPlanError('));
 const editableFieldsConst = html.slice(html.indexOf("const LESION_REVIEW_EDITABLE_FIELDS = "), html.indexOf('function validateProposedChanges('));
 const execConsts = html.slice(html.indexOf('const STRUCTURAL_EXECUTOR_VERSION = '), html.indexOf('function structuralExecutionId('));
@@ -119,7 +122,7 @@ function ctxFixture() {
   });
   ctx.calls = calls;
   ctx.__backing = backing;
-  vm.runInContext(planTypesConst + '\n' + editableFieldsConst + '\n' + execConsts + '\n' + ownershipConst + statusesConst + anatomicGuardConst + snapshotStoreConst + '\n' + schemaVersionConst + src, ctx, { filename: 'update-content-test.js' });
+  vm.runInContext(planTypesConst + '\n' + editableFieldsConst + '\n' + execConsts + '\n' + ownershipConst + statusesConst + anatomicGuardConst + snapshotStoreConst + '\n' + schemaVersionConst + '\n' + fieldLabelsConst + '\n' + src, ctx, { filename: 'update-content-test.js' });
   vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;', ctx);
   return ctx;
 }
@@ -426,4 +429,101 @@ test('ESTÁTICO: a guarda de identidade nunca lê humanOverride (não existe for
   assert.doesNotMatch(updateBranch, /humanOverride[^)]*\?|if\([^)]*humanOverride[^)]*\)\s*\{\s*(?:return|$)/, 'nenhum "if(humanOverride)" controlando o fluxo da guarda de identidade');
   const applyBody = fn('structuralApplyUpdateContent');
   assert.doesNotMatch(applyBody, /humanOverride/);
+});
+
+// ===========================================================================
+// PRÉVIA DETALHADA update_content (auditoria 2026-10-08) — ATUAL × PROPOSTO
+// por campo, lida do estado VIVO (structuralPlanLesion), 100% read-only.
+// Abrir a prévia NUNCA executa/aceita/rejeita nada — o botão "Aceitar
+// plano" continua vindo de structuralPlanStatusRowHtml (fluxo já
+// existente, não tocado aqui).
+// ===========================================================================
+
+test('PREVIEW-A. notes: ATUAL e PROPOSTO em blocos separados, preservando quebras de linha', async () => {
+  const ctx = ctxFixture();
+  await ctx.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900, { notes: 'linha 1\nlinha 2' })]));
+  const v = ctx.structuralPlanLiveView('RA');
+  assert.ok(v, 'liveView precisa devolver o plano (fields/expectedIdentity propagados)');
+  const htmlOut = ctx.structuralPlanPreviewHtml(v);
+  assert.match(htmlOut, /notas antigas/, 'ATUAL (valor hoje na lesão) aparece');
+  assert.match(htmlOut, /linha 1<br>linha 2/, 'PROPOSTO preserva quebra de linha como <br>, nunca colapsada');
+});
+
+test('PREVIEW-B. tags: mostra atuais, propostas, adicionadas e removidas', async () => {
+  const ctx = ctxFixture();
+  // atual = ['antigo']; proposto = ['novo1'] => removida 'antigo', adicionada 'novo1'.
+  await ctx.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900, { tags: ['novo1'] })]));
+  const v = ctx.structuralPlanLiveView('RA');
+  const htmlOut = ctx.structuralPlanPreviewHtml(v);
+  assert.match(htmlOut, /atuais: antigo/);
+  assert.match(htmlOut, /propostas: novo1/);
+  assert.match(htmlOut, /adicionadas: novo1/);
+  assert.match(htmlOut, /removidas: antigo/);
+});
+
+test('PREVIEW-C. clinicalTags: mostra adicionadas e removidas corretamente', async () => {
+  const ctx = ctxFixture();
+  ctx.DATA.find(e => e.id === 'seed_900').clinicalTags = ['ct_antiga'];
+  await ctx.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900, { clinicalTags: ['ct_nova'] })]));
+  const v = ctx.structuralPlanLiveView('RA');
+  const htmlOut = ctx.structuralPlanPreviewHtml(v);
+  assert.match(htmlOut, /adicionadas: ct_nova/);
+  assert.match(htmlOut, /removidas: ct_antiga/);
+});
+
+test('PREVIEW-D. classification: valor → null e null → valor, ambos mostrados como "(vazio)"', async () => {
+  const ctxToNull = ctxFixture();
+  await ctxToNull.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900, { classification: null })]));
+  const vToNull = ctxToNull.structuralPlanLiveView('RA');
+  const htmlToNull = ctxToNull.structuralPlanPreviewHtml(vToNull);
+  assert.match(htmlToNull, /OLD\s*→\s*\(vazio\)/, 'valor atual (OLD) → proposto vazio');
+
+  const ctxFromNull = ctxFixture();
+  ctxFromNull.DATA.find(e => e.id === 'seed_900').classification = null;
+  await ctxFromNull.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900, { classification: 'NEW' })]));
+  const vFromNull = ctxFromNull.structuralPlanLiveView('RA');
+  const htmlFromNull = ctxFromNull.structuralPlanPreviewHtml(vFromNull);
+  assert.match(htmlFromNull, /\(vazio\)\s*→\s*NEW/, 'atual vazio → proposto NEW');
+});
+
+test('PREVIEW-E. expectedIdentity não corresponde mais à lesão atual => alerta vermelho, plano segue "desatualizado" (accept já fica desabilitado pelo mecanismo existente)', async () => {
+  const ctx = ctxFixture();
+  await ctx.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900, { notes: 'x' })]));
+  // Lesão foi editada DEPOIS do import (nome mudou) — identidade não bate mais.
+  ctx.DATA.find(e => e.id === 'seed_900').name = 'Nome mudou depois do import';
+  const v = ctx.structuralPlanLiveView('RA');
+  const htmlOut = ctx.structuralPlanPreviewHtml(v);
+  assert.match(htmlOut, /IDENTIDADE NÃO CORRESPONDE/, 'alerta vermelho aparece no topo da prévia');
+  assert.match(htmlOut, /NÃO aceite este plano por esta prévia/);
+  // Mecanismo JÁ EXISTENTE (isStructuralPlanStale, não tocado aqui) continua
+  // sendo quem desabilita o botão "Aceitar plano" — nenhuma lógica nova.
+  const stale = ctx.isStructuralPlanStale(ctx.LESION_REVISIONS.RA);
+  assert.equal(stale.stale, true, 'a mesma mudança que causa o mismatch de identidade também marca o plano como desatualizado (accept já fica disabled)');
+});
+
+test('PREVIEW-F. abrir a prévia (structuralPlanLiveView + structuralPlanPreviewHtml) nunca altera DATA/LESION_REVISIONS', async () => {
+  const ctx = ctxFixture();
+  await ctx.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900, { notes: 'x', tags: ['t'], clinicalTags: ['ct'] })]));
+  const dataBefore = JSON.parse(JSON.stringify(ctx.DATA));
+  const revBefore = JSON.parse(JSON.stringify(ctx.LESION_REVISIONS));
+  const savesBeforePreview = ctx.calls.saves; // já inclui o import — a prévia não pode somar mais nada
+  const v = ctx.structuralPlanLiveView('RA');
+  ctx.structuralPlanPreviewHtml(v);
+  ctx.structuralPlanPreviewHtml(v); // chamar de novo — idempotente, read-only
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.DATA)), dataBefore, 'DATA byte a byte intacto depois de abrir a prévia');
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.LESION_REVISIONS)), revBefore, 'LESION_REVISIONS byte a byte intacto depois de abrir a prévia');
+  assert.equal(ctx.calls.saves, savesBeforePreview, 'nenhuma função de persistência foi chamada só de abrir a prévia (contador não muda)');
+});
+
+test('PREVIEW-G. prévia de outros tipos de structuralPlan (merge_duplicates) continua exatamente igual (não tocado)', () => {
+  const ctx = ctxFixture();
+  const v = { reviewId: 'RM', type: 'merge_duplicates', keeperId: 'seed_900', removeId: 'seed_901',
+    keeperName: 'Lesão seed_900', removeName: 'Lesão seed_901', merge: { name: 'Nome final', tags: ['a', 'b'] },
+    reasoning: 'motivo de teste' };
+  const htmlOut = ctx.structuralPlanPreviewHtml(v);
+  assert.match(htmlOut, /Fusão: Lesão seed_901 → Lesão seed_900/);
+  assert.match(htmlOut, /MANTER:<\/b> seed_900/);
+  assert.match(htmlOut, /REMOVER:<\/b> seed_901/);
+  assert.match(htmlOut, /DADOS QUE SERIAM INCORPORADOS/);
+  assert.doesNotMatch(htmlOut, /IDENTIDADE NÃO CORRESPONDE/, 'alerta de identidade é exclusivo de update_content');
 });
