@@ -717,6 +717,253 @@ test('M) conflito (field_changed_after_apply) NÃO chama saveData, NÃO altera a
 });
 
 // ===========================================================================
+// "↩ DESFAZER ESTA RODADA" (auditoria 2026-10-08) — seleção EXATA por
+// review.aiPipeline.batchId (nunca ordem/contagem/intervalo/seed_N). Prévia
+// 100% read-only (reusa computeReviewAttemptRollbackPlan/getReviewAttemptSnapshot
+// pra classificar honestamente); execução sequencial reaproveitando
+// EXATAMENTE rollbackAppliedReviewSolution (nenhuma mutação direta de
+// DATA/LESION_REVISIONS neste bloco).
+// ===========================================================================
+
+function stampBatch(review, batchId, completedAt) {
+  review.aiPipeline = { state: 'proposed', batchId, completedAt: completedAt || Date.now() };
+}
+
+test('BATCH-A. getAiPipelineBatchReviews seleciona SOMENTE revisões do batchId exato', () => {
+  const ctx = buildTestContext({ data: [makeLesionRich({ id: 'seed_1' }), makeLesionRich({ id: 'seed_2' })] });
+  const r1 = ctx.createLesionReview('seed_1', 'x').review;
+  const r2 = ctx.createLesionReview('seed_2', 'y').review;
+  stampBatch(r1, 'aibatch_AAA');
+  stampBatch(r2, 'aibatch_AAA');
+  const found = ctx.getAiPipelineBatchReviews('aibatch_AAA');
+  assert.equal(found.length, 2);
+  assert.deepEqual(found.map(r => r.id).sort(), [r1.id, r2.id].sort());
+});
+
+test('BATCH-B. getAiPipelineBatchReviews NÃO inclui revisões de outro batchId', () => {
+  const ctx = buildTestContext({ data: [makeLesionRich({ id: 'seed_1' }), makeLesionRich({ id: 'seed_2' })] });
+  const r1 = ctx.createLesionReview('seed_1', 'x').review;
+  const r2 = ctx.createLesionReview('seed_2', 'y').review;
+  stampBatch(r1, 'aibatch_AAA');
+  stampBatch(r2, 'aibatch_BBB');
+  const found = ctx.getAiPipelineBatchReviews('aibatch_AAA');
+  assert.deepEqual(found.map(r => r.id), [r1.id]);
+});
+
+test('BATCH-C. getAiPipelineBatchReviews NÃO inclui revisão sem aiPipeline/batchId', () => {
+  const ctx = buildTestContext({ data: [makeLesionRich({ id: 'seed_1' }), makeLesionRich({ id: 'seed_2' })] });
+  ctx.createLesionReview('seed_1', 'x'); // sem aiPipeline — nunca passou pelo pipeline da IA
+  const r2 = ctx.createLesionReview('seed_2', 'y').review;
+  stampBatch(r2, 'aibatch_AAA');
+  const found = ctx.getAiPipelineBatchReviews('aibatch_AAA');
+  assert.deepEqual(found.map(r => r.id), [r2.id]);
+});
+
+test('BATCH-D. buildAiPipelineBatchRollbackPreview nunca muta DATA', async () => {
+  const ctx = buildTestContext({ data: [makeLesionRich({ id: 'seed_1' })] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 's', { notes: 'nota nova' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  stampBatch(review, 'aibatch_AAA');
+  const dataBefore = serialize(ctx.DATA);
+  await ctx.buildAiPipelineBatchRollbackPreview('aibatch_AAA');
+  assert.deepEqual(serialize(ctx.DATA), dataBefore, 'DATA byte a byte intacto só de montar a prévia');
+});
+
+test('BATCH-E. buildAiPipelineBatchRollbackPreview nunca muta LESION_REVISIONS', async () => {
+  const ctx = buildTestContext({ data: [makeLesionRich({ id: 'seed_1' })] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 's', { notes: 'nota nova' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  stampBatch(review, 'aibatch_AAA');
+  const revBefore = serialize(readGlobal(ctx, 'LESION_REVISIONS'));
+  await ctx.buildAiPipelineBatchRollbackPreview('aibatch_AAA');
+  assert.deepEqual(serialize(readGlobal(ctx, 'LESION_REVISIONS')), revBefore, 'LESION_REVISIONS byte a byte intacto só de montar a prévia');
+});
+
+test('BATCH-F. item sem conflito aparece como "safe" com os campos a restaurar', async () => {
+  const ctx = buildTestContext({ data: [makeLesionRich({ id: 'seed_1' })] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 's', { notes: 'nota nova' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  stampBatch(review, 'aibatch_AAA');
+  const preview = await ctx.buildAiPipelineBatchRollbackPreview('aibatch_AAA');
+  assert.equal(preview.summary.safe, 1);
+  assert.equal(preview.items[0].outcome, 'safe');
+  assert.deepEqual(serialize(preview.items[0].fields), ['notes']);
+});
+
+test('BATCH-G. item com edição posterior NO MESMO CAMPO aparece como "stale" (bloqueado)', async () => {
+  const ctx = buildTestContext({ data: [makeLesionRich({ id: 'seed_1' })] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 's', { notes: 'nota nova' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  stampBatch(review, 'aibatch_AAA');
+  ctx.DATA[0].notes = 'editado depois';
+  const preview = await ctx.buildAiPipelineBatchRollbackPreview('aibatch_AAA');
+  assert.equal(preview.summary.stale, 1);
+  assert.equal(preview.items[0].outcome, 'stale');
+  assert.equal(preview.items[0].reason, 'field_changed_after_apply');
+  assert.equal(preview.items[0].field, 'notes');
+});
+
+test('BATCH-H. revisão já resolvida (fora de applied_pending_validation) aparece como "ineligible"', async () => {
+  const ctx = buildTestContext({ data: [makeLesionRich({ id: 'seed_1' })] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 's', { notes: 'nota nova' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  ctx.approveAppliedReviewSolution(review.id); // já resolvida -> accepted
+  stampBatch(review, 'aibatch_AAA');
+  const preview = await ctx.buildAiPipelineBatchRollbackPreview('aibatch_AAA');
+  assert.equal(preview.summary.ineligible, 1);
+  assert.equal(preview.items[0].outcome, 'ineligible');
+  assert.equal(preview.items[0].reason, 'not_awaiting_validation');
+  assert.equal(preview.summary.alreadyResolved, 1);
+});
+
+test('BATCH-I. executeAiPipelineBatchRollback chama rollbackAppliedReviewSolution SEQUENCIALMENTE (nunca concorrente)', async () => {
+  const ctx = buildTestContext({ data: [makeLesionRich({ id: 'seed_1' }), makeLesionRich({ id: 'seed_2' })] });
+  const r1 = ctx.createLesionReview('seed_1', 'x').review;
+  ctx.setReviewSolution(r1.id, 's', { notes: 'n1' });
+  ctx.authorizeAndApplyReviewSolution(r1.id);
+  stampBatch(r1, 'aibatch_AAA');
+  const r2 = ctx.createLesionReview('seed_2', 'y').review;
+  ctx.setReviewSolution(r2.id, 's', { notes: 'n2' });
+  ctx.authorizeAndApplyReviewSolution(r2.id);
+  stampBatch(r2, 'aibatch_AAA');
+
+  const preview = await ctx.buildAiPipelineBatchRollbackPreview('aibatch_AAA');
+  assert.equal(preview.summary.safe, 2);
+
+  const order = [];
+  let concurrent = 0, maxConcurrent = 0;
+  const realRollback = ctx.rollbackAppliedReviewSolution;
+  ctx.rollbackAppliedReviewSolution = async (reviewId, reason) => {
+    concurrent++; maxConcurrent = Math.max(maxConcurrent, concurrent);
+    order.push(reviewId);
+    const res = await realRollback(reviewId, reason);
+    concurrent--;
+    return res;
+  };
+  const report = await ctx.executeAiPipelineBatchRollback('aibatch_AAA', preview, 'motivo teste');
+  assert.equal(maxConcurrent, 1, 'nunca mais de 1 chamada em voo — nunca Promise.all');
+  assert.deepEqual(order, [r1.id, r2.id], 'ordem segue a ordem da prévia');
+  assert.equal(report.success, 2);
+});
+
+test('BATCH-J. item "stale" NUNCA chama rollbackAppliedReviewSolution (fica "skipped")', async () => {
+  const ctx = buildTestContext({ data: [makeLesionRich({ id: 'seed_1' })] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 's', { notes: 'nota nova' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  stampBatch(review, 'aibatch_AAA');
+  ctx.DATA[0].notes = 'editado depois';
+  const preview = await ctx.buildAiPipelineBatchRollbackPreview('aibatch_AAA');
+  assert.equal(preview.items[0].outcome, 'stale');
+
+  let called = false;
+  ctx.rollbackAppliedReviewSolution = async () => { called = true; return { ok: true }; };
+  const report = await ctx.executeAiPipelineBatchRollback('aibatch_AAA', preview, 'x');
+  assert.equal(called, false, 'rollbackAppliedReviewSolution nunca é chamado pra item stale');
+  assert.equal(report.skipped, 1);
+  assert.equal(report.results[0].outcome, 'skipped');
+});
+
+test('BATCH-K. falha (exceção) em UM item não corrompe os demais itens seguros do lote', async () => {
+  const ctx = buildTestContext({ data: [makeLesionRich({ id: 'seed_1' }), makeLesionRich({ id: 'seed_2' })] });
+  const r1 = ctx.createLesionReview('seed_1', 'x').review;
+  ctx.setReviewSolution(r1.id, 's', { notes: 'n1' });
+  ctx.authorizeAndApplyReviewSolution(r1.id);
+  stampBatch(r1, 'aibatch_AAA');
+  const r2 = ctx.createLesionReview('seed_2', 'y').review;
+  ctx.setReviewSolution(r2.id, 's', { notes: 'n2' });
+  ctx.authorizeAndApplyReviewSolution(r2.id);
+  stampBatch(r2, 'aibatch_AAA');
+  const preview = await ctx.buildAiPipelineBatchRollbackPreview('aibatch_AAA');
+  assert.equal(preview.summary.safe, 2);
+
+  const realRollback = ctx.rollbackAppliedReviewSolution;
+  ctx.rollbackAppliedReviewSolution = async (reviewId, reason) => {
+    if (reviewId === r1.id) throw new Error('falha simulada de rede');
+    return realRollback(reviewId, reason);
+  };
+  const report = await ctx.executeAiPipelineBatchRollback('aibatch_AAA', preview, 'motivo teste');
+  assert.equal(report.failed, 1);
+  assert.equal(report.success, 1);
+  const byId = Object.fromEntries(report.results.map(r => [r.reviewId, r]));
+  assert.equal(byId[r1.id].outcome, 'failed');
+  assert.equal(byId[r2.id].outcome, 'success', 'o item seguinte continua sendo processado normalmente');
+  assert.equal(ctx.DATA[1].notes, 'lesão óssea benigna clássica', 'r2 foi de fato restaurada, mesmo com a falha de r1');
+});
+
+test('BATCH-L. relatório final distingue sucesso/conflito/ignorada corretamente (e a execução sempre revalida — nunca confia na prévia já velha)', async () => {
+  const ctx = buildTestContext({ data: [makeLesionRich({ id: 'seed_1' }), makeLesionRich({ id: 'seed_2' }), makeLesionRich({ id: 'seed_3' }), makeLesionRich({ id: 'seed_4' })] });
+  const rOk = ctx.createLesionReview('seed_1', 'x').review;
+  ctx.setReviewSolution(rOk.id, 's', { notes: 'n1' }); ctx.authorizeAndApplyReviewSolution(rOk.id); stampBatch(rOk, 'aibatch_AAA');
+  const rConflict = ctx.createLesionReview('seed_2', 'y').review;
+  ctx.setReviewSolution(rConflict.id, 's', { notes: 'n2' }); ctx.authorizeAndApplyReviewSolution(rConflict.id); stampBatch(rConflict, 'aibatch_AAA');
+  const rStale = ctx.createLesionReview('seed_3', 'z').review;
+  ctx.setReviewSolution(rStale.id, 's', { notes: 'n3' }); ctx.authorizeAndApplyReviewSolution(rStale.id); stampBatch(rStale, 'aibatch_AAA');
+  ctx.DATA.find(e => e.id === 'seed_3').notes = 'editado antes da prévia'; // já stale na própria prévia
+  const rIneligible = ctx.createLesionReview('seed_4', 'w').review;
+  stampBatch(rIneligible, 'aibatch_AAA'); // nunca autorizado -> not_awaiting_validation
+
+  const preview = await ctx.buildAiPipelineBatchRollbackPreview('aibatch_AAA');
+  assert.equal(preview.summary.safe, 2); // rOk, rConflict — ambos "safe" NA PRÉVIA
+  assert.equal(preview.summary.stale, 1); // rStale
+  assert.equal(preview.summary.ineligible, 1); // rIneligible
+
+  // Edição concorrente ENTRE a prévia e a execução — prova que a execução
+  // real revalida de novo (nunca confia cegamente na classificação da prévia).
+  ctx.DATA.find(e => e.id === 'seed_2').notes = 'mudou depois da prévia';
+
+  const report = await ctx.executeAiPipelineBatchRollback('aibatch_AAA', preview, 'motivo teste');
+  assert.equal(report.success, 1); // só rOk
+  assert.equal(report.conflict, 1); // rConflict — revalidado e bloqueado na hora de executar
+  assert.equal(report.skipped, 2); // rStale + rIneligible
+
+  const byId = Object.fromEntries(report.results.map(r => [r.reviewId, r]));
+  assert.equal(byId[rOk.id].outcome, 'success');
+  assert.equal(byId[rConflict.id].outcome, 'conflict');
+  assert.equal(byId[rStale.id].outcome, 'skipped');
+  assert.equal(byId[rIneligible.id].outcome, 'skipped');
+});
+
+test('BATCH-M. gate do botão (aiPipelineBatchHasEligibleReviews) é false sem batchId/revisão elegível', () => {
+  const ctx = buildTestContext({ data: [makeLesionRich({ id: 'seed_1' })] });
+  assert.equal(ctx.aiPipelineBatchHasEligibleReviews(''), false);
+  assert.equal(ctx.aiPipelineBatchHasEligibleReviews(null), false);
+  assert.equal(ctx.aiPipelineBatchHasEligibleReviews('aibatch_nope'), false, 'nenhuma revisão com esse batchId');
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  stampBatch(review, 'aibatch_AAA'); // ainda pending, nunca aplicado — sem attempts
+  assert.equal(ctx.aiPipelineBatchHasEligibleReviews('aibatch_AAA'), false, 'revisão existe mas nunca foi aplicada');
+});
+
+test('BATCH-N. rollback individual (sem nenhuma relação com batch) continua funcionando sem regressão', async () => {
+  const ctx = buildTestContext({ data: [makeLesionRich({ id: 'seed_1' })] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 's', { notes: 'nota nova' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'teste');
+  assert.equal(res.ok, true);
+  assert.equal(ctx.DATA[0].notes, 'lesão óssea benigna clássica');
+  assert.equal(res.review.status, 'rejected');
+});
+
+test('BATCH-O. execução em lote gera exatamente 1 saveData() por item seguro executado — nenhum atalho/otimização de sync introduzido', async () => {
+  const ctx = buildTestContext({ data: [makeLesionRich({ id: 'seed_1' }), makeLesionRich({ id: 'seed_2' })] });
+  const r1 = ctx.createLesionReview('seed_1', 'x').review;
+  ctx.setReviewSolution(r1.id, 's', { notes: 'n1' }); ctx.authorizeAndApplyReviewSolution(r1.id); stampBatch(r1, 'aibatch_AAA');
+  const r2 = ctx.createLesionReview('seed_2', 'y').review;
+  ctx.setReviewSolution(r2.id, 's', { notes: 'n2' }); ctx.authorizeAndApplyReviewSolution(r2.id); stampBatch(r2, 'aibatch_AAA');
+  const saveDataCallsBefore = ctx.saveDataCalls.length; // já inclui as 2 aplicações
+  const preview = await ctx.buildAiPipelineBatchRollbackPreview('aibatch_AAA');
+  const report = await ctx.executeAiPipelineBatchRollback('aibatch_AAA', preview, 'motivo teste');
+  assert.equal(report.success, 2);
+  assert.equal(ctx.saveDataCalls.length, saveDataCallsBefore + 2, 'exatamente 1 saveData() por rollback individual executado — sem agrupar nada');
+});
+
+// ===========================================================================
 // APROVAÇÃO HUMANA ÚNICA — "✓ autorizar correção" na aba Propostas deixa de
 // exigir um 2º clique em "Validar correções" pra mesma decisão.
 // authorizeAndFinalizeReviewSolution() = authorizeAndApplyReviewSolution()

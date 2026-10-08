@@ -7962,6 +7962,212 @@ async function rollbackAppliedReviewSolution(reviewId, reasonText){
   return { ok:true, reason:null, review };
 }
 
+/* ============================================================
+   "↩ DESFAZER ESTA RODADA" (auditoria 2026-10-08) — desfazer em lote de
+   uma rodada específica da IA. Seleção é SEMPRE por review.aiPipeline.
+   batchId (gravado uma única vez por runAiSolutionPipeline(), nunca
+   limpo depois — ver auditoria anterior) — NUNCA por ordem/contagem/
+   intervalo de tempo/seed_N. completedAt só aparece como informação
+   auxiliar na prévia, nunca como critério de seleção.
+
+   Reaproveita 100% a lógica já existente: computeReviewAttemptRollbackPlan
+   (decisão de segurança) e rollbackAppliedReviewSolution (execução, 1
+   revisão por vez — mesma função do botão individual, sem nenhuma lógica
+   nova de mutação). Este bloco nunca toca DATA/LESION_REVISIONS
+   diretamente — só lê (prévia) ou chama a função individual (execução).
+   ============================================================ */
+// Seleção EXATA por batchId — nunca heurística de ordem/contagem/tempo.
+function getAiPipelineBatchReviews(batchId){
+  if(!batchId || typeof batchId!=='string') return [];
+  return Object.values(LESION_REVISIONS || {}).filter(r=>r && r.aiPipeline && r.aiPipeline.batchId===batchId);
+}
+// Checagem BARATA/síncrona só pra decidir se o botão aparece na linha —
+// não resolve snapshot nem roda computeReviewAttemptRollbackPlan (isso é
+// assíncrono); a prévia completa (assíncrona) é quem decide de verdade
+// quais itens são 'safe'. Nunca usada para autorizar a execução em si.
+function aiPipelineBatchHasEligibleReviews(batchId){
+  return getAiPipelineBatchReviews(batchId).some(r=>
+    r.status==='applied_pending_validation' && !isGlobalReview(r) && Array.isArray(r.attempts) && r.attempts.length>0
+  );
+}
+// Prévia READ-ONLY de UMA revisão da rodada — nunca muta nada. Reusa
+// getReviewAttemptSnapshot/computeReviewAttemptRollbackPlan, as MESMAS
+// funções do rollback individual, pra classificar com a mesma honestidade
+// (safe/stale/ineligible) que a execução real usaria.
+async function buildAiPipelineBatchRollbackItemPreview(review){
+  // Resolve pelo DATA vivo via .id (nunca confia em seed_N isolado) — mesma
+  // busca de structuralPlanLesion(), inline aqui pra este bloco não
+  // depender de uma função de outro módulo (planos estruturais).
+  const lesion = (Array.isArray(DATA) ? DATA : []).find(e=>e && e.id===review.lesionId) || null;
+  const attempt = review.attempts && review.attempts[review.attempts.length-1];
+  const base = {
+    reviewId: review.id, lesionId: review.lesionId,
+    lesionName: (lesion && lesion.name) || review.lesionName || null,
+    section: lesion ? lesion.s : null, site: lesion ? lesion.site : null,
+    status: review.status, attemptId: attempt ? attempt.id : null,
+    appliedAt: attempt ? attempt.appliedAt : null,
+    outcome:'ineligible', reason:null, field:null, fields:null
+  };
+  if(isGlobalReview(review)) return Object.assign(base, { reason:GLOBAL_REVIEW_NO_TARGET });
+  if(review.status!=='applied_pending_validation') return Object.assign(base, { reason:'not_awaiting_validation' });
+  if(!attempt) return Object.assign(base, { reason:'no_snapshot' });
+  if(!lesion) return Object.assign(base, { reason:'lesion_not_found' });
+  const snap = await getReviewAttemptSnapshot(review, attempt);
+  if(!snap.ok || !snap.beforeSnapshot) return Object.assign(base, { reason: snap.reason || 'no_snapshot' });
+  const plan = computeReviewAttemptRollbackPlan(lesion, Object.assign({}, attempt, { beforeSnapshot: snap.beforeSnapshot }));
+  if(!plan.ok){
+    base.outcome = plan.reason==='field_changed_after_apply' ? 'stale' : 'ineligible';
+    base.reason = plan.reason; base.field = plan.field||null;
+    return base;
+  }
+  base.outcome = 'safe'; base.fields = Object.keys(plan.changes);
+  return base;
+}
+// Prévia da RODADA inteira — sequencial (cada item resolve seu próprio
+// snapshot); nunca Promise.all (mesma regra de nunca paralelizar que vale
+// pra execução). 100% leitura — nenhuma escrita acontece aqui.
+async function buildAiPipelineBatchRollbackPreview(batchId){
+  const reviews = getAiPipelineBatchReviews(batchId);
+  const items = [];
+  for(const r of reviews) items.push(await buildAiPipelineBatchRollbackItemPreview(r));
+  const completedAts = reviews.map(r=>r.aiPipeline && r.aiPipeline.completedAt).filter(x=>typeof x==='number');
+  return {
+    batchId,
+    summary: {
+      total: items.length,
+      safe: items.filter(i=>i.outcome==='safe').length,
+      stale: items.filter(i=>i.outcome==='stale').length,
+      ineligible: items.filter(i=>i.outcome==='ineligible').length,
+      alreadyResolved: items.filter(i=>['rejected','accepted','cancelled'].includes(i.status)).length,
+      // Só informativo — NUNCA usado para selecionar quem entra na rodada.
+      completedAtMin: completedAts.length ? Math.min(...completedAts) : null,
+      completedAtMax: completedAts.length ? Math.max(...completedAts) : null
+    },
+    items
+  };
+}
+const AI_PIPELINE_BATCH_ROLLBACK_DEFAULT_REASON = (batchId)=>'Rollback em lote da rodada IA ' + batchId + ': conteúdo considerado inadequado/simplista.';
+/* Execução — SEQUENCIAL (nunca Promise.all), reaproveitando EXATAMENTE
+   rollbackAppliedReviewSolution (mesma função do botão individual) para
+   cada item 'safe' da prévia. Itens 'stale'/'ineligible' NUNCA chegam a
+   chamá-la. Uma falha (exceção ou {ok:false} inesperado) em um item nunca
+   impede os demais, e nunca é silenciosamente convertida em sucesso —
+   cada resultado é registrado por reviewId. Nunca muta DATA/
+   LESION_REVISIONS diretamente: toda mutação acontece dentro da função
+   individual já auditada. */
+async function executeAiPipelineBatchRollback(batchId, preview, reasonText){
+  const reason = (reasonText||'').trim() || AI_PIPELINE_BATCH_ROLLBACK_DEFAULT_REASON(batchId);
+  const results = [];
+  for(const item of preview.items){
+    if(item.outcome!=='safe'){
+      results.push({ reviewId:item.reviewId, outcome:'skipped', reason:item.reason||item.outcome });
+      continue;
+    }
+    try{
+      const res = await rollbackAppliedReviewSolution(item.reviewId, reason);
+      results.push({ reviewId:item.reviewId, outcome: res.ok ? 'success' : 'conflict', reason: res.ok ? null : res.reason });
+    }catch(e){
+      results.push({ reviewId:item.reviewId, outcome:'failed', reason:(e&&e.message)||String(e) });
+    }
+  }
+  try{ updateReviewCenterBadges(); }catch(_e){}
+  return {
+    batchId, results,
+    success: results.filter(r=>r.outcome==='success').length,
+    conflict: results.filter(r=>r.outcome==='conflict').length,
+    failed: results.filter(r=>r.outcome==='failed').length,
+    skipped: results.filter(r=>r.outcome==='skipped').length
+  };
+}
+const AI_PIPELINE_BATCH_ROLLBACK_OUTCOME_LABELS = { safe:'✅ seguro', stale:'⚠️ conflito/desatualizado', ineligible:'⛔ não elegível' };
+const AI_PIPELINE_BATCH_ROLLBACK_REASON_LABELS = {
+  field_changed_after_apply: 'o campo foi alterado por outra coisa depois da aplicação',
+  legacy_ambiguous_changes: 'tentativa antiga/ambígua — não é possível determinar os campos com segurança',
+  no_snapshot: 'snapshot indisponível',
+  lesion_not_found: 'lesão não encontrada no catálogo',
+  not_awaiting_validation: 'revisão não está mais aguardando validação (já resolvida)',
+  global_review_has_no_direct_target: 'pendência geral — sem lesão associada'
+};
+/* Modal de PRÉVIA — 100% read-only (abrir nunca executa nada). Mostra o
+   resumo da rodada + um item por revisão com a classificação honesta
+   (safe/stale/ineligible) que a EXECUÇÃO real usaria. O botão de
+   confirmação só aparece quando há pelo menos 1 item 'safe', e seu texto
+   já informa quantas revisões serão desfeitas. */
+function openAiPipelineBatchRollbackModal(batchId, onDone){
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) close(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) close(); };
+  const close = ()=>{ document.removeEventListener('keydown', closeOnEsc); ov.remove(); };
+  document.addEventListener('keydown', closeOnEsc);
+  const esc = s=>String(s==null?'':s).replace(/</g,'&lt;');
+  ov.innerHTML = '<div class="modal review-center-modal"><h2>↩ Desfazer esta rodada</h2>' +
+    '<div class="modal-sub">Carregando prévia (lendo snapshots, nada é alterado)…</div>' +
+    '<div class="modal-actions"><button type="button" class="btn btn-ghost" id="aibatch-rb-close-loading">fechar</button></div></div>';
+  document.body.appendChild(ov);
+  const closeLoadingBtn = ov.querySelector('#aibatch-rb-close-loading');
+  if(closeLoadingBtn) closeLoadingBtn.onclick = close;
+  (async ()=>{
+    const preview = await buildAiPipelineBatchRollbackPreview(batchId);
+    if(!ov.isConnected) return; // usuário fechou enquanto a prévia carregava
+    const s = preview.summary;
+    const rows = preview.items.map(it=>{
+      const reasonTxt = it.reason ? (AI_PIPELINE_BATCH_ROLLBACK_REASON_LABELS[it.reason] || it.reason) + (it.field ? ' ('+esc(it.field)+')' : '') : '';
+      return '<div class="review-center-row">' +
+        '<div class="review-center-row-main">' +
+        '<div class="review-center-row-title">' + esc(it.lesionName || it.lesionId || it.reviewId) + '</div>' +
+        '<div class="review-center-row-meta">' + esc([it.section, it.site].filter(Boolean).join(' · ')) +
+          (it.section || it.site ? ' · ' : '') + 'reviewId ' + esc(it.reviewId) + ' · lesionId ' + esc(it.lesionId) + ' · status ' + esc(it.status) +
+          (it.appliedAt ? ' · aplicado em ' + esc(new Date(it.appliedAt).toLocaleString('pt-BR')) : '') + '</div>' +
+        '<div>' + (AI_PIPELINE_BATCH_ROLLBACK_OUTCOME_LABELS[it.outcome] || it.outcome) + (reasonTxt ? ' — ' + esc(reasonTxt) : '') + '</div>' +
+        (it.fields && it.fields.length ? '<div>campos a restaurar: ' + esc(it.fields.join(', ')) + '</div>' : '') +
+        '</div></div>';
+    }).join('');
+    ov.querySelector('.modal').innerHTML =
+      '<h2>↩ Desfazer esta rodada</h2>' +
+      '<div class="modal-sub">Lote (batchId): <code>' + esc(batchId) + '</code>' +
+        (s.completedAtMin ? ' · concluído entre ' + esc(new Date(s.completedAtMin).toLocaleString('pt-BR')) + ' e ' + esc(new Date(s.completedAtMax).toLocaleString('pt-BR')) + ' (só informativo — nunca usado pra selecionar)' : '') +
+        '</div>' +
+      '<div class="modal-sub"><b>Total: ' + s.total + '</b> · seguras: ' + s.safe + ' · conflito/desatualizado: ' + s.stale + ' · não elegíveis: ' + s.ineligible +
+        (s.alreadyResolved ? ' · já resolvidas antes: ' + s.alreadyResolved : '') + '</div>' +
+      '<div class="review-center-list">' + (rows || '<div class="review-center-empty">Nenhuma revisão encontrada para este batchId.</div>') + '</div>' +
+      '<div class="modal-sub"><label>Motivo (opcional, substitui o padrão):<br>' +
+        '<textarea id="aibatch-rb-reason" style="width:100%;" placeholder="' + esc(AI_PIPELINE_BATCH_ROLLBACK_DEFAULT_REASON(batchId)) + '"></textarea></label></div>' +
+      '<div class="modal-actions"><button type="button" class="btn btn-ghost" id="aibatch-rb-close">fechar</button>' +
+      (s.safe > 0 ? '<button type="button" class="btn btn-primary" id="aibatch-rb-confirm">Desfazer ' + s.safe + ' revis' + (s.safe === 1 ? 'ão' : 'ões') + ' segura' + (s.safe === 1 ? '' : 's') + ' desta rodada</button>' : '') +
+      '</div>';
+    ov.querySelector('#aibatch-rb-close').onclick = close;
+    const confirmBtn = ov.querySelector('#aibatch-rb-confirm');
+    if(confirmBtn) confirmBtn.onclick = async ()=>{
+      confirmBtn.disabled = true; // anti duplo clique
+      const reasonInput = (ov.querySelector('#aibatch-rb-reason').value || '').trim();
+      const report = await executeAiPipelineBatchRollback(batchId, preview, reasonInput);
+      close();
+      openAiPipelineBatchRollbackReportModal(report);
+      try{ if(typeof onDone === 'function') onDone(); }catch(_e){}
+    };
+  })();
+}
+/* Relatório final — por reviewId: sucesso/conflito/falha/ignorada. */
+function openAiPipelineBatchRollbackReportModal(report){
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.onclick = e=>{ if(e.target===ov) close(); };
+  const closeOnEsc = e=>{ if(e.key==='Escape' && ov.isConnected) close(); };
+  const close = ()=>{ document.removeEventListener('keydown', closeOnEsc); ov.remove(); };
+  document.addEventListener('keydown', closeOnEsc);
+  const esc = s=>String(s==null?'':s).replace(/</g,'&lt;');
+  const OUTCOME_LABEL = { success:'✅ desfeita', conflict:'⚠️ conflito (não aplicado)', failed:'❌ falhou', skipped:'⛔ ignorada (não segura)' };
+  const rows = report.results.map(r=>'<div class="review-center-row-meta">' + esc(r.reviewId) + ': ' + (OUTCOME_LABEL[r.outcome] || r.outcome) + (r.reason ? ' — ' + esc(AI_PIPELINE_BATCH_ROLLBACK_REASON_LABELS[r.reason] || r.reason) : '') + '</div>').join('');
+  ov.innerHTML = '<div class="modal review-center-modal"><h2>Resultado do rollback em lote</h2>' +
+    '<div class="modal-sub"><b>sucesso: ' + report.success + '</b> · conflito: ' + report.conflict + ' · falha: ' + report.failed + ' · ignorada: ' + report.skipped + '</div>' +
+    '<div class="review-center-list">' + rows + '</div>' +
+    '<div class="modal-actions"><button type="button" class="btn btn-primary" id="aibatch-rb-report-close">fechar</button></div></div>';
+  document.body.appendChild(ov);
+  const closeBtn = ov.querySelector('#aibatch-rb-report-close');
+  if(closeBtn) closeBtn.onclick = close;
+}
+
 /* CANCELAMENTO MANUAL — o próprio usuário encerra um pedido de revisão que
    não é mais necessário (ex: corrigiu manualmente, marcou por engano). NÃO
    apaga nada: o pedido continua em LESION_REVISIONS com todo o histórico,
@@ -20439,6 +20645,7 @@ function openReadySolutionsModal(){
           <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}${reviewResolveButtonHtml(r)}
           <button type="button" class="btn btn-primary review-approve">✓ funcionou — manter</button>
           <button type="button" class="btn btn-ghost review-rollback">↩ não funcionou — desfazer</button>
+          ${(r.aiPipeline && r.aiPipeline.batchId && aiPipelineBatchHasEligibleReviews(r.aiPipeline.batchId)) ? '<button type="button" class="btn btn-ghost review-batch-rollback" data-batch-id="'+String(r.aiPipeline.batchId).replace(/"/g,'&quot;')+'">↩ Desfazer esta rodada</button>' : ''}
         </div>`;
       if(meta.found){ const openBtn = row.querySelector('.review-open-lesion'); openBtn.onclick = ()=>{ closeLesionHoverPreview(); closeAllAndCleanup(); openDetail(meta.lesion.id); }; wireLesionHoverPreview(openBtn, meta.lesion.id); }
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
@@ -20465,6 +20672,8 @@ function openReadySolutionsModal(){
           confirmLabel: '↩ desfazer'
         });
       };
+      const batchRbBtn = row.querySelector('.review-batch-rollback');
+      if(batchRbBtn) batchRbBtn.onclick = ()=> openAiPipelineBatchRollbackModal(batchRbBtn.getAttribute('data-batch-id'), renderBothLists);
       appliedList.appendChild(row);
     });
   };
