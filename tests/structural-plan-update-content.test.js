@@ -60,11 +60,19 @@ const names = ['normalizeExternalTitle', 'tokenizeExternalTitle',
   'rollbackStructuralExecution', 'resolveReviewManually',
   'structuralPlanPreviewHtml', 'structuralHistoryCardHtml', 'getEffectiveStructuralStatus',
   'imageOwnerIdV1', 'assertManualImageOwnershipChange', 'canChangeImageOwnership', 'clinicalCaseIdentityKey',
-  // Auditoria 2026-10-08 — prévia detalhada ATUAL×PROPOSTO de update_content.
-  'structuralUpdateContentFieldDiffs', 'structuralPlanLiveView'
+  'structuralPlanLiveView',
+  // Mudança de UX 2026-10-08 — prévia de update_content reusa o mesmo
+  // renderer humano de "✨ proposta" (ver tests/solucoes-proposal-compact-card.test.js).
+  'splitDifferentialItems', 'notesDifferentialsHtml',
+  'previewLesionWithProposedChanges', 'lesionHoverPreviewHtml'
 ];
 const src = names.map(fn).join('\n');
-const fieldLabelsConst = html.slice(html.indexOf('const STRUCTURAL_UPDATE_CONTENT_FIELD_LABELS = '), html.indexOf('function structuralPlanPreviewHtml('));
+// escAttr/esc NÃO entram em `names`: o corpo de escAttr tem replace(/"/g,...)
+// — uma regex literal com uma única aspa dupla — que confunde o contador de
+// chaves por quote do fn() (mesmo problema já visto em
+// openStructuralPlanPreviewModal, ver tests/structural-plan-accept-render.test.js).
+// Inline literal, idêntico à produção.
+const escHelpersConst = 'function escAttr(v){ return String(v||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }\nfunction esc(v){ return escAttr(v); }\n';
 const planTypesConst = html.slice(html.indexOf('const STRUCTURAL_PLAN_TYPES = '), html.indexOf('function structuralPlanError('));
 const editableFieldsConst = html.slice(html.indexOf("const LESION_REVIEW_EDITABLE_FIELDS = "), html.indexOf('function validateProposedChanges('));
 const execConsts = html.slice(html.indexOf('const STRUCTURAL_EXECUTOR_VERSION = '), html.indexOf('function structuralExecutionId('));
@@ -122,7 +130,7 @@ function ctxFixture() {
   });
   ctx.calls = calls;
   ctx.__backing = backing;
-  vm.runInContext(planTypesConst + '\n' + editableFieldsConst + '\n' + execConsts + '\n' + ownershipConst + statusesConst + anatomicGuardConst + snapshotStoreConst + '\n' + schemaVersionConst + '\n' + fieldLabelsConst + '\n' + src, ctx, { filename: 'update-content-test.js' });
+  vm.runInContext(planTypesConst + '\n' + editableFieldsConst + '\n' + execConsts + '\n' + ownershipConst + statusesConst + anatomicGuardConst + snapshotStoreConst + '\n' + schemaVersionConst + '\n' + escHelpersConst + '\n' + src, ctx, { filename: 'update-content-test.js' });
   vm.runInContext('STRUCTURAL_SNAPSHOT_EXTERNALIZATION_ENABLED = false;', ctx);
   return ctx;
 }
@@ -432,58 +440,96 @@ test('ESTÁTICO: a guarda de identidade nunca lê humanOverride (não existe for
 });
 
 // ===========================================================================
-// PRÉVIA DETALHADA update_content (auditoria 2026-10-08) — ATUAL × PROPOSTO
-// por campo, lida do estado VIVO (structuralPlanLesion), 100% read-only.
-// Abrir a prévia NUNCA executa/aceita/rejeita nada — o botão "Aceitar
-// plano" continua vindo de structuralPlanStatusRowHtml (fluxo já
-// existente, não tocado aqui).
+// PRÉVIA HUMANA update_content (mudança de UX 2026-10-08) — nada de diff
+// técnico (ATUAL/PROPOSTO, nomes internos de campo, lesionId): a prévia
+// compõe em memória a ficha final esperada (previewLesionWithProposedChanges)
+// e renderiza com o MESMO componente humano de "✨ proposta"
+// (lesionHoverPreviewHtml). Abrir a prévia NUNCA executa/aceita/rejeita
+// nada — o botão "Aceitar plano" continua vindo de
+// structuralPlanStatusRowHtml (fluxo já existente, não tocado aqui).
 // ===========================================================================
 
-test('PREVIEW-A. notes: ATUAL e PROPOSTO em blocos separados, preservando quebras de linha', async () => {
+test('PREVIEW-A. campo não alterado pela proposta continua vindo da lesão atual', async () => {
   const ctx = ctxFixture();
+  // Só "notes" é proposto; "classification"/"enTerm"/"tags" não entram em
+  // fields e precisam aparecer com o valor ATUAL da lesão, intocados.
   await ctx.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900, { notes: 'linha 1\nlinha 2' })]));
   const v = ctx.structuralPlanLiveView('RA');
   assert.ok(v, 'liveView precisa devolver o plano (fields/expectedIdentity propagados)');
   const htmlOut = ctx.structuralPlanPreviewHtml(v);
-  assert.match(htmlOut, /notas antigas/, 'ATUAL (valor hoje na lesão) aparece');
-  assert.match(htmlOut, /linha 1<br>linha 2/, 'PROPOSTO preserva quebra de linha como <br>, nunca colapsada');
+  assert.match(htmlOut, /OLD/, 'classification não proposto continua vindo da lesão atual');
+  assert.match(htmlOut, /old term/, 'enTerm não proposto continua vindo da lesão atual');
+  assert.match(htmlOut, /antigo/, 'tags não propostas continuam vindo da lesão atual');
 });
 
-test('PREVIEW-B. tags: mostra atuais, propostas, adicionadas e removidas', async () => {
+test('PREVIEW-B. campo proposto substitui SOMENTE aquele campo no preview (notes, preservando quebra de linha)', async () => {
   const ctx = ctxFixture();
-  // atual = ['antigo']; proposto = ['novo1'] => removida 'antigo', adicionada 'novo1'.
+  await ctx.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900, { notes: 'linha 1\nlinha 2' })]));
+  const v = ctx.structuralPlanLiveView('RA');
+  const htmlOut = ctx.structuralPlanPreviewHtml(v);
+  assert.match(htmlOut, /linha 1\nlinha 2/, 'notes finais no preview são as PROPOSTAS, não as antigas');
+  assert.doesNotMatch(htmlOut, /notas antigas/, 'o valor antigo de notes não deveria aparecer — foi substituído');
+});
+
+test('PREVIEW-C. tags propostas (overwrite) substituem as atuais no preview', async () => {
+  const ctx = ctxFixture();
   await ctx.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900, { tags: ['novo1'] })]));
   const v = ctx.structuralPlanLiveView('RA');
   const htmlOut = ctx.structuralPlanPreviewHtml(v);
-  assert.match(htmlOut, /atuais: antigo/);
-  assert.match(htmlOut, /propostas: novo1/);
-  assert.match(htmlOut, /adicionadas: novo1/);
-  assert.match(htmlOut, /removidas: antigo/);
+  assert.match(htmlOut, /novo1/);
+  assert.doesNotMatch(htmlOut, />antigo</, 'tag antiga não sobrevive — overwrite, nunca união');
 });
 
-test('PREVIEW-C. clinicalTags: mostra adicionadas e removidas corretamente', async () => {
-  const ctx = ctxFixture();
-  ctx.DATA.find(e => e.id === 'seed_900').clinicalTags = ['ct_antiga'];
-  await ctx.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900, { clinicalTags: ['ct_nova'] })]));
-  const v = ctx.structuralPlanLiveView('RA');
-  const htmlOut = ctx.structuralPlanPreviewHtml(v);
-  assert.match(htmlOut, /adicionadas: ct_nova/);
-  assert.match(htmlOut, /removidas: ct_antiga/);
-});
-
-test('PREVIEW-D. classification: valor → null e null → valor, ambos mostrados como "(vazio)"', async () => {
+test('PREVIEW-D. classification proposta (incluindo null) aparece no preview; se vazia, a seção some', async () => {
   const ctxToNull = ctxFixture();
   await ctxToNull.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900, { classification: null })]));
   const vToNull = ctxToNull.structuralPlanLiveView('RA');
   const htmlToNull = ctxToNull.structuralPlanPreviewHtml(vToNull);
-  assert.match(htmlToNull, /OLD\s*→\s*\(vazio\)/, 'valor atual (OLD) → proposto vazio');
+  assert.doesNotMatch(htmlToNull, /🏷/, 'classification proposta vazia: a linha "🏷" (só aparece quando há valor) não deve existir');
 
   const ctxFromNull = ctxFixture();
   ctxFromNull.DATA.find(e => e.id === 'seed_900').classification = null;
   await ctxFromNull.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900, { classification: 'NEW' })]));
   const vFromNull = ctxFromNull.structuralPlanLiveView('RA');
   const htmlFromNull = ctxFromNull.structuralPlanPreviewHtml(vFromNull);
-  assert.match(htmlFromNull, /\(vazio\)\s*→\s*NEW/, 'atual vazio → proposto NEW');
+  assert.match(htmlFromNull, /🏷 NEW/, 'classification proposta (NEW) aparece no preview');
+});
+
+test('PREVIEW-H. HTML de update_content NÃO contém diff técnico/nomes internos de campo/lesionId', async () => {
+  const ctx = ctxFixture();
+  await ctx.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900,
+    { notes: 'n2', tags: ['t2'], enTerm: 'e2', classification: 'NEW', clinicalTags: ['ct2'], name: 'Nome novo' })]));
+  const v = ctx.structuralPlanLiveView('RA');
+  const htmlOut = ctx.structuralPlanPreviewHtml(v);
+  for (const forbidden of [/ATUAL:/, /PROPOSTO:/, /lesionId:/, /\(notes\)/, /MUDANÇAS PROPOSTAS/, /PLANO ESTRUTURAL IMPORTADO/]) {
+    assert.doesNotMatch(htmlOut, forbidden, 'não deve conter: ' + forbidden);
+  }
+  assert.match(htmlOut, /Nome novo/, 'nome final proposto aparece');
+  assert.match(htmlOut, /PRÉVIA DA LESÃO/, 'título humano da prévia aparece');
+});
+
+test('PREVIEW-I. reutiliza o mesmo renderer de "Ver proposta"/"✨ proposta" (lesionHoverPreviewHtml), não um HTML paralelo', async () => {
+  const ctx = ctxFixture();
+  await ctx.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900, { notes: 'x' })]));
+  const v = ctx.structuralPlanLiveView('RA');
+  const lesion = ctx.DATA.find(e => e.id === 'seed_900');
+  const expectedPreview = ctx.previewLesionWithProposedChanges(lesion, v.fields);
+  const expectedHtml = ctx.lesionHoverPreviewHtml(expectedPreview, { label: 'FICHA FINAL PROPOSTA', labelAccent: true });
+  const htmlOut = ctx.structuralPlanPreviewHtml(v);
+  assert.ok(htmlOut.includes(expectedHtml), 'o corpo da ficha no preview é EXATAMENTE o mesmo HTML produzido por lesionHoverPreviewHtml');
+});
+
+test('PREVIEW-J. classification/enTerm/tags/clinicalTags só aparecem quando existirem (todos vazios => nenhuma seção opcional)', async () => {
+  const ctx = ctxFixture();
+  const lesionNaked = ctx.DATA.find(e => e.id === 'seed_900');
+  Object.assign(lesionNaked, { classification: null, tags: [], clinicalTags: [], enTerm: '' });
+  await ctx.importStructuralResolutionBatch(batch([updateContent('RA', 'seed_900', ID900, { name: 'Só nome mudou' })]));
+  const v = ctx.structuralPlanLiveView('RA');
+  const htmlOut = ctx.structuralPlanPreviewHtml(v);
+  assert.doesNotMatch(htmlOut, /🏷/, 'sem classification: sem linha de classificação');
+  assert.doesNotMatch(htmlOut, /EN:/, 'sem enTerm: sem linha de termo em inglês');
+  assert.doesNotMatch(htmlOut, /lesion-hover-preview-tags/, 'sem tags/clinicalTags: sem bloco de tags');
+  assert.match(htmlOut, /Só nome mudou/, 'o campo realmente proposto (name) continua aparecendo');
 });
 
 test('PREVIEW-E. expectedIdentity não corresponde mais à lesão atual => alerta vermelho, plano segue "desatualizado" (accept já fica desabilitado pelo mecanismo existente)', async () => {

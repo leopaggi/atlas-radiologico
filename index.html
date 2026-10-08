@@ -28893,38 +28893,6 @@ async function applySnapshotMigrationCompaction(opts){
   done.completedAt = new Date().toISOString();
   return done;
 }
-/* Diff PURO (sem HTML, sem DOM) entre o estado ATUAL de uma lesão e os
-   campos PROPOSTOS por um plano update_content — usado só pela prévia
-   (requisito: UI/leitura, nunca aplica nada). Nunca muta `lesion`/`fields`.
-   kind: 'list' (tags/clinicalTags — current/proposed/added/removed),
-   'text_block' (notes — preserva quebras de linha, ATUAL/PROPOSTO em
-   blocos separados) ou 'inline' (name/classification/enTerm — atual →
-   proposto). changed:false quando o valor proposto é idêntico ao atual
-   ("sem alteração real", requisito 7). */
-function structuralUpdateContentFieldDiffs(lesion, fields){
-  const f = (fields && typeof fields==='object' && !Array.isArray(fields)) ? fields : {};
-  return Object.keys(f).map(key=>{
-    const proposed = f[key];
-    const current = lesion ? lesion[key] : undefined;
-    if(key==='tags' || key==='clinicalTags'){
-      const curList = Array.isArray(current) ? current : [];
-      const propList = Array.isArray(proposed) ? proposed : [];
-      const curSet = new Set(curList), propSet = new Set(propList);
-      const added = propList.filter(t=>!curSet.has(t));
-      const removed = curList.filter(t=>!propSet.has(t));
-      return { field:key, kind:'list', current:curList, proposed:propList, added, removed, changed: added.length>0 || removed.length>0 };
-    }
-    if(key==='notes'){
-      const curText = current==null ? '' : String(current);
-      const propText = proposed==null ? '' : String(proposed);
-      return { field:key, kind:'text_block', current:curText, proposed:propText, changed: curText!==propText };
-    }
-    const curVal = (current===undefined || current===null) ? null : current;
-    const propVal = (proposed===undefined || proposed===null) ? null : proposed;
-    return { field:key, kind:'inline', current:curVal, proposed:propVal, changed: curVal!==propVal };
-  });
-}
-const STRUCTURAL_UPDATE_CONTENT_FIELD_LABELS = { name:'nome', notes:'descrição (notes)', classification:'classificação', tags:'tags', enTerm:'termo em inglês (enTerm)', clinicalTags:'tags clínicas' };
 function structuralPlanPreviewHtml(v){
   // Prévia 100% a partir do plano VALIDADO + snapshot (nunca do DATA mutável
   // posterior): o que o usuário vê é exatamente o que foi validado.
@@ -28967,43 +28935,27 @@ function structuralPlanPreviewHtml(v){
       (v.reasoning?'<div><b>Justificativa da IA:</b> '+esc(v.reasoning)+'</div>':'') + '</div>';
   }
   if(v.type==='update_content'){
-    // Auditoria 2026-10-08 — prévia READ-ONLY detalhada: ATUAL × PROPOSTO
-    // por campo, lida direto da lesão VIVA (structuralPlanLesion) e do
-    // plano validado — nunca executa nada (abrir a prévia não chama
-    // executeStructuralPlan/acceptStructuralPlan/saveData). Reusa a MESMA
-    // guarda de identidade (structuralPlanIdentityMismatch) já usada na
-    // importação/execução — nenhuma regra nova.
+    // Mudança de UX 2026-10-08 — a prévia deixa de ser um diff técnico
+    // (ATUAL/PROPOSTO por campo, nomes internos como "notes"/"enTerm",
+    // lesionId) e passa a reusar o MESMO renderer humano já usado em
+    // "✨ proposta" (lesionHoverPreviewHtml + previewLesionWithProposedChanges,
+    // ver renderProposedList): compõe em memória a ficha final esperada e
+    // mostra como qualquer outra ficha do Atlas. 100% leitura — nunca toca
+    // DATA/LESION_REVISIONS, nunca chama saveData/execução/aceite. A guarda
+    // de identidade (structuralPlanIdentityMismatch) é lida direto da lesão
+    // VIVA (structuralPlanLesion) exatamente como antes — nenhuma regra de
+    // segurança nova nem removida.
     const lesion = structuralPlanLesion(v.lesionId);
     const identity = v.expectedIdentity || {};
     const mismatch = structuralPlanIdentityMismatch(lesion, identity);
-    const diffs = structuralUpdateContentFieldDiffs(lesion, v.fields);
-    const nl2br = s=>esc(s).replace(/\n/g,'<br>');
-    const rowsHtml = diffs.map(d=>{
-      const label = STRUCTURAL_UPDATE_CONTENT_FIELD_LABELS[d.field] || d.field;
-      if(!d.changed) return '<li>'+esc(label)+': <i>sem alteração real</i></li>';
-      if(d.kind==='list'){
-        return '<li><b>'+esc(label)+'</b>' +
-          '<div>atuais: '+(d.current.length?esc(d.current.join(', ')):'<i>nenhuma</i>')+'</div>' +
-          '<div>propostas: '+(d.proposed.length?esc(d.proposed.join(', ')):'<i>nenhuma</i>')+'</div>' +
-          (d.added.length?'<div>➕ adicionadas: '+esc(d.added.join(', '))+'</div>':'') +
-          (d.removed.length?'<div>➖ removidas: '+esc(d.removed.join(', '))+'</div>':'') +
-          '</li>';
-      }
-      if(d.kind==='text_block'){
-        return '<li><b>'+esc(label)+'</b>' +
-          '<div>ATUAL:<pre style="white-space:pre-wrap;margin:2px 0;">'+(d.current?nl2br(d.current):'<i>(vazio)</i>')+'</pre></div>' +
-          '<div>PROPOSTO:<pre style="white-space:pre-wrap;margin:2px 0;">'+(d.proposed?nl2br(d.proposed):'<i>(vazio)</i>')+'</pre></div>' +
-          '</li>';
-      }
-      return '<li><b>'+esc(label)+'</b>: '+esc(d.current==null?'(vazio)':d.current)+' → '+esc(d.proposed==null?'(vazio)':d.proposed)+'</li>';
-    }).join('');
-    return head('Atualizar conteúdo (PLANO — não executado)', v.reviewId) +
+    const base = lesion || { name: identity.name || v.lesionName || v.lesionId, s: identity.section || '', site: identity.site || '' };
+    const previewLesion = previewLesionWithProposedChanges(base, v.fields);
+    return head('PRÉVIA DA LESÃO', v.reviewId) +
+      '<div class="review-center-row-meta">Visualização de como a ficha ficará após a aplicação deste plano. Nenhuma alteração foi executada.</div>' +
       (mismatch ? '<div style="color:#c0392b;font-weight:bold;">⚠️ IDENTIDADE NÃO CORRESPONDE — esperado: '+esc(identity.name)+' · '+esc(identity.section)+' › '+esc(identity.site)+
         (lesion ? (' — atual: '+esc(lesion.name)+' · '+esc(lesion.s)+' › '+esc(lesion.site)) : ' — lesão não encontrada no catálogo') +
         '. NÃO aceite este plano por esta prévia.</div>' : '') +
-      '<div><b>Lesão:</b> '+esc((lesion&&lesion.name)||v.lesionName||v.lesionId)+' · '+esc((lesion&&lesion.s)||identity.section||'')+' › '+esc((lesion&&lesion.site)||identity.site||'')+'</div>' +
-      '<div><b>lesionId:</b> '+esc(v.lesionId)+'</div>' +
-      (diffs.length?'<div><b>MUDANÇAS PROPOSTAS:</b><ul>'+rowsHtml+'</ul></div>':'<div>Nenhum campo proposto.</div>') +
+      '<div class="structural-plan-lesion-preview">'+lesionHoverPreviewHtml(previewLesion, { label:'FICHA FINAL PROPOSTA', labelAccent:true })+'</div>' +
       (v.reasoning?'<div><b>Justificativa da IA:</b> '+esc(v.reasoning)+'</div>':'') + '</div>';
   }
   if(v.type==='unresolved'){
