@@ -741,6 +741,169 @@ test('GATE-H. activateLesionRevisionsCollectionStorage não tem call site autom�
   assert.equal(callSites.length, 1, 'função existe mas não é chamada por nenhum código de produção (boot/pull/push/migração)');
 });
 
+// ===========================================================================
+// OPT-OUT DE LEITURA (auditoria 2026-10-07) — readShardedState(ms, { includeLesionRevisions:false })
+// pula COMPLETAMENTE a leitura de lesionRevisions (coleção nova OU legado)
+// quando o chamador comprovadamente nunca usa remote.lesionRevisions.
+// Default (sem opts, ou com includeLesionRevisions!==false) é IDÊNTICO ao
+// comportamento anterior. 3 chamadores confirmados seguros por leitura
+// completa do corpo (buildImageIdentityDivergenceAuditFromServer,
+// mergeThisDeviceImagesToCloud, collectRecoverySources).
+// ===========================================================================
+
+// ===========================================================================
+// ESPECIALIZAÇÃO DO PUSH DE DATA (auditoria 2026-10-08) —
+// reconcileStateWithRemote(remote, opts) ganhou o MESMO opt-out
+// (includeLesionRevisions:false): quando ativo, nunca lê/mescla/reatribui
+// LESION_REVISIONS (nem no fold de LESION_MERGES, nem no merge final).
+// reconcileBeforePush() passa { includeLesionRevisions:false } tanto pra
+// readShardedState quanto pra reconcileStateWithRemote, e removeu
+// lesionRevisions do no-op guard (localSnapshot/remoteSnapshot) — reduz um
+// saveData() de ~1296 reads pra ~10. O merge por documento
+// (DIRTY_LESION_REVIEW_IDS -> writeLesionReviewIncremental ->
+// mergeOneLesionReviewPair) é 100% independente disso, nunca passou por
+// aqui. syncFromFirebase() continua chamando reconcileStateWithRemote(remote)
+// SEM opts (default true) — comportamento intacto.
+// ===========================================================================
+test('OPT-A. default (sem opts) continua lendo lesionRevisions normalmente', async () => {
+  const cloud = makeFakeCloud();
+  const legacyRevs = { OLD1: rev('OLD1') };
+  cloud.setRaw('main', { ...metaBase095Gate, lesionRevisions: legacyRevs });
+  const a = makeDevice(cloud, { initialCatalog: [lesion('seed_1')] });
+  const remote = await a.context.readShardedState(5000);
+  assert.deepEqual(plain(remote.lesionRevisions), legacyRevs, 'sem opts = comportamento de sempre');
+});
+
+test('OPT-B. includeLesionRevisions:false NUNCA lê a coleção nova (mesmo com documentos lá)', async () => {
+  const cloud = makeFakeCloud();
+  cloud.setRaw('main', { ...metaBase095Gate, lesionRevisionsStorage: 'collection' });
+  cloud.setRaw('sub/lesionRevisions/NEW1', rev('NEW1'));
+  const a = makeDevice(cloud, { initialCatalog: [lesion('seed_1')] });
+  const remote = await a.context.readShardedState(5000, { includeLesionRevisions: false });
+  assert.deepEqual(plain(remote.lesionRevisions), {}, 'coleção nova tem NEW1, mas nunca foi lida — lesionRevisions volta vazio');
+  // estático: a própria ramificação de skip não referencia a função de leitura.
+  const src = readShardedStateFn.source;
+  const skipBranch = src.slice(src.indexOf('if(!includeLesionRevisions){'), src.indexOf("}else if(meta.lesionRevisionsStorage === 'collection')"));
+  assert.doesNotMatch(skipBranch, /readLesionRevisionsCollection/, 'ramo de skip não chama a leitura da coleção');
+});
+
+test('OPT-C. includeLesionRevisions:false NUNCA lê o fallback legado (pedaços nem campo embutido)', async () => {
+  const cloud = makeFakeCloud();
+  const legacyRevs = { OLD1: rev('OLD1') };
+  cloud.setRaw('main', { ...metaBase095Gate, lesionRevisions: legacyRevs });
+  const a = makeDevice(cloud, { initialCatalog: [lesion('seed_1')] });
+  const remote = await a.context.readShardedState(5000, { includeLesionRevisions: false });
+  assert.deepEqual(plain(remote.lesionRevisions), {}, 'campo legado tem OLD1, mas nunca foi lido');
+});
+
+test('A. reconcileBeforePush usa includeLesionRevisions:false (tanto no readShardedState quanto no reconcileStateWithRemote)', () => {
+  const src = extractFunction(html, 'reconcileBeforePush').source;
+  assert.match(src, /readShardedState\(15000,\s*\{\s*includeLesionRevisions:false\s*\}\)/, 'readShardedState chamado com o opt-out');
+  assert.match(src, /reconcileStateWithRemote\(remote,\s*\{\s*includeLesionRevisions:false\s*\}\)/, 'reconcileStateWithRemote chamado com o opt-out');
+});
+
+test('B. reconcileBeforePush nunca lê/mescla a coleção nova lesionRevisions (push de DATA especializado)', async () => {
+  const cloud = makeFakeCloud();
+  cloud.setRaw('main', { ...metaBase095Gate, lesionRevisionsStorage: 'collection' });
+  cloud.setRaw('sub/lesionRevisions/NEW1', rev('NEW1'));
+  const a = makeDevice(cloud, { initialCatalog: [lesion('seed_1')] });
+  await a.boot();
+  vm.runInContext("LESION_REVISIONS = " + JSON.stringify({ LOCAL1: rev('LOCAL1') }) + ";", a.context); // local propositalmente diferente do remoto
+  const before = plain(a.context.LESION_REVISIONS);
+  const result = await a.context.reconcileBeforePush('test');
+  assert.equal(result.ok, true, 'reconcile precisa ter sucesso: ' + JSON.stringify(result));
+  assert.deepEqual(plain(a.context.LESION_REVISIONS), before, 'LESION_REVISIONS local intacto — a coleção nova (NEW1) nunca foi lida/mesclada');
+});
+
+test('C. reconcileBeforePush nunca lê/mescla o fallback legado de lesionRevisions (pedaços nem campo embutido)', async () => {
+  const cloud = makeFakeCloud();
+  cloud.setRaw('main', { ...metaBase095Gate, lesionRevisions: { OLD1: rev('OLD1') } }); // gate ausente = legado
+  const a = makeDevice(cloud, { initialCatalog: [lesion('seed_1')] });
+  await a.boot();
+  vm.runInContext("LESION_REVISIONS = " + JSON.stringify({ LOCAL1: rev('LOCAL1') }) + ";", a.context);
+  const before = plain(a.context.LESION_REVISIONS);
+  const result = await a.context.reconcileBeforePush('test');
+  assert.equal(result.ok, true, 'reconcile precisa ter sucesso: ' + JSON.stringify(result));
+  assert.deepEqual(plain(a.context.LESION_REVISIONS), before, 'LESION_REVISIONS local intacto — o campo legado (OLD1) nunca foi lido/mesclado');
+});
+
+test('D. LESION_REVISIONS global não é tocado por reconcileBeforePush em nenhum cenário (gate collection OU legacy)', async () => {
+  for (const storage_ of [{ lesionRevisionsStorage: 'collection' }, {}]) {
+    const cloud = makeFakeCloud();
+    cloud.setRaw('main', { ...metaBase095Gate, ...storage_, lesionRevisions: { OLD1: rev('OLD1') } });
+    if (storage_.lesionRevisionsStorage === 'collection') cloud.setRaw('sub/lesionRevisions/NEW1', rev('NEW1'));
+    const a = makeDevice(cloud, { initialCatalog: [lesion('seed_1')] });
+    await a.boot();
+    const before = plain(a.context.LESION_REVISIONS);
+    await a.context.reconcileBeforePush('test');
+    assert.deepEqual(plain(a.context.LESION_REVISIONS), before, 'nenhuma mudança, gate=' + (storage_.lesionRevisionsStorage || 'legacy'));
+  }
+});
+
+test('E. no-op de DATA não compara lesionRevisions: DATA/REVIEW/SRS idênticos + revisões diferentes => noOp continua true', async () => {
+  const cloud = makeFakeCloud();
+  const a = makeDevice(cloud, { initialCatalog: [lesion('seed_1')] });
+  await a.boot();
+  await a.context.saveData(); // ação real -> publica DATA/REVIEW/SRS (revision 0->1); local fica === nuvem
+  assert.equal(a.context.syncPushPending, false, 'pré-condição: push inicial aceito');
+  // Revisão local divergente da nuvem (nuvem não tem nenhuma) — se o no-op
+  // ainda comparasse lesionRevisions, isso bastaria pra marcar noOp:false.
+  vm.runInContext("LESION_REVISIONS = " + JSON.stringify({ LOCAL1: rev('LOCAL1') }) + ";", a.context);
+  const result = await a.context.reconcileBeforePush('test');
+  assert.equal(result.ok, true, 'reconcile precisa ter sucesso: ' + JSON.stringify(result));
+  assert.equal(result.noOp, true, 'DATA/REVIEW/SRS idênticos à nuvem => no-op, mesmo com LESION_REVISIONS divergente');
+});
+
+test('F. syncFromFirebase continua lendo/mesclando lesionRevisions normalmente (não foi tocado)', () => {
+  const src = extractFunction(html, 'syncFromFirebase').source;
+  assert.match(src, /reconcileStateWithRemote\(remote\)\s*;/, 'chama reconcileStateWithRemote SEM opts — default true, comportamento intacto');
+  assert.doesNotMatch(src, /includeLesionRevisions/, 'syncFromFirebase nunca referencia a opção — não foi alterado');
+});
+
+test('G. boot real (dispositivo já inicializado) continua recebendo lesionRevisions do pull via syncFromFirebase', async () => {
+  const cloud = makeFakeCloud();
+  const legacyRevs = { OLD1: rev('OLD1') };
+  cloud.setRaw('main', { ...metaBase095Gate, lesionRevisions: legacyRevs });
+  const a = makeDevice(cloud, { initialCatalog: [lesion('seed_1')] });
+  await a.boot();
+  assert.deepEqual(plain(a.context.LESION_REVISIONS), legacyRevs, 'boot (loadData->syncFromFirebase) continua trazendo lesionRevisions — só o push de DATA foi especializado');
+});
+
+test('H. writer incremental (writeLesionReviewIncremental) não referencia a nova opção — intacto', () => {
+  const src = extractFunction(html, 'writeLesionReviewIncremental').source;
+  assert.doesNotMatch(src, /includeLesionRevisions/, 'writeLesionReviewIncremental não foi tocado por esta especialização');
+});
+
+test('OPT-E. boot/pull normal (sem opts) continua recebendo lesionRevisions do pull', async () => {
+  const cloud = makeFakeCloud();
+  const legacyRevs = { OLD1: rev('OLD1') };
+  cloud.setRaw('main', { ...metaBase095Gate, lesionRevisions: legacyRevs });
+  const a = makeDevice(cloud, { initialCatalog: [lesion('seed_1')] });
+  await a.boot();
+  assert.deepEqual(plain(a.context.LESION_REVISIONS), legacyRevs, 'pull real continua trazendo lesionRevisions — nenhum call site de boot foi alterado');
+});
+
+test('OPT-F. gate collection/legacy permanece com a MESMA seleção de fonte quando includeLesionRevisions é true/default', async () => {
+  const cloud = makeFakeCloud();
+  cloud.setRaw('main', { ...metaBase095Gate, lesionRevisionsStorage: 'collection', lesionRevisions: { OLD1: rev('OLD1') } });
+  cloud.setRaw('sub/lesionRevisions/NEW1', rev('NEW1'));
+  const a = makeDevice(cloud, { initialCatalog: [lesion('seed_1')] });
+  const remoteDefault = await a.context.readShardedState(5000);
+  assert.deepEqual(plain(remoteDefault.lesionRevisions), { NEW1: rev('NEW1') }, 'default: gate=collection continua escolhendo a coleção, ignorando o legado — nenhuma mudança de seleção de fonte');
+  const remoteExplicitTrue = await a.context.readShardedState(5000, { includeLesionRevisions: true });
+  assert.deepEqual(plain(remoteExplicitTrue.lesionRevisions), { NEW1: rev('NEW1') }, 'includeLesionRevisions:true explícito é idêntico ao default');
+});
+
+test('OPT-G. nenhum caminho de ESCRITA foi alterado por este opt-out (estático)', () => {
+  // writeShardedState/writeLesionReviewIncremental/activateLesionRevisionsCollectionStorage
+  // nunca referenciam includeLesionRevisions — a opção é exclusiva de
+  // readShardedState (só leitura), nenhuma escrita foi tocada.
+  for (const name of ['writeShardedState', 'writeLesionReviewIncremental', 'activateLesionRevisionsCollectionStorage']) {
+    const src = extractFunction(html, name).source;
+    assert.doesNotMatch(src, /includeLesionRevisions/, name + ' não referencia a nova opção — nenhuma escrita mudou');
+  }
+});
+
 test('E. formato legado (campo embutido, sem pedaços) continua sendo lido corretamente', async () => {
   const cloud = makeFakeCloud();
   const legacyRevs = { OLD1: rev('OLD1'), OLD2: rev('OLD2', { status: 'proposed', updatedAt: 2000 }) };

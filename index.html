@@ -2884,7 +2884,16 @@ async function writeShardedState(ms=15000){
 }
 /* Lê o documento principal + todos os pedaços, e junta tudo de volta num
    único array, no mesmo formato que o resto do código já espera. */
-async function readShardedState(ms=15000){
+async function readShardedState(ms=15000, opts){
+  // Auditoria 2026-10-07 — opt-out explícito e aditivo: default (sem
+  // `opts` ou sem este campo) continua lendo lesionRevisions exatamente
+  // como sempre leu (compatibilidade total). Só os chamadores PROVADOS
+  // (grep + leitura do corpo) a nunca tocar remote.lesionRevisions podem
+  // passar { includeLesionRevisions:false } — ver lista no comentário do
+  // bloco abaixo. reconcileBeforePush/syncFromFirebase/adoptRemoteStateForNewDevice
+  // continuam SEM esta opção (dependem de remote.lesionRevisions de verdade
+  // via reconcileStateWithRemote/comparação de no-op) — não tocados.
+  const includeLesionRevisions = !(opts && opts.includeLesionRevisions === false);
   // { source: 'server' } força buscar do servidor de verdade, ignorando o
   // cache local do Firestore no navegador — sem isso, logo após recarregar a
   // página, o SDK às vezes devolve uma versão em cache mais antiga do
@@ -2951,7 +2960,12 @@ async function readShardedState(ms=15000){
   // coleção nova é completamente ignorada (mesmo que já tenha documentos)
   // até o gate ser explicitamente ativado.
   let combinedLesionRevisions = {};
-  if(meta.lesionRevisionsStorage === 'collection'){
+  if(!includeLesionRevisions){
+    // Pulado por pedido explícito do chamador (comprovadamente não usa
+    // remote.lesionRevisions) — nenhuma leitura de coleção/pedaços/campo
+    // legado, window.__lastKnownLesionRevisionsChunkCount NÃO é tocado
+    // (mantém o último valor real conhecido, nunca um palpite).
+  }else if(meta.lesionRevisionsStorage === 'collection'){
     combinedLesionRevisions = await readLesionRevisionsCollection(ms);
     window.__lastKnownLesionRevisionsChunkCount = 0; // coleção nova é a fonte — pedaços legados (se existirem) ficam ignorados nesta leitura
   }else{
@@ -3605,7 +3619,10 @@ function buildImageIdentityDivergenceReport(localData, remoteData){
    de imagens. */
 async function buildImageIdentityDivergenceAuditFromServer(){
   if(!fbDb) throw new Error('Firebase indisponível neste navegador.');
-  const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'auditoria de identidade de imagens (servidor)');
+  // Auditoria 2026-10-07 — nunca lê/usa remote.lesionRevisions (só
+  // remote.data, pra comparar identidade de imagem); confirmado por
+  // leitura completa do corpo desta função.
+  const remote = await withFirebaseTimeout(readShardedState(15000, { includeLesionRevisions:false }), 20000, 'auditoria de identidade de imagens (servidor)');
   const remoteData = (Array.isArray(remote && remote.data) ? remote.data : [])
     .filter(e=>e && !isQuarantinedSeedId(e.id));
   const localData = (Array.isArray(DATA)?DATA:[]).filter(e=>e && !isQuarantinedSeedId(e.id));
@@ -5441,7 +5458,10 @@ async function mergeThisDeviceImagesToCloud(opts){
     onStep(1, 'criando snapshot');
     createSafetySnapshot('antes de mesclar imagens deste dispositivo na nuvem');
     onStep(2, 'lendo a nuvem (servidor)');
-    const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'merge de imagens (leitura do servidor)');
+    // Auditoria 2026-10-07 — nunca lê/usa remote.lesionRevisions (só
+    // remote.data/review/srs/tombstones, pro merge aditivo de imagens);
+    // confirmado por leitura completa do corpo desta função.
+    const remote = await withFirebaseTimeout(readShardedState(15000, { includeLesionRevisions:false }), 20000, 'merge de imagens (leitura do servidor)');
     const remoteData = (Array.isArray(remote && remote.data) ? remote.data : []).filter(e=>e && !isQuarantinedSeedId(e.id));
     const localData = (Array.isArray(DATA)?DATA:[]).filter(e=>e && !isQuarantinedSeedId(e.id));
     const localById = new Map(localData.map(e=>[e.id,e]));
@@ -5559,7 +5579,17 @@ function countRemoteOnlyAdopted(localData, remoteData, mergedData){
 // Reconcilia o estado local (DATA/REVIEW/SRS/SESSIONLOG/tombstones) com um
 // estado remoto JÁ LIDO. Não faz push, não toca syncDirty, não persiste
 // (quem chama persiste). Devolve { preservedCloudOnly }.
-function reconcileStateWithRemote(remote){
+function reconcileStateWithRemote(remote, opts){
+  // Auditoria 2026-10-08 — especialização do push de DATA: quando o
+  // chamador passa { includeLesionRevisions:false } (hoje só
+  // reconcileBeforePush/push de DATA), esta função NUNCA toca
+  // LESION_REVISIONS — nem lê, nem mescla, nem reatribui a global. Default
+  // (sem opts, usado por syncFromFirebase e todo o resto) é IDÊNTICO ao
+  // comportamento anterior. O merge por documento (DIRTY_LESION_REVIEW_IDS
+  // -> writeLesionReviewIncremental -> mergeOneLesionReviewPair) continua
+  // sendo a única via real de sincronização de revisões — isto aqui nunca
+  // foi mais que um pull redundante delas pro estado local em memória.
+  const includeLesionRevisions = !(opts && opts.includeLesionRevisions === false);
   // PROTEÇÃO 094 — tombstones de lesão: união local ∪ remoto ANTES de
   // qualquer filtro, pelo mesmo motivo do mapa de fusão abaixo — um PC que
   // nunca viu a exclusão (feita em outro device) só aprende dela aqui, e
@@ -5581,10 +5611,18 @@ function reconcileStateWithRemote(remote){
     foldLesionMergesIntoGlobals();
     if(remote){
       const clone = v => JSON.parse(JSON.stringify(v || {}));
+      // includeLesionRevisions:false — rst nunca ganha a chave
+      // lesionRevisions; foldLesionMergesIntoState trata st.lesionRevisions
+      // ausente como {} (nenhuma iteração), e remote nunca é reatribuído
+      // com um campo lesionRevisions novo (fold de DATA/REVIEW/SRS não
+      // depende do conteúdo de lesionRevisions pra ficar correto — ver
+      // auditoria 2026-10-07/08).
       const rst = { data: JSON.parse(JSON.stringify(Array.isArray(remote.data) ? remote.data : [])), review: clone(remote.review), reviewStamps: clone(remote.reviewUpdatedAt),
-        reviewProgress: clone(remote.reviewProgress), reviewOverride: clone(remote.reviewOverride), srs: clone(remote.srs), lesionRevisions: clone(remote.lesionRevisions) };
+        reviewProgress: clone(remote.reviewProgress), reviewOverride: clone(remote.reviewOverride), srs: clone(remote.srs) };
+      if(includeLesionRevisions) rst.lesionRevisions = clone(remote.lesionRevisions);
       if(foldLesionMergesIntoState(rst, LESION_MERGES).changed){
-        remote = { ...remote, data: rst.data, review: rst.review, reviewUpdatedAt: rst.reviewStamps, reviewProgress: rst.reviewProgress, reviewOverride: rst.reviewOverride, srs: rst.srs, lesionRevisions: rst.lesionRevisions };
+        remote = { ...remote, data: rst.data, review: rst.review, reviewUpdatedAt: rst.reviewStamps, reviewProgress: rst.reviewProgress, reviewOverride: rst.reviewOverride, srs: rst.srs };
+        if(includeLesionRevisions) remote.lesionRevisions = rst.lesionRevisions;
       }
     }
   }
@@ -5664,7 +5702,9 @@ function reconcileStateWithRemote(remote){
   SRS = mergeSRSPreservingNewest(SRS, remote && remote.srs);
   SESSIONLOG = mergeSessionLogPreservingProgress(SESSIONLOG, remote && remote.sessionLog);
   // PROTEÇÃO 084 — revisões/soluções: merge por reviewId (nunca overwrite cego).
-  LESION_REVISIONS = mergeLesionRevisions(LESION_REVISIONS, remote && remote.lesionRevisions);
+  // includeLesionRevisions:false (push de DATA) — pula por completo: não
+  // chama mergeLesionRevisions, não toca a global LESION_REVISIONS.
+  if(includeLesionRevisions) LESION_REVISIONS = mergeLesionRevisions(LESION_REVISIONS, remote && remote.lesionRevisions);
 
   // PROTEÇÃO 085 — ordem de seções/sítios: merge por carimbo de reordenação
   // manual (ver mergeOrderState). Antes: "local preservada quando válida;
@@ -5716,14 +5756,24 @@ async function reconcileBeforePush(reason){
   }
   fbSyncing = true;
   try{
-    const remote = await withFirebaseTimeout(readShardedState(15000), 20000, 'reconciliação pré-envio (' + (reason || 'save') + ')');
+    // Auditoria 2026-10-08 — push de DATA nunca grava lesionRevisions
+    // (writeShardedState não a toca) e o merge por documento
+    // (DIRTY_LESION_REVIEW_IDS -> writeLesionReviewIncremental) já cuida
+    // da sincronização real, independente deste reconcile. Ler/mesclar/
+    // comparar a coleção inteira aqui era só herança do modelo antigo
+    // (quando writeShardedState AINDA gravava lesionRevisions) — custava
+    // ~1286 reads por push, sem proteger nada que este push realmente
+    // escreva. syncFromFirebase/adoptRemoteStateForNewDevice continuam
+    // chamando readShardedState/reconcileStateWithRemote SEM esta opção
+    // (default true, comportamento intacto).
+    const remote = await withFirebaseTimeout(readShardedState(15000, { includeLesionRevisions:false }), 20000, 'reconciliação pré-envio (' + (reason || 'save') + ')');
     if(!remote){
       // Nuvem nunca escrita: nada a preservar; o write cuidará da revisão 0→1.
       lastPrePushReconcileAt = Date.now();
       lastPrePushPreserved = 0;
       return { ok:true, preservedCloudOnly: 0, emptyCloud: true };
     }
-    const r = reconcileStateWithRemote(remote);
+    const r = reconcileStateWithRemote(remote, { includeLesionRevisions:false });
     await persistLocalStateNow();
     lastPrePushReconcileAt = Date.now();
     lastPrePushPreserved = r.preservedCloudOnly;
@@ -5749,7 +5799,11 @@ async function reconcileBeforePush(reason){
       lesionMerges: normalizeLesionMerges(LESION_MERGES), // PROTEÇÃO 091c
       lesionTombstones: normalizeLesionTombstones(LESION_TOMBSTONES), // PROTEÇÃO 094 — mudança só de exclusão NÃO é no-op
       sessionLog: SESSIONLOG, sectionOrder, siteOrder, tombstones: IMAGE_TOMBSTONES,
-      lesionRevisions: LESION_REVISIONS || {}, // PROTEÇÃO 084 — mudança só de revisão NÃO é no-op
+      // lesionRevisions removido do no-op de DATA (auditoria 2026-10-08):
+      // writeShardedState nunca grava este campo, então compará-lo aqui só
+      // forçava uma escrita de DATA por uma mudança que esta escrita nem
+      // publica — a revisão continua protegida pelo caminho incremental
+      // (DIRTY_LESION_REVIEW_IDS), que não depende deste guard.
       orderUpdatedAt: normalizeOrderStamps(ORDER_STAMPS) // PROTEÇÃO 085
     };
     const remoteSnapshot = {
@@ -5761,7 +5815,6 @@ async function reconcileBeforePush(reason){
       lesionTombstones: normalizeLesionTombstones(remote.lesionTombstones), // PROTEÇÃO 094
       sessionLog: remote.sessionLog||{}, sectionOrder: remote.sectionOrder||[], siteOrder: remote.siteOrder||{},
       tombstones: remote.tombstones||{},
-      lesionRevisions: remote.lesionRevisions||{},
       orderUpdatedAt: normalizeOrderStamps(remote.orderUpdatedAt)
     };
     const noOp = deepStableEqual(localSnapshot, remoteSnapshot);
@@ -20607,7 +20660,10 @@ async function collectRecoverySources(){
   // 5) Firebase atual — leitura sem gravar.
   if(fbDb){
     try{
-      const remote = await readShardedState(15000);
+      // Auditoria 2026-10-07 — este diagnóstico só varre remote.data/review
+      // (progresso), nunca remote.lesionRevisions; confirmado por leitura
+      // completa do corpo deste bloco.
+      const remote = await readShardedState(15000, { includeLesionRevisions:false });
       if(remote){
         for(const e of (Array.isArray(remote.data)?remote.data:[])) mergeRecoverableIntoMap(found,e,'Firebase');
         for(const [id,st] of Object.entries(remote.review||{})){

@@ -3685,7 +3685,14 @@ test('B. PC A e PC B criam revisões diferentes -> cada um publica a sua; depois
   assert.equal(b.context.syncDirty, false);
 });
 
-test('C. PC desatualizado (nunca pullou a revisão) não apaga a revisão remota ao fazer outras ações', async () => {
+test('C. PC desatualizado (nunca pullou a revisão) não apaga a revisão remota ao fazer outras ações (push de DATA especializado — auditoria 2026-10-08)', async () => {
+  // Desde a especialização do push de DATA, reconcileBeforePush() nunca
+  // mais lê/mescla lesionRevisions (includeLesionRevisions:false) — uma
+  // escrita de DATA não relacionada NÃO ensina mais B sobre R1 (isso
+  // dependia só do pull redundante que o reconcile fazia antes; o merge
+  // por documento, independente, é quem de fato sincroniza revisões). O
+  // que continua garantido: a nuvem nunca perde R1 por causa de uma
+  // escrita de DATA de um PC que não o conhece.
   const cloud = makeFakeCloud();
   await seedCleanCloud079c(cloud, [makeSeedEntry()]);
   await activateCollectionGate084(cloud);
@@ -3695,9 +3702,9 @@ test('C. PC desatualizado (nunca pullou a revisão) não apaga a revisão remota
   assert.deepEqual(Object.keys(b.context.LESION_REVISIONS), [], 'pré-condição: B não conhece R1 ainda');
   b.context.DATA[0].notes = 'edição qualquer, sem relação com revisões';
   await b.markDirty();
-  await b.context.pushToFirebaseNow(); // writeShardedState em si nunca lê/escreve/mescla lesionRevisions; o RECONCILE pré-push (reconcileBeforePush) é quem aprende R1
+  await b.context.pushToFirebaseNow(); // writeShardedState nunca lê/escreve/mescla lesionRevisions; reconcileBeforePush também não mais (push de DATA especializado)
   assert.deepEqual(Object.keys(cloudRevs084(cloud)), ['R1'], 'R1 continua intacto na coleção nova depois de uma escrita de DATA não relacionada');
-  assert.deepEqual(Object.keys(b.context.LESION_REVISIONS), ['R1'], 'B aprende R1 pelo reconcile pré-push — nunca apaga o que não conhecia');
+  assert.deepEqual(Object.keys(b.context.LESION_REVISIONS), [], 'B continua sem conhecer R1 localmente — o push de DATA não mescla mais revisões (só o pull real/writer incremental fazem isso)');
 });
 
 test('D. mesma revisão modificada em dois PCs -> merge determinístico (updatedAt mais novo vence status/solution; history/attempts/feedback são UNIDOS)', async () => {

@@ -187,12 +187,19 @@ test('095 COMPATIBILIDADE: nenhum outro ponto de leitura precisou mudar — todo
   assert.doesNotMatch(extractFunction(html, 'adoptRemoteStateForNewDevice'), /lesionRevisionsChunkCount|FB_LESION_REVISIONS_CHUNK_REF/);
 });
 
-test('084 PIPELINE: reconcile/persist/no-op/pull/adoção de device novo cobrem lesionRevisions sem marcar dirty', () => {
+test('084 PIPELINE: reconcile/persist/pull/adoção de device novo cobrem lesionRevisions sem marcar dirty (default); push de DATA especializado NÃO cobre mais (auditoria 2026-10-08)', () => {
+  // default (sem opts) continua mesclando — usado por syncFromFirebase/adoptRemoteStateForNewDevice.
   assert.match(extractFunction(html, 'reconcileStateWithRemote'), /LESION_REVISIONS = mergeLesionRevisions\(LESION_REVISIONS, remote && remote\.lesionRevisions\)/);
+  assert.match(extractFunction(html, 'reconcileStateWithRemote'), /if\(includeLesionRevisions\) LESION_REVISIONS = mergeLesionRevisions/, 'mesclagem é condicional ao opt-out (default true)');
   assert.match(extractFunction(html, 'persistLocalStateNow'), /await saveLesionRevisions\(true\)/);
+  // reconcileBeforePush (push de DATA) foi especializado: nunca mais lê/mescla/compara lesionRevisions
+  // (writeShardedState nunca gravou este campo; o merge por documento via
+  // writeLesionReviewIncremental é a única via real de sync de revisões).
   const pre = extractFunction(html, 'reconcileBeforePush');
-  assert.match(pre, /lesionRevisions: LESION_REVISIONS \|\| \{\}/, 'snapshot local do no-op inclui revisões');
-  assert.match(pre, /lesionRevisions: remote\.lesionRevisions\|\|\{\}/, 'snapshot remoto do no-op inclui revisões');
+  assert.match(pre, /readShardedState\(15000,\s*\{\s*includeLesionRevisions:false\s*\}\)/, 'leitura pula a coleção/legado de revisões');
+  assert.match(pre, /reconcileStateWithRemote\(remote,\s*\{\s*includeLesionRevisions:false\s*\}\)/, 'reconcile não mescla revisões');
+  assert.doesNotMatch(pre, /lesionRevisions: LESION_REVISIONS \|\| \{\}/, 'snapshot local do no-op NÃO inclui mais revisões');
+  assert.doesNotMatch(pre, /lesionRevisions: remote\.lesionRevisions\|\|\{\}/, 'snapshot remoto do no-op NÃO inclui mais revisões');
   const pull = extractFunction(html, 'syncFromFirebase');
   assert.match(pull, /await saveLesionRevisions\(true\)/);
   assert.match(pull, /updateReviewCenterBadges\(\)/, 'badges 🔔/💡 atualizados sem F5');
