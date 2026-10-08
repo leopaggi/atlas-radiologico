@@ -7862,10 +7862,65 @@ function authorizeAndFinalizeReviewSolution(reviewId){
   return { ok:true, reason:null, review: finalized.review };
 }
 
-/* SEGUNDO ACEITE — negado: "não funcionou, desfazer". Restaura a lesão
-   EXATAMENTE a partir do beforeSnapshot daquela tentativa específica (nunca
-   um snapshot de outra tentativa) e reabre a revisão em "rejected", pronta
-   pra uma nova proposta/tentativa com seu próprio snapshot novo. */
+/* Auditoria 2026-10-08 — ROLLBACK CIRÚRGICO: decide, SEM MUTAR NADA, quais
+   campos esta tentativa específica (e só ela) realmente alterou e se é
+   seguro restaurá-los. NUNCA adivinha: bloqueia (legacy_ambiguous_changes)
+   sempre que não for possível determinar com certeza os campos tocados.
+
+   Dois formatos de tentativa suportados (os únicos dois que
+   authorizeAndApplyReviewSolution/applyReviewAiSuggestedPlacement criam):
+   - campo-a-campo (attempt.proposedChanges — mesma lista usada pra aplicar
+     pra frente, nunca uma nova heurística): restaura só esses campos, cada
+     um para o valor que tinha em attempt.beforeSnapshot;
+   - alt_placement (attempt.kind==='alt_placement'): o único campo tocado é
+     altPlacements; attempt.beforeAltPlacements já guarda o valor exato de
+     antes (sempre inline, independente da flag de externalização).
+
+   Em AMBOS os formatos, ANTES de restaurar, compara o valor ATUAL do campo
+   com o valor que ESTA tentativa deixou lá — se divergir, outra coisa
+   mudou esse campo depois (edição manual, outra tentativa, outra revisão)
+   e o rollback é bloqueado (field_changed_after_apply) em vez de apagar
+   essa mudança. Campos fora da lista (imagens, links, clinicalCases,
+   radiologicSigns, classificationSchemes, outros altPlacements não
+   tocados por este attempt, etc.) nunca são lidos nem escritos aqui. */
+function computeReviewAttemptRollbackPlan(lesion, attempt){
+  if(!lesion || typeof lesion!=='object' || !attempt || typeof attempt!=='object') return { ok:false, reason:'invalid_input' };
+  const sameArray = (a,b)=> JSON.stringify(Array.isArray(a)?a:[]) === JSON.stringify(Array.isArray(b)?b:[]);
+  if(attempt.kind==='alt_placement'){
+    const before = attempt.beforeAltPlacements;
+    const placement = attempt.placement;
+    if(!Array.isArray(before) || !placement || typeof placement!=='object' || Array.isArray(placement)) return { ok:false, reason:'legacy_ambiguous_changes' };
+    const expectedAfterApply = before.concat([placement]);
+    const current = Array.isArray(lesion.altPlacements) ? lesion.altPlacements : [];
+    if(!sameArray(current, expectedAfterApply)) return { ok:false, reason:'field_changed_after_apply', field:'altPlacements' };
+    return { ok:true, reason:null, changes:{ altPlacements: before } };
+  }
+  const applied = attempt.proposedChanges;
+  if(!applied || typeof applied!=='object' || Array.isArray(applied)) return { ok:false, reason:'legacy_ambiguous_changes' };
+  const fields = Object.keys(applied);
+  if(!fields.length) return { ok:false, reason:'legacy_ambiguous_changes' };
+  for(const f of fields) if(!LESION_REVIEW_EDITABLE_FIELDS.includes(f)) return { ok:false, reason:'legacy_ambiguous_changes', field:f };
+  const before = attempt.beforeSnapshot;
+  if(!before || typeof before!=='object' || Array.isArray(before)) return { ok:false, reason:'no_snapshot' };
+  const sameValue = (a,b)=> (Array.isArray(a)||Array.isArray(b)) ? sameArray(a,b) : (a===undefined?null:a)===(b===undefined?null:b);
+  const changes = {};
+  for(const f of fields){
+    const expectedAfterApply = applied[f];
+    if(!sameValue(lesion[f], expectedAfterApply)) return { ok:false, reason:'field_changed_after_apply', field:f };
+    const restoreTo = before[f];
+    changes[f] = (restoreTo===undefined) ? (Array.isArray(expectedAfterApply) ? [] : null) : restoreTo;
+  }
+  return { ok:true, reason:null, changes };
+}
+/* SEGUNDO ACEITE — negado: "não funcionou, desfazer". Restaura SÓ os
+   campos que a tentativa mais recente alterou (ver
+   computeReviewAttemptRollbackPlan) e reabre a revisão em "rejected",
+   pronta pra uma nova proposta/tentativa com seu próprio snapshot novo.
+   NUNCA substitui a lesão inteira — qualquer edição posterior em OUTRO
+   campo, imagens, links, altPlacements não relacionados, clinicalCases
+   etc. permanece intacta. Se o próprio campo tocado por esta tentativa foi
+   editado por outra coisa depois, ou se a tentativa é legada/ambígua
+   demais pra determinar isso com segurança, bloqueia sem tocar em nada. */
 async function rollbackAppliedReviewSolution(reviewId, reasonText){
   const review = LESION_REVISIONS[reviewId];
   if(isGlobalReview(review)) return { ok:false, reason:GLOBAL_REVIEW_NO_TARGET, review }; // PROTEÇÃO 091
@@ -7879,15 +7934,19 @@ async function rollbackAppliedReviewSolution(reviewId, reasonText){
   if(!snap.ok || !snap.beforeSnapshot) return { ok:false, reason: snap.reason || 'no_snapshot', review };
   const idx = DATA.findIndex(e=>e && e.id===review.lesionId);
   if(idx===-1) return { ok:false, reason:'lesion_not_found', review };
+  const lesion = DATA[idx];
+
+  const plan = computeReviewAttemptRollbackPlan(lesion, Object.assign({}, attempt, { beforeSnapshot: snap.beforeSnapshot }));
+  if(!plan.ok) return { ok:false, reason:plan.reason, field:plan.field||null, review };
 
   const reason = (reasonText||'').trim() || null;
   pushLesionReviewHistory(review, 'application_rejected', { attemptId: attempt.id, reason });
 
-  DATA[idx] = JSON.parse(JSON.stringify(snap.beforeSnapshot));
-  // BUGFIX rollback-externo: o snapshot guarda _userUpdatedAt antigo; sem
-  // recarimbo, o reconcile pré-push (remoto vence quando rt > lt) ressuscita
-  // a versão ainda aplicada. Rollback é mutação humana nova e vence recência.
-  DATA[idx]._userUpdatedAt = Date.now();
+  Object.keys(plan.changes).forEach(field=>{ lesion[field] = plan.changes[field]; });
+  // BUGFIX rollback-externo: sem recarimbo, o reconcile pré-push (remoto
+  // vence quando rt > lt) ressuscita a versão ainda aplicada. Rollback é
+  // mutação humana nova e vence recência.
+  lesion._userUpdatedAt = Date.now();
   attempt.rolledBackAt = Date.now();
   attempt.rollbackReason = reason;
 
@@ -7895,7 +7954,7 @@ async function rollbackAppliedReviewSolution(reviewId, reasonText){
   review.updatedAt = Date.now();
   review.rollbackReason = reason;
   pushHumanFeedback(review, 'rollback', reason, attempt.id);
-  pushLesionReviewHistory(review, 'rollback_completed', { attemptId: attempt.id });
+  pushLesionReviewHistory(review, 'rollback_completed', { attemptId: attempt.id, fields: Object.keys(plan.changes) });
 
   saveLesionRevisions(false, reviewId);
   saveData();

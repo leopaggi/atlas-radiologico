@@ -212,7 +212,7 @@ const lesionRevisionsFns084 = ['mergeOneLesionReviewPair', 'mergeLesionRevisions
 // rollback contra merge REAL (sem stubbar reconcile/merge). Funções reais do
 // 1º/2º aceite + leitores de snapshot + store local.
 const lesionReviewApplyFns = ['createLesionReview', 'setReviewSolution', 'validateProposedChanges',
-  'authorizeAndApplyReviewSolution', 'rollbackAppliedReviewSolution',
+  'authorizeAndApplyReviewSolution', 'computeReviewAttemptRollbackPlan', 'rollbackAppliedReviewSolution',
   'getReviewAttemptSnapshot', 'reviewAttemptSnapshotSync', 'getSnapshotFromStore',
   'getSnapshotFromLocalCache', 'saveSnapshotToLocalCache',
   'buildAtlasSnapshotRecord', 'computeDeterministicFingerprint',

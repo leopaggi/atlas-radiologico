@@ -491,6 +491,232 @@ test('7) NOVA TENTATIVA após rollback: novo snapshot independente do anterior',
 });
 
 // ===========================================================================
+// ROLLBACK CIRÚRGICO (auditoria 2026-10-08) — rollbackAppliedReviewSolution()
+// nunca mais substitui a lesão inteira (DATA[idx] = beforeSnapshot). Restaura
+// SÓ os campos que attempt.proposedChanges (ou, pra alt_placement,
+// attempt.beforeAltPlacements) registra como alterados por ESTA tentativa, e
+// bloqueia (sem tocar em nada) se o valor atual desse campo específico já
+// não é mais o que a tentativa deixou lá (edição de outra coisa depois).
+// ===========================================================================
+
+function makeLesionRich(overrides) {
+  return makeLesion(Object.assign({
+    images: [{ assetId: 'img1', data: 'https://x/1.jpg', source: 'cloudinary', label: 'img' }],
+    links: [{ label: 'ref', url: 'https://x' }],
+    altPlacements: [], clinicalTags: []
+  }, overrides || {}));
+}
+
+test('A) notes: rollback restaura notes sem apagar images', async () => {
+  const lesion = makeLesionRich();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 'nota melhor', { notes: 'nota nova' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  assert.equal(ctx.DATA[0].notes, 'nota nova');
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'ruim');
+  assert.equal(res.ok, true);
+  assert.equal(ctx.DATA[0].notes, 'lesão óssea benigna clássica', 'notes volta ao valor anterior');
+  assert.equal(ctx.DATA[0].images.length, 1, 'images nunca foi tocado');
+  assert.equal(ctx.DATA[0].images[0].assetId, 'img1');
+});
+
+test('B) tags: rollback restaura tags sem apagar links', async () => {
+  const lesion = makeLesionRich();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 'tags melhores', { tags: ['nova1', 'nova2'] });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  assert.deepEqual(ctx.DATA[0].tags, ['nova1', 'nova2']);
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'ruim');
+  assert.equal(res.ok, true);
+  assert.deepEqual(serialize(ctx.DATA[0].tags), ['lítica', 'excêntrica'], 'tags volta ao valor anterior');
+  assert.equal(ctx.DATA[0].links.length, 1, 'links nunca foi tocado');
+  assert.equal(ctx.DATA[0].links[0].url, 'https://x');
+});
+
+test('C) notes+tags: rollback de múltiplos campos não altera nenhum outro campo (classification/enTerm/name/images/links)', async () => {
+  const lesion = makeLesionRich();
+  const snapshot = JSON.parse(JSON.stringify(lesion));
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 'várias correções', { notes: 'n2', tags: ['t2'] });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'ruim');
+  assert.equal(res.ok, true);
+  const { _userUpdatedAt, ...restored } = serialize(ctx.DATA[0]);
+  const { _userUpdatedAt: _o, ...orig } = snapshot;
+  assert.deepEqual(restored, orig, 'lesão volta byte a byte (exceto o recarimbo) — nenhum outro campo tocado');
+});
+
+test('D) edição posterior NO MESMO CAMPO bloqueia o rollback (nunca apaga a edição mais recente)', async () => {
+  const lesion = makeLesionRich();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 'nota IA', { notes: 'nota da IA' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  // Edição manual/externa no MESMO campo, depois da aplicação.
+  ctx.DATA[0].notes = 'usuário editou manualmente depois';
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'ruim');
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'field_changed_after_apply');
+  assert.equal(res.field, 'notes');
+  assert.equal(ctx.DATA[0].notes, 'usuário editou manualmente depois', 'a edição manual NUNCA é apagada');
+});
+
+test('E) edição posterior em OUTRO campo é preservada e o rollback do campo original funciona', async () => {
+  const lesion = makeLesionRich();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 'nota IA', { notes: 'nota da IA' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  ctx.DATA[0].enTerm = 'termo editado manualmente depois'; // campo diferente do tocado pela tentativa
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'ruim');
+  assert.equal(res.ok, true);
+  assert.equal(ctx.DATA[0].notes, 'lesão óssea benigna clássica', 'notes foi restaurado');
+  assert.equal(ctx.DATA[0].enTerm, 'termo editado manualmente depois', 'edição posterior em OUTRO campo sobrevive ao rollback');
+});
+
+test('F) nova imagem adicionada depois da aplicação é preservada pelo rollback', async () => {
+  const lesion = makeLesionRich();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 'nota IA', { notes: 'nota da IA' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  ctx.DATA[0].images.push({ assetId: 'img2', data: 'https://x/2.jpg', source: 'cloudinary', label: 'nova' });
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'ruim');
+  assert.equal(res.ok, true);
+  assert.equal(ctx.DATA[0].notes, 'lesão óssea benigna clássica');
+  assert.equal(ctx.DATA[0].images.length, 2, 'a imagem nova adicionada depois continua lá');
+  assert.ok(ctx.DATA[0].images.some(im => im.assetId === 'img2'));
+});
+
+test('G) altPlacements adicionado depois da aplicação é preservado pelo rollback (de um attempt de campo, não de alt_placement)', async () => {
+  const lesion = makeLesionRich();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 'nota IA', { notes: 'nota da IA' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  ctx.DATA[0].altPlacements.push({ s: 'Outra Seção', site: 'Outro Sítio' }); // estrutura posterior, campo não tocado por esta tentativa
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'ruim');
+  assert.equal(res.ok, true);
+  assert.equal(ctx.DATA[0].notes, 'lesão óssea benigna clássica');
+  assert.equal(ctx.DATA[0].altPlacements.length, 1, 'a localização adicional criada depois continua lá');
+});
+
+test('H) attempt LEGADO (só {id, proposedChanges, beforeSnapshot}, sem summary/reasoning/appliedAt) funciona normalmente', async () => {
+  const lesion = makeLesionRich();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  const beforeSnapshot = JSON.parse(JSON.stringify(lesion));
+  ctx.DATA[0].notes = 'nota aplicada por um attempt legado';
+  const legacyAttempt = { id: 'legacy_att_1', proposedChanges: { notes: 'nota aplicada por um attempt legado' }, beforeSnapshot };
+  vm.runInContext(
+    "LESION_REVISIONS['" + review.id + "'].attempts = [" + JSON.stringify(legacyAttempt) + "]; " +
+    "LESION_REVISIONS['" + review.id + "'].status = 'applied_pending_validation';",
+    ctx
+  );
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'legado ruim');
+  assert.equal(res.ok, true, 'attempt legado com proposedChanges válido é suficiente, sem precisar de summary/reasoning/appliedAt');
+  assert.equal(ctx.DATA[0].notes, 'lesão óssea benigna clássica');
+});
+
+test('I) attempt LEGADO ambíguo (sem proposedChanges, sem kind alt_placement) bloqueia sem adivinhar', async () => {
+  const lesion = makeLesionRich();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  const originalNotes = ctx.DATA[0].notes;
+  const beforeSnapshot = JSON.parse(JSON.stringify(lesion));
+  ctx.DATA[0].notes = 'alterado por um mecanismo desconhecido/antigo';
+  const ambiguousAttempt = { id: 'legacy_att_2', beforeSnapshot }; // sem proposedChanges, sem kind
+  vm.runInContext(
+    "LESION_REVISIONS['" + review.id + "'].attempts = [" + JSON.stringify(ambiguousAttempt) + "]; " +
+    "LESION_REVISIONS['" + review.id + "'].status = 'applied_pending_validation';",
+    ctx
+  );
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'tentando desfazer o legado ambíguo');
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'legacy_ambiguous_changes');
+  assert.equal(ctx.DATA[0].notes, 'alterado por um mecanismo desconhecido/antigo', 'nada foi tocado — bloqueou em vez de adivinhar');
+  assert.notEqual(ctx.DATA[0].notes, originalNotes); // sanity: confirma que de fato não restaurou
+});
+
+test('J) classification: null -> valor -> rollback (volta a null) e valor -> null -> rollback (volta ao valor)', async () => {
+  // null -> valor -> null
+  const lesionA = makeLesionRich(); // classification: null (default de makeLesion)
+  const ctxA = buildTestContext({ data: [lesionA] });
+  const revA = ctxA.createLesionReview('seed_1', 'x').review;
+  ctxA.setReviewSolution(revA.id, 'classificar', { classification: 'BIRADS' });
+  ctxA.authorizeAndApplyReviewSolution(revA.id);
+  const resA = await ctxA.rollbackAppliedReviewSolution(revA.id, 'ruim');
+  assert.equal(resA.ok, true);
+  assert.equal(ctxA.DATA[0].classification, null, 'volta a null');
+
+  // valor -> null -> valor
+  const lesionB = makeLesionRich({ classification: 'LI-RADS' });
+  const ctxB = buildTestContext({ data: [lesionB] });
+  const revB = ctxB.createLesionReview('seed_1', 'x').review;
+  ctxB.setReviewSolution(revB.id, 'limpar classificação errada', { classification: null });
+  ctxB.authorizeAndApplyReviewSolution(revB.id);
+  assert.equal(ctxB.DATA[0].classification, null);
+  const resB = await ctxB.rollbackAppliedReviewSolution(revB.id, 'ruim');
+  assert.equal(resB.ok, true);
+  assert.equal(ctxB.DATA[0].classification, 'LI-RADS', 'volta ao valor anterior');
+});
+
+test('K) tags/clinicalTags: reordenação/alteração posterior (mesmo conteúdo, ordem ou conjunto diferente) é detectada como mudança e bloqueia', async () => {
+  const lesion = makeLesionRich();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 'tags + clinicalTags', { tags: ['a', 'b'], clinicalTags: ['sinal1'] });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  // Reordena tags (mesmo conteúdo, ordem diferente) — precisa ser tratado como mudança real.
+  ctx.DATA[0].tags = ['b', 'a'];
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'ruim');
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'field_changed_after_apply');
+  assert.equal(res.field, 'tags');
+  assert.deepEqual(ctx.DATA[0].tags, ['b', 'a'], 'reordenação posterior preservada — nunca apagada por um bloqueio');
+  assert.deepEqual(ctx.DATA[0].clinicalTags, ['sinal1'], 'clinicalTags nem chegou a ser avaliado — bloqueio para na primeira divergência');
+});
+
+test('L) aplicação normal (sem nenhuma edição concorrente) continua restaurando corretamente — sem regressão', async () => {
+  const lesion = makeLesionRich();
+  const snapshot = JSON.parse(JSON.stringify(lesion));
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 'correção completa', { notes: 'n2', tags: ['t2'], enTerm: 'e2', classification: 'NEW', clinicalTags: ['ct2'], name: 'Nome novo' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  const l = ctx.DATA[0];
+  assert.equal(l.notes, 'n2'); assert.deepEqual(l.tags, ['t2']); assert.equal(l.enTerm, 'e2');
+  assert.equal(l.classification, 'NEW'); assert.deepEqual(l.clinicalTags, ['ct2']); assert.equal(l.name, 'Nome novo');
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'reverte tudo');
+  assert.equal(res.ok, true);
+  const { _userUpdatedAt, ...restored } = serialize(ctx.DATA[0]);
+  const { _userUpdatedAt: _o, ...orig } = snapshot;
+  assert.deepEqual(restored, orig, 'todos os 6 campos voltam exatamente — mesmo resultado do whole-object-replace antigo quando não há conflito');
+});
+
+test('M) conflito (field_changed_after_apply) NÃO chama saveData, NÃO altera a revisão nem a tentativa', async () => {
+  const lesion = makeLesionRich();
+  const ctx = buildTestContext({ data: [lesion] });
+  const { review } = ctx.createLesionReview('seed_1', 'x');
+  ctx.setReviewSolution(review.id, 'nota IA', { notes: 'nota da IA' });
+  ctx.authorizeAndApplyReviewSolution(review.id);
+  const saveCallsBefore = ctx.saveDataCalls.length;
+  const historyLenBefore = review.history.length;
+  const attemptBefore = JSON.parse(JSON.stringify(review.attempts[review.attempts.length - 1]));
+  ctx.DATA[0].notes = 'edição concorrente';
+  const res = await ctx.rollbackAppliedReviewSolution(review.id, 'tentando desfazer em conflito');
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'field_changed_after_apply');
+  assert.equal(ctx.saveDataCalls.length, saveCallsBefore, 'nenhuma chamada nova a saveData()');
+  assert.equal(review.status, 'applied_pending_validation', 'status da revisão não muda em caso de conflito');
+  assert.equal(review.history.length, historyLenBefore, 'nenhuma entrada de histórico nova');
+  assert.deepEqual(serialize(review.attempts[review.attempts.length - 1]), attemptBefore, 'a tentativa não é tocada (rolledBackAt continua null)');
+});
+
+// ===========================================================================
 // APROVAÇÃO HUMANA ÚNICA — "✓ autorizar correção" na aba Propostas deixa de
 // exigir um 2º clique em "Validar correções" pra mesma decisão.
 // authorizeAndFinalizeReviewSolution() = authorizeAndApplyReviewSolution()
@@ -2677,9 +2903,18 @@ test('LOCAL: rollback remove SÓ a localização adicionada e restaura o estado 
   const res = await ctx.rollbackAppliedReviewSolution(r.id, 'não serviu');
   assert.equal(res.ok, true);
   assert.equal(r.status, 'rejected');
-  const { _userUpdatedAt: _rbStampLoc, ...restoredLoc } = serialize(ctx.DATA[0]);
-  const { _userUpdatedAt: _origStampLoc, ...origLoc } = original;
-  assert.deepEqual(restoredLoc, origLoc, 'lesão volta EXATAMENTE ao estado anterior (exceto o recarimbo do rollback)');
+  // Auditoria 2026-10-08 — rollback cirúrgico restaura SÓ altPlacements
+  // (campo tocado por esta tentativa) pro valor exato de antes
+  // (attempt.beforeAltPlacements, sempre um array — [] quando a lesão
+  // nunca teve a chave). Isso grava altPlacements:[] explicitamente em
+  // vez de deixar a chave ausente como o whole-object-replace antigo
+  // fazia — equivalente em todo o resto do app, que já trata ambos os
+  // casos de forma idêntica (Array.isArray(e.altPlacements)?...:[]
+  // usado em todo lugar). Normaliza dos dois lados antes de comparar.
+  const normalizeAltPlacements = (o) => Object.assign({}, o, { altPlacements: Array.isArray(o.altPlacements) ? o.altPlacements : [] });
+  const { _userUpdatedAt: _rbStampLoc, ...restoredLoc } = normalizeAltPlacements(serialize(ctx.DATA[0]));
+  const { _userUpdatedAt: _origStampLoc, ...origLoc } = normalizeAltPlacements(original);
+  assert.deepEqual(restoredLoc, origLoc, 'lesão volta EXATAMENTE ao estado anterior (exceto o recarimbo do rollback e a presença explícita de altPlacements:[])');
   assert.equal(ctx.DATA[0].s, 'Medicina Fetal', 'seção principal intacta');
   assert.equal(ctx.DATA[0].images.length, 0);
 });
