@@ -219,10 +219,12 @@ test('21. CSS: só o <strong> DENTRO de .notes-differential-item ganha branco pu
 });
 
 test('22. o seletor é escopado — não muda a cor do rótulo "Diferenciais-chave:" (que fica FORA de .notes-differential-item)', () => {
-  // o <strong>${marker}</strong> é devolvido ANTES e FORA de itemsHtml —
-  // nunca fica dentro de nenhum <div class="notes-differential-item">,
-  // por isso o seletor ".notes-differential-item strong" nunca o alcança.
-  assert.match(HELPER_SRC, /<strong>\$\{esc\(marker\)\}<\/strong>\$\{itemsHtml\}/, 'o <strong> do rótulo é irmão dos itens, não descendente de nenhum deles');
+  // o <strong class="notes-section-label">${marker}</strong> (classe
+  // adicionada para diferenciar do <strong> inline de "Padrão:" — ver
+  // notes-lead-label) é devolvido ANTES e FORA de itemsHtml — nunca fica
+  // dentro de nenhum <div class="notes-differential-item">, por isso o
+  // seletor ".notes-differential-item strong" nunca o alcança.
+  assert.match(HELPER_SRC, /<strong class="notes-section-label">\$\{esc\(marker\)\}<\/strong>\$\{itemsHtml\}/, 'o <strong> do rótulo é irmão dos itens, não descendente de nenhum deles');
 });
 
 test('23. comportamento real (Chrome headless): o nome do diagnóstico computa branco puro (#fff); a explicação entre parênteses NÃO recebe essa cor', () => {

@@ -624,8 +624,9 @@ body{
 .review-fields-diff-from{color:var(--muted-2);text-decoration:line-through;}
 .review-fields-diff-to{color:var(--teal);font-weight:600;}
 /* notes proposta (Padrão:/Diferenciais-chave:) — só separação visual; o
-   destaque (::first-line, > strong, .notes-differential-item strong) já vem
-   de .detail-notes, reaproveitada aqui sem nenhuma regra nova de realce. */
+   destaque (.notes-lead-label, .notes-section-label, .notes-differential-item
+   strong) já vem de .detail-notes, reaproveitada aqui sem nenhuma regra nova
+   de realce. */
 .review-fields-diff-notes-from{margin-bottom:4px;}
 .review-fields-diff-notes-to b{display:block;margin-bottom:2px;}
 .review-fields-diff-notes-body{margin-top:2px;padding-top:6px;border-top:1px solid var(--line);}
@@ -833,15 +834,19 @@ body{
 .notes-differential-item{display:block;margin-top:6px;}
 .notes-differential-item strong{color:#fff;font-weight:700;}
 /* Legibilidade do bloco notes (detalhe, preview hover e Quiz — todos usam
-   .detail-notes ou .lesion-hover-preview-notes): o rótulo "Diferenciais-chave:"
-   é sempre o único <strong> FILHO DIRETO destes containers (o dos diagnósticos
-   fica dentro de .notes-differential-item, nunca alcançado por este seletor —
-   ver notesDifferentialsHtml) — ganha linha própria e espaço acima, sem
-   precisar de nenhuma classe nova no HTML gerado. "Padrão:" (sempre a 1ª
-   linha da convenção de notes) ganha destaque só por CSS (::first-line),
-   também sem tocar no parser/HTML de notesDifferentialsHtml. */
-.detail-notes > strong,.lesion-hover-preview-notes > strong{display:block;margin-top:10px;color:var(--text);}
-.detail-notes::first-line,.lesion-hover-preview-notes::first-line{font-weight:600;color:var(--text);}
+   .detail-notes ou .lesion-hover-preview-notes). Dois <strong> FILHOS
+   DIRETOS distintos destes containers (o dos diagnósticos fica dentro de
+   .notes-differential-item, nunca alcançado por estes seletores — ver
+   notesDifferentialsHtml/formatDifferentialItemHtml):
+   - .notes-section-label ("Diferenciais-chave:") ganha linha própria e
+     espaço acima — é um TÍTULO de seção.
+   - .notes-lead-label ("Padrão:") fica INLINE, na MESMA linha do texto que
+     vem depois — é só um rótulo de abertura, não um título de seção.
+   Antes disso "Padrão:" ganhava negrito só via CSS (::first-line), o que
+   bold(e)ava a linha inteira dependendo de onde o texto quebrava
+   visualmente (frágil); agora é negrito semântico determinístico. */
+.detail-notes > strong.notes-section-label,.lesion-hover-preview-notes > strong.notes-section-label{display:block;margin-top:10px;color:var(--text);}
+.detail-notes > strong.notes-lead-label,.lesion-hover-preview-notes > strong.notes-lead-label{color:var(--text);}
 .detail-meta{color:var(--muted-2);font-size:12px;font-family:'IBM Plex Mono',monospace;margin-bottom:14px;}
 .detail-altplacements{color:var(--teal);font-size:12px;margin:-8px 0 14px 0;opacity:.9;}
 .detail-altplacements b{font-weight:600;}
@@ -6126,6 +6131,45 @@ function splitDifferentialItems(section){
   }
   return items.map(s=>s.trim()).filter(Boolean);
 }
+/* "Padrão:" ganha negrito SEMÂNTICO (<strong>), não mais só o CSS
+   ::first-line (que bold(e)ava a linha inteira dependendo de onde o texto
+   quebrava visualmente — visual frágil e inconsistente, só o rótulo deveria
+   ficar em negrito). Só reconhece o rótulo literal "Padrão:" no início do
+   texto; qualquer outro conteúdo inicial é apenas escapado, sem inventar
+   nenhum rótulo novo. */
+function boldLeadingPadraoLabelHtml(text){
+  const m = /^(\s*)(Padrão:)/.exec(text);
+  if(!m) return esc(text);
+  return esc(m[1]) + '<strong class="notes-lead-label">' + esc(m[2]) + '</strong>' + esc(text.slice(m[0].length));
+}
+/* Formata UM item da lista de diferenciais. 3 formatos aceitos, nunca
+   migra/converte o texto salvo — só reconhece o que já está lá:
+   1) "— Nome: critério" — travessão como MARCADOR DE LISTA no início da
+      linha (não como separador): negrito só em "Nome:" (dois-pontos
+      incluídos); o travessão inicial e o critério ficam fora do <strong>.
+   2) "Nome (explicação)" — histórico.
+   3) "Nome — explicação" — travessão como SEPARADOR no meio do item (nunca
+      no início — esse caso já foi tratado por (1) acima).
+   Sem nenhum separador reconhecível: texto só escapado, sem negrito novo. */
+function formatDifferentialItemHtml(item){
+  const bulletMatch = /^—\s*/.exec(item);
+  if(bulletMatch){
+    const bullet = bulletMatch[0];
+    const rest = item.slice(bullet.length);
+    const colonIdx = rest.indexOf(':');
+    if(colonIdx===-1) return `<div class="notes-differential-item">${esc(item)}</div>`;
+    const name = rest.slice(0, colonIdx+1);
+    const crit = rest.slice(colonIdx+1);
+    return `<div class="notes-differential-item">${esc(bullet)}<strong>${esc(name)}</strong>${esc(crit)}</div>`;
+  }
+  const parenIdx = item.indexOf('(');
+  const dashIdx = item.indexOf('—');
+  const sepIdx = parenIdx===-1 ? dashIdx : (dashIdx===-1 ? parenIdx : Math.min(parenIdx, dashIdx));
+  const name = sepIdx===-1 ? '' : item.slice(0, sepIdx).trim();
+  if(!name) return `<div class="notes-differential-item">${esc(item)}</div>`;
+  const rest = item.slice(sepIdx);
+  return `<div class="notes-differential-item"><strong>${esc(name)}</strong> ${esc(rest)}</div>`;
+}
 function notesDifferentialsHtml(notes){
   const raw = String(notes || '');
   const marker = 'Diferenciais-chave:';
@@ -6141,19 +6185,8 @@ function notesDifferentialsHtml(notes){
   const after = raw.slice(sectionEnd);
   const items = splitDifferentialItems(section);
   if(!items.length) return esc(raw);
-  const itemsHtml = items.map(item=>{
-    const parenIdx = item.indexOf('(');
-    // "Nome — explicação" (travessão, U+2014) é um 2º formato aceito, além do
-    // histórico "Nome (explicação)" — nunca converte/migra notes existentes,
-    // só reconhece o separador já presente no texto na hora de renderizar.
-    const dashIdx = item.indexOf('—');
-    const sepIdx = parenIdx===-1 ? dashIdx : (dashIdx===-1 ? parenIdx : Math.min(parenIdx, dashIdx));
-    const name = sepIdx===-1 ? '' : item.slice(0, sepIdx).trim();
-    if(!name) return `<div class="notes-differential-item">${esc(item)}</div>`;
-    const rest = item.slice(sepIdx);
-    return `<div class="notes-differential-item"><strong>${esc(name)}</strong> ${esc(rest)}</div>`;
-  }).join('');
-  return `${esc(before)}<strong>${esc(marker)}</strong>${itemsHtml}${esc(after)}`;
+  const itemsHtml = items.map(formatDifferentialItemHtml).join('');
+  return `${boldLeadingPadraoLabelHtml(before)}<strong class="notes-section-label">${esc(marker)}</strong>${itemsHtml}${esc(after)}`;
 }
 function safeCloudTagPart(v){
   return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -20708,6 +20741,14 @@ function openReadySolutionsModal(){
       const reason = r.manualActionReason || (r.solution && r.solution.reason) || '';
       const isImage = /imagem|imagens|image|images|foto|figura/i.test(reason);
       const sug = reviewPlacementSuggestion(r);
+      // Fonte ÚNICA do estado do plano estrutural desta linha — calculada
+      // UMA vez e reusada tanto na condição de render do botão quanto no
+      // wiring (nunca ler r.structuralPlan direto num lugar e
+      // structuralPlanLiveView noutro: seriam sempre o mesmo dado, mas só
+      // há uma fonte de verdade declarada). planView é null exatamente
+      // quando r.structuralPlan é ausente (structuralPlanLiveView é
+      // puramente derivada dele — nunca uma fonte independente).
+      const planView = structuralPlanLiveView(r.id);
       const row = document.createElement('div');
       row.className = 'review-center-row';
       row.innerHTML = `
@@ -20723,7 +20764,8 @@ function openReadySolutionsModal(){
           <button type="button" class="btn btn-ghost review-manual-copy-one">📋 Copiar pacote para IA</button>
           ${sug.applicable?`<button type="button" class="btn btn-primary review-manual-apply-placement">✓ Aplicar localização sugerida</button>`:''}
           ${meta.found?`<button type="button" class="btn btn-ghost review-manual-open">${isImage?'🖼 Abrir lesão para ajustar imagens':'✏ Abrir lesão'}</button>`:''}
-          ${r.structuralPlan?`<button type="button" class="btn btn-ghost review-structural-preview">👁 Pré-visualizar plano</button>`:''}
+          ${planView && planView.type==='update_content' && planView.fields?`<button type="button" class="btn btn-ghost review-open-lesion-proposed" title="Prévia de como a lesão ficaria SE este plano fosse aceito — nada é alterado">✨ proposta</button>`
+            : planView?`<button type="button" class="btn btn-ghost review-structural-preview">👁 Pré-visualizar plano</button>`:''}
           ${structuralPlanCardDecideHtml(r)}
           ${structuralPlanCardButtonsHtml(r)}
           <button type="button" class="btn btn-ghost review-open-history">histórico</button>${isReviewRequestEditable(r)?'<button type="button" class="btn btn-ghost review-edit-request">✏ Editar solicitação</button>':''}${reviewResolveButtonHtml(r)}
@@ -20741,6 +20783,22 @@ function openReadySolutionsModal(){
       row.querySelector('.review-open-history').onclick = ()=> openReviewHistoryModal(r.id);
       const structPrevBtn = row.querySelector('.review-structural-preview');
       if(structPrevBtn) structPrevBtn.onclick = ()=> openStructuralPlanPreviewModalForReview(r.id, renderBothLists);
+      // update_content: MESMO mecanismo de "✨ proposta" das revisões normais
+      // (openLesionHoverPreview/wireLesionHoverPreview) — nunca um segundo
+      // .overlay. Aceitar/Rejeitar continuam só no card (structuralPlanCardButtonsHtml),
+      // nunca duplicados aqui.
+      const structProposedBtn = row.querySelector('.review-open-lesion-proposed');
+      if(structProposedBtn){
+        // MESMA planView calculada acima (nunca uma 2ª leitura/fonte).
+        const lesion = (planView && structuralPlanLesion(planView.lesionId)) ||
+          { name: (planView&&planView.expectedIdentity&&planView.expectedIdentity.name) || (planView&&planView.lesionName) || (planView&&planView.lesionId) || '',
+            s: (planView&&planView.expectedIdentity&&planView.expectedIdentity.section) || '',
+            site: (planView&&planView.expectedIdentity&&planView.expectedIdentity.site) || '' };
+        const previewOpts = { lesion: previewLesionWithProposedChanges(lesion, planView&&planView.fields), label:'PRÉVIA DA PROPOSTA', labelAccent:true, previewKey:'structural-proposed:'+r.id };
+        const anchorLesionId = (planView && planView.lesionId) || r.lesionId;
+        structProposedBtn.onclick = ()=>{ openLesionHoverPreview(structProposedBtn, anchorLesionId, previewOpts); };
+        wireLesionHoverPreview(structProposedBtn, anchorLesionId, previewOpts);
+      }
       const structAcceptBtn = row.querySelector('.review-structural-accept');
       if(structAcceptBtn) structAcceptBtn.onclick = async (e)=>{
         e.currentTarget.disabled = true; // anti duplo clique

@@ -63,7 +63,7 @@ const names = ['normalizeExternalTitle', 'tokenizeExternalTitle',
   'structuralPlanLiveView',
   // Mudança de UX 2026-10-08 — prévia de update_content reusa o mesmo
   // renderer humano de "✨ proposta" (ver tests/solucoes-proposal-compact-card.test.js).
-  'splitDifferentialItems', 'notesDifferentialsHtml',
+  'splitDifferentialItems', 'boldLeadingPadraoLabelHtml', 'formatDifferentialItemHtml', 'notesDifferentialsHtml',
   'previewLesionWithProposedChanges', 'lesionHoverPreviewHtml'
 ];
 const src = names.map(fn).join('\n');

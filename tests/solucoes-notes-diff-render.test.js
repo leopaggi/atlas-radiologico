@@ -43,7 +43,7 @@ function extractLineFunction(source, name) {
   return m[0];
 }
 
-const FNS = ['splitDifferentialItems', 'notesDifferentialsHtml', 'formatLesionReviewFieldValue',
+const FNS = ['splitDifferentialItems', 'boldLeadingPadraoLabelHtml', 'formatDifferentialItemHtml', 'notesDifferentialsHtml', 'formatLesionReviewFieldValue',
   'describeLesionReviewFieldChanges', 'renderFieldChangesHtml'];
 const FN_SRC = FNS.map((n) => extractFunction(html, n).source).join('\n');
 const ESC_SRC = ['esc', 'escAttr'].map((n) => extractLineFunction(html, n)).join('\n');
@@ -73,7 +73,7 @@ test('diff de notes na proposta usa notesDifferentialsHtml: "Padrão:"/"Diferenc
   const rows = vm.runInContext(
     `describeLesionReviewFieldChanges(${JSON.stringify(LESION_ATUAL)}, {notes:${JSON.stringify(NOTES_PROPOSTA)}}, ['notes'])`, ctx);
   const out = vm.runInContext(`renderFieldChangesHtml(${JSON.stringify(rows)})`, ctx);
-  assert.match(out, /<strong>Diferenciais-chave:<\/strong>/, '"Diferenciais-chave:" preservado e destacado, não colapsado numa linha');
+  assert.match(out, /<strong class="notes-section-label">Diferenciais-chave:<\/strong>/, '"Diferenciais-chave:" preservado e destacado, não colapsado numa linha');
   const items = out.match(/<div class="notes-differential-item">/g) || [];
   assert.equal(items.length, 3, 'os 3 diferenciais aparecem em blocos próprios, nunca numa única linha "de → para"');
 });

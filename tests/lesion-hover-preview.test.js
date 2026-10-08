@@ -165,7 +165,7 @@ function makeCtx(lesions, opts) {
     __timers: timers, __anchor: anchor, __errors: errors
   };
   vm.createContext(context);
-  const deps = ['splitDifferentialItems', 'notesDifferentialsHtml'].map((n) => extractFunction(html, n).source).join('\n');
+  const deps = ['splitDifferentialItems', 'boldLeadingPadraoLabelHtml', 'formatDifferentialItemHtml', 'notesDifferentialsHtml'].map((n) => extractFunction(html, n).source).join('\n');
   vm.runInContext(ESC_SRC + '\n' + PREVIEW_STATE_SRC + '\n' + deps + '\n' + PREVIEW_SRC, context, { filename: 'lesion-hover-preview.js' });
   return context;
 }
@@ -233,7 +233,7 @@ test('7-9. lesão, tags e clinicalTags corretas no conteúdo', () => {
 test('10-11. notes usa o renderer estruturado (Diferenciais-chave formatado)', () => {
   const ctx = makeCtx([LESION]);
   const out = vm.runInContext('lesionHoverPreviewHtml(DATA[0])', ctx);
-  assert.match(out, /<strong>Diferenciais-chave:<\/strong>/);
+  assert.match(out, /<strong class="notes-section-label">Diferenciais-chave:<\/strong>/);
   assert.match(out, /<strong>A<\/strong> \(critério um\)/);
   assert.match(out, /notes-differential-item/);
 });
@@ -401,10 +401,16 @@ test('clique continua funcionando mesmo quando hover está desabilitado', () => 
 
 /* ---------- legibilidade (réplica compacta do detalhe) ----------
  * Mesma filosofia dos testes acima: auditoria estática do CSS/HTML real +
- * execução das funções extraídas. notesDifferentialsHtml NUNCA é tocado —
- * todo o ganho de legibilidade abaixo é só CSS (incl. ::first-line, que não
- * precisa de marcação nova), reaproveitando as MESMAS classes do detalhe
+ * execução das funções extraídas. Reaproveita as MESMAS classes do detalhe
  * completo (.detail-notes/.notes-differential-item), nunca um parser novo.
+ *
+ * AJUSTE (2026-10-08): "Padrão:" passou de negrito só-via-CSS (::first-line,
+ * que bold(e)ava a linha inteira dependendo de onde o texto quebrava
+ * visualmente — frágil) para negrito SEMÂNTICO determinístico
+ * (boldLeadingPadraoLabelHtml, dentro de notesDifferentialsHtml). Dois
+ * <strong> filhos diretos distintos agora existem: .notes-section-label
+ * ("Diferenciais-chave:", em bloco/linha própria) e .notes-lead-label
+ * ("Padrão:", inline — fica na MESMA linha do texto seguinte).
  */
 
 test('16. título do preview: CSS evidente — negrito, ligeiramente maior, cor de destaque', () => {
@@ -423,21 +429,21 @@ test('17. seção/sítio do preview: cor secundária, menor destaque que o corpo
   assert.match(notesRule[1], /color:var\(--muted\)/, 'corpo das notas no mesmo tom do detalhe completo (.detail-notes)');
 });
 
-test('18. "Padrão:" ganha destaque só por CSS (::first-line) — notesDifferentialsHtml continua sem nenhuma lógica sobre "Padrão"', () => {
-  assert.match(html, /\.lesion-hover-preview-notes::first-line\{[^}]*font-weight:600[^}]*color:var\(--text\)/);
-  const helperBody = extractFunction(html, 'lesionHoverPreviewHtml').body;
-  assert.doesNotMatch(helperBody, /Padrão/, 'nenhuma lógica nova sobre "Padrão" dentro do preview');
+test('18. "Padrão:" ganha negrito SEMÂNTICO (<strong class="notes-lead-label">), inline na mesma linha do texto seguinte — nunca mais só via CSS ::first-line', () => {
+  assert.doesNotMatch(html, /\.lesion-hover-preview-notes::first-line\{/, 'o hack de ::first-line foi removido — negrito agora é determinístico, não depende de onde o texto quebra visualmente');
+  assert.match(html, /\.detail-notes > strong\.notes-lead-label,\.lesion-hover-preview-notes > strong\.notes-lead-label\{color:var\(--text\);?\}/,
+    'regra dedicada a .notes-lead-label (sem display:block — fica inline)');
   const ctx = makeCtx([LESION]);
   const out = vm.runInContext('lesionHoverPreviewHtml(DATA[0])', ctx);
-  assert.match(out, /Padrão: nódulo denso\./, '"Padrão:" continua só escapado, texto intacto');
+  assert.match(out, /<strong class="notes-lead-label">Padrão:<\/strong> nódulo denso\./, '"Padrão:" em <strong>, resto da linha em peso normal, tudo na mesma linha');
 });
 
-test('19. "Diferenciais-chave:" ganha linha própria + espaço acima (CSS por seletor de filho direto, sem classe nova no HTML gerado)', () => {
-  assert.match(html, /\.detail-notes > strong,\.lesion-hover-preview-notes > strong\{display:block;margin-top:\d+px;color:var\(--text\);?\}/,
-    'regra aplicada aos DOIS containers (detalhe e preview) — mesma classe, nenhuma nova');
+test('19. "Diferenciais-chave:" ganha linha própria + espaço acima (CSS escopado a .notes-section-label — nunca mais um seletor genérico "> strong", que agora colidiria com .notes-lead-label)', () => {
+  assert.match(html, /\.detail-notes > strong\.notes-section-label,\.lesion-hover-preview-notes > strong\.notes-section-label\{display:block;margin-top:\d+px;color:var\(--text\);?\}/,
+    'regra aplicada aos DOIS containers (detalhe e preview), escopada à classe — "Padrão:" (outro <strong> filho direto) não pode herdar display:block');
   const ctx = makeCtx([LESION]);
   const out = vm.runInContext('lesionHoverPreviewHtml(DATA[0])', ctx);
-  assert.match(out, /<strong>Diferenciais-chave:<\/strong>/, 'HTML do marcador não mudou (continua bare <strong>, sem atributo novo)');
+  assert.match(out, /<strong class="notes-section-label">Diferenciais-chave:<\/strong>/, 'marcador agora tem classe própria, pra não colidir com .notes-lead-label no mesmo seletor "> strong"');
 });
 
 test('20. cada diferencial em bloco próprio, com espaço perceptível entre eles (mesma classe do detalhe)', () => {
@@ -515,7 +521,7 @@ function notesDifferentialsHtml_legacy(notes){
   return \`\${esc(before)}<strong>\${esc(marker)}</strong>\${itemsHtml}\${esc(after)}\`;
 }`;
 
-test('21e. não migra/converte as notas reais existentes: todas as lesões do SEED com "Diferenciais-chave:" renderizam IDÊNTICO à versão anterior à correção (0 casos reais de travessão antes de "(" hoje)', () => {
+test('21e. não migra/converte as notas reais existentes: todas as lesões do SEED com "Diferenciais-chave:" renderizam IDÊNTICO à versão anterior à correção, exceto as 2 mudanças intencionais conhecidas (negrito semântico de "Padrão:" e classe no marcador) — 0 casos reais de travessão antes de "(" hoje', () => {
   const seedMatch = /const SEED = (\[.*?\]);/s.exec(html);
   assert.ok(seedMatch, 'SEED precisa ser localizável no index.html');
   const seed = JSON.parse(seedMatch[1]);
@@ -526,7 +532,15 @@ test('21e. não migra/converte as notas reais existentes: todas as lesões do SE
   for (let i = 0; i < withDiff.length; i++) {
     const current = vm.runInContext(`notesDifferentialsHtml(DATA[${i}].notes)`, ctx);
     const legacy = vm.runInContext(`notesDifferentialsHtml_legacy(DATA[${i}].notes)`, ctx);
-    assert.equal(current, legacy, `lesão "${withDiff[i].name}" (${withDiff[i].id}) rendeu diferente da versão anterior — não deveria, pois nenhuma nota real usa travessão`);
+    // Auditoria 2026-10-08: "Padrão:" ganhou <strong class="notes-lead-label">
+    // (antes: texto só escapado) e o marcador ganhou class="notes-section-label"
+    // (antes: <strong> bare) — as DUAS únicas diferenças intencionais e
+    // deterministicas vs a versão anterior. Revertendo as duas, a saída
+    // precisa continuar byte-a-byte idêntica à legada para TODA nota real.
+    const reverted = current
+      .replace('<strong class="notes-lead-label">Padrão:</strong>', 'Padrão:')
+      .replace('<strong class="notes-section-label">Diferenciais-chave:</strong>', '<strong>Diferenciais-chave:</strong>');
+    assert.equal(reverted, legacy, `lesão "${withDiff[i].name}" (${withDiff[i].id}) rendeu diferente da versão anterior, além das 2 mudanças intencionais conhecidas`);
   }
 });
 

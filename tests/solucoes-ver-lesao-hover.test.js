@@ -185,7 +185,7 @@ function makeHoverCtx(lesions, clickSpy) {
     __timers: timers, __anchor: anchor, __anchor2: anchor2
   };
   vm.createContext(context);
-  const deps = ['splitDifferentialItems', 'notesDifferentialsHtml'].map((n) => extractFunction(html, n).source).join('\n');
+  const deps = ['splitDifferentialItems', 'boldLeadingPadraoLabelHtml', 'formatDifferentialItemHtml', 'notesDifferentialsHtml'].map((n) => extractFunction(html, n).source).join('\n');
   vm.runInContext(ESC_SRC + '\n' + PREVIEW_STATE_SRC + '\n' + deps + '\n' + PREVIEW_LESION_COPY_SRC + '\n' + PREVIEW_SRC, context, { filename: 'solucoes-hover.js' });
   return context;
 }
@@ -290,7 +290,7 @@ test('COMPORTAMENTAL: hover "✨ proposta" mostra a CÓPIA com proposedChanges (
   ctx.__anchor2.fire('mouseenter'); ctx.__timers.fire(300);
   const html2 = ctx.document._appended[0].innerHTML;
   assert.match(html2, /PRÉVIA DA PROPOSTA/);
-  assert.match(html2, /<strong>Diferenciais-chave:<\/strong>/, 'notes propostas estruturadas renderizam com notesDifferentialsHtml');
+  assert.match(html2, /<strong class="notes-section-label">Diferenciais-chave:<\/strong>/, 'notes propostas estruturadas renderizam com notesDifferentialsHtml');
   assert.match(html2, /<strong>Craniofaringioma<\/strong> — calcificações\./);
   assert.doesNotMatch(html2, /nota curta/, 'nunca mostra a notes antiga nesta prévia');
   assert.equal(fp(ctx, 'DATA'), dataBefore, 'DATA permanece bit-a-bit igual depois do hover da proposta');
