@@ -15,6 +15,18 @@ ownership, link, tag ou dado de revisão/SRS foi alterado — só `s` e `site`
 (quando `s` era `"Vascular"`). `DEFAULT_SECTION_ORDER` não lista mais
 `"Vascular"`. Migração pontual em `scripts/migrate-vascular.js`.
 
+### Nuvem atualizada — migração aplicada (2026-10-18)
+
+O catálogo do Firestore foi alinhado à estrutura nova: **1.216 lesões na nuvem
+= 1.197 `seed_*` + 19 `u_*`** (as lesões personalizadas do usuário), com a
+**seção raiz "Vascular" eliminada** (`sectionOrder`/`siteOrder` sem
+`"Vascular"`). A migração re-embutiu o SEED de 1.197 nas `seed_*` e preservou
+o progresso (revisão, SRS, sessão, `lesionRevisions`, merges e tombstones) por
+import/merge, sem apagar as 19 lesões do usuário. As 2 lesões personalizadas
+que ainda estavam na seção "Vascular" foram remapeadas para a seção anatômica
+correta: **"Pileflebite (Tromboflebite séptica ascendente)" → Abdômen Superior**
+e **"Granulação aracnoide" → Neurorradiologia** (ambas com `site="Vascular"`).
+
 ### IA local — transporte ativo (sem deploy/commit nesta entrega)
 
 Usar Node 22+ instalado. `functions/` permanece, mas a UI não usa callable

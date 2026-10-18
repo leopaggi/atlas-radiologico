@@ -24,6 +24,19 @@ Testes re-baselinados ao novo catálogo: `duplicate-detection`
 `tests/seed-historico-1213.json` para `legacy-id-migration`.
 `node --test`: 2801 testes, 251 falhas = baseline idêntico.
 
+## Nuvem atualizada (2026-10-18)
+
+O Firestore foi alinhado ao SEED atual: **1.216 lesões = 1.197 `seed_*` +
+19 `u_*`** (personalizadas do usuário), com a **seção raiz "Vascular"
+eliminada** (`sectionOrder`/`siteOrder` sem `"Vascular"`; `site="Vascular"`
+permanece nas 78 lesões migradas). O merge preservou
+`review`/`srs`/`sessionLog`/`lesionRevisions`/`lesionMerges`/`lesionTombstones`/
+`imageTombstones` e as 19 `u_*` — nada foi apagado. As 2 `u_*` que ainda estavam
+na seção "Vascular" foram remapeadas (**Pileflebite → Abdômen Superior**;
+**Granulação aracnoide → Neurorradiologia**). O artefato de import local
+(`nuvem-migrada.json`) e o script pontual (`scripts/force-cloud-migration.js`)
+NÃO são versionados (ver `.gitignore`).
+
 ## Pivô IA local — transporte ativo, sem publicação
 
 O adapter ativo agora é `REVIEW_AI_LOCAL_PROVIDER`, HTTP em
