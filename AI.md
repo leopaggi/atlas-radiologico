@@ -1,5 +1,29 @@
 # AI.md — instruções para assistentes de IA (Claude, DeepSeek, ChatGPT, etc.)
 
+## Catálogo 1.197 + dissolução da seção Vascular (2026-10-18)
+
+`const SEED` deixou de ser um seed enxuto de 1.213 e passa a conter o
+catálogo real com **1.197 entradas `seed_*`** e todos os campos clínicos
+(`attributes`/`attributesVersion`, `classification`, `classificationSchemes`,
+`clinicalCases`, `clinicalTags`, `radiologicSigns`, `altPlacements`,
+`_userUpdatedAt`). O renumeramento posicional de ids no boot
+(`SEED.forEach(... id='seed_'+i)`) continua igual; ids no array são posicionais.
+
+A seção `"Vascular"` foi removida como seção: as 78 lesões migraram para a
+seção anatômica correta com `site="Vascular"`. `DEFAULT_SECTION_ORDER` não
+contém mais `"Vascular"`. `SECTION_ANATOMIC_SYSTEM['Vascular']='vascular'`
+permanece (mapa de cor/sistema). `LEGACY_ID_MIGRATION_MAP_V1` é inerte/
+histórico e teve 3 `expectedLegacy*` atualizados (seed_355, seed_409,
+seed_920). Migração pontual name-based em `scripts/migrate-vascular.js`
+(dry-run padrão; `--apply` grava o SEED); a v1 era por id e ficou obsoleta
+porque os ids são posicionais.
+
+Testes re-baselinados ao novo catálogo: `duplicate-detection`
+(EXPECTED_SEED_COUNT 1213→1197), 7 fixtures `structural-*` pinadas, formato
+`Nome — explicação` do hover-preview, e fixture congelada
+`tests/seed-historico-1213.json` para `legacy-id-migration`.
+`node --test`: 2801 testes, 251 falhas = baseline idêntico.
+
 ## Pivô IA local — transporte ativo, sem publicação
 
 O adapter ativo agora é `REVIEW_AI_LOCAL_PROVIDER`, HTTP em

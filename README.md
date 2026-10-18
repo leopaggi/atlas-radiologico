@@ -1,5 +1,20 @@
 # Atlas Radiológico
 
+### Seção "Vascular" dissolvida — catálogo de 1.197 lesões (2026-10-18)
+
+O `SEED` foi re-embutido a partir do catálogo atual: **1.197 lesões**, agora
+com todos os campos clínicos de verdade (atributos, casos clínicos, tags
+clínicas, esquemas de classificação e sinais radiológicos), e não apenas o
+subconjunto enxuto anterior.
+
+A seção **"Vascular" deixou de existir** como seção. As 78 lesões que estavam
+nela foram redistribuídas para a seção anatômica correta e passaram a ter
+`site` = `"Vascular"` (Neurorradiologia 7, Cabeça e Pescoço 5, Tórax 17,
+Abdômen Superior 22, Musculoesquelético 27). Nenhuma lesão, id, imagem,
+ownership, link, tag ou dado de revisão/SRS foi alterado — só `s` e `site`
+(quando `s` era `"Vascular"`). `DEFAULT_SECTION_ORDER` não lista mais
+`"Vascular"`. Migração pontual em `scripts/migrate-vascular.js`.
+
 ### IA local — transporte ativo (sem deploy/commit nesta entrega)
 
 Usar Node 22+ instalado. `functions/` permanece, mas a UI não usa callable
@@ -204,12 +219,14 @@ esse arquivo pra edição direta**. O fluxo é:
 Tudo num arquivo único (`index.html`), por opção explícita — mais fácil de
 manter e atualizar sem depender de build step. Por dentro, três camadas:
 
-- **Dados** — `const SEED = [...]`: ~1.213 lesões, cada uma com `id`, `s`
+- **Dados** — `const SEED = [...]`: ~1.197 lesões, cada uma com `id`, `s`
   (seção), `site` (subseção), `name`, `tags`, `notes`, `inc` (frequência:
   1=muito comum ... 4=raro), `enTerm` (termo em inglês pra busca), `links`,
-  `images`, e opcionalmente `classification` (sistema padronizado de
-  classificação radiológica — BI-RADS, PI-RADS, TI-RADS, etc.; ver
-  `AI.md` pra a lista completa e qual órgão cada um cobre).
+  `images`, `classification` (sistema padronizado de classificação
+  radiológica — BI-RADS, PI-RADS, TI-RADS, etc.; ver `AI.md` pra a lista
+  completa e qual órgão cada um cobre) e demais campos clínicos (atributos,
+  casos clínicos, tags clínicas, esquemas de classificação e sinais
+  radiológicos).
 - **Armazenamento local** — IndexedDB (banco `atlas_radiologico_idb`), não
   `localStorage`. Ver `AI.md` pra entender por quê.
 - **Sincronização** — Firebase Firestore (projeto `atlas-radiologico`),
