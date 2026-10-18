@@ -1,0 +1,31 @@
+# ============================================================
+# Arquivos locais que NUNCA devem ir para o GitHub
+# ============================================================
+
+# Dados clinicos sensiveis (nunca commitar)
+nuvem-migrada.json
+ATLAS_CANONICO_LIMPO_1216_116_FINAL.json
+
+# Artefatos de entrega temporarios
+COMMIT_MESSAGE.txt
+UPDATE_README_AI.txt
+
+# Script temporario de uso unico (migracao da nuvem)
+scripts/force-cloud-migration.js
+
+# Dumps de rollback que o script pode gerar
+cloud-backup-*.json
+
+# Credenciais / Service Accounts (nunca commitar)
+*serviceaccount*.json
+*service-account*.json
+firebase-adminsdk*.json
+*.pem
+
+# Ambiente
+.env
+.env.*
+!.env.example
+
+# Dependencias
+node_modules/
