@@ -7,7 +7,7 @@ const vm = require('node:vm');
 const test = require('node:test');
 
 const INDEX_PATH = path.resolve(__dirname, '..', 'index.html');
-const EXPECTED_SEED_COUNT = 1213;
+const EXPECTED_SEED_COUNT = 1197;
 
 let html = null;
 let inlineScripts = [];

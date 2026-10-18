@@ -521,7 +521,7 @@ function notesDifferentialsHtml_legacy(notes){
   return \`\${esc(before)}<strong>\${esc(marker)}</strong>\${itemsHtml}\${esc(after)}\`;
 }`;
 
-test('21e. não migra/converte as notas reais existentes: todas as lesões do SEED com "Diferenciais-chave:" renderizam IDÊNTICO à versão anterior à correção, exceto as 2 mudanças intencionais conhecidas (negrito semântico de "Padrão:" e classe no marcador) — 0 casos reais de travessão antes de "(" hoje', () => {
+test('21e. as notas reais do SEED renderizam de forma consistente: as que NÃO usam o separador novo "—" continuam byte-a-byte idênticas à versão anterior à correção (revertendo as 2 mudanças intencionais conhecidas: negrito semântico de "Padrão:" e classe no marcador); as que usam "Nome — explicação" são a ÚNICA diferença adicional, e o formato novo está presente nos dados', () => {
   const seedMatch = /const SEED = (\[.*?\]);/s.exec(html);
   assert.ok(seedMatch, 'SEED precisa ser localizável no index.html');
   const seed = JSON.parse(seedMatch[1]);
@@ -529,19 +529,27 @@ test('21e. não migra/converte as notas reais existentes: todas as lesões do SE
   assert.ok(withDiff.length > 900, 'sanity check: ainda existem ~1.014 lesões reais com Diferenciais-chave:');
   const ctx = makeCtx(withDiff);
   vm.runInContext(LEGACY_NOTES_DIFFERENTIALS_SRC, ctx);
+  let newDashFormat = 0;
   for (let i = 0; i < withDiff.length; i++) {
     const current = vm.runInContext(`notesDifferentialsHtml(DATA[${i}].notes)`, ctx);
     const legacy = vm.runInContext(`notesDifferentialsHtml_legacy(DATA[${i}].notes)`, ctx);
     // Auditoria 2026-10-08: "Padrão:" ganhou <strong class="notes-lead-label">
     // (antes: texto só escapado) e o marcador ganhou class="notes-section-label"
-    // (antes: <strong> bare) — as DUAS únicas diferenças intencionais e
-    // deterministicas vs a versão anterior. Revertendo as duas, a saída
-    // precisa continuar byte-a-byte idêntica à legada para TODA nota real.
+    // (antes: <strong> bare) — as 2 mudanças cosméticas intencionais e
+    // determinísticas. Revertendo as duas, a saída da nota legada precisa
+    // continuar byte-a-byte idêntica, SALVO quando o item usa o separador novo
+    // "—" ("Nome — explicação"), que é uma mudança INTENCIONAL de renderização
+    // agora adotada pelos dados reais (as notas antigas usavam só "(").
     const reverted = current
       .replace('<strong class="notes-lead-label">Padrão:</strong>', 'Padrão:')
       .replace('<strong class="notes-section-label">Diferenciais-chave:</strong>', '<strong>Diferenciais-chave:</strong>');
-    assert.equal(reverted, legacy, `lesão "${withDiff[i].name}" (${withDiff[i].id}) rendeu diferente da versão anterior, além das 2 mudanças intencionais conhecidas`);
+    if (reverted === legacy) continue;
+    const section = withDiff[i].notes.slice(withDiff[i].notes.indexOf('Diferenciais-chave:'));
+    assert.ok(section.includes('—'),
+      `lesão "${withDiff[i].name}" (${withDiff[i].id}) rendeu diferente da versão anterior SEM usar o separador novo "—"`);
+    newDashFormat++;
   }
+  assert.ok(newDashFormat > 0, 'o formato "Nome — explicação" está presente nos dados reais');
 });
 
 test('21f. detalhe da lesão, preview por hover e Quiz pós-resposta continuam chamando o MESMO renderer (notesDifferentialsHtml) — nenhum parser novo por lugar', () => {

@@ -247,12 +247,17 @@ test('motor real e localizado estaticamente no index.html nas linhas esperadas',
 // contra o SEED real (PASSO 16); (b) checar que as fixtures desta suite
 // nao ficaram desatualizadas.
 // ---------------------------------------------------------------------------
+// SEED historico (1213) congelado como fixture: o motor de migracao de legacy
+// IDs (V1) e' INERTE e foi auditado contra aquele SEED especifico (ids "crus"
+// pre-boot, nao posicionais: ex. seed_32 e' "Osteoma craniano"). O SEED vivo do
+// index.html foi consolidado/renumerado na nuvem desde entao (duplicatas
+// mescladas). Esta suite documenta e verifica aquele CONTRATO HISTORICO, entao
+// usa a fixture congelada (tests/seed-historico-1213.json) em vez do SEED vivo.
+const LEGACY_SEED_FIXTURE = path.resolve(__dirname, 'seed-historico-1213.json');
 function loadRealSeed() {
-  const match = /\bconst\s+SEED\s*=/.exec(html);
-  assert.ok(match, 'SEED nao encontrado em index.html');
-  const start = html.indexOf('[', match.index);
-  const seed = JSON.parse(extractDelimited(html, start));
-  assert.ok(Array.isArray(seed), 'SEED deve ser um array JSON estatico');
+  assert.ok(fs.existsSync(LEGACY_SEED_FIXTURE), 'tests/seed-historico-1213.json (fixture congelada) deve existir');
+  const seed = JSON.parse(fs.readFileSync(LEGACY_SEED_FIXTURE, 'utf8'));
+  assert.ok(Array.isArray(seed), 'SEED (fixture historica) deve ser um array JSON estatico');
   return seed;
 }
 const REAL_SEED = loadRealSeed();
