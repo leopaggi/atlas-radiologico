@@ -1,5 +1,17 @@
 # AI.md — instruções para assistentes de IA (Claude, DeepSeek, ChatGPT, etc.)
 
+## Capa e reordenação de imagens (2026-10-19)
+
+Editar lesão e o modal `🖼 Adicionar imagem` do Quiz têm `★ capa`, `↑` e `↓`.
+A capa é `images[0]` (cards/detalhe usam `getEntryImgs`/`getEntryFirstImg`, que
+preservam a ordem). A reordenação usa o helper puro `moveArrayItem` e só troca
+posições: nunca altera `publicId`, URL, `assetId`, legenda, contexto clínico ou
+ownership. No editor, marcar `imgsChanged` faz o `Salvar` gravar a nova ordem;
+no Quiz, o `concluído` aplica `draftImgs` na ordem exibida. A união de imagens
+na sincronização preserva a base local e anexa novas ao fim; deduplicação
+(`Map` por primeira ocorrência) preserva a capa. Teste:
+`tests/image-reorder-cover.test.js` (8 PASS).
+
 ## Catálogo 1.197 + dissolução da seção Vascular (2026-10-18)
 
 `const SEED` deixou de ser um seed enxuto de 1.213 e passa a conter o

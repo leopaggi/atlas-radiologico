@@ -1,5 +1,19 @@
 # Diario de desenvolvimento
 
+## Capa e reordenação de imagens (2026-10-19)
+
+A galeria do formulário Editar lesão e o modal "Adicionar imagem" do Quiz agora
+permitem escolher a capa e mudar a ordem das imagens de cada lesão com os
+botões ★ capa, ↑ e ↓. A capa é simplesmente a primeira imagem da lista, que é
+o que os cards e o detalhe já exibiam. A mudança só troca a posição das imagens
+na lesão: não altera endereço, identificador do Cloudinary, legenda, contexto
+clínico nem a associação da imagem à lesão. No editor, a nova ordem entra ao
+clicar em Salvar; no Quiz, ao clicar em concluído. A sincronização continua
+juntando imagens que chegam de outro computador sem perder a capa escolhida.
+Testes: novo `tests/image-reorder-cover.test.js` com 8 testes aprovados e
+verificação de sintaxe do JavaScript inline aprovada. Nada foi publicado nem
+enviado à nuvem nesta etapa.
+
 ## Pivô do transporte IA para backend Node local
 
 Preservada functions/ e separado seu núcleo de análise da autenticação

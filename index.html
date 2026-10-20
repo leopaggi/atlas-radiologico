@@ -437,6 +437,7 @@ body{
 .img-cloud-status.ok{color:var(--teal);}
 .img-cloud-status.warn{color:var(--amber);}
 .img-source-badge{position:absolute;top:4px;left:4px;background:rgba(14,23,32,.82);color:var(--teal);font-size:9px;padding:1px 5px;border-radius:7px;font-family:'IBM Plex Mono',monospace;}
+.img-cover-badge{position:absolute;top:4px;right:4px;background:rgba(14,23,32,.82);color:var(--amber,#d9a441);font-size:9px;padding:1px 5px;border-radius:7px;font-family:'IBM Plex Mono',monospace;}
 .img-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-bottom:8px;}
 .img-gallery:empty{display:none;}
 .img-gallery-item{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius);padding:6px;position:relative;}
@@ -485,7 +486,14 @@ body{
   width:18px;height:18px;border-radius:50%;font-size:11px;cursor:pointer;line-height:1;
 }
 .img-gallery-remove:hover{background:#c0392b;}
-.img-gallery-actions{display:flex;gap:6px;margin-top:6px;}
+.img-gallery-actions{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center;}
+.img-gallery-cover-btn,.img-gallery-move{
+  background:var(--panel-2);border:1px solid var(--line);color:var(--teal);cursor:pointer;
+  font-size:11px;border-radius:6px;padding:5px 9px;font-family:inherit;
+}
+.img-gallery-cover-btn:hover,.img-gallery-move:hover{border-color:var(--teal);}
+.img-gallery-cover-btn[disabled],.img-gallery-move[disabled]{opacity:.35;cursor:default;}
+.img-gallery-cover-btn[disabled]:hover,.img-gallery-move[disabled]:hover{border-color:var(--line);}
 .img-gallery-actions .img-gallery-remove{position:static;width:auto;height:auto;border-radius:6px;padding:5px 9px;font-size:11px;background:var(--panel-2);border:1px solid var(--line);}
 .img-gallery-actions .img-gallery-remove:hover{background:#c0392b;border-color:#c0392b;}
 .img-gallery-swap{
@@ -11035,6 +11043,20 @@ function removeImageFromLesionData(lesion, imageIndex){
   if(removed) lesion._userUpdatedAt = Date.now();
   return removed;
 }
+/* Reordenar = só mudar a POSIÇÃO no array `images`; nada de URL, publicId,
+   assetId ou qualquer metadado é tocado. A primeira posição é a capa exibida
+   nos cards e no detalhe (getEntryImgs/getEntryFirstImg preservam a ordem).
+   `to` é limitado ao intervalo válido; devolve true quando a ordem mudou. */
+function moveArrayItem(arr, from, to){
+  if(!Array.isArray(arr)) return false;
+  const n = arr.length;
+  if(!Number.isInteger(from) || !Number.isInteger(to) || from<0 || from>=n) return false;
+  const dest = Math.max(0, Math.min(n-1, to));
+  if(from===dest) return false;
+  const moved = arr.splice(from,1)[0];
+  arr.splice(dest,0,moved);
+  return true;
+}
 /* O formulário normal já edita `label`; esta versão direta faz exatamente a
    mesma alteração na lesão do Quiz e preserva todos os demais metadados. */
 function updateLesionImageLabel(lesion, imageIndex, label){
@@ -17933,6 +17955,7 @@ function openForm(id, opts){
       const sourceLabel=img.source==='cloudinary'?'☁ Cloudinary':(img.source==='pending'?'⏳ não enviada':(img.source==='imgbb'?'☁ ImgBB':(img.source==='url'?'🔗 URL':'💾 local')));
       item.innerHTML = `
         <span class="img-source-badge">${sourceLabel}</span>
+        ${idx===0 ? '<span class="img-cover-badge" title="esta é a imagem de capa do card">★ capa</span>' : ''}
         <img src="${img.data}" class="img-gallery-thumb" title="clique pra ampliar">
         <textarea class="img-gallery-label" rows="3" placeholder="descrição da imagem/quadro (sequências curtas como &quot;axial T2, CC, MLO&quot; ou um texto mais longo)">${esc(img.label||'')}</textarea>
         <div class="img-gallery-seq-wrap">
@@ -17956,6 +17979,9 @@ function openForm(id, opts){
           <button type="button" class="img-gallery-replace-url-btn">✓</button>
         </div>
         <div class="img-gallery-actions">
+          <button type="button" class="img-gallery-cover-btn" title="usar esta imagem como capa (primeira do card)" ${idx===0?'disabled':''}>★ capa</button>
+          <button type="button" class="img-gallery-move img-gallery-move-up" title="mover para cima" ${idx===0?'disabled':''}>↑</button>
+          <button type="button" class="img-gallery-move img-gallery-move-down" title="mover para baixo" ${idx===pendingImgs.length-1?'disabled':''}>↓</button>
           ${Array.isArray(img.panels) && img.panels.length ? '<button type="button" class="img-gallery-edit-collage" title="reabrir o construtor de quadro com os mesmos painéis, pra adicionar, remover ou corrigir legendas">▦ editar quadro</button>' : ''}
           <button type="button" class="img-gallery-swap" title="trocar a imagem deste quadro, mantendo rótulo e posição">🔄 trocar imagem</button>
           ${imageLinkButtonHtml({cases:clinicalCasesDraft, signs:radiologicSignsDraft, schemes:classificationSchemesDraft}, img, 'data-form-link="1"')}
@@ -18101,6 +18127,14 @@ function openForm(id, opts){
         expandedClinicalBoxes.add(img);
         renderImgGallery();
       };
+      const reorderGallery = (from, to)=>{
+        if(!moveArrayItem(pendingImgs, from, to)) return;
+        imgsChanged = true;
+        renderImgGallery();
+      };
+      item.querySelector('.img-gallery-cover-btn').addEventListener('click', ()=> reorderGallery(idx, 0));
+      item.querySelector('.img-gallery-move-up').addEventListener('click', ()=> reorderGallery(idx, idx-1));
+      item.querySelector('.img-gallery-move-down').addEventListener('click', ()=> reorderGallery(idx, idx+1));
       item.querySelector('.img-gallery-remove').addEventListener('click', ()=>{
         const removed = pendingImgs.splice(idx,1)[0];
         if(removed && removed.source==='pending') revokeObjectUrl(removed._objectUrl);
@@ -22374,9 +22408,13 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
       // nunca uma URL remota inexistente. Miniatura e lightbox usam a MESMA src.
       const src = img.data || img._objectUrl || '';
       item.innerHTML = `<span class="img-source-badge">${badge}</span>
+        ${idx===0 ? '<span class="img-cover-badge" title="esta é a imagem de capa do card">★ capa</span>' : ''}
         <img src="${src}" class="img-gallery-thumb" title="clique pra ampliar">
         <div class="quiz-img-current-label" title="${escAttr(img.label||'')}">${esc(img.label||'Sem legenda')}</div>
         <div class="img-gallery-actions">
+          <button type="button" class="img-gallery-cover-btn quiz-img-cover" title="usar esta imagem como capa (primeira do card)" ${idx===0?'disabled':''}>★ capa</button>
+          <button type="button" class="img-gallery-move quiz-img-up" title="mover para cima" ${idx===0?'disabled':''}>↑</button>
+          <button type="button" class="img-gallery-move quiz-img-down" title="mover para baixo" ${idx===draftImgs.length-1?'disabled':''}>↓</button>
           <button type="button" class="img-gallery-swap quiz-img-edit">✏ Editar</button>
           <button type="button" class="img-gallery-remove quiz-img-remove">🗑 Remover</button>
         </div>
@@ -22396,6 +22434,10 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
         draftImgs[idx].label = labelInput.value;
         renderGallery();
       };
+      const reorderDraft = (from, to)=>{ if(moveArrayItem(draftImgs, from, to)) renderGallery(); };
+      item.querySelector('.quiz-img-cover').onclick = ()=> reorderDraft(idx, 0);
+      item.querySelector('.quiz-img-up').onclick = ()=> reorderDraft(idx, idx-1);
+      item.querySelector('.quiz-img-down').onclick = ()=> reorderDraft(idx, idx+1);
       item.querySelector('.quiz-img-remove').onclick = ()=>{
         if(!confirm('Remover esta imagem desta lesão?')) return;
         const removed = draftImgs.splice(idx,1)[0];

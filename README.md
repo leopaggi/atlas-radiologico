@@ -715,6 +715,18 @@ Editar e Quiz (sem duplicar lógica).
 
 Testes: `tests/quiz-images.test.js` com **56 PASS**.
 
+### Capa e reordenação de imagens (2026-10-19)
+
+Na galeria do formulário `Editar lesão` e no modal `🖼 Adicionar imagem` do
+Quiz, cada imagem ganhou `★ capa`, `↑` e `↓`. A primeira posição do array
+`images` é a capa exibida no card e no detalhe; reordenar só troca posições e
+marca a edição para o `Salvar`/`concluído` persistir. `publicId`, URL,
+`assetId`, legenda, contexto clínico, ownership e demais metadados não mudam.
+A união de imagens na sincronização preserva a ordem local e anexa apenas
+imagens novas; a deduplicação mantém a posição da primeira ocorrência, então
+a capa escolhida não muda sozinha. Cobertura:
+`tests/image-reorder-cover.test.js` (8 testes).
+
 ### Cancelar um pedido de revisão (2026-09-20)
 
 Na Central de Revisões (🔔) e na aba Propostas da Central de Soluções (💡),
