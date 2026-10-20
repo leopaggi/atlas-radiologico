@@ -4,6 +4,7 @@
 
 # Dados clinicos sensiveis (nunca commitar)
 nuvem-migrada.json
+nuvem-corrigida.json
 ATLAS_CANONICO_LIMPO_1216_116_FINAL.json
 
 # Artefatos de entrega temporarios
@@ -17,6 +18,7 @@ scripts/force-cloud-migration.js
 cloud-backup-*.json
 
 # Credenciais / Service Accounts (nunca commitar)
+serviceaccount.json
 *serviceaccount*.json
 *service-account*.json
 firebase-adminsdk*.json
