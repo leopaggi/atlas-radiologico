@@ -195,6 +195,15 @@ body{
   border-radius:9px;padding:1px 6px;line-height:1.4;min-width:8px;text-align:center;
 }
 .review-center-btn.is-empty .review-center-badge{display:none;}
+.review-center-icon{display:inline-block;line-height:1;font-size:15px;}
+#pending-reviews-btn:not(.is-empty){color:#FFC107;border-color:rgba(255,193,7,.55);}
+#pending-reviews-btn:not(.is-empty):hover{border-color:#FFC107;background:rgba(255,193,7,.14);}
+#pending-reviews-btn .review-center-icon{filter:saturate(1.15) brightness(1.08);}
+#pending-reviews-badge{background:#FFC107;color:#241a00;}
+#ready-solutions-btn:not(.is-empty){color:#4CAF50;border-color:rgba(76,175,80,.55);}
+#ready-solutions-btn:not(.is-empty):hover{border-color:#4CAF50;background:rgba(76,175,80,.16);}
+#ready-solutions-btn .review-center-icon{filter:grayscale(1) sepia(1) saturate(3) hue-rotate(85deg) brightness(.9);}
+#ready-solutions-badge{background:#4CAF50;color:#0b1f12;}
 #progress-btn{
   background:none;color:var(--muted);border:1px solid var(--line);padding:9px 14px;
   border-radius:var(--radius);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0;
@@ -2020,8 +2029,8 @@ body{
       <div id="scope-title"><span class="path" id="scope-path"></span><div id="scope-name">Todas as seções</div></div>
       <div id="search-wrap"><input id="search" placeholder="Buscar lesão…"></div>
       <div class="review-center-actions">
-        <button id="pending-reviews-btn" class="review-center-btn is-empty" title="Revisões pendentes" aria-label="Revisões pendentes">🔔<span id="pending-reviews-badge" class="review-center-badge"></span></button>
-        <button id="ready-solutions-btn" class="review-center-btn is-empty" title="Soluções disponíveis" aria-label="Soluções disponíveis">💡<span id="ready-solutions-badge" class="review-center-badge"></span></button>
+        <button id="pending-reviews-btn" class="review-center-btn is-empty" title="Revisões pendentes" aria-label="Revisões pendentes"><span class="review-center-icon" aria-hidden="true">🔔</span><span id="pending-reviews-badge" class="review-center-badge"></span></button>
+        <button id="ready-solutions-btn" class="review-center-btn is-empty" title="Soluções disponíveis" aria-label="Soluções disponíveis"><span class="review-center-icon" aria-hidden="true">💡</span><span id="ready-solutions-badge" class="review-center-badge"></span></button>
       </div>
       <button id="progress-btn">🧠 Quiz &amp; Progresso</button>
       <button id="quiz-btn" style="display:none">🧠 Quiz<span id="quiz-due-badge" class="quiz-due-badge" style="display:none;"></span></button>
