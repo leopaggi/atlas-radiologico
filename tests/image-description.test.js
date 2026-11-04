@@ -222,9 +222,14 @@ test('LIGHTBOX (dinâmico): sem descrição -> nenhuma caixa de descrição VIS�
   // descrição ao trocar de imagem sem recriar a overlay inteira. A garantia
   // de "nenhuma caixa aparece" continua valendo (elemento [hidden] não é
   // visível), só muda COMO isso é garantido.
+  // lrev_mulfu0x2_optim1 — a unificação com a barra de fonte deu ao card
+  // dois filhos sempre presentes (.lightbox-desc-text e .lightbox-desc-source),
+  // cada um com seu próprio [hidden] — por isso o card já não fica vazio
+  // (<div ...></div>), mas continua oculto por fora (harness estático: não
+  // executa updateLbDescVisibility, então ambos os filhos nascem ocultos).
   for (const empty of [undefined, '', '   ', null]) {
     const { ov, appended } = invokeLightbox('https://x/y.jpg', empty);
-    assert.match(ov.innerHTML, /<div class="lightbox-desc" hidden><\/div>/, `description=${JSON.stringify(empty)} deve renderizar a caixa oculta, vazia`);
+    assert.match(ov.innerHTML, /<div class="lightbox-desc" hidden>\s*<div class="lightbox-desc-text" hidden><\/div>\s*<div class="lightbox-desc-source" hidden>/, `description=${JSON.stringify(empty)} deve renderizar a caixa oculta, sem texto visível`);
     assert.match(ov.innerHTML, /class="lightbox-img"/);
     assert.equal(appended.length, 1, 'o lightbox precisa ser anexado ao body normalmente');
     assert.equal(typeof ov.onclick, 'function', 'clicar fora continua fechando');
@@ -248,7 +253,8 @@ test('LIGHTBOX (dinâmico): com descrição -> aparece abaixo da imagem, escapad
 
 test('LIGHTBOX (dinâmico): descrição só com espaços é tratada como vazia (trim), igual a não ter descrição', () => {
   const { ov } = invokeLightbox('https://x/y.jpg', '   \n  ');
-  assert.match(ov.innerHTML, /<div class="lightbox-desc" hidden><\/div>/);
+  // ver nota lrev_mulfu0x2_optim1 acima: card nunca mais fica vazio, só oculto.
+  assert.match(ov.innerHTML, /<div class="lightbox-desc" hidden>\s*<div class="lightbox-desc-text" hidden><\/div>\s*<div class="lightbox-desc-source" hidden>/);
 });
 
 test('LIGHTBOX: CSS garante que a descrição fica ABAIXO da imagem, nunca sobreposta (coluna, sem position:absolute na descrição)', () => {
@@ -367,12 +373,15 @@ test('LIGHTBOX/LARGURA: a coluna da descrição NÃO fica presa à largura da im
 });
 
 test('LIGHTBOX/COMPACTO: padding vertical e line-height mais enxutos que antes, mas ainda legível (fonte não foi reduzida)', () => {
-  const descRule = html.match(/\.lightbox-desc\{([^}]*)\}/)[1];
-  const lineHeight = parseFloat(descRule.match(/line-height:\s*([\d.]+)/)[1]);
-  const fontSize = parseFloat(descRule.match(/font-size:\s*([\d.]+)px/)[1]);
+  // lrev_mulfu0x2_optim1 — font-size/line-height/text-align do TEXTO
+  // migraram para .lightbox-desc-text (o card .lightbox-desc agora só guarda
+  // layout/fundo/padding do conjunto texto+fonte unificado).
+  const textRule = html.match(/\.lightbox-desc-text\{([^}]*)\}/)[1];
+  const lineHeight = parseFloat(textRule.match(/line-height:\s*([\d.]+)/)[1]);
+  const fontSize = parseFloat(textRule.match(/font-size:\s*([\d.]+)px/)[1]);
   assert.ok(lineHeight <= 1.45, `line-height precisa ser compacto (<=1.45), veio ${lineHeight}`);
   assert.ok(fontSize >= 13, `a solução não pode ser diminuir demais a fonte (>=13px), veio ${fontSize}px`);
-  assert.match(descRule, /text-align:\s*left/);
+  assert.match(textRule, /text-align:\s*left/);
 });
 
 test('LIGHTBOX: a imagem continua o elemento visual prioritário (tamanho/posição dela não foram tocados)', () => {

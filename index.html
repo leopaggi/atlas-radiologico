@@ -860,22 +860,38 @@ body{
   width:min(1200px,94vw);max-width:100%;max-height:100%;cursor:default;
 }
 .lightbox-img{max-width:100%;max-height:75vh;object-fit:contain;border-radius:4px;flex:0 0 auto;cursor:zoom-out;}
+/* lrev_mulfu0x2_optim1 — UNIFICAÇÃO: a antiga barra separada .lightbox-source
+   (fonte/URL) foi dobrada PRA DENTRO deste card, como um rodapé discreto
+   (ícone 🔗 + "Copiar link") — não mais um segundo bloco com seu próprio
+   fundo/borda abaixo da descrição. Isso economiza o gap extra entre os dois
+   blocos E a altura própria do card de fonte. Só o texto (.lightbox-desc-text)
+   tem teto + rolagem própria; o rodapé de fonte nunca rola junto, fica
+   sempre visível. A imagem (.lightbox-stage/.lightbox-img, acima) já usa
+   vh fixo — nunca depende da altura deste card, então nunca é "esmagada". */
 .lightbox-desc{
   width:100%;box-sizing:border-box;flex:0 0 auto;cursor:auto;
+  display:flex;flex-direction:column;gap:6px;
   background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:10px;
-  padding:8px 18px;color:#f2f4f6;font-size:14px;line-height:1.4;text-align:left;
-  white-space:pre-wrap;overflow-wrap:anywhere;
-  max-height:calc(5 * 1.4em + 16px);overflow-y:auto;overflow-x:hidden;
+  padding:8px 18px;color:#f2f4f6;
 }
-.lightbox-source{
-  width:100%;box-sizing:border-box;flex:0 0 auto;cursor:auto;display:flex;align-items:center;gap:8px;
-  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:8px;
-  padding:5px 12px;color:#cfd8de;font-size:11.5px;line-height:1.35;
-  white-space:nowrap;overflow:hidden;
+.lightbox-desc[hidden]{display:none;}
+.lightbox-desc-text{
+  font-size:14px;line-height:1.4;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;
+  max-height:calc(4 * 1.4em);overflow-y:auto;overflow-x:hidden;
 }
-.lightbox-source[hidden]{display:none;}
-.lightbox-source-label{font:600 9.5px 'IBM Plex Mono',monospace;letter-spacing:.05em;text-transform:uppercase;color:#9fb0ba;white-space:nowrap;flex:0 0 auto;}
-.lightbox-source-link{flex:1 1 auto;color:#7ee7dc;text-decoration:underline;text-underline-offset:2px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lightbox-desc-text[hidden]{display:none;}
+.lightbox-desc-source{
+  display:flex;align-items:center;gap:10px;flex:0 0 auto;
+  padding-top:6px;border-top:1px solid rgba(255,255,255,.12);
+}
+.lightbox-desc-source[hidden]{display:none;}
+.lightbox-source-link{
+  display:flex;align-items:center;gap:5px;min-width:0;flex:1 1 auto;
+  color:#7ee7dc;text-decoration:none;font-size:11.5px;line-height:1.35;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.lightbox-source-link:hover{text-decoration:underline;}
+.lightbox-source-link-icon{flex:0 0 auto;}
 .lightbox-source-copy{
   margin-left:auto;flex:0 0 auto;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);
   color:#f2f4f6;border-radius:5px;font-size:10px;padding:3px 8px;cursor:pointer;font-family:inherit;
@@ -22074,11 +22090,12 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
         <button type="button" class="lightbox-nav-next" aria-label="Próxima imagem" style="${navBtnStyle}right:8px;">›</button>
         <div class="lightbox-nav-counter" aria-live="polite" style="position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:5;background:rgba(6,10,14,.6);color:#fff;font-size:12px;padding:2px 10px;border-radius:999px;font-family:'IBM Plex Mono',monospace;">${navIdx+1} / ${navList.length}</div>` : ''}
       </div>
-      <div class="lightbox-desc" ${desc ? '' : 'hidden'}>${desc ? richDescHtml(desc) : ''}</div>
-      <div class="lightbox-source" hidden>
-        <span class="lightbox-source-label">Fonte:</span>
-        <a class="lightbox-source-link" target="_blank" rel="noopener noreferrer"></a>
-        <button type="button" class="lightbox-source-copy" title="copiar a URL da fonte">copiar</button>
+      <div class="lightbox-desc" hidden>
+        <div class="lightbox-desc-text" ${desc ? '' : 'hidden'}>${desc ? richDescHtml(desc) : ''}</div>
+        <div class="lightbox-desc-source" hidden>
+          <a class="lightbox-source-link" target="_blank" rel="noopener noreferrer"><span class="lightbox-source-link-icon" aria-hidden="true">🔗</span><span class="lightbox-source-link-label"></span></a>
+          <button type="button" class="lightbox-source-copy" title="copiar link da imagem">Copiar link</button>
+        </div>
       </div>
     </div>
     <div class="lightbox-controls" style="display:flex;gap:6px;justify-content:center;margin-top:8px;">
@@ -22089,35 +22106,47 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
     </div>
     <button type="button" class="lightbox-close">✕</button>`;
   const lbFind = (sel)=>{ try{ return ov.querySelector(sel); }catch(e){ return null; } };
+  const descEl = lbFind('.lightbox-desc');
+  const descTextEl = lbFind('.lightbox-desc-text');
   // Fonte / URL da imagem no lightbox: lê o item de navegação atual
   // (sourcePage -> originalUrl -> data) e mantém o link/cópia em sincronia ao
-  // trocar de imagem. Só http(s) vira link; o resto continua oculto.
-  const lbSourceRow = lbFind('.lightbox-source');
-  const lbSourceLabel = lbFind('.lightbox-source-label');
+  // trocar de imagem. Só http(s) vira link; o resto continua oculto. A barra
+  // de fonte agora vive DENTRO do mesmo card da descrição (rodapé fixo, não
+  // rola com o texto) — updateLbDescVisibility() decide se o card aparece
+  // (texto OU fonte presente; nunca mostra o card vazio).
+  const lbSourceRow = lbFind('.lightbox-desc-source');
   const lbSourceLink = lbFind('.lightbox-source-link');
+  const lbSourceLinkLabel = lbFind('.lightbox-source-link-label');
   const lbSourceCopy = lbFind('.lightbox-source-copy');
+  function updateLbDescVisibility(){
+    if(!descEl) return;
+    const hasText = !!(descTextEl && !descTextEl.hidden);
+    const hasSource = !!(lbSourceRow && !lbSourceRow.hidden);
+    descEl.hidden = !hasText && !hasSource;
+  }
   function paintLightboxSource(item, fallbackSrc){
-    if(!lbSourceRow || !lbSourceLink) return;
+    if(!lbSourceRow || !lbSourceLink){ updateLbDescVisibility(); return; }
     // Em contextos isolados (testes vm) o helper pode não estar presente.
-    if(typeof imageSourceInfo !== 'function'){ lbSourceRow.hidden = true; return; }
+    if(typeof imageSourceInfo !== 'function'){ lbSourceRow.hidden = true; updateLbDescVisibility(); return; }
     const info = imageSourceInfo(item, fallbackSrc);
     if(!info.source || !info.isHttp){
       lbSourceRow.hidden = true;
       if(typeof lbSourceLink.removeAttribute === 'function') lbSourceLink.removeAttribute('href');
-      lbSourceLink.textContent = '';
+      lbSourceLink.title = '';
       if(lbSourceCopy) lbSourceCopy.onclick = null;
+      updateLbDescVisibility();
       return;
     }
     lbSourceRow.hidden = false;
-    if(lbSourceLabel) lbSourceLabel.textContent = info.direct ? 'URL da imagem:' : 'Fonte:';
+    if(lbSourceLinkLabel) lbSourceLinkLabel.textContent = info.direct ? 'URL da imagem' : 'Fonte';
     lbSourceLink.href = info.source;
     lbSourceLink.title = info.source;
-    lbSourceLink.textContent = info.source;
     if(lbSourceCopy) lbSourceCopy.onclick = (e)=>{
       if(e && e.stopPropagation) e.stopPropagation();
       if(typeof copyUrlWithToast === 'function') copyUrlWithToast(info.source, 'URL copiada.');
       else if(typeof copyTextToClipboard === 'function') copyTextToClipboard(info.source);
     };
+    updateLbDescVisibility();
   }
   if(lbSourceRow) lbSourceRow.onclick = (e)=>{ if(e && e.stopPropagation) e.stopPropagation(); };
   paintLightboxSource(navList[navIdx] || { data: src }, src);
@@ -22139,7 +22168,6 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
   if(document.addEventListener) document.addEventListener('keydown', lbKeydown);
   const closeBtn = lbFind('.lightbox-close');
   if(closeBtn) closeBtn.onclick = (e)=>{ if(e && e.stopPropagation) e.stopPropagation(); closeLb(); };
-  const descEl = lbFind('.lightbox-desc');
   if(descEl){
     // clicar no texto não fecha o lightbox (permite ler/selecionar); clicar
     // fora continua fechando, como sempre.
@@ -22156,8 +22184,8 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
     const img = lbFind('.lightbox-img');
     if(img) img.src = item.data;
     const newDesc = String(item.label || '').trim();
-    if(descEl){ descEl.hidden = !newDesc; descEl.textContent = newDesc; descEl.innerHTML = newDesc ? richDescHtml(newDesc) : ''; }
-    paintLightboxSource(item, item.data);
+    if(descTextEl){ descTextEl.hidden = !newDesc; descTextEl.innerHTML = newDesc ? richDescHtml(newDesc) : ''; }
+    paintLightboxSource(item, item.data); // já chama updateLbDescVisibility() ao final
     const counterEl = lbFind('.lightbox-nav-counter');
     if(counterEl) counterEl.textContent = (navIdx + 1) + ' / ' + navList.length;
     // lrev_muqw07yj_w2yirw — contexto clínico re-resolvido POR IMAGEM a cada

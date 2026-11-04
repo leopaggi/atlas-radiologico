@@ -185,11 +185,21 @@ test('13. contador (N / total) é atualizado dentro de goToLbImage', () => {
 // ===========================================================================
 
 test('14. legenda (lightbox-desc) é atualizada e ocultada quando a nova imagem não tem descrição', () => {
-  assert.match(LIGHTBOX_SRC, /descEl\.hidden = !newDesc; descEl\.textContent = newDesc;/);
+  // lrev_mulfu0x2_optim1 — a barra de fonte foi unificada dentro do card da
+  // descrição: quem guarda/esconde o TEXTO agora é .lightbox-desc-text
+  // (descTextEl), não mais o card inteiro (.lightbox-desc/descEl) — o card
+  // em si só fica oculto quando NEM texto NEM fonte sobram (ver
+  // updateLbDescVisibility, testado abaixo).
+  assert.match(LIGHTBOX_SRC, /descTextEl\.hidden = !newDesc; descTextEl\.innerHTML = newDesc \? richDescHtml\(newDesc\) : '';/);
 });
 
 test('descrição vazia por padrão fica com hidden (não deixa caixa vazia visível)', () => {
-  assert.match(LIGHTBOX_SRC, /<div class="lightbox-desc" \$\{desc \? '' : 'hidden'\}>/);
+  // O template estático agora sempre começa oculto — quem decide reaparecer
+  // (texto OU fonte presentes) é updateLbDescVisibility(), chamada a partir
+  // de paintLightboxSource() logo após a criação do markup.
+  assert.match(LIGHTBOX_SRC, /<div class="lightbox-desc" hidden>/);
+  assert.match(LIGHTBOX_SRC, /function updateLbDescVisibility\(\)\{/);
+  assert.match(LIGHTBOX_SRC, /descEl\.hidden = !hasText && !hasSource;/);
 });
 
 // ===========================================================================
