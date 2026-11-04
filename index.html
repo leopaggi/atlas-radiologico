@@ -466,6 +466,61 @@ body{
      resize:vertical deixa o usuário abrir mais espaço para textos longos. */
   resize:vertical;min-height:46px;line-height:1.4;box-sizing:border-box;
 }
+/* Texto rico de legendas/anotações: **negrito**, __sublinhado__ e URL
+   automática. richTextHtml() escapa TUDO antes de montar as três únicas tags
+   permitidas (<strong>, <u>, <a>); nenhum HTML vindo dos dados é interpretado. */
+.rich-text-link{color:var(--teal);text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere;}
+.lightbox-desc .rich-text-link{color:#7ee7dc;}
+.rich-text-toolbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:0 0 5px;}
+.rich-text-btn{
+  min-width:26px;height:24px;padding:0 6px;border-radius:4px;border:1px solid var(--line);
+  background:var(--panel);color:var(--text);font-size:11px;cursor:pointer;font-family:inherit;
+}
+.rich-text-btn:hover{border-color:var(--teal);color:var(--teal);}
+.rich-text-hint{font-size:9px;color:var(--muted-2);line-height:1.2;}
+/* Miniatura + legenda formada um só bloco visual: a legenda é um rodapé
+   preso à imagem (sem borda/cartão próprio), com no máximo 2 linhas para
+   nunca crescer o card. O texto completo continua no textarea e no lightbox. */
+.img-thumb-wrap{
+  border:1px solid var(--line);border-radius:4px;overflow:hidden;margin:0 0 6px;
+  background:#060a0e;
+}
+.img-thumb-wrap .img-gallery-thumb{
+  width:100%;height:80px;object-fit:cover;display:block;margin:0;border-radius:0;cursor:zoom-in;
+}
+.img-thumb-caption{
+  font-size:9.5px;line-height:1.3;color:var(--text);background:rgba(255,255,255,.05);
+  border-top:1px solid var(--line);padding:2px 5px;max-height:2.9em;overflow:hidden;
+  white-space:pre-wrap;overflow-wrap:anywhere;
+}
+.img-thumb-caption[hidden]{display:none;}
+.img-source-row{display:flex;flex-direction:column;gap:3px;margin:0 0 6px;min-width:0;}
+.img-source-line{display:flex;gap:4px;align-items:center;min-width:0;}
+.img-source-page{
+  flex:1;min-width:0;height:24px;padding:2px 6px;box-sizing:border-box;
+  background:var(--panel);border:1px solid var(--line);color:var(--text);
+  border-radius:4px;font-size:10px;font-family:'IBM Plex Mono',monospace;
+}
+.img-source-copy,.img-source-copy-direct{
+  border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:4px;
+  font-size:9.5px;padding:3px 7px;cursor:pointer;font-family:inherit;white-space:nowrap;
+}
+.img-source-copy{height:24px;padding:0 7px;}
+.img-source-copy:hover,.img-source-copy-direct:hover{border-color:var(--teal);color:var(--teal);}
+/* URL direta da imagem: UMA linha discreta, truncada com reticências; o
+   endereço completo fica no title (tooltip) e no botão copiar. */
+.img-source-direct{
+  display:flex;align-items:center;gap:4px;min-width:0;white-space:nowrap;
+  font-size:9.5px;color:var(--muted-2);line-height:1.3;
+}
+.img-source-direct[hidden]{display:none;}
+.img-source-direct-prefix{flex:0 0 auto;}
+.img-source-direct a{
+  flex:1 1 auto;min-width:0;color:var(--teal);text-decoration:none;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.img-source-direct a:hover{text-decoration:underline;}
+.img-source-direct .img-source-copy-direct{flex:0 0 auto;padding:1px 5px;font-size:9px;line-height:1.2;}
 .img-gallery-presets{display:flex;flex-wrap:wrap;gap:4px;}
 .img-gallery-modality{margin:5px 0 6px;padding-top:5px;border-top:1px solid var(--line);}
 .img-gallery-modality-title{font-size:9px;color:var(--muted-2);font-family:'IBM Plex Mono',monospace;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;}
@@ -812,6 +867,20 @@ body{
   white-space:pre-wrap;overflow-wrap:anywhere;
   max-height:calc(5 * 1.4em + 16px);overflow-y:auto;overflow-x:hidden;
 }
+.lightbox-source{
+  width:100%;box-sizing:border-box;flex:0 0 auto;cursor:auto;display:flex;align-items:center;gap:8px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:8px;
+  padding:5px 12px;color:#cfd8de;font-size:11.5px;line-height:1.35;
+  white-space:nowrap;overflow:hidden;
+}
+.lightbox-source[hidden]{display:none;}
+.lightbox-source-label{font:600 9.5px 'IBM Plex Mono',monospace;letter-spacing:.05em;text-transform:uppercase;color:#9fb0ba;white-space:nowrap;flex:0 0 auto;}
+.lightbox-source-link{flex:1 1 auto;color:#7ee7dc;text-decoration:underline;text-underline-offset:2px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lightbox-source-copy{
+  margin-left:auto;flex:0 0 auto;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);
+  color:#f2f4f6;border-radius:5px;font-size:10px;padding:3px 8px;cursor:pointer;font-family:inherit;
+}
+.lightbox-source-copy:hover{background:rgba(255,255,255,.16);}
 /* lrev_muqw07yj_w2yirw — contexto clínico na margem SUPERIOR do lightbox
    maximizado, mesma proporção visual de .lightbox-desc (abaixo). Reaproveita
    clinicalCaseImageBandHtml() (.detail-img-clinical-band/-pac), só
@@ -1994,7 +2063,7 @@ body{
 
   <div id="sidebar">
     <div id="brand">
-      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v208</div>
+      <div class="mark">ATLAS · SUMÁRIO PESSOAL · v252</div>
       <h1>Padrões &amp; Lesões</h1>
       <div class="sub">organizado por sítio e características de imagem</div>
       <div id="sync-status" class="sync-status sync-status-ok" style="display:none;"></div>
@@ -6109,6 +6178,131 @@ function hasCloudinaryConfig(){ const c=getCloudinaryConfig(); return !!(c.cloud
 function escAttr(v){ return String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 /* alias global — o painel de progresso/quiz reformado usa esc() para escapar texto exibido */
 function esc(v){ return escAttr(v); }
+/* ============================================================
+   TEXTO RICO DE LEGENDAS E ANOTAÇÕES (compatível com os dados atuais)
+   ------------------------------------------------------------
+   Formatação pedida pelo usuário sem gravar HTML no banco:
+     **negrito**  -> <strong>
+     __sublinhado__ -> <u>
+     https://...  -> link clicável (só http/https)
+   Segurança: o texto é ESCAPADO primeiro; depois só são inseridas essas
+   três tags. Nenhum HTML existente nos dados é interpretado. Links recebem
+   target=_blank + rel=noopener noreferrer. Texto sem marcação/URL continua
+   exatamente igual ao esc() de sempre (compatibilidade com o acervo).
+   ============================================================ */
+function richTextUrlParts(url){
+  let core = String(url || '');
+  let trailing = '';
+  const closes = { ')': '(', ']': '[', '}': '{' };
+  while(core){
+    const ch = core.slice(-1);
+    if(/[.,;:!?]/.test(ch)){ trailing = ch + trailing; core = core.slice(0, -1); continue; }
+    if(closes[ch]){
+      const open = closes[ch];
+      const opens = core.split(open).length - 1;
+      const shutdowns = core.split(ch).length - 1;
+      if(opens < shutdowns){ trailing = ch + trailing; core = core.slice(0, -1); continue; }
+    }
+    break;
+  }
+  return { url: core, trailing };
+}
+function richTextSegmentHtml(segment){
+  let out = esc(segment);
+  out = out.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
+  out = out.replace(/__([^_\n]+?)__/g, '<u>$1</u>');
+  return out;
+}
+function richTextHtml(value){
+  const raw = String(value == null ? '' : value).replace(/\u0000/g, '');
+  if(!raw) return '';
+  const links = [];
+  let out = '';
+  let last = 0;
+  const re = /https?:\/\/[^\s<>"']+/gi;
+  let m;
+  while((m = re.exec(raw))){
+    out += richTextSegmentHtml(raw.slice(last, m.index));
+    const parsed = richTextUrlParts(m[0]);
+    out += '<span data-rich-url="' + links.length + '"></span>';
+    links.push(parsed);
+    if(parsed.trailing) out += richTextSegmentHtml(parsed.trailing);
+    last = m.index + m[0].length;
+  }
+  out += richTextSegmentHtml(raw.slice(last));
+  return out.replace(/<span data-rich-url="(\d+)"><\/span>/g, (all, idx)=>{
+    const parsed = links[Number(idx)];
+    if(!parsed || !parsed.url) return '';
+    const href = escAttr(parsed.url);
+    return `<a class="rich-text-link" href="${href}" target="_blank" rel="noopener noreferrer">${esc(parsed.url)}</a>`;
+  });
+}
+// Envolve/desenvolve a seleção de um textarea com o marcador de formatação
+// (Markdown simples: ** ou __). Nenhum HTML é gravado no dado.
+function applyRichTextWrap(textarea, marker){
+  if(!textarea || !marker) return;
+  const value = String(textarea.value || '');
+  let start = Number.isInteger(textarea.selectionStart) ? textarea.selectionStart : value.length;
+  let end = Number.isInteger(textarea.selectionEnd) ? textarea.selectionEnd : start;
+  if(end < start){ const tmp = start; start = end; end = tmp; }
+  const selected = value.slice(start, end);
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+  const m = String(marker);
+  let next = '';
+  let nextStart = start;
+  let nextEnd = end;
+  if(selected.length >= m.length * 2 && selected.slice(0, m.length) === m && selected.slice(-m.length) === m){
+    const inner = selected.slice(m.length, selected.length - m.length);
+    next = before + inner + after;
+    nextStart = start;
+    nextEnd = start + inner.length;
+  } else if(before.slice(-m.length) === m && after.slice(0, m.length) === m){
+    next = before.slice(0, -m.length) + selected + after.slice(m.length);
+    nextStart = start - m.length;
+    nextEnd = end - m.length;
+  } else {
+    next = before + m + selected + m + after;
+    nextStart = start + m.length;
+    nextEnd = end + m.length;
+  }
+  textarea.value = next;
+  try{ textarea.focus(); }catch(_e){}
+  try{ textarea.setSelectionRange(nextStart, nextEnd); }catch(_e){}
+  try{ textarea.dispatchEvent(new Event('input', { bubbles: true })); }catch(_e){}
+}
+function wireRichTextArea(textarea, toolbar){
+  if(!textarea) return;
+  if(toolbar){
+    toolbar.querySelectorAll('[data-rich-wrap]').forEach(btn=>{
+      btn.addEventListener('mousedown', ev=>{ if(ev && ev.preventDefault) ev.preventDefault(); });
+      btn.addEventListener('click', ()=> applyRichTextWrap(textarea, btn.getAttribute('data-rich-wrap')));
+    });
+  }
+  textarea.addEventListener('keydown', (ev)=>{
+    if(!ev || ev.isComposing || ev.altKey || ev.shiftKey || !(ev.ctrlKey || ev.metaKey)) return;
+    const key = String(ev.key || '').toLowerCase();
+    if(key === 'b'){ ev.preventDefault(); applyRichTextWrap(textarea, '**'); }
+    else if(key === 'u'){ ev.preventDefault(); applyRichTextWrap(textarea, '__'); }
+  });
+}
+// URL exibida no lightbox: a página de origem tem prioridade; sem ela, usa
+// originalUrl e, por fim, a própria URL da imagem. Só http(s) vira link.
+function imageSourceInfo(img, fallbackSrc){
+  const item = (img && typeof img === 'object') ? img : {};
+  const data = String(item.data || fallbackSrc || '').trim();
+  const page = String(item.sourcePage || '').trim();
+  const original = String(item.originalUrl || '').trim();
+  const source = page || original || data;
+  return { data, page, original, source, direct: !!data && source === data, isHttp: /^https?:\/\//i.test(source) };
+}
+function copyUrlWithToast(url, okMessage){
+  const text = String(url || '').trim();
+  if(!text){ if(typeof toast === 'function') toast('Nenhuma URL para copiar.'); return false; }
+  const ok = typeof copyTextToClipboard === 'function' ? copyTextToClipboard(text) : false;
+  if(typeof toast === 'function') toast(ok ? (okMessage || 'URL copiada.') : 'Não foi possível copiar a URL.');
+  return ok;
+}
 /* lrev — realce visual do bloco "Diferenciais-chave:" dentro de `notes`
    (convenção de texto livre já usada em ~2200 lesões: "Padrão: ...\n
    Diferenciais-chave: item1 (explicação); item2 (explicação); ..."). Também
@@ -6156,8 +6350,8 @@ function splitDifferentialItems(section){
    nenhum rótulo novo. */
 function boldLeadingPadraoLabelHtml(text){
   const m = /^(\s*)(Padrão:)/.exec(text);
-  if(!m) return esc(text);
-  return esc(m[1]) + '<strong class="notes-lead-label">' + esc(m[2]) + '</strong>' + esc(text.slice(m[0].length));
+  if(!m) return richTextHtml(text);
+  return esc(m[1]) + '<strong class="notes-lead-label">' + esc(m[2]) + '</strong>' + richTextHtml(text.slice(m[0].length));
 }
 /* Formata UM item da lista de diferenciais. 3 formatos aceitos, nunca
    migra/converte o texto salvo — só reconhece o que já está lá:
@@ -6174,24 +6368,24 @@ function formatDifferentialItemHtml(item){
     const bullet = bulletMatch[0];
     const rest = item.slice(bullet.length);
     const colonIdx = rest.indexOf(':');
-    if(colonIdx===-1) return `<div class="notes-differential-item">${esc(item)}</div>`;
+    if(colonIdx===-1) return `<div class="notes-differential-item">${richTextHtml(item)}</div>`;
     const name = rest.slice(0, colonIdx+1);
     const crit = rest.slice(colonIdx+1);
-    return `<div class="notes-differential-item">${esc(bullet)}<strong>${esc(name)}</strong>${esc(crit)}</div>`;
+    return `<div class="notes-differential-item">${richTextHtml(bullet)}<strong>${richTextHtml(name)}</strong>${richTextHtml(crit)}</div>`;
   }
   const parenIdx = item.indexOf('(');
   const dashIdx = item.indexOf('—');
   const sepIdx = parenIdx===-1 ? dashIdx : (dashIdx===-1 ? parenIdx : Math.min(parenIdx, dashIdx));
   const name = sepIdx===-1 ? '' : item.slice(0, sepIdx).trim();
-  if(!name) return `<div class="notes-differential-item">${esc(item)}</div>`;
+  if(!name) return `<div class="notes-differential-item">${richTextHtml(item)}</div>`;
   const rest = item.slice(sepIdx);
-  return `<div class="notes-differential-item"><strong>${esc(name)}</strong> ${esc(rest)}</div>`;
+  return `<div class="notes-differential-item"><strong>${richTextHtml(name)}</strong> ${richTextHtml(rest)}</div>`;
 }
 function notesDifferentialsHtml(notes){
   const raw = String(notes || '');
   const marker = 'Diferenciais-chave:';
   const idx = raw.indexOf(marker);
-  if(idx === -1) return esc(raw);
+  if(idx === -1) return richTextHtml(raw);
   const before = raw.slice(0, idx);
   const afterMarker = idx + marker.length;
   // a seção vai até a próxima linha em branco ou até o fim do texto —
@@ -6201,9 +6395,9 @@ function notesDifferentialsHtml(notes){
   const section = raw.slice(afterMarker, sectionEnd).trim();
   const after = raw.slice(sectionEnd);
   const items = splitDifferentialItems(section);
-  if(!items.length) return esc(raw);
+  if(!items.length) return richTextHtml(raw);
   const itemsHtml = items.map(formatDifferentialItemHtml).join('');
-  return `${boldLeadingPadraoLabelHtml(before)}<strong class="notes-section-label">${esc(marker)}</strong>${itemsHtml}${esc(after)}`;
+  return `${boldLeadingPadraoLabelHtml(before)}<strong class="notes-section-label">${esc(marker)}</strong>${itemsHtml}${richTextHtml(after)}`;
 }
 function safeCloudTagPart(v){
   return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -17962,11 +18156,27 @@ function openForm(id, opts){
       const item = document.createElement('div');
       item.className = 'img-gallery-item';
       const sourceLabel=img.source==='cloudinary'?'☁ Cloudinary':(img.source==='pending'?'⏳ não enviada':(img.source==='imgbb'?'☁ ImgBB':(img.source==='url'?'🔗 URL':'💾 local')));
+      const directUrl = /^https?:\/\//i.test(String(img.data||'').trim()) ? String(img.data).trim() : '';
       item.innerHTML = `
         <span class="img-source-badge">${sourceLabel}</span>
         ${idx===0 ? '<span class="img-cover-badge" title="esta é a imagem de capa do card">★ capa</span>' : ''}
-        <img src="${img.data}" class="img-gallery-thumb" title="clique pra ampliar">
+        <div class="img-thumb-wrap">
+          <img src="${img.data}" class="img-gallery-thumb" title="clique pra ampliar">
+          <div class="img-thumb-caption" ${String(img.label||'').trim()?'':'hidden'}>${richTextHtml(img.label||'')}</div>
+        </div>
         <textarea class="img-gallery-label" rows="3" placeholder="descrição da imagem/quadro (sequências curtas como &quot;axial T2, CC, MLO&quot; ou um texto mais longo)">${esc(img.label||'')}</textarea>
+        <div class="rich-text-toolbar" role="toolbar" aria-label="Formatação da legenda">
+          <button type="button" class="rich-text-btn" data-rich-wrap="**" title="negrito (Ctrl+B)"><b>B</b></button>
+          <button type="button" class="rich-text-btn" data-rich-wrap="__" title="sublinhado (Ctrl+U)"><u>U</u></button>
+          <span class="rich-text-hint">**negrito** · __sublinhado__ · links automáticos</span>
+        </div>
+        <div class="img-source-row">
+          <div class="img-source-line">
+            <input class="img-source-page" type="text" inputmode="url" placeholder="fonte / página de origem (URL)" title="fonte / página de origem (URL)" value="${escAttr(img.sourcePage||'')}">
+            <button type="button" class="img-source-copy" title="copiar a fonte (ou a URL da imagem, se a fonte estiver vazia)">copiar</button>
+          </div>
+          ${directUrl ? `<div class="img-source-direct" title="URL da imagem: ${escAttr(directUrl)}"><span class="img-source-direct-prefix">URL:</span><a href="${escAttr(directUrl)}" target="_blank" rel="noopener noreferrer">${esc(directUrl)}</a><button type="button" class="img-source-copy-direct" title="copiar a URL da imagem">copiar</button></div>` : ''}
+        </div>
         <div class="img-gallery-seq-wrap">
           <div class="img-gallery-seq-chips"></div>
           <div class="img-gallery-seq-picker">${collageSeqSelectHtml('', IMAGE_SEQUENCE_PRESETS)}<button type="button" class="btn btn-ghost img-gallery-seq-custom-add" hidden>+ adicionar</button></div>
@@ -18045,7 +18255,36 @@ function openForm(id, opts){
         renderImgGallery();
       });
       const labelInput = item.querySelector('.img-gallery-label');
-      labelInput.addEventListener('input', (ev)=>{ pendingImgs[idx].label = ev.target.value; imgsChanged = true; });
+      // Legenda formatada = rodapé da própria miniatura (sem bloco duplicado
+      // abaixo do textarea). Atualiza no mesmo input, sem crescer o card.
+      const captionEl = item.querySelector('.img-thumb-caption');
+      const refreshCaption = ()=>{
+        if(!captionEl) return;
+        const text = String((pendingImgs[idx] && pendingImgs[idx].label) || '');
+        captionEl.hidden = !text.trim();
+        captionEl.innerHTML = text.trim() ? richTextHtml(text) : '';
+      };
+      labelInput.addEventListener('input', (ev)=>{ pendingImgs[idx].label = ev.target.value; imgsChanged = true; refreshCaption(); });
+      wireRichTextArea(labelInput, item.querySelector('.rich-text-toolbar'));
+      // Fonte / página de origem: campo canônico já sincronizado (sourcePage,
+      // PROTEÇÃO 092). NÃO altera img.data (a URL efetivamente exibida).
+      const sourceInput = item.querySelector('.img-source-page');
+      if(sourceInput){
+        sourceInput.addEventListener('input', (ev)=>{ pendingImgs[idx].sourcePage = ev.target.value; imgsChanged = true; });
+      }
+      const sourceCopy = item.querySelector('.img-source-copy');
+      if(sourceCopy){
+        sourceCopy.addEventListener('click', ()=>{
+          const info = imageSourceInfo(pendingImgs[idx], pendingImgs[idx] && pendingImgs[idx].data);
+          copyUrlWithToast(info.page || info.original || info.data, 'URL da fonte copiada.');
+        });
+      }
+      const sourceDirectCopy = item.querySelector('.img-source-copy-direct');
+      if(sourceDirectCopy){
+        sourceDirectCopy.addEventListener('click', ()=>{
+          copyUrlWithToast(String((pendingImgs[idx] && pendingImgs[idx].data) || ''), 'URL da imagem copiada.');
+        });
+      }
       // UX — seletor compacto de sequência/modalidade (reaproveita
       // collageSeqSelectHtml/IMAGE_SEQUENCE_PRESETS/addSequenceToImageLabel,
       // o MESMO componente e vocabulário já usados no construtor de quadro —
@@ -18600,7 +18839,13 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
       <div class="field"><label>Resolução</label><select id="collage-size"><option value="1600">1600 px</option><option value="1920" selected>1920 px</option><option value="2400">2400 px</option></select></div>
       <button type="button" class="btn btn-primary" id="collage-generate">gerar quadro</button>
     </div>
-    <div class="field"><label>Descrição geral do quadro</label><textarea id="collage-desc" rows="3" placeholder="Ex.: TC do joelho demonstrando ... (vai para a legenda, sem queimar na imagem; pode ser um texto longo)"></textarea></div>
+    <div class="field"><label>Descrição geral do quadro</label><textarea id="collage-desc" rows="3" placeholder="Ex.: TC do joelho demonstrando ... (vai para a legenda, sem queimar na imagem; pode ser um texto longo)"></textarea>
+      <div class="rich-text-toolbar" role="toolbar" aria-label="Formatação da descrição">
+        <button type="button" class="rich-text-btn" data-rich-wrap="**" title="negrito (Ctrl+B)"><b>B</b></button>
+        <button type="button" class="rich-text-btn" data-rich-wrap="__" title="sublinhado (Ctrl+U)"><u>U</u></button>
+        <span class="rich-text-hint">**negrito** · __sublinhado__ · links automáticos</span>
+      </div>
+    </div>
     <canvas id="collage-canvas" style="display:none"></canvas><img id="collage-preview" class="collage-preview">
     <div class="modal-actions"><button class="btn btn-ghost" id="collage-cancel">cancelar</button><button class="btn btn-primary" id="collage-insert" disabled>${isEditMode?'salvar quadro atualizado':'inserir quadro no caso'}</button></div>
   </div>`;
@@ -18613,6 +18858,7 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
   cov.querySelector('#collage-desc').value = isEditMode
     ? collageInitialDesc(existingLabel, items.map(x=>x.seq))
     : '';
+  wireRichTextArea(cov.querySelector('#collage-desc'), cov.querySelector('.rich-text-toolbar'));
   let finalBlob=null; let finalUrl='';
   const seqs=IMAGE_SEQUENCE_PRESETS;
   const list=cov.querySelector('#collage-list'), drop=cov.querySelector('#collage-drop'), input=cov.querySelector('#collage-files');
@@ -21807,6 +22053,10 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
   const ov = document.createElement('div');
   ov.className = 'overlay lightbox-overlay';
   const desc = String(description||'').trim();
+  // richTextHtml vive no escopo global do app; o fallback para esc() mantém o
+  // lightbox utilizável isoladamente (testes vm / extração) sem perder a
+  // segurança: sem o helper, o texto sai escapado como sempre saiu.
+  const richDescHtml = (text)=> (typeof richTextHtml === 'function') ? richTextHtml(text) : esc(text);
   function clinicalBandFor(item){
     if (typeof resolveClinicalCase !== 'function' || !item) return '';
     try {
@@ -21824,7 +22074,12 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
         <button type="button" class="lightbox-nav-next" aria-label="Próxima imagem" style="${navBtnStyle}right:8px;">›</button>
         <div class="lightbox-nav-counter" aria-live="polite" style="position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:5;background:rgba(6,10,14,.6);color:#fff;font-size:12px;padding:2px 10px;border-radius:999px;font-family:'IBM Plex Mono',monospace;">${navIdx+1} / ${navList.length}</div>` : ''}
       </div>
-      <div class="lightbox-desc" ${desc ? '' : 'hidden'}>${esc(desc)}</div>
+      <div class="lightbox-desc" ${desc ? '' : 'hidden'}>${desc ? richDescHtml(desc) : ''}</div>
+      <div class="lightbox-source" hidden>
+        <span class="lightbox-source-label">Fonte:</span>
+        <a class="lightbox-source-link" target="_blank" rel="noopener noreferrer"></a>
+        <button type="button" class="lightbox-source-copy" title="copiar a URL da fonte">copiar</button>
+      </div>
     </div>
     <div class="lightbox-controls" style="display:flex;gap:6px;justify-content:center;margin-top:8px;">
       <button type="button" class="btn btn-ghost" data-lb="minus" title="reduzir zoom">−</button>
@@ -21834,6 +22089,38 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
     </div>
     <button type="button" class="lightbox-close">✕</button>`;
   const lbFind = (sel)=>{ try{ return ov.querySelector(sel); }catch(e){ return null; } };
+  // Fonte / URL da imagem no lightbox: lê o item de navegação atual
+  // (sourcePage -> originalUrl -> data) e mantém o link/cópia em sincronia ao
+  // trocar de imagem. Só http(s) vira link; o resto continua oculto.
+  const lbSourceRow = lbFind('.lightbox-source');
+  const lbSourceLabel = lbFind('.lightbox-source-label');
+  const lbSourceLink = lbFind('.lightbox-source-link');
+  const lbSourceCopy = lbFind('.lightbox-source-copy');
+  function paintLightboxSource(item, fallbackSrc){
+    if(!lbSourceRow || !lbSourceLink) return;
+    // Em contextos isolados (testes vm) o helper pode não estar presente.
+    if(typeof imageSourceInfo !== 'function'){ lbSourceRow.hidden = true; return; }
+    const info = imageSourceInfo(item, fallbackSrc);
+    if(!info.source || !info.isHttp){
+      lbSourceRow.hidden = true;
+      if(typeof lbSourceLink.removeAttribute === 'function') lbSourceLink.removeAttribute('href');
+      lbSourceLink.textContent = '';
+      if(lbSourceCopy) lbSourceCopy.onclick = null;
+      return;
+    }
+    lbSourceRow.hidden = false;
+    if(lbSourceLabel) lbSourceLabel.textContent = info.direct ? 'URL da imagem:' : 'Fonte:';
+    lbSourceLink.href = info.source;
+    lbSourceLink.title = info.source;
+    lbSourceLink.textContent = info.source;
+    if(lbSourceCopy) lbSourceCopy.onclick = (e)=>{
+      if(e && e.stopPropagation) e.stopPropagation();
+      if(typeof copyUrlWithToast === 'function') copyUrlWithToast(info.source, 'URL copiada.');
+      else if(typeof copyTextToClipboard === 'function') copyTextToClipboard(info.source);
+    };
+  }
+  if(lbSourceRow) lbSourceRow.onclick = (e)=>{ if(e && e.stopPropagation) e.stopPropagation(); };
+  paintLightboxSource(navList[navIdx] || { data: src }, src);
   const closeLb = ()=>{
     try{ document.removeEventListener('keydown', lbKeydown); }catch(e){}
     try{ ov.remove(); }catch(e){}
@@ -21869,7 +22156,8 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
     const img = lbFind('.lightbox-img');
     if(img) img.src = item.data;
     const newDesc = String(item.label || '').trim();
-    if(descEl){ descEl.hidden = !newDesc; descEl.textContent = newDesc; }
+    if(descEl){ descEl.hidden = !newDesc; descEl.textContent = newDesc; descEl.innerHTML = newDesc ? richDescHtml(newDesc) : ''; }
+    paintLightboxSource(item, item.data);
     const counterEl = lbFind('.lightbox-nav-counter');
     if(counterEl) counterEl.textContent = (navIdx + 1) + ' / ' + navList.length;
     // lrev_muqw07yj_w2yirw — contexto clínico re-resolvido POR IMAGEM a cada
@@ -22416,10 +22704,11 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
       // Enquanto pending, o preview é LOCAL: prioriza a blob URL (_objectUrl),
       // nunca uma URL remota inexistente. Miniatura e lightbox usam a MESMA src.
       const src = img.data || img._objectUrl || '';
+      const directUrl = /^https?:\/\//i.test(String(img.data||'').trim()) ? String(img.data).trim() : '';
       item.innerHTML = `<span class="img-source-badge">${badge}</span>
         ${idx===0 ? '<span class="img-cover-badge" title="esta é a imagem de capa do card">★ capa</span>' : ''}
         <img src="${src}" class="img-gallery-thumb" title="clique pra ampliar">
-        <div class="quiz-img-current-label" title="${escAttr(img.label||'')}">${esc(img.label||'Sem legenda')}</div>
+        <div class="quiz-img-current-label" title="${escAttr(img.label||'')}">${richTextHtml(img.label||'Sem legenda')}</div>
         <div class="img-gallery-actions">
           <button type="button" class="img-gallery-cover-btn quiz-img-cover" title="usar esta imagem como capa (primeira do card)" ${idx===0?'disabled':''}>★ capa</button>
           <button type="button" class="img-gallery-move quiz-img-up" title="mover para cima" ${idx===0?'disabled':''}>↑</button>
@@ -22429,6 +22718,18 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
         </div>
         <div class="quiz-img-edit-box" hidden>
           <textarea class="img-gallery-label" rows="3" placeholder="legenda/descrição da imagem (pode ser longa)">${esc(img.label||'')}</textarea>
+          <div class="rich-text-toolbar" role="toolbar" aria-label="Formatação da legenda">
+            <button type="button" class="rich-text-btn" data-rich-wrap="**" title="negrito (Ctrl+B)"><b>B</b></button>
+            <button type="button" class="rich-text-btn" data-rich-wrap="__" title="sublinhado (Ctrl+U)"><u>U</u></button>
+            <span class="rich-text-hint">**negrito** · __sublinhado__ · links automáticos</span>
+          </div>
+          <div class="img-source-row">
+            <div class="img-source-line">
+              <input class="img-source-page quiz-img-source-page" type="text" inputmode="url" placeholder="fonte / página de origem (URL)" title="fonte / página de origem (URL)" value="${escAttr(img.sourcePage||'')}">
+              <button type="button" class="img-source-copy quiz-img-source-copy" title="copiar a fonte (ou a URL da imagem, se a fonte estiver vazia)">copiar</button>
+            </div>
+            ${directUrl ? `<div class="img-source-direct" title="URL da imagem: ${escAttr(directUrl)}"><span class="img-source-direct-prefix">URL:</span><a href="${escAttr(directUrl)}" target="_blank" rel="noopener noreferrer">${esc(directUrl)}</a><button type="button" class="img-source-copy-direct quiz-img-source-copy-direct" title="copiar a URL da imagem">copiar</button></div>` : ''}
+          </div>
           <div class="quiz-img-edit-actions">
             <button type="button" class="btn btn-primary quiz-img-edit-save">salvar</button>
             <button type="button" class="btn btn-ghost quiz-img-edit-cancel">cancelar</button>
@@ -22437,10 +22738,20 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
       item.querySelector('.img-gallery-thumb').onclick = ()=> openImageLightbox(src, img.label);
       const editBox = item.querySelector('.quiz-img-edit-box');
       const labelInput = item.querySelector('.img-gallery-label');
+      wireRichTextArea(labelInput, editBox.querySelector('.rich-text-toolbar'));
+      const sourceInput = editBox.querySelector('.quiz-img-source-page');
+      const sourceCopy = editBox.querySelector('.quiz-img-source-copy');
+      if(sourceCopy) sourceCopy.onclick = ()=>{
+        const info = imageSourceInfo(draftImgs[idx], src);
+        copyUrlWithToast(info.page || info.original || info.data, 'URL da fonte copiada.');
+      };
+      const sourceDirectCopy = editBox.querySelector('.quiz-img-source-copy-direct');
+      if(sourceDirectCopy) sourceDirectCopy.onclick = ()=> copyUrlWithToast(src, 'URL da imagem copiada.');
       item.querySelector('.quiz-img-edit').onclick = ()=>{ editBox.hidden=false; labelInput.focus(); labelInput.select(); };
       item.querySelector('.quiz-img-edit-cancel').onclick = ()=>{ editBox.hidden=true; };
       item.querySelector('.quiz-img-edit-save').onclick = ()=>{
         draftImgs[idx].label = labelInput.value;
+        if(sourceInput) draftImgs[idx].sourcePage = sourceInput.value;
         renderGallery();
       };
       const reorderDraft = (from, to)=>{ if(moveArrayItem(draftImgs, from, to)) renderGallery(); };
@@ -23365,7 +23676,7 @@ function quizImageDescHtml(label, answered){
   // imagem, ao contrário do lightbox).
   return `<div class="quiz-img-desc" style="font-size:15px;line-height:1.4;color:var(--text);background:rgba(20,184,166,.07);border:1px solid var(--teal-dim);border-radius:10px;padding:7px 14px;margin-bottom:10px;max-width:100%;overflow-wrap:anywhere;text-align:left;white-space:pre-wrap;">`
     + `<div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);margin-bottom:3px;">Descrição da imagem</div>`
-    + `<div>${esc(t)}</div></div>`;
+    + `<div>${richTextHtml(t)}</div></div>`;
 }
 
 /* ============================================================
