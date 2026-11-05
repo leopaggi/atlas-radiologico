@@ -163,6 +163,7 @@ function loadDetail(lesionOver) {
     renderResults: () => {},
     wireClinicalCasesToggle: () => {},
     radiologicSignsSectionHtml: () => '', classificationSchemesSectionHtml: () => '', wireDidacticImages: () => {},
+    wireDidacticTextClamps: () => {}, // lrev_mulfu0x2_didclamp
     closeOverlay: () => { calls.closeOverlay++; },
     openForm: (id, o) => { calls.openForm++; capturedFormOpts = o; },
     openImagesTodayModal: () => { calls.openImagesTodayModal++; },

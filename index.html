@@ -338,8 +338,18 @@ body{
 .quiz-case-context{font-size:14px;line-height:1.4;color:var(--text);background:rgba(250,204,21,.08);border:1px solid rgba(202,138,4,.45);border-radius:10px;padding:6px 12px;margin-bottom:10px;max-width:100%;overflow-wrap:anywhere;text-align:left;white-space:pre-wrap;}
 .quiz-case-context-label{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);margin-bottom:2px;}
 .quiz-case-context-meta{font-weight:600;} .quiz-case-context-case{margin-top:4px;font-size:13px;}
-.clinical-case-presentation.is-clampable{cursor:pointer;} .clinical-case-presentation.is-clampable:focus-visible{outline:2px solid var(--teal-dim);outline-offset:2px;}
+/* lrev_mulfu0x2_didclamp — componente "ler mais" genérico (antes só do
+   resumo do caso clínico): .is-clampable dá o cursor/foco, cada container
+   define SEU próprio max-height em .is-clamped (teaser curto do caso clínico
+   vs. ~3 linhas do texto de sinais/classificações, abaixo). O clique só
+   alterna a classe is-clamped (ver wireClampToggles) — nunca corta o HTML. */
+.is-clampable{cursor:pointer;} .is-clampable:focus-visible{outline:2px solid var(--teal-dim);outline-offset:2px;}
 .clinical-case-presentation.is-clamped{max-height:2.1em;line-height:1.4;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,#000 55%,transparent);mask-image:linear-gradient(180deg,#000 55%,transparent);}
+/* PROTEÇÃO 093/otimização — texto de Sinais radiológicos e Classificações e
+   esquemas (renderDidacticRichText: pode ter subtítulo ## + lista + parágrafos)
+   usa o MESMO componente acima, só com um teto maior (~3 linhas em vez de
+   ~1,5) por ter mais "ar" visual que o teaser do caso clínico. */
+.didactic-text.is-clamped{max-height:4.6em;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,#000 55%,transparent);mask-image:linear-gradient(180deg,#000 55%,transparent);}
 .didactic-edit-missing{width:72px;height:72px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:var(--ink);color:var(--amber);}
 .lesion-review-warning:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
 .inc-badge{
@@ -17336,6 +17346,7 @@ function openDetail(id, opts){
   renderReviewButtons();
   wireClinicalCasesToggle(ov, e);
   wireDidacticImages(ov); // 093
+  wireDidacticTextClamps(ov); // lrev_mulfu0x2_didclamp
   document.getElementById('btn-close').onclick = closeOverlay;
   const backTodayBtn = document.getElementById('btn-back-today');
   // Voltar fecha SOMENTE o detalhe (ov.remove, nunca closeOverlay — o
@@ -23119,6 +23130,7 @@ function renderQuizCardIntegrated(host){
       <div class="quiz-post-answer-actions"><button type="button" class="btn btn-ghost quiz-add-img-action" id="quiz-add-img-btn">🖼 Adicionar imagem a esta lesão</button><button type="button" class="btn btn-ghost quiz-edit-lesion-action" id="quiz-edit-lesion-btn">✏ Editar esta lesão no Acervo</button><button type="button" class="btn btn-ghost quiz-review-action" id="quiz-review-btn">🔔 Marcar para revisão</button></div>
       ${gradeHtml}`;
     wireDidacticImages(fb); // 093
+    wireDidacticTextClamps(fb); // lrev_mulfu0x2_didclamp
     fb.querySelector('#quiz-add-img-btn').onclick=()=>{
       openQuizAddImageModal(e.id, ()=>{ refreshQuizImgs(true); renderAll(); }); // sidebar reflete a nova imagem (overlays do Quiz intactas)
     };
@@ -23131,7 +23143,7 @@ function renderQuizCardIntegrated(host){
         preserveUnderlyingOverlay: true,
         onSaved: ()=>{
           const detailEl = fb.querySelector('.quiz-answer-detail');
-          if(detailEl){ detailEl.outerHTML = renderDetail(); wireDidacticImages(fb); }
+          if(detailEl){ detailEl.outerHTML = renderDetail(); wireDidacticImages(fb); wireDidacticTextClamps(fb); }
           const correctOpt = host.querySelector(`.quiz-mcq-option[data-id="${e.id}"] span:last-child`);
           if(correctOpt) correctOpt.textContent = e.name;
           // keepIndex: preserva a imagem atual do carrossel (normalizada ao
@@ -26136,6 +26148,22 @@ function renderDidacticRichText(text){
   flushPara(); flushList();
   return out.join('');
 }
+// lrev_mulfu0x2_didclamp — teto de ~3 linhas pro texto de Sinais
+// radiológicos/Classificações (card não cresce mais sem limite quando a
+// descrição é longa, ex. ARCO classification). Mesmo componente visual do
+// resumo de caso clínico (clinicalCasePresentationHtml, 093d) — só o teto em
+// CSS é maior (.didactic-text.is-clamped, ver <style>), já que aqui o
+// conteúdo pode ter subtítulo/lista (mais "ar" que um teaser de 1,5 linha).
+// A heurística de quando clampar é a MESMA: texto curto e de uma linha só
+// nunca ganha o wrapper clicável (nada pra "ler mais" se já cabe tudo).
+const DIDACTIC_TEXT_CLAMP = 220;
+function didacticTextHtml(rawText){
+  const t = String(rawText || '');
+  if (!t.trim()) return '';
+  const rendered = renderDidacticRichText(t);
+  if (t.length <= DIDACTIC_TEXT_CLAMP && !/\n/.test(t)) return '<div class="didactic-text">' + rendered + '</div>';
+  return '<div class="didactic-text is-clampable is-clamped" role="button" tabindex="0" aria-expanded="false" title="clique para ver o texto completo">' + rendered + '</div>';
+}
 // views = [{data, thumb, caption, credit}] (vínculos resolvidos e/ou
 // imagens antigas 093). O asset é SEMPRE o da galeria (nada copiado).
 function didacticViewsHtml(views, collapseCaseCaptions){
@@ -26153,7 +26181,7 @@ function radiologicSignHtml(s, entry){
     + '<span class="didactic-badge didactic-badge-' + escAttr(s.strength) + '">' + esc(DIDACTIC_SIGN_STRENGTHS[s.strength] || '') + '</span>'
     + (n ? ' <span class="didactic-meta">· ' + n + (n === 1 ? ' imagem' : ' imagens') + '</span>' : '') + '</div>'
     + '<div class="didactic-item-body">'
-    + (s.description ? '<div class="didactic-text">' + renderDidacticRichText(s.description) + '</div>' : '')
+    + didacticTextHtml(s.description)
     + (s.modality ? '<div class="didactic-meta">Modalidade: ' + esc(s.modality) + '</div>' : '')
     + (s.notes ? '<div class="didactic-meta">' + esc(s.notes) + '</div>' : '')
     + didacticViewsHtml(views)
@@ -26164,7 +26192,7 @@ function classificationSchemeHtml(c, entry){
   const links = Array.isArray(c.links) ? c.links : [];
   return '<div class="didactic-item didactic-scheme"><div class="didactic-item-title">' + esc(c.title) + '</div>'
     + '<div class="didactic-item-body">'
-    + (c.content ? '<div class="didactic-text">' + renderDidacticRichText(c.content) + '</div>' : '')
+    + didacticTextHtml(c.content)
     + didacticViewsHtml(didacticImageViews(c, entry)) // 093b
     + (links.length ? '<div class="didactic-links">' + links.map(l => '<a class="detail-link" href="' + escAttr(l.url) + '" target="_blank" rel="noopener">↗ ' + esc(l.label || l.url) + '</a>').join('') + '</div>' : '')
     + '</div></div>';
@@ -26614,13 +26642,23 @@ function clinicalCasePresentationHtml(text){
   if (t.length <= CLINICAL_CASE_PRESENTATION_CLAMP && !/\n/.test(t)) return '<div class="clinical-case-presentation" style="font-size:12px;margin-top:2px;">' + esc(t) + '</div>';
   return '<div class="clinical-case-presentation is-clampable is-clamped" role="button" tabindex="0" aria-expanded="false" title="clique para ver a história completa" style="font-size:12px;margin-top:2px;">' + esc(t) + '</div>';
 }
-function wireClinicalCasePresentations(root){
+// lrev_mulfu0x2_didclamp — mecanismo de toggle extraído pra ser reaproveitado
+// por qualquer bloco "ler mais" (clique ou Enter/Espaço com foco), em vez de
+// duplicar a mesma lógica a cada novo uso do componente .is-clampable.
+function wireClampToggles(root, selector){
   if (!root || typeof root.querySelectorAll !== 'function') return;
-  root.querySelectorAll('.clinical-case-presentation.is-clampable').forEach(el => {
+  root.querySelectorAll(selector).forEach(el => {
     const toggle = () => { const open = el.classList.toggle('is-clamped') === false; el.setAttribute('aria-expanded', open ? 'true' : 'false'); };
     el.onclick = toggle;
     el.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); } };
   });
+}
+function wireClinicalCasePresentations(root){
+  wireClampToggles(root, '.clinical-case-presentation.is-clampable');
+}
+// Sinais radiológicos / Classificações e esquemas (093) — mesmo componente.
+function wireDidacticTextClamps(root){
+  wireClampToggles(root, '.didactic-text.is-clampable');
 }
 
 /* ---------- lrev_muqw07yj_w2yirw — resumo clínico na MARGEM SUPERIOR da

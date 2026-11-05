@@ -411,6 +411,7 @@ function loadDetail() {
     renderResults: () => {},
     wireClinicalCasesToggle: () => {},
     radiologicSignsSectionHtml: () => '', classificationSchemesSectionHtml: () => '', wireDidacticImages: () => {}, // 093
+    wireDidacticTextClamps: () => {}, // lrev_mulfu0x2_didclamp
     closeOverlay: () => { calls.closeOverlay++; },
     openForm: () => { calls.openForm++; },
     openImagesTodayModal: () => { calls.openImagesTodayModal++; },

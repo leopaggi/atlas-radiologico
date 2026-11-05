@@ -31,7 +31,12 @@ const ctx=vm.createContext({
   sortDidacticItems:list=>list||[]
 });
 vm.runInContext('const CLINICAL_CASE_PRESENTATION_CLAMP = 140;\n'+[
-  'escAttr','esc','clinicalCasePresentationHtml','wireClinicalCasePresentations',
+  'escAttr','esc','clinicalCasePresentationHtml',
+  // lrev_mulfu0x2_didclamp — wireClinicalCasePresentations passou a delegar
+  // o toggle pra wireClampToggles (reaproveitado também por
+  // wireDidacticTextClamps, ver tests/didactic-text-collapse.test.js);
+  // precisa estar no mesmo contexto vm, senão ReferenceError ao chamar.
+  'wireClampToggles','wireClinicalCasePresentations',
   'didacticViewsHtml','clinicalCaseRowHtml','clinicalCasesSectionHtml'
 ].map(extract).join('\n'),ctx);
 const long='TC: Massa pancreática com atenuação muito baixa e discreta heterogeneidade. '.repeat(4);
@@ -64,7 +69,10 @@ test('texto longo começa recolhido (~1,5 linha), íntegro no DOM, sem resumo ne
   const narratives=markup.match(/class="clinical-case-presentation is-clampable is-clamped"[^>]*>[^<]+/g)||[];
   assert.equal(narratives.length,3);
   narratives.forEach(block=>assert.ok(block.endsWith(long),'texto integral no DOM, sem truncar'));
-  assert.match(html,/\.clinical-case-presentation\.is-clampable\{cursor:pointer;/);
+  // lrev_mulfu0x2_didclamp — cursor/foco do .is-clampable generalizaram (sem
+  // o prefixo .clinical-case-presentation) pra serem reaproveitados por
+  // .didactic-text; o teto (max-height) continua por componente.
+  assert.match(html,/\.is-clampable\{cursor:pointer;/);
   assert.match(html,/\.clinical-case-presentation\.is-clamped\{max-height:2\.1em;line-height:1\.4;overflow:hidden;/);
   assert.doesNotMatch(markup,/ver mais/i);
 });
