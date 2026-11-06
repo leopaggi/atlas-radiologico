@@ -5800,3 +5800,125 @@ dedicada.
 Autorizado explicitamente pelo usuário em 06/11/2026 ("blindagem
 profissional"). Commit local, aguardando push para o GitHub (publica
 automaticamente via GitHub Pages).
+
+## Investigação 2026-11-06 — IDs posicionais (`seed_N`): risco já estava coberto, nenhuma mudança de código necessária
+
+**Data:** 06/11/2026
+
+### Contexto
+
+Depois da correção da deduplicação, o usuário pediu para investigar a
+causa raiz de um problema mais profundo: o ID de cada lesão (`seed_N`)
+é calculado pela POSIÇÃO dela no array `SEED` a cada carregamento do
+arquivo (`SEED.forEach((e,i)=>{ e.id = 'seed_'+i; ... })`), não é um
+identificador permanente. Isso já havia causado pelo menos um incidente
+real documentado no próprio código (Alteração 059, 2026-09-21: "Abscesso
+cerebral virou Oligodendroglioma" quando o `SEED` foi reordenado).
+
+### O que foi investigado
+
+Antes de propor qualquer mudança (essa é uma área sensível do projeto —
+`AGENTS.md` exige analisar todas as referências e, em caso de dúvida,
+perguntar antes de alterar IDs), foi rastreado o caminho completo de
+onde IDs posicionais poderiam contaminar dados já salvos:
+
+1. **Carregamento normal (dispositivo já configurado):** desde a
+   Alteração 059/v250, o mecanismo que sincronizava campos de uma lesão
+   salva com o `SEED` atual **por ID de posição** está desligado
+   (`CANONICAL_REFRESH_DISABLED_V250 = true`). Ou seja: uma vez que uma
+   lesão já existe nos seus dados salvos, a posição dela no arquivo
+   nunca mais altera o ID guardado nem seus campos.
+2. **Dispositivo novo, nuvem com dados ("⬇ Carregar meus dados da
+   nuvem"):** `adoptRemoteStateForNewDevice()` (Alteração 078,
+   2026-09-24) adota o conteúdo da nuvem (`remote.data`) **1:1**,
+   incluindo os IDs que a nuvem já usa — não recalcula nada por posição.
+   O `SEED` local só existe como um placeholder temporário em memória
+   até essa escolha ser resolvida, e é descartado inteiramente quando a
+   nuvem é adotada.
+3. **Dispositivo novo, nuvem vazia (primeira instalação de verdade):**
+   não há nada preexistente para conflitar — o ID posicional atribuído
+   agora se torna a referência definitiva dali para frente (protegida
+   pelo item 1 em qualquer carregamento futuro).
+
+### Conclusão
+
+O caminho que causou o incidente de setembro (posição do `SEED`
+sobrescrevendo dados já salvos) já foi fechado por proteções anteriores
+do próprio projeto, e o caminho de "dispositivo novo" também já adota
+a nuvem por completo em vez de recalcular por posição. Some-se a isso a
+deduplicação automática por identidade da correção anterior (nesta
+mesma entrega): o risco realmente ativo que motivou a investigação não
+foi encontrado, com uma ressalva estreita e de baixíssima probabilidade
+prática (duas instalações completamente novas e independentes, ambas
+antes de qualquer sincronização com a nuvem, usando versões do arquivo
+com `SEED` em ordens diferentes — não se aplica ao uso real de um único
+usuário sincronizando pelo Firestore).
+
+Decisão, de acordo com o usuário: **nenhuma reescrita de IDs foi feita.**
+Trocar os IDs já estabelecidos (que não têm esse problema) por um novo
+formato permanente adicionaria risco real (precisaria reescrever
+referências em imagens, revisão, SRS e sincronização) sem reduzir risco
+nenhum, já que esses dados já estão protegidos pelos mecanismos acima.
+
+### Arquivos modificados
+
+Nenhum arquivo de código. Apenas esta entrada de documentação, para
+registrar a investigação e a decisão.
+
+## Alteração 2026-11-06 — Backup diário automático do Firestore
+
+**Data:** 06/11/2026
+
+### Contexto
+
+Terceira e última parte da blindagem autorizada pelo usuário em
+06/11/2026. Até aqui, a única cópia de segurança dos dados era manual
+(exportação pelo próprio app) e dependia do usuário lembrar de fazer.
+
+### O que mudou (linguagem simples)
+
+Criado um repositório **privado** separado,
+`leopaggi/atlas-radiologico-backups` (fora deste repositório, que é
+público — necessário para o GitHub Pages), com uma automação (GitHub
+Actions) que roda sozinha todo dia às 03:15 (horário de São Paulo) e:
+
+1. Lê todo o conteúdo salvo no Firestore (lesões, imagens associadas,
+   progresso de revisão/SRS, etc.) usando uma chave de acesso do
+   Firebase guardada como segredo do repositório — não depende do plano
+   pago (Blaze) do Firebase.
+2. Salva uma cópia completa em `backups/AAAA-MM-DD.json`.
+3. Aplica a retenção combinada com o usuário, para não acumular espaço
+   para sempre: últimos 30 dias guarda todos (1 por dia); últimos 12
+   meses guarda só 1 por semana; mais antigo que isso guarda só 1 por
+   mês, indefinidamente.
+
+A política de retenção tem um teste automatizado próprio (simula 3 anos
+de backups diários e confirma que a poda certa acontece, inclusive
+rodando duas vezes seguidas sem mudar nada). Testado manualmente de
+ponta a ponta nesta mesma entrega: rodou com sucesso, salvou 1.224
+lesões (~20 MB) e o commit automático apareceu no histórico do
+repositório de backups.
+
+Nada neste repositório (`atlas-radiologico`, que é público) foi
+alterado — toda a automação vive só no repositório privado de backups.
+
+### Arquivos modificados
+
+- Nenhum neste repositório (só esta entrada de documentação).
+- No repositório `leopaggi/atlas-radiologico-backups` (novo, privado):
+  `.github/workflows/daily-backup.yml`, `scripts/backup.js`,
+  `scripts/backup.test.js`, `package.json`, `README.md`, `.gitignore`.
+
+### Testes realizados
+
+- `node scripts/backup.test.js` (política de retenção, 3 anos simulados):
+  passou.
+- Execução manual real da Action no GitHub: sucesso (39s), backup de
+  06/11/2026 salvo e commitado automaticamente.
+
+### Commit
+
+Autorizado explicitamente pelo usuário em 06/11/2026. Commit e push já
+feitos no repositório `atlas-radiologico-backups` (privado). Esta
+entrada de documentação também será commitada neste repositório
+(`atlas-radiologico`) com autorização do usuário.
