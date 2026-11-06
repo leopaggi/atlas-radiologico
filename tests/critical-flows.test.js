@@ -605,9 +605,15 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // comentario novo + max-height no .quiz-carousel (causa raiz real do
   // "quadro escuro": o WRAPPER do carrossel crescia sem teto proprio,
   // nao o texto) — tudo no <style>, antes da primeira ancora.
-  assert.equal(recovery.line, 9765);
-  assert.equal(brokenArtifacts.line, 9755);
-  assert.equal(loadData.line, 12316);
+  // ALTERAÇÃO 2026-11-06: âncoras desatualizadas (já estavam desalinhadas
+  // antes desta entrega, por commits anteriores de 04-05/11 que não
+  // atualizaram os números — rich text toolbar v252 etc.) + deslocamento
+  // desta entrega (substituição de DUPLICATE_PAIRS_V171/deduplicateV171
+  // por autoDeduplicateByIdentity, antes das 4 âncoras). Recalculado contra
+  // o index.html atual.
+  assert.equal(recovery.line, 12203);
+  assert.equal(brokenArtifacts.line, 12193);
+  assert.equal(loadData.line, 16324);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
@@ -669,7 +675,7 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // nas três primeiras âncoras acima).
   // +12 no importHandler (3o ajuste lrev_mulfu0x2_ocobn9, ver comentário
   // nas três primeiras âncoras acima).
-  assert.equal(importHandler.line, 16892);
+  assert.equal(importHandler.line, 21895);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
@@ -835,7 +841,6 @@ test('BOOTSTRAP SEGURO (ALTERAÇÃO 078): a escolha "load" adota a nuvem 1:1 via
 test('F5 preserva as 1213 identidades ao executar o loadData real', async () => {
   const seedSource = extractAssignedArray(html, 'SEED');
   const legacySuppressedSource = extractAssignedArray(html, 'LEGACY_SUPPRESSED_DUPLICATE_IDS');
-  const duplicatePairsSource = extractAssignedArray(html, 'DUPLICATE_PAIRS_V171');
   const seed = JSON.parse(seedSource);
   // Reproduz o boot real anterior a loadData(): index.html renumera todo o
   // SEED por posicao com seed_<indice> antes de ler o estado persistido.
@@ -852,7 +857,8 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
     loadOrderStamps: async () => {}, saveOrderStamps: async () => {}, // PROTEÇÃO 085
     loadReviewStamps: async () => {}, saveReviewStamps: async () => {}, // PROTEÇÃO 089
     loadReviewProgressState: async () => {}, saveReviewProgressState: async () => {}, materializeReviewState: (r) => r, REVIEW_PROGRESS: {}, REVIEW_OVERRIDE: {}, /* 090b (coberto em review-auto-status) */ // PROTEÇÃO 090
-    loadLesionMerges: async () => {}, saveLesionMerges: async () => {}, foldLesionMergesIntoGlobals: () => ({ changed: false }), // PROTEÇÃO 091c
+    loadLesionMerges: async () => {}, saveLesionMerges: async () => {}, foldLesionMergesIntoGlobals: () => ({ changed: false, folded: [], movedImages: 0 }), // PROTEÇÃO 091c
+    LESION_MERGES: {},
     appStateReady: false,
     SEED: seed,
     STORAGE_KEY: 'data',
@@ -895,6 +901,8 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
     loadPendingLocalImageAdds: async () => {}, // ALTERAÇÃO 079d
     loadLesionRevisions: async () => {},
     loadClassificationReviewDecisions: async () => {},
+    loadDirtyLesionReviewIds: async () => {}, // dependência de loadData() não relacionada a este teste (dirty-tracking de review)
+    DIRTY_LESION_REVIEW_IDS: new Set(),
     saveReview: async () => {},
     saveSRS: async () => {},
     createSafetySnapshot: () => null,
@@ -926,8 +934,13 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
 
   const runDuplicateCleanup = extractFunction(html, 'runDuplicateCleanup').source
     .replace('function runDuplicateCleanup', 'function runDuplicateCleanupReal');
-  const deduplicateV171 = extractFunction(html, 'deduplicateV171').source
-    .replace('function deduplicateV171', 'function deduplicateV171Real');
+  // ALTERAÇÃO 2026-11-06: deduplicateV171 (lista fixa DUPLICATE_PAIRS_V171,
+  // sempre no-op) foi substituída por autoDeduplicateByIdentity (detecção
+  // dinâmica por s+site+name, reaproveitando LESION_MERGES/
+  // foldLesionMergesIntoGlobals). Reconstrói o motor real equivalente no
+  // sandbox, incluindo as funções puras das quais ele depende.
+  const autoDedup = extractFunction(html, 'autoDeduplicateByIdentity').source
+    .replace('async function autoDeduplicateByIdentity', 'async function autoDeduplicateByIdentityReal');
   const engine = `
     const LEGACY_SUPPRESSED_DUPLICATE_IDS = new Set(${legacySuppressedSource});
     ${extractFunction(html, 'computeDuplicateSeedIds').source}
@@ -936,8 +949,14 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
     globalThis.activeSuppressedCount = SUPPRESSED_DUPLICATE_IDS_V172.size;
     ${extractFunction(html, 'getActiveCanonicalSeed').source}
     ${extractFunction(html, 'activeCanonicalSeedV172').source}
-    const DUPLICATE_PAIRS_V171 = ${duplicatePairsSource};
-    ${extractFunction(html, 'mergeDuplicateEntryV171').source}
+    ${extractFunction(html, 'normalizeExternalTitle').source}
+    ${extractFunction(html, 'exactLesionIdentityKey').source}
+    ${extractFunction(html, 'isRealPersistedImageForMerge').source}
+    ${extractFunction(html, 'lesionRealImagesForMerge').source}
+    ${extractFunction(html, 'normalizeLesionMerges').source}
+    ${extractFunction(html, 'mergeLesionMergeMaps').source}
+    ${extractFunction(html, 'compareLesionIdForKeeper').source}
+    ${extractFunction(html, 'planAutoDeduplicateByIdentity').source}
     ${runDuplicateCleanup}
     function runDuplicateCleanup(){
       stages.push({stage:'runDuplicateCleanup:before', count:DATA.length});
@@ -945,11 +964,11 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
       stages.push({stage:'runDuplicateCleanup:after', count:DATA.length});
       return result;
     }
-    ${deduplicateV171}
-    async function deduplicateV171(){
-      stages.push({stage:'deduplicateV171:before', count:DATA.length});
-      const result = await deduplicateV171Real();
-      stages.push({stage:'deduplicateV171:after', count:DATA.length});
+    ${autoDedup}
+    async function autoDeduplicateByIdentity(){
+      stages.push({stage:'autoDeduplicateByIdentity:before', count:DATA.length});
+      const result = await autoDeduplicateByIdentityReal();
+      stages.push({stage:'autoDeduplicateByIdentity:after', count:DATA.length});
       return result;
     }
     ${loadData.source}
@@ -965,8 +984,8 @@ test('F5 preserva as 1213 identidades ao executar o loadData real', async () => 
     { stage: 'runDuplicateCleanup:after', count: 1213 },
     { stage: 'runDuplicateCleanup:before', count: 1213 },
     { stage: 'runDuplicateCleanup:after', count: 1213 },
-    { stage: 'deduplicateV171:before', count: 1213 },
-    { stage: 'deduplicateV171:after', count: 1213 }
+    { stage: 'autoDeduplicateByIdentity:before', count: 1213 },
+    { stage: 'autoDeduplicateByIdentity:after', count: 1213 }
   ]);
   assert.equal(
     context.DATA.length,

@@ -181,9 +181,14 @@ test('089-13/14: consolidação de duplicata preserva sem promover indevidamente
   const dup = extractFunction(html, 'runDuplicateCleanup');
   assert.match(dup, /consolidateReviewOnMerge\(keeper\.id, o\.id\)/);
   assert.doesNotMatch(dup, /\(REVIEW\[o\.id\]\|\|0\) > \(REVIEW\[keeper\.id\]\|\|0\)/);
-  const v171 = extractFunction(html, 'deduplicateV171');
-  assert.match(v171, /consolidateReviewOnMerge\(keepId, dropId\)/);
-  assert.doesNotMatch(v171, /if\(dropReview>keepReview\)/);
+  // ALTERAÇÃO 2026-11-06: deduplicateV171 (lista fixa DUPLICATE_PAIRS_V171)
+  // foi substituída por autoDeduplicateByIdentity, que delega a preservação
+  // de review ao motor já testado foldLesionMergesIntoGlobals (mesmo
+  // caminho da fusão clínica 091c, com a mesma regra "por recência, nunca
+  // Math.max" — não promove sem base) em vez de consolidateReviewOnMerge.
+  const autoDedup = extractFunction(html, 'autoDeduplicateByIdentity');
+  assert.match(autoDedup, /foldLesionMergesIntoGlobals/);
+  assert.doesNotMatch(autoDedup, /if\(dropReview>keepReview\)/);
 });
 
 test('089-17: F5 — carimbos persistem e recarregam', async () => {

@@ -497,7 +497,7 @@ test('loadData() real: dispositivo NOVO (storage.get lança) aciona o bootstrap 
       loadSidebarScopePref: () => ({ section: null, site: null }),
       loadQuizScopePref: () => ({ section: null, site: null }),
       runDuplicateCleanup: () => ({ changed: false, reviewOrSrsChanged: false }),
-      deduplicateV171: async () => {},
+      autoDeduplicateByIdentity: async () => {},
       runNewDeviceBootstrapFlow: async () => { calls.push('runNewDeviceBootstrapFlow'); },
       // ALTERACAO 068 (2026-09-23): dispositivo JA inicializado (storage.get
       // NAO lanca) agora puxa a nuvem automaticamente — ver asserts abaixo.
@@ -591,7 +591,7 @@ test('loadData() real: reload DEPOIS do bootstrap não repete o fluxo (storage j
       loadSidebarScopePref: () => ({ section: null, site: null }),
       loadQuizScopePref: () => ({ section: null, site: null }),
       runDuplicateCleanup: () => ({ changed: false, reviewOrSrsChanged: false }),
-      deduplicateV171: async () => {},
+      autoDeduplicateByIdentity: async () => {},
       runNewDeviceBootstrapFlow: async () => { calls.push('runNewDeviceBootstrapFlow'); },
       // ALTERACAO 068 (2026-09-23): rastreado à parte de `calls` — o ponto
       // deste teste é a NÃO repetição do bootstrap; o pull automático (que

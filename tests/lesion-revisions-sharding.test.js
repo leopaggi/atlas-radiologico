@@ -360,7 +360,7 @@ function makeDevice(cloud, { initialCatalog = [] } = {}) {
     loadSidebarScopePref: () => ({ section: null, site: null }),
     loadQuizScopePref: () => ({ section: null, site: null }),
     runDuplicateCleanup: () => ({ changed: false, reviewOrSrsChanged: false }),
-    deduplicateV171: async () => {},
+    autoDeduplicateByIdentity: async () => {},
     runNewDeviceBootstrapFlow: async () => { throw new Error('não deveria ser chamado (dispositivo já inicializado)'); },
     renderAll: () => {},
     LESION_REVISIONS: {},

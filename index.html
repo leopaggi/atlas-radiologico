@@ -6769,7 +6769,7 @@ async function loadSRS(){
 }
 // ALTERAÇÃO 072 (2026-09-23) — `internal=true` é usado SÓ pelas 3 migrações
 // automáticas de boot que já persistem SRS por outro motivo que não uma
-// ação real do usuário (deduplicateV171/dupResult/postSyncDupV208 dentro de
+// ação real do usuário (autoDeduplicateByIdentity/dupResult/postSyncDupV208 dentro de
 // loadData()) — nesse caso persiste local mas NÃO marca syncDirty nem
 // publica sozinha (ver a REGRA ABSOLUTA no topo do arquivo, perto de
 // syncPushPending). Toda chamada SEM o parâmetro (grade do Quiz via
@@ -12521,61 +12521,77 @@ async function upgradeDescriptionsV182(){
    O registro canônico mantém o ID antigo; imagens/tags/links e
    metadados úteis do duplicado são incorporados antes da remoção.
    ============================================================ */
-const DUPLICATE_PAIRS_V171 = [("seed_477", "seed_876"), ("seed_625", "seed_877"), ("seed_232", "seed_564"), ("seed_316", "seed_580"), ("seed_157", "seed_603"), ("seed_213", "seed_611"), ("seed_331", "seed_619"), ("seed_91", "seed_640"), ("seed_498", "seed_671"), ("seed_152", "seed_698"), ("seed_42", "seed_720"), ("seed_608", "seed_745"), ("seed_215", "seed_761"), ("seed_239", "seed_776"), ("seed_97", "seed_791"), ("seed_163", "seed_835"), ("seed_606", "seed_836"), ("seed_283", "seed_840"), ("seed_533", "seed_1040"), ("seed_777", "seed_1089"), ("seed_162", "seed_605"), ("seed_604", "seed_1028"), ("seed_136", "seed_535"), ("seed_31", "seed_716"), ("seed_54", "seed_634"), ("seed_46", "seed_594"), ("seed_574", "seed_747"), ("seed_243", "seed_614")];
-function mergeDuplicateEntryV171(target, source){
-  if(!target || !source) return target;
-  target.tags=[...new Set([...(Array.isArray(target.tags)?target.tags:[]),...(Array.isArray(source.tags)?source.tags:[])])];
-  const imgs=new Map();
-  [...(Array.isArray(target.images)?target.images:[]),...(Array.isArray(source.images)?source.images:[])].forEach(x=>{
-    if(!x) return;
-    // mesma correção: ao fundir um par de duplicata conhecido, a imagem do
-    // registro que está sendo removido (source) passa a pertencer ao alvo.
-    const rewritten = {...x, lesionId: target.id};
-    const k=stableImageKeyV208(rewritten);
-    if(k) imgs.set(k,{...(imgs.get(k)||{}),...rewritten});
-  });
-  target.images=[...imgs.values()];
-  const links=new Map();
-  [...(Array.isArray(target.links)?target.links:[]),...(Array.isArray(source.links)?source.links:[])].forEach(x=>{ if(x&&x.url) links.set(x.url,{...x}); });
-  target.links=[...links.values()];
-  if((source.notes||'').length>(target.notes||'').length) target.notes=source.notes;
-  if(!target.img && source.img) target.img=source.img;
-  target.localImg=!!(target.localImg||source.localImg);
-  if(!target.enTerm && source.enTerm) target.enTerm=source.enTerm;
-  if(!target.classification && source.classification) target.classification=source.classification;
-  return target;
+/* ALTERAÇÃO 2026-11-06 — substitui DUPLICATE_PAIRS_V171 (lista fixa de 28
+   pares de IDs "seed_N" congelados em um instante específico, com sintaxe
+   de tupla Python inválida em JS — portanto sempre um no-op silencioso
+   desde a introdução) por detecção dinâmica de duplicata exata por
+   identidade (s + site + name), conforme a regra já documentada em
+   AGENTS.md: "Duplicatas devem ser detectadas pela regra s + site + name,
+   preservando o histórico auditado. Não resolva novos casos apenas
+   acrescentando IDs a uma lista fixa." IDs seed_N são posicionais (mudam a
+   cada re-embed/reordenação) e nunca são uma referência estável entre
+   execuções — por isso uma lista fixa de IDs trava no instante em que foi
+   escrita e no máximo não faz nada (quando os IDs já não existem) ou, pior,
+   funde lesões erradas (quando os IDs foram reaproveitados por outro
+   conteúdo). Reaproveita o motor de fusão já existente e testado
+   (LESION_MERGES / foldLesionMergesIntoGlobals — o mesmo caminho da fusão
+   clínica controlada 091c), preservando imagens, tags, links, progresso de
+   revisão e SRS do registro removido. Cria snapshot de segurança antes de
+   aplicar (SAFETY_SNAPSHOT_RISK_REASONS já previa o motivo abaixo).
+   Autorizado explicitamente pelo usuário em 2026-11-06. */
+function compareLesionIdForKeeper(a, b){
+  const na = /^seed_(\d+)$/.exec(a && a.id), nb = /^seed_(\d+)$/.exec(b && b.id);
+  if(na && nb) return Number(na[1]) - Number(nb[1]);
+  if(na) return -1; // IDs seed_N (SEED original) preferidos sobre u_... (criados manualmente) em empate
+  if(nb) return 1;
+  return DATA.indexOf(a) - DATA.indexOf(b);
 }
-async function deduplicateV171(){
-  if(!Array.isArray(DATA)) return 0;
-  const byId=new Map(DATA.map(e=>[e.id,e]));
-  const remove=new Set(); let merged=0;
-  for(const [keepId,dropId] of DUPLICATE_PAIRS_V171){
-    const keep=byId.get(keepId), drop=byId.get(dropId);
-    if(!keep||!drop) continue;
-    mergeDuplicateEntryV171(keep,drop);
-    if(REVIEW){
-      consolidateReviewOnMerge(keepId, dropId); // PROTEÇÃO 089: preserva sem promover
-    }
-    if(SRS && SRS[dropId] && !SRS[keepId]) SRS[keepId]=SRS[dropId];
-    remove.add(dropId); merged++;
+function planAutoDeduplicateByIdentity(){
+  if(!Array.isArray(DATA)) return {};
+  const groups = new Map();
+  for(const e of DATA){
+    if(!e || !e.id) continue;
+    const key = exactLesionIdentityKey(e.s, e.site, e.name);
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
   }
-  if(!merged) return 0;
-  DATA=DATA.filter(e=>!remove.has(e.id));
-  remove.forEach(id=>{ if(REVIEW) delete REVIEW[id]; delete REVIEW_STAMPS[id]; delete REVIEW_PROGRESS[id]; delete REVIEW_OVERRIDE[id]; if(SRS) delete SRS[id]; });
+  const merges = {};
+  const now = Date.now();
+  for(const entries of groups.values()){
+    if(entries.length < 2) continue;
+    // keeper: mais imagens reais vence; empate decidido por compareLesionIdForKeeper.
+    const sorted = [...entries].sort((a,b)=>{
+      const diff = lesionRealImagesForMerge(b).length - lesionRealImagesForMerge(a).length;
+      return diff !== 0 ? diff : compareLesionIdForKeeper(a,b);
+    });
+    const keeper = sorted[0];
+    for(const drop of sorted.slice(1)){
+      merges[drop.id] = { into: keeper.id, at: now, group: 'auto_dedup_identity' };
+    }
+  }
+  return merges;
+}
+async function autoDeduplicateByIdentity(){
+  const plan = planAutoDeduplicateByIdentity();
+  if(!Object.keys(plan).length) return 0;
+  try{ createSafetySnapshot('antes de forçar fusão de duplicatas'); }catch(_e){}
+  LESION_MERGES = mergeLesionMergeMaps(LESION_MERGES, plan);
+  await saveLesionMerges(); // PROTEÇÃO 091c
+  const report = foldLesionMergesIntoGlobals({explicit:true});
+  if(!report.changed) return 0;
   try{ await storage.set(STORAGE_KEY,JSON.stringify(DATA),false); }catch(_e){}
   try{ await storage.set(REVIEW_KEY,JSON.stringify(REVIEW),false); }catch(_e){}
   await saveReviewStamps();
   await saveReviewProgressState(); // PROTEÇÃO 090
-  await saveLesionMerges(); // PROTEÇÃO 091c
-  // ALTERAÇÃO 072: chamada tanto pelo boot (migração automática, nunca deve
-  // publicar sozinha) quanto pela importação de backup (ação real do
-  // usuário, que já chamou saveData() — REAL — antes desta função, deixando
+  // ALTERAÇÃO 072 (mantida): chamada tanto pelo boot (migração automática,
+  // nunca deve publicar sozinha) quanto pela importação de backup (ação
+  // real do usuário, que já chamou saveData() antes, deixando
   // syncDirty=true) — internal=true aqui + o gate por syncDirty cobrem os
   // dois casos corretamente sem duplicar lógica.
   await saveSRS(true);
   if(syncDirty) await pushToFirebaseNow();
-  console.info(`[Atlas] v189: ${merged} duplicata(s) semântica(s) consolidada(s), preservando imagens, metadados e progresso.`);
-  return merged;
+  console.info(`[Atlas] dedup automático: ${report.folded.length} duplicata(s) exata(s) (mesma s+site+name) consolidada(s), preservando imagens, metadados e progresso.`);
+  return report.folded.length;
 }
 
 
@@ -16592,7 +16608,7 @@ async function loadData(){
   await upgradeDescriptionsV180();
   await upgradeDescriptionsV181();
   await upgradeDescriptionsV182();
-  await deduplicateV171();
+  await autoDeduplicateByIdentity();
   // v187: barreira final contra dados antigos do localStorage/Firebase reintroduzirem aliases suprimidos.
   DATA = DATA.filter(e=>e && !isQuarantinedSeedId(e.id));
   try{ await storage.set(STORAGE_KEY,JSON.stringify(DATA),false); }catch(_e){}
@@ -21906,7 +21922,7 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
       DATA = parsed;
       preserveLocalImageOwnershipOnImport(DATA, localDataBeforeImport);
       await saveData();
-      await deduplicateV171();
+      await autoDeduplicateByIdentity();
       DATA = DATA.filter(e=>e && !isQuarantinedSeedId(e.id));
       await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
       renderAll();
@@ -21963,7 +21979,7 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
     // silenciosamente pelo backup (conflito é registrado, não resolvido sozinho).
     const ownershipConflicts = preserveLocalImageOwnershipOnImport(DATA, localDataBeforeImport);
 
-    await deduplicateV171();
+    await autoDeduplicateByIdentity();
     DATA = DATA.filter(e=>e && !isQuarantinedSeedId(e.id));
 
     await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);

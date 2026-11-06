@@ -3857,3 +3857,64 @@ No-op guard usa os marcadores. Boot/pull/import/migração nunca marcam.
 **Testes:** `multi-device-sync` 146 (145 PASS; F2 exige arquivo
 protegido), `quiz-images` 103 PASS; suíte 1142/1107 PASS/30 FAIL
 (mesmas da base)/5 todo.
+
+## Alteração 2026-11-06 — `DUPLICATE_PAIRS_V171` substituído por deduplicação automática por identidade
+
+**Motivo:** `DUPLICATE_PAIRS_V171` era uma lista fixa de 28 pares de
+`seed_N` com sintaxe de tupla Python (`[("a","b"), ...]`), inválida em
+JS — o operador vírgula colapsa cada par ao último elemento, tornando
+`deduplicateV171()` um no-op desde a introdução. Documentado e mantido
+sem correção (ver histórico acima, "não corrigir sem pedido") até
+autorização explícita do usuário em 06/11/2026. Mesmo corrigida a
+sintaxe, a lista continuaria inútil: `seed_N` é posicional (reatribuído
+a cada reordenação do `SEED`/`DATA`), nunca uma referência estável — uma
+lista fixa de IDs trava no instante em que foi escrita.
+
+**Implementado:** removidos `DUPLICATE_PAIRS_V171`,
+`mergeDuplicateEntryV171`, `deduplicateV171`. Nova
+`planAutoDeduplicateByIdentity()` agrupa `DATA` por
+`exactLesionIdentityKey(s, site, name)`; dentro de cada grupo com mais
+de 1 entrada, escolhe mantida por `lesionRealImagesForMerge().length`
+(mais imagens reais vence) e depois `compareLesionIdForKeeper` (menor
+`seed_N` numérico vence; não-`seed_N` vence `seed_N`; fallback posição
+em `DATA`), gerando `{dropId: {into: keeperId, at, group:
+'auto_dedup_identity'}}`. `autoDeduplicateByIdentity()` cria
+`createSafetySnapshot('antes de forçar fusão de duplicatas')` (motivo
+já presente em `SAFETY_SNAPSHOT_RISK_REASONS`), funde o plano em
+`LESION_MERGES` via `mergeLesionMergeMaps`, persiste com
+`saveLesionMerges()`, aplica com `foldLesionMergesIntoGlobals({explicit:
+true})` (mesmo motor de 091c — preserva imagens reais, tags, links,
+clinicalCases, review/SRS por recência), grava `DATA`/`REVIEW` via
+`storage.set`, salva `reviewStamps`/`reviewProgressState`/SRS, e
+`pushToFirebaseNow()` se `syncDirty`. Chamada nos 3 pontos onde
+`deduplicateV171()` era chamada antes: boot/`loadData()` e as duas
+rotas de importação de backup.
+
+**Achado colateral (fora do escopo, só corrigido o estritamente
+necessário para rodar):** `tests/critical-flows.test.js` tinha 4
+âncoras de linha desatualizadas (drift de commits 04–05/11 anteriores
+a esta alteração, não relacionado) — corrigidas. O mesmo arquivo ainda
+fixa o `SEED` em 1213 em ~10 lugares (`SEED` tem 1197 desde a dissolução
+da seção Vascular em 18/10, três semanas antes desta alteração);
+**não corrigido** — fica para uma entrega dedicada a esse teste. Dois
+outros FAILs no mesmo arquivo ("backup completo minimo valido...",
+"operacoes potencialmente destrutivas da importacao...") confirmados
+pré-existentes em HEAD limpo (via `git stash`), não relacionados a
+dedup, também não corrigidos.
+
+**Arquivos modificados:** `index.html`;
+`tests/duplicate-detection.test.js` (reescrito para a nova função);
+`tests/critical-flows.test.js` (motor do sandbox migrado, 4 âncoras de
+linha corrigidas, 2 stubs faltantes adicionados —
+`loadDirtyLesionReviewIds`, `DIRTY_LESION_REVIEW_IDS` — pré-existentes,
+só expostos porque o fix anterior chegava mais longe no teste);
+`tests/review-state.test.js` (assert trocado para checar delegação a
+`foldLesionMergesIntoGlobals`); `tests/lesion-revisions-sharding.test.js`,
+`tests/multi-device-sync.test.js`, `tests/lesion-tombstone.test.js`,
+`tests/device-bootstrap.test.js` (rename de stub); `README.md`,
+`LOG_DESENVOLVIMENTO.md`.
+
+**Testes:** `tests/duplicate-detection.test.js` 8 PASS/0 FAIL (era 6
+PASS/1 FAIL histórico). Suíte completa (`tests/*.test.js`, 2760 testes):
+2579 PASS/151 FAIL — contra 2576 PASS/153 FAIL em HEAD limpo antes desta
+alteração (git stash comparado). Nenhuma falha nova; 2 falhas a menos.

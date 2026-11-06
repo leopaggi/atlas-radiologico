@@ -511,7 +511,7 @@ function makeDevice(cloud, { seed = [] } = {}) {
     loadSidebarScopePref: () => ({ section: null, site: null }),
     loadQuizScopePref: () => ({ section: null, site: null }),
     runDuplicateCleanup: () => ({ changed: false, reviewOrSrsChanged: false }),
-    deduplicateV171: async () => {},
+    autoDeduplicateByIdentity: async () => {},
     runNewDeviceBootstrapFlow: async () => { throw new Error('runNewDeviceBootstrapFlow não deveria ser chamado neste teste (dispositivo já inicializado)'); },
     renderAll: () => {},
     // ALTERAÇÃO 079c — stubs mínimos para syncThisDeviceToCloud()/

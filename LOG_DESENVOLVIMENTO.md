@@ -5710,3 +5710,93 @@ um computador desatualizado — e aí as imagens antigas dele subiam.
 
 Commit local "Protecao 079d: exige intencao explicita para novas
 imagens", sem push.
+
+## Correção 2026-11-06 — Deduplicação automática por identidade (substitui DUPLICATE_PAIRS_V171)
+
+**Data:** 06/11/2026
+
+### Contexto
+
+Em 05–06/11 foi necessário recuperar manualmente 371 lesões duplicadas
+que se acumularam na nuvem (Firestore) ao longo do tempo, mais 371
+lesões que haviam desaparecido e 56 imagens presas na lesão errada —
+tudo causado por uma combinação de fatores, incluindo o fato de que o
+mecanismo automático de deduplicação do app nunca funcionava de verdade.
+
+`DUPLICATE_PAIRS_V171` era uma lista fixa de 28 pares de IDs `seed_N`
+capturados em um instante específico (setembro/2026), com sintaxe de
+tupla Python `[("a","b"), ...]` — inválida em JavaScript (o operador
+vírgula colapsa cada "tupla" ao último elemento, e a desestruturação
+seguinte então desestrutura por caractere da string, não pelo par
+pretendido). `deduplicateV171()` era, portanto, um no-op silencioso
+desde a introdução — documentado e deliberadamente mantido sem correção
+("não corrigir sem pedido") até esta autorização explícita do usuário.
+
+Mesmo corrigindo só a sintaxe, a lista continuaria inútil: IDs `seed_N`
+são posicionais (reatribuídos a cada re-embed/reordenação do SEED ou do
+array em runtime) e nunca são uma referência estável entre execuções —
+uma lista fixa de IDs trava no instante em que foi escrita.
+
+### O que mudou (linguagem simples)
+
+- Removidos: `DUPLICATE_PAIRS_V171`, `mergeDuplicateEntryV171`,
+  `deduplicateV171()`.
+- Nova função `autoDeduplicateByIdentity()` (chamada nos mesmos 3 pontos
+  que a antiga: boot/`loadData()`, importação de backup "só lesões" e
+  importação de backup completo): agrupa todas as lesões por identidade
+  exata (`s` + `site` + `name`, via `exactLesionIdentityKey` — a mesma
+  regra já documentada em `AGENTS.md` e usada no diagnóstico do sistema),
+  escolhe uma "mantida" por grupo (mais imagens reais vence; empate por
+  ID) e funde o restante usando o motor de fusão já existente e testado
+  (`LESION_MERGES` / `foldLesionMergesIntoGlobals` — o mesmo caminho da
+  fusão clínica controlada 091c), preservando imagens, tags, links,
+  progresso de revisão e SRS do registro removido.
+- Cria snapshot de segurança (`createSafetySnapshot('antes de forçar
+  fusão de duplicatas')`, motivo já previsto em
+  `SAFETY_SNAPSHOT_RISK_REASONS`) antes de aplicar.
+- Como roda a cada `loadData()` (não só no boot de dispositivo novo),
+  duplicatas que voltarem a surgir por qualquer causa futura são
+  corrigidas sozinhas a cada carregamento normal do app — sem depender
+  de lista fixa nem de intervenção manual.
+
+### Achado adicional (fora do escopo desta correção, só documentado)
+
+`tests/critical-flows.test.js` tinha 4 testes já quebrados antes desta
+entrega, por dois motivos anteriores e não relacionados: (1) os
+comentários de "âncora de linha exata" não foram atualizados após os
+commits de 04–05/11 (toolbar de texto rico); (2) vários testes ainda
+fixam o `SEED` em 1213 registros, número anterior à dissolução da seção
+Vascular de 18/10 (`SEED` tem 1197 desde então). Corrigidas apenas as
+âncoras de linha (necessárias para este teste rodar); o número 1213
+remanescente em ~10 testes (incluindo "backup completo minimo valido" e
+"operacoes potencialmente destrutivas da importacao") não foi corrigido
+— são pré-existentes, documentados aqui, e ficam para uma entrega
+dedicada.
+
+### Arquivos modificados
+
+- `index.html`
+- `tests/duplicate-detection.test.js` (teste da lista fixa trocado por
+  teste da nova função)
+- `tests/critical-flows.test.js` (motor reconstruído no sandbox trocado
+  para a nova função + stubs/âncoras corrigidos)
+- `tests/review-state.test.js`, `tests/lesion-revisions-sharding.test.js`,
+  `tests/multi-device-sync.test.js`, `tests/lesion-tombstone.test.js`,
+  `tests/device-bootstrap.test.js` (stubs/asserções renomeados)
+- `AI.md`, `README.md`, `LOG_DESENVOLVIMENTO.md`
+
+### Testes realizados
+
+- `tests/duplicate-detection.test.js`: **8 PASS, 0 FAIL** (o FAIL
+  histórico de `DUPLICATE_PAIRS_V171` deixou de existir).
+- Suíte completa (`tests/*.test.js`, 2760 testes): **2579 PASS, 151
+  FAIL** — contra **2576 PASS, 153 FAIL** na mesma suíte antes desta
+  entrega (HEAD limpo). Ou seja: 2 falhas a menos, nenhuma falha nova
+  introduzida (as 151 remanescentes são as mesmas pré-existentes, não
+  relacionadas a deduplicação).
+
+### Commit
+
+Autorizado explicitamente pelo usuário em 06/11/2026 ("blindagem
+profissional"). Commit local, aguardando push para o GitHub (publica
+automaticamente via GitHub Pages).

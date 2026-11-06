@@ -1600,3 +1600,30 @@ imagem (editor, Quiz), o Atlas guarda uma anotação de "inclusão
 pendente" no navegador; só imagens com essa anotação sobem. A anotação
 sai quando a nuvem confirma que recebeu. Imagens antigas que só estavam
 guardadas neste computador (ou vindas de backup) ficam aqui e não sobem.
+
+### Limpeza automática de duplicatas corrigida de vez (2026-11-06)
+
+Durante anos o Atlas tinha uma lista fixa de 28 pares de lesões
+conhecidas como duplicadas (`DUPLICATE_PAIRS_V171`), escrita com uma
+sintaxe inválida — por isso nunca funcionou, mesmo antes de ficar
+desatualizada. Esse defeito preexistente estava documentado há várias
+alterações acima e foi deixado de propósito sem correção até agora,
+porque corrigir só a lista não resolveria o problema de verdade: uma
+lista fixa de IDs trava no instante em que foi escrita e nunca
+acompanha lesões novas.
+
+Agora o Atlas detecta duplicatas de verdade: toda vez que os dados são
+carregados, ele compara todas as lesões pelo mesmo critério já usado em
+outras partes do sistema (mesma seção + mesmo local + mesmo nome) e, se
+encontrar duas entradas iguais, funde automaticamente — mantendo a
+versão com mais imagens e preservando imagens, anotações e progresso de
+revisão da outra. Isso vale para qualquer duplicata, inclusive uma que
+venha a aparecer no futuro por qualquer motivo, não só a lista antiga de
+28 pares. Antes de fundir, o Atlas cria uma cópia de segurança, como já
+faz em outras operações de risco.
+
+Resultado: o teste que antes tinha 1 falha conhecida e nunca-corrigida
+agora passa 100%. Rodando toda a suíte de testes do projeto (2.760
+testes), o resultado ficou um pouco melhor do que antes da correção (151
+falhas pré-existentes e não relacionadas, contra 153 antes), sem
+nenhuma falha nova.

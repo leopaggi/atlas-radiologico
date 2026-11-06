@@ -170,32 +170,45 @@ test('SEED nao possui duplicatas exatas por s + site + name', () => {
   );
 });
 
-test('DUPLICATE_PAIRS_V171 e um array de pares de IDs validos e existentes', () => {
-  assert.ok(html && Array.isArray(seed), 'index.html ou SEED nao foi carregado');
-  const pairDeclarations = declarations(html, 'DUPLICATE_PAIRS_V171');
-  assert.equal(pairDeclarations.length, 1, 'DUPLICATE_PAIRS_V171 deve possuir uma unica declaracao');
-  duplicatePairsSource = extractAssignedArray(html, pairDeclarations[0]);
+test('DUPLICATE_PAIRS_V171 (lista fixa de IDs, sempre no-op) foi removida', () => {
+  assert.ok(html, 'index.html nao foi carregado');
+  // ALTERAÇÃO 2026-11-06: a lista fixa de pares de IDs seed_N (posicionais,
+  // portanto instaveis entre execucoes) foi substituida por deteccao
+  // dinamica de identidade. Este teste passa a confirmar a remocao
+  // completa, nao mais a forma da lista antiga.
+  assert.equal(declarations(html, 'DUPLICATE_PAIRS_V171').length, 0,
+    'DUPLICATE_PAIRS_V171 nao deveria mais existir no codigo');
+  assert.equal(/function\s+mergeDuplicateEntryV171\s*\(/.test(html), false,
+    'mergeDuplicateEntryV171 nao deveria mais existir no codigo');
+  assert.equal(/function\s+deduplicateV171\s*\(/.test(html), false,
+    'deduplicateV171 nao deveria mais existir no codigo');
+});
 
-  const entries = splitTopLevelArray(duplicatePairsSource);
-  assert.ok(entries.length > 0, 'DUPLICATE_PAIRS_V171 nao pode estar vazio');
-  const malformed = entries.filter(
-    (entry) => !/^\[\s*["']seed_\d+["']\s*,\s*["']seed_\d+["']\s*\]$/.test(entry)
-  );
-  assert.deepEqual(
-    malformed,
-    [],
-    `${malformed.length} entrada(s) nao usam a estrutura ["seed_<N>", "seed_<N>"]: ${malformed.slice(0, 3).join('; ')}`
-  );
+function functionDeclarations(source, name) {
+  const pattern = new RegExp(`\\bfunction\\s+${name}\\s*\\(`, 'g');
+  return [...source.matchAll(pattern)];
+}
 
-  const seedIds = new Set(seed.map((entry) => entry.id));
-  const unknown = [];
-  for (const entry of entries) {
-    const ids = [...entry.matchAll(/["'](seed_\d+)["']/g)].map((match) => match[1]);
-    assert.equal(ids.length, 2, `Par deve conter exatamente dois IDs: ${entry}`);
-    assert.notEqual(ids[0], ids[1], `Par repete o mesmo ID: ${entry}`);
-    for (const id of ids) if (!seedIds.has(id)) unknown.push(id);
-  }
-  assert.deepEqual(unknown, [], `IDs dos pares ausentes no SEED: ${[...new Set(unknown)].join(', ')}`);
+test('autoDeduplicateByIdentity existe e usa exactLesionIdentityKey (s+site+name), nunca lista fixa de IDs', () => {
+  assert.ok(html, 'index.html nao foi carregado');
+  const fnDeclarations = functionDeclarations(html, 'autoDeduplicateByIdentity');
+  assert.equal(fnDeclarations.length, 1, 'autoDeduplicateByIdentity deve possuir uma unica declaracao');
+
+  const planDeclarations = functionDeclarations(html, 'planAutoDeduplicateByIdentity');
+  assert.equal(planDeclarations.length, 1, 'planAutoDeduplicateByIdentity deve possuir uma unica declaracao');
+  const planStart = html.indexOf('{', planDeclarations[0].index);
+  const planBody = extractDelimited(html, planStart);
+  assert.ok(planBody.includes('exactLesionIdentityKey'),
+    'planAutoDeduplicateByIdentity deve agrupar por exactLesionIdentityKey (s+site+name), nao por lista fixa de IDs');
+  assert.ok(planBody.includes('lesionRealImagesForMerge'),
+    'planAutoDeduplicateByIdentity deve escolher o keeper por imagens reais, igual a fusao clinica controlada 091c');
+
+  const fnStart = html.indexOf('{', fnDeclarations[0].index);
+  const fnBody = extractDelimited(html, fnStart);
+  assert.ok(fnBody.includes('foldLesionMergesIntoGlobals'),
+    'autoDeduplicateByIdentity deve reaproveitar o motor de fusao ja testado (LESION_MERGES/foldLesionMergesIntoGlobals)');
+  assert.ok(fnBody.includes("createSafetySnapshot('antes de forçar fusão de duplicatas')"),
+    'autoDeduplicateByIdentity deve criar snapshot de seguranca antes de aplicar a fusao automatica');
 });
 
 test('JavaScript inline possui sintaxe valida sem ser executado', () => {
