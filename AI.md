@@ -3918,3 +3918,23 @@ só expostos porque o fix anterior chegava mais longe no teste);
 PASS/1 FAIL histórico). Suíte completa (`tests/*.test.js`, 2760 testes):
 2579 PASS/151 FAIL — contra 2576 PASS/153 FAIL em HEAD limpo antes desta
 alteração (git stash comparado). Nenhuma falha nova; 2 falhas a menos.
+
+## Correção 2026-11-06 — `radiologicSignHtml`: `s.notes` sem clamp
+
+**Motivo:** reportado pelo usuário com print — Sinal radiológico "Lesão
+de Pellegrini-Stieda" mostrava texto enorme sem botão de recolher, ao
+contrário de Casos Clínicos. `didacticTextHtml(s.description)` já
+clampava o campo principal (lrev_mulfu0x2_didclamp); `s.notes` era
+impresso à parte via `esc(s.notes)` dentro de `<div
+class="didactic-meta">`, sem passar por `didacticTextHtml` — logo sem
+`DIDACTIC_TEXT_CLAMP`/`.is-clampable.is-clamped` nenhum.
+**Implementado:** troca de `(s.notes ? '<div class="didactic-meta">' +
+esc(s.notes) + '</div>' : '')` por `(s.notes ? didacticTextHtml(s.notes)
+: '')` — mesmo helper, mesmo teto de ~3 linhas (`.didactic-text.is-clamped`,
+`max-height:4.6em`), mesmo toggle (`wireDidacticTextClamps`, já
+chamado nos mesmos pontos). `classificationSchemeHtml` não tinha esse
+campo solto — não precisou de mudança.
+**Testes:** `tests/clinical-case-text-collapse.test.js` 9 PASS/0 FAIL
+(eram 7; 2 novos: `notes` longo clampa, `notes` curto não clampa).
+Suíte completa: 2581 PASS/151 FAIL — mesmas 151 pré-existentes, zero
+regressão.

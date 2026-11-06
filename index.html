@@ -26199,7 +26199,7 @@ function radiologicSignHtml(s, entry){
     + '<div class="didactic-item-body">'
     + didacticTextHtml(s.description)
     + (s.modality ? '<div class="didactic-meta">Modalidade: ' + esc(s.modality) + '</div>' : '')
-    + (s.notes ? '<div class="didactic-meta">' + esc(s.notes) + '</div>' : '')
+    + (s.notes ? didacticTextHtml(s.notes) : '')
     + didacticViewsHtml(views)
     + (s.referenceUrl ? '<a class="detail-link" href="' + escAttr(s.referenceUrl) + '" target="_blank" rel="noopener">↗ Referência</a>' : '')
     + '</div></div>';

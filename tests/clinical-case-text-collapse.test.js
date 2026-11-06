@@ -28,16 +28,18 @@ function extract(name){
 }
 const ctx=vm.createContext({
   linkedImageViews:(c,e)=>e.images.map(img=>({data:img.data, caption:img.label, credit:img.credit})),
-  sortDidacticItems:list=>list||[]
+  sortDidacticItems:list=>list||[],
+  didacticImageViews:()=>[]
 });
-vm.runInContext('const CLINICAL_CASE_PRESENTATION_CLAMP = 140;\n'+[
+vm.runInContext('const CLINICAL_CASE_PRESENTATION_CLAMP = 140;\nconst DIDACTIC_TEXT_CLAMP = 220;\nconst DIDACTIC_SIGN_STRENGTHS = { suggestive:"Sugestivo", specific:"Específico", pathognomonic:"Patognomônico" };\n'+[
   'escAttr','esc','clinicalCasePresentationHtml',
   // lrev_mulfu0x2_didclamp — wireClinicalCasePresentations passou a delegar
   // o toggle pra wireClampToggles (reaproveitado também por
   // wireDidacticTextClamps, ver tests/didactic-text-collapse.test.js);
   // precisa estar no mesmo contexto vm, senão ReferenceError ao chamar.
   'wireClampToggles','wireClinicalCasePresentations',
-  'didacticViewsHtml','clinicalCaseRowHtml','clinicalCasesSectionHtml'
+  'didacticViewsHtml','clinicalCaseRowHtml','clinicalCasesSectionHtml',
+  'renderDidacticRichText','didacticTextHtml','radiologicSignHtml'
 ].map(extract).join('\n'),ctx);
 const long='TC: Massa pancreática com atenuação muito baixa e discreta heterogeneidade. '.repeat(4);
 const short='TC: achado focal.';
@@ -132,4 +134,22 @@ test('sinais/classificações usam a apresentação original da legenda (sem cla
   assert.match(generic,/<figcaption>TC: Massa pancreática/);
   assert.match(extract('radiologicSignHtml'),/didacticViewsHtml\(views\)/);
   assert.match(extract('classificationSchemeHtml'),/didacticViewsHtml\(didacticImageViews\(c, entry\)\)/);
+});
+
+test('2026-11-06 — sinal radiológico: texto longo em "notes" também recebe o clamp de ~3 linhas (antes escapava sem limite nenhum)',()=>{
+  const sign={id:'s1',title:'Sinal de Pellegrini-Stieda',strength:'suggestive',description:short,modality:'RX',notes:long,referenceUrl:''};
+  const markup=ctx.radiologicSignHtml(sign,{images:[]});
+  // o "notes" longo precisa estar dentro do mesmo wrapper clicável/clampável
+  // usado pelo "description" — nunca mais num <div class="didactic-meta">
+  // solto, que renderizava o texto inteiro sem nenhum limite.
+  assert.doesNotMatch(markup,/<div class="didactic-meta">TC: Massa pancreática/);
+  assert.match(markup,/class="didactic-text is-clampable is-clamped"[^>]*>[\s\S]*TC: Massa pancreática/);
+  assert.equal((markup.match(/is-clampable is-clamped/g)||[]).length,1,'só o notes longo deveria clampar aqui (description é curto)');
+});
+
+test('2026-11-06 — sinal radiológico: "notes" curto continua sem clamp (comportamento preservado)',()=>{
+  const sign={id:'s2',title:'Sinal curto',strength:'specific',description:short,modality:'TC',notes:'Achado incidental.',referenceUrl:''};
+  const markup=ctx.radiologicSignHtml(sign,{images:[]});
+  assert.doesNotMatch(markup,/is-clampable|is-clamped/);
+  assert.match(markup,/class="didactic-text"><p>Achado incidental\./);
 });

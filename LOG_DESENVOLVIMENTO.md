@@ -5922,3 +5922,46 @@ Autorizado explicitamente pelo usuário em 06/11/2026. Commit e push já
 feitos no repositório `atlas-radiologico-backups` (privado). Esta
 entrada de documentação também será commitada neste repositório
 (`atlas-radiologico`) com autorização do usuário.
+
+## Correção 2026-11-06 — "Sinais radiológicos": campo de observações (notes) não respeitava o limite de ~3 linhas
+
+**Data:** 06/11/2026
+
+### Contexto
+
+Usuário reportou, com print, que um Sinal radiológico ("Lesão de
+Pellegrini-Stieda") mostrava um texto enorme sem o botão de "ler
+mais"/recolher que já existe em Casos Clínicos. A regra de limitar a
+~3 linhas já existia e já era usada pelo campo principal de descrição
+do Sinal radiológico (`didacticTextHtml`, função já criada numa
+alteração anterior, comentário `lrev_mulfu0x2_didclamp`) — mas um
+segundo campo de texto do mesmo bloco, `notes` ("observações"), não
+passava por essa função: era sempre impresso por inteiro, sem limite,
+num `<div class="didactic-meta">` solto.
+
+### O que mudou (linguagem simples)
+
+`radiologicSignHtml()` agora aplica a mesma regra de "recolhe em ~3
+linhas, com botão clicável pra ver tudo" tanto no texto da descrição
+quanto no texto de observações do Sinal radiológico — exatamente o
+mesmo comportamento que já existe em Casos Clínicos. Texto curto
+continua aparecendo normal, sem botão nenhum (só textos realmente
+longos ganham o recolhimento).
+
+### Arquivos modificados
+
+- `index.html` (`radiologicSignHtml`)
+- `tests/clinical-case-text-collapse.test.js` (2 testes novos
+  cobrindo o campo `notes`: longo clampa, curto não clampa)
+
+### Testes realizados
+
+- `tests/clinical-case-text-collapse.test.js`: 9 PASS, 0 FAIL (eram 7
+  antes; 2 novos cobrindo este caso).
+- Suíte completa (`tests/*.test.js`, 2762 testes): 2581 PASS, 151 FAIL
+  — mesmas 151 falhas pré-existentes e não relacionadas de antes desta
+  entrega, nenhuma regressão.
+
+### Commit
+
+Autorizado explicitamente pelo usuário em 06/11/2026.

@@ -1627,3 +1627,11 @@ agora passa 100%. Rodando toda a suíte de testes do projeto (2.760
 testes), o resultado ficou um pouco melhor do que antes da correção (151
 falhas pré-existentes e não relacionadas, contra 153 antes), sem
 nenhuma falha nova.
+
+### "Sinais radiológicos": observações longas agora recolhem como o resto (2026-11-06)
+
+Correção pontual: o texto de "observações" de um Sinal radiológico (um
+campo separado do texto principal de descrição) não tinha o limite de
+~3 linhas + botão "ver tudo" que já existia pra descrição e pra Casos
+Clínicos — aparecia sempre inteiro, por maior que fosse. Agora usa
+exatamente a mesma regra. Texto curto continua normal, sem nenhum botão.
