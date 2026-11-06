@@ -5965,3 +5965,55 @@ longos ganham o recolhimento).
 ### Commit
 
 Autorizado explicitamente pelo usuário em 06/11/2026.
+
+## Correção 2026-11-06 (parte 2) — causa real do texto gigante: legenda de imagem, não description/notes
+
+**Data:** 06/11/2026
+
+### Contexto
+
+A correção anterior (campo `notes`) era uma falha real e válida, mas
+**não era a causa do caso que o usuário reportou**. Depois de publicar,
+o usuário confirmou que o problema continuava no mesmo caso ("Lesão de
+Pellegrini-Stieda"). Investigando os dados reais na nuvem (via o backup
+automático configurado hoje — útil já na primeira hora!), ficou claro
+que `description` e `notes` desse sinal estavam **ambos vazios**: o
+texto de ~1200 caracteres vinha da **legenda da imagem** vinculada ao
+sinal radiológico (o texto digitado quando a imagem foi associada à
+lesão), um terceiro caminho de texto que também nunca tinha nenhum
+limite.
+
+### O que mudou (linguagem simples)
+
+A função que desenha a legenda de qualquer imagem dentro de um Sinal
+radiológico ou Classificação/esquema (`didacticViewsHtml`) agora
+também aplica o mesmo limite de ~3 linhas + botão "ver tudo" — o
+mesmo usado em Casos Clínicos e já usado pela descrição/observações do
+sinal. Legenda curta continua aparecendo normal, sem botão.
+
+Com as duas correções de hoje juntas (notes + legenda de imagem), os
+três lugares onde um texto longo podia aparecer num Sinal
+radiológico/Classificação agora têm o mesmo limite.
+
+### Arquivos modificados
+
+- `index.html` (`didacticViewsHtml`)
+- `tests/clinical-case-text-collapse.test.js` (teste reescrito pra
+  refletir o novo comportamento pretendido + 1 teste novo)
+- `tests/didactic-image-links.test.js`, `tests/lesion-didactic-content.test.js`
+  (2 asserções desatualizadas, que checavam o texto solto antigo,
+  atualizadas pro novo HTML — comportamento mudou de propósito)
+
+### Testes realizados
+
+- `tests/clinical-case-text-collapse.test.js`: 10 PASS, 0 FAIL.
+- Suíte completa (`tests/*.test.js`, 2763 testes): 2582 PASS, 151 FAIL
+  — comparado por diff exato contra a suíte rodada em HEAD limpo
+  (`git stash`): as mesmas 151 falhas pré-existentes, nenhuma nova
+  (duas delas pareciam novas à primeira vista, mas se confirmou que já
+  falhavam isoladamente antes desta mudança — fragilidade pré-existente
+  de ordem de execução dos testes, não relacionada).
+
+### Commit
+
+Autorizado explicitamente pelo usuário em 06/11/2026.

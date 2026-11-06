@@ -26187,7 +26187,7 @@ function didacticViewsHtml(views, collapseCaseCaptions){
   if (!list.length) return '';
   return '<div class="didactic-images">' + list.map((im, i) => '<figure class="didactic-figure">'
     + '<img class="didactic-img" loading="lazy" src="' + escAttr(im.thumb || im.data) + '" data-full="' + escAttr(im.data) + '" data-caption="' + escAttr(im.caption || '') + '" data-idx="' + i + '" alt="' + escAttr(im.caption || 'imagem didática') + '">'
-    + ((im.caption || im.credit) ? '<figcaption>' + (collapseCaseCaptions && im.caption ? clinicalCasePresentationHtml(im.caption) : esc(im.caption || '')) + (im.credit ? ' <span class="didactic-credit">— ' + esc(im.credit) + '</span>' : '') + '</figcaption>' : '')
+    + ((im.caption || im.credit) ? '<figcaption>' + (im.caption ? (collapseCaseCaptions ? clinicalCasePresentationHtml(im.caption) : didacticTextHtml(im.caption)) : '') + (im.credit ? ' <span class="didactic-credit">— ' + esc(im.credit) + '</span>' : '') + '</figcaption>' : '')
     + '</figure>').join('') + '</div>';
 }
 function radiologicSignHtml(s, entry){

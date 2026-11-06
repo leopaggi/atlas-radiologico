@@ -159,7 +159,9 @@ test('093b 8-9: captionOverride e creditOverride valem só no item; legenda prin
   refs = A.setImageRefOverrides(refs, id1, { captionOverride: 'Sinal do alvo (seta)', creditOverride: 'Radiopaedia rID 1' }, 3000);
   e.radiologicSigns = [sign('s1', { imageRefs: refs })];
   const out = A.radiologicSignsSectionHtml(e);
-  assert.match(out, /Sinal do alvo \(seta\) <span class="didactic-credit">— Radiopaedia rID 1<\/span>/);
+  // 2026-11-06: legenda passou a usar didacticTextHtml (clamp de ~3 linhas
+  // pra textos longos) em vez de texto solto — ver clinical-case-text-collapse.test.js.
+  assert.match(out, /<div class="didactic-text"><p>Sinal do alvo \(seta\)<\/p><\/div> <span class="didactic-credit">— Radiopaedia rID 1<\/span>/);
   assert.equal(e.images[0].label, 'legenda principal 1', 'override nunca altera a imagem principal');
   assert.equal(refs[0].updatedAt, 3000);
   refs = A.setImageRefOverrides(refs, id1, { captionOverride: '' }, 4000);

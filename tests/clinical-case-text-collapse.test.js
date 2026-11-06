@@ -60,7 +60,10 @@ test('campos reais: presentation já usa 093d; notes e legenda vinculada reutili
   assert.match(src,/clinicalCasePresentationHtml\(c\.notes\)/);
   assert.match(src,/didacticViewsHtml\(linkedImageViews\(c, entry\), true\)/);
   const views=extract('didacticViewsHtml');
-  assert.match(views,/collapseCaseCaptions && im\.caption \? clinicalCasePresentationHtml\(im\.caption\) : esc\(im\.caption \|\| ''\)/);
+  // 2026-11-06: legenda de imagem (sinais/classificações) passou a usar
+  // didacticTextHtml (clamp de ~3 linhas) em vez de esc() sem limite nenhum
+  // — ver testes "sinais/classificações: legenda de imagem longa..." abaixo.
+  assert.match(views,/collapseCaseCaptions \? clinicalCasePresentationHtml\(im\.caption\) : didacticTextHtml\(im\.caption\)/);
   assert.match(extract('wireClinicalCasesToggle'),/wireClinicalCasePresentations\(ov\)/);
 });
 
@@ -128,12 +131,23 @@ test('título, fonte, idade/sexo, modalidade, crédito, imagem e Abrir caso não
   assert.equal((markup.match(/class="clinical-case-presentation is-clampable is-clamped"/g)||[]).length,3);
 });
 
-test('sinais/classificações usam a apresentação original da legenda (sem clamp novo)',()=>{
+test('2026-11-06 — sinais/classificações: legenda de imagem longa agora usa o clamp de ~3 linhas (didactic-text), não mais sem limite nenhum',()=>{
+  // Achado real do usuário: "Lesão de Pellegrini-Stieda" tinha description E
+  // notes vazios — o texto gigante vinha da LEGENDA da imagem vinculada ao
+  // sinal radiológico (im.caption), que nunca passava por nenhum clamp aqui
+  // (nem o teto curto de clinical-case-presentation, nem o de didactic-text).
   const generic=ctx.didacticViewsHtml([{data:'https://example.org/img.jpg',caption:long,credit:'Fonte curta'}]);
-  assert.doesNotMatch(generic,/clinical-case-presentation|is-clamped/);
-  assert.match(generic,/<figcaption>TC: Massa pancreática/);
+  assert.doesNotMatch(generic,/clinical-case-presentation/);
+  assert.match(generic,/<figcaption><div class="didactic-text is-clampable is-clamped"/);
+  assert.match(generic,/<span class="didactic-credit">— Fonte curta<\/span>/);
   assert.match(extract('radiologicSignHtml'),/didacticViewsHtml\(views\)/);
   assert.match(extract('classificationSchemeHtml'),/didacticViewsHtml\(didacticImageViews\(c, entry\)\)/);
+});
+
+test('2026-11-06 — sinais/classificações: legenda curta de imagem não ganha clamp nem botão',()=>{
+  const generic=ctx.didacticViewsHtml([{data:'https://example.org/img.jpg',caption:short,credit:'Fonte curta'}]);
+  assert.doesNotMatch(generic,/is-clamped|is-clampable|clinical-case-presentation/);
+  assert.match(generic,/<figcaption><div class="didactic-text"><p>TC: achado focal\./);
 });
 
 test('2026-11-06 — sinal radiológico: texto longo em "notes" também recebe o clamp de ~3 linhas (antes escapava sem limite nenhum)',()=>{

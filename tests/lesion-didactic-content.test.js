@@ -130,7 +130,9 @@ test('093 sinais 6-10: sugestivo / específico / patognomônico, múltiplas imag
   const html1 = A.radiologicSignsSectionHtml({ radiologicSigns: signs });
   assert.match(html1, /Sinais radiológicos \(3\)/);
   for (const b of ['Sugestivo', 'Específico', 'Patognomônico']) assert.match(html1, new RegExp('>' + b + '<'));
-  assert.match(html1, /legenda 1 <span class="didactic-credit">— fonte 1<\/span>/);
+  // 2026-11-06: legenda passou a usar didacticTextHtml (clamp de ~3 linhas
+  // pra textos longos) em vez de texto solto.
+  assert.match(html1, /<div class="didactic-text"><p>legenda 1<\/p><\/div> <span class="didactic-credit">— fonte 1<\/span>/);
   assert.match(html1, /2 imagens/);
   assert.match(html1, /↗ Referência/);
   // imagem base64/javascript nunca entra

@@ -1635,3 +1635,11 @@ campo separado do texto principal de descrição) não tinha o limite de
 ~3 linhas + botão "ver tudo" que já existia pra descrição e pra Casos
 Clínicos — aparecia sempre inteiro, por maior que fosse. Agora usa
 exatamente a mesma regra. Texto curto continua normal, sem nenhum botão.
+
+### "Sinais radiológicos": legenda de imagem também recolhe (2026-11-06, parte 2)
+
+Faltava mais um lugar: a legenda digitada numa imagem vinculada a um
+Sinal radiológico ou Classificação também não tinha limite nenhum — foi
+a causa real de um caso reportado (texto de ~1200 caracteres aparecendo
+inteiro). Agora usa o mesmo limite de ~3 linhas das outras correções de
+hoje.

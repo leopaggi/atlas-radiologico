@@ -3938,3 +3938,32 @@ campo solto — não precisou de mudança.
 (eram 7; 2 novos: `notes` longo clampa, `notes` curto não clampa).
 Suíte completa: 2581 PASS/151 FAIL — mesmas 151 pré-existentes, zero
 regressão.
+
+## Correção 2026-11-06 (parte 2) — `didacticViewsHtml`: `im.caption` sem clamp (causa real reportada pelo usuário)
+
+**Motivo:** usuário confirmou, após a correção acima, que o mesmo caso
+("Lesão de Pellegrini-Stieda") continuava igual. Investigação dos dados
+reais (via backup automático, já útil horas depois de configurado)
+mostrou `description` e `notes` ambos `""` nesse sinal — o texto vinha
+de `im.caption` de uma imagem vinculada via `imageRefs`, renderizada em
+`didacticViewsHtml` com `esc(im.caption || '')` puro, sem clamp nenhum,
+quando `collapseCaseCaptions` é falsy (caminho usado por
+`radiologicSignHtml`/`classificationSchemeHtml`; só Casos Clínicos
+passava `true` e usava `clinicalCasePresentationHtml`).
+**Implementado:** troca de `(collapseCaseCaptions && im.caption ?
+clinicalCasePresentationHtml(im.caption) : esc(im.caption || ''))` por
+`(im.caption ? (collapseCaseCaptions ? clinicalCasePresentationHtml(im.caption)
+: didacticTextHtml(im.caption)) : '')` — Casos Clínicos inalterado
+(continua com o teaser de 1,5 linha); Sinais/Classificações passam a
+usar o mesmo `didacticTextHtml` (clamp ~3 linhas) já usado por
+description/notes.
+**Testes atualizados** (comportamento mudou de propósito, não
+regressão): `tests/clinical-case-text-collapse.test.js` (teste "sem
+clamp novo" reescrito pra refletir o clamp novo, +1 teste de legenda
+curta sem clamp), `tests/didactic-image-links.test.js` (093b 8-9),
+`tests/lesion-didactic-content.test.js` (093 sinais 6-10) — ambos só
+checavam o texto solto antigo adjacente ao `<span class="didactic-credit">`.
+**Testes:** suíte completa 2582 PASS/151 FAIL, diff exato contra HEAD
+limpo (`git stash`) confirma as mesmas 151 falhas pré-existentes, zero
+regressão (2 falhas pareciam novas à primeira vista; confirmado que já
+falhavam isoladas, fragilidade de ordem de execução pré-existente).
