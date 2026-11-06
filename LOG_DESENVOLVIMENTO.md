@@ -6017,3 +6017,64 @@ radiológico/Classificação agora têm o mesmo limite.
 ### Commit
 
 Autorizado explicitamente pelo usuário em 06/11/2026.
+
+## Alteração 2026-11-06 — Trava de segurança automática (CI): código quebrado nunca mais publica sozinho
+
+**Data:** 06/11/2026
+
+### Contexto
+
+Usuário perguntou se a arquitetura de arquivo único é segura contra
+"quebrar". Resposta honesta: o risco real nunca foi o arquivo ser um
+só — foi a ausência de qualquer verificação automática ANTES de uma
+mudança ir ao ar (hoje, GitHub Pages publica direto do `main`). Pediu,
+explicitamente, só a trava de segurança agora (sem reestruturar nada),
+deixando uma reorganização maior pra depois, se ainda fizer sentido.
+
+### O que mudou (linguagem simples)
+
+Criado um checklist automático (GitHub Actions) que roda sozinho a
+cada mudança no repositório, com duas checagens:
+
+1. **Sintaxe:** confere se o JavaScript dentro do `index.html` está
+   gramaticalmente correto (pega praticamente qualquer erro de digitação
+   de código — parênteses/chaves faltando, vírgula sobrando, etc.) —
+   testado de propósito com um erro inserido, confirmado que pega.
+2. **Suíte de testes completa** (quase 2.800 testes), mas com uma regra
+   inteligente: o projeto já tinha 151 falhas antigas e conhecidas
+   (documentadas, não relacionadas a nada recente) antes de hoje. Exigir
+   zero falhas travaria a publicação pra sempre sem ninguém ter corrigido
+   nada. Em vez disso, a trava só BLOQUEIA se o número de falhas
+   **aumentar** além das 151 já conhecidas — ou seja, qualquer quebra
+   NOVA é barrada, mas o projeto não fica refém de corrigir anos de
+   dívida técnica de uma vez. Esse número fica guardado em
+   `tests/known-failures-baseline.json` e pode ser abaixado no futuro,
+   manualmente, conforme falhas antigas forem sendo corrigidas.
+
+Isso ainda precisa de um último passo manual do usuário (ativar
+"obrigar esse checklist passar antes de qualquer mudança" nas
+configurações do repositório no GitHub — é administração de conta, uma
+ferramenta de IA não tem permissão pra isso) para virar uma trava de
+verdade, em vez de só um aviso.
+
+### Arquivos modificados
+
+- `.github/workflows/ci.yml` (novo)
+- `scripts/check-syntax.js` (novo)
+- `scripts/run-tests-gate.js` (novo)
+- `tests/known-failures-baseline.json` (novo)
+
+### Testes realizados
+
+- `node scripts/check-syntax.js` contra o arquivo real: OK.
+- `node scripts/check-syntax.js` contra uma cópia com um erro de sintaxe
+  inserido de propósito: detectou corretamente, apontou o bloco certo.
+- `node scripts/run-tests-gate.js` contra o estado real (151 falhas
+  conhecidas, baseline 151): passou.
+- `node scripts/run-tests-gate.js` com a baseline temporariamente
+  forçada pra 0: bloqueou corretamente (código de saída 1), confirmando
+  que a trava barra de verdade quando deveria.
+
+### Commit
+
+Autorizado explicitamente pelo usuário em 06/11/2026.

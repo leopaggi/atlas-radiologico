@@ -1643,3 +1643,14 @@ Sinal radiológico ou Classificação também não tinha limite nenhum — foi
 a causa real de um caso reportado (texto de ~1200 caracteres aparecendo
 inteiro). Agora usa o mesmo limite de ~3 linhas das outras correções de
 hoje.
+
+### Trava de segurança automática antes de qualquer publicação (2026-11-06)
+
+Agora, toda vez que uma mudança é enviada ao repositório, um checklist
+automático roda sozinho: confere se o código JavaScript dentro do
+`index.html` não tem nenhum erro de digitação de sintaxe, e roda a
+suíte inteira de testes do projeto, avisando se alguma mudança nova
+quebrou algo que antes funcionava (sem exigir corrigir, de uma vez,
+falhas antigas já conhecidas e não relacionadas). Isso não muda nada na
+forma como o site funciona hoje — é só uma camada extra de segurança
+contra erros entrarem no ar sem ninguém notar.

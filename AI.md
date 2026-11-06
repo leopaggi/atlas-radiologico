@@ -3967,3 +3967,47 @@ checavam o texto solto antigo adjacente ao `<span class="didactic-credit">`.
 limpo (`git stash`) confirma as mesmas 151 falhas pré-existentes, zero
 regressão (2 falhas pareciam novas à primeira vista; confirmado que já
 falhavam isoladas, fragilidade de ordem de execução pré-existente).
+
+### CI de segurança (sintaxe + testes com ratchet) (2026-11-06)
+
+**Motivo:** avaliar se a arquitetura single-file é "segura" contra
+quebra. Decisão: zero mudança estrutural agora, só trava de CI
+(bloquear publicação de código quebrado), por pedido explícito do
+usuário.
+
+**Implementado:**
+- `.github/workflows/ci.yml` — novo workflow, dispara em todo push e
+  PR pra `main`. Dois steps: `node scripts/check-syntax.js` e
+  `node scripts/run-tests-gate.js`.
+- `scripts/check-syntax.js` — extrai cada bloco `<script>` inline (sem
+  `src`) de `index.html` via regex
+  `/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi`, escreve cada
+  um num arquivo temporário e roda `node --check` (`execFileSync`) em
+  cada. Qualquer erro de sintaxe aborta com mensagem apontando o bloco.
+  Verificado manualmente: passa no arquivo real; detecta corretamente
+  um erro de sintaxe inserido de propósito numa cópia de teste (depois
+  removida).
+- `scripts/run-tests-gate.js` — roda `node --test` sobre
+  `tests/*.test.js` via `spawnSync` (com `maxBuffer: 1024*1024*1024` —
+  o default de 1 MB truncava a saída verbosa da suíte completa,
+  quebrando o parsing do resumo; bug real encontrado e corrigido
+  durante a implementação). Extrai `# pass (\d+)` / `# fail (\d+)` da
+  saída e compara contra `tests/known-failures-baseline.json.failCount`
+  (151 hoje). Só sai com código 1 (bloqueia) se o número de falhas
+  FOR MAIOR que o baseline — ratchet, não bloqueia nas 151
+  pré-existentes, mas pega qualquer regressão nova. Verificado
+  manualmente nos dois sentidos (passa com baseline real; bloqueia
+  quando a baseline é forçada abaixo do número real de falhas).
+- `tests/known-failures-baseline.json` — `{"failCount": 151,
+  "updatedAt": "2026-11-06"}`, com comentário explicando o propósito e
+  como abaixar o número no futuro.
+
+**Limitação conhecida:** isso roda e reporta status, mas não é uma
+trava "de verdade" até o usuário ativar, manualmente, a proteção de
+branch do GitHub (exigir esse check passando antes de qualquer mudança
+em `main`) — configuração de admin de conta, fora do alcance da
+credencial desta sessão (`gh api .../branches/main/protection` retorna
+403).
+
+**Testes:** scripts verificados manualmente nos dois sentidos (passa
+e bloqueia); não alteram nenhum teste existente nem o `index.html`.

@@ -1,0 +1,25 @@
+name: Checagem de segurança (sintaxe + testes)
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o repositório
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Checar sintaxe do JavaScript em index.html
+        run: node scripts/check-syntax.js
+
+      - name: Rodar a suíte de testes completa (bloqueia só falhas NOVAS, ver tests/known-failures-baseline.json)
+        run: node scripts/run-tests-gate.js

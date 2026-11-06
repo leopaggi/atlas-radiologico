@@ -1,0 +1,5 @@
+{
+  "_comentario": "Numero de testes que JA falhavam antes da trava de CI (06/11/2026) — problemas antigos, documentados, nao relacionados a nenhuma mudanca recente. A trava de CI (scripts/run-tests-gate.js) bloqueia a publicacao se o numero de falhas CRESCER acima deste valor (quebra nova), mas nao exige corrigir as 151 pre-existentes de uma vez. Para abaixar esse numero no futuro (corrigindo alguma das falhas antigas), atualize 'failCount' para o novo total depois de confirmar que a suite inteira passou menos vezes.",
+  "failCount": 151,
+  "updatedAt": "2026-11-06"
+}
