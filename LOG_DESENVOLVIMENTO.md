@@ -6078,3 +6078,73 @@ verdade, em vez de só um aviso.
 ### Commit
 
 Autorizado explicitamente pelo usuário em 06/11/2026.
+
+## Alteração 2026-11-06 — Imagem de backup restaurado presa só no computador de origem (bug real)
+
+**Data:** 06/11/2026
+
+### Contexto
+
+Usuário relatou: lesões com imagem no PC de casa, sem imagem nenhuma
+no PC do hospital — mesma nuvem, dois dispositivos. Investigação com
+os dados reais (backup automático de hoje) mostrou que as lesões
+citadas ("Hiperostose frontal interna", "Hemorragia intracraniana
+espontânea (hipertensiva)") realmente tinham ZERO imagens na nuvem,
+embora tivessem 1 imagem cada no dispositivo de casa. A ferramenta de
+diagnóstico já existente no app ("☁ sincronizar este dispositivo")
+confirmou: 113 imagens em 62 lesões presas localmente, nunca enviadas.
+
+### O que mudou (linguagem simples)
+
+Achamos a causa: o Atlas tem uma trava de segurança interna que
+impede uma imagem removida de propósito em outro computador de
+"ressuscitar" sozinha. Para isso, toda imagem nova só sobe à nuvem se
+estiver marcada como "foi adicionada de propósito aqui". Essa marcação
+acontecia certinho quando você edita uma lesão normalmente ou usa o
+Quiz — mas **não** acontecia ao restaurar um backup (botão "Importar
+backup"). Resultado: toda imagem vinda de um backup restaurado, que
+ainda não estivesse na nuvem, ficava presa pra sempre naquele
+computador, sem nenhum aviso de erro na tela (por isso passou
+despercebido). Corrigido: agora, ao importar um backup, as imagens são
+marcadas corretamente e sobem à nuvem normalmente.
+
+Também foi adicionado um registro de diagnóstico extra (só leitura, só
+grava no console do navegador) que, se uma imagem ficar presa assim de
+novo por qualquer outro motivo, mostra exatamente quais lesões foram
+afetadas — antes só mostrava "quantas", agora mostra "quais".
+
+### Mitigação imediata (feita ao vivo, antes da correção)
+
+Como era sexta à noite e o usuário só volta ao hospital na segunda,
+resolvemos o caso concreto na hora: um comando de console (usando as
+próprias funções internas do Atlas, só leitura+gravação local, nada
+inventado por fora) marcou retroativamente as imagens presas como
+intencionais no PC de casa, e o usuário rodou "sincronizar este
+dispositivo" de novo. Confirmado pelo próprio Atlas: "nuvem = este
+dispositivo" (496/496 imagens, 285/285 registros com imagem, demais
+contadores intactos). As imagens já devem aparecer certinho no PC do
+hospital agora.
+
+### Arquivos modificados
+
+- `index.html`: handler de "Importar backup" (os dois formatos,
+  antigo e novo) passa a marcar as imagens importadas como inclusão
+  pendente antes de publicar; `gateStaleLocalOnlyImagesForWrite()` e
+  `writeShardedState()` agora também registram quais lesões foram
+  afetadas quando algo é bloqueado (só diagnóstico).
+- `tests/critical-flows.test.js`: 4 âncoras de número de linha
+  reajustadas (mesmo mecanismo de sempre, sem mudança de
+  comportamento testado).
+
+### Testes realizados
+
+- `node scripts/check-syntax.js`: OK.
+- Suíte completa: 2582 PASS / 151 FAIL — mesmo número de falhas
+  pré-existentes do baseline atual, confirmado por diff exato da lista
+  de testes falhando contra o HEAD limpo (`git stash`). Zero regressão
+  nova.
+
+### Commit
+
+Autorizado explicitamente pelo usuário em 06/11/2026 (confirmar antes
+de publicar).
