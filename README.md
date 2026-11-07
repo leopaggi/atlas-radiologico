@@ -1654,3 +1654,17 @@ quebrou algo que antes funcionava (sem exigir corrigir, de uma vez,
 falhas antigas já conhecidas e não relacionadas). Isso não muda nada na
 forma como o site funciona hoje — é só uma camada extra de segurança
 contra erros entrarem no ar sem ninguém notar.
+
+### Imagem restaurada de backup que nunca chegava à nuvem em outro computador (2026-11-06)
+
+Corrigido um bug real: quando um backup era restaurado ("Importar
+backup"), as imagens dele ficavam presas só naquele computador — iam
+para a lista local normalmente, mas uma trava de segurança interna
+(que existe para impedir que uma imagem apagada de propósito em outro
+aparelho "ressuscite" sozinha) acabava barrando o envio delas pra
+nuvem, sem nenhum aviso de erro. Resultado: a lesão aparecia com
+imagem no computador onde o backup foi restaurado, mas sem imagem em
+qualquer outro computador/celular, porque a imagem nunca tinha
+realmente chegado à nuvem. Agora, ao restaurar um backup, as imagens
+são marcadas corretamente como "inclusão intencional" e sobem à nuvem
+normalmente.

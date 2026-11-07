@@ -611,9 +611,17 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // desta entrega (substituição de DUPLICATE_PAIRS_V171/deduplicateV171
   // por autoDeduplicateByIdentity, antes das 4 âncoras). Recalculado contra
   // o index.html atual.
-  assert.equal(recovery.line, 12203);
-  assert.equal(brokenArtifacts.line, 12193);
-  assert.equal(loadData.line, 16324);
+  // +13 nesta continuação (mesmo dia): correção do bug real "imagem
+  // importada de backup nunca marcada como inclusão pendente" — trava
+  // anti-imagem-fantasma (gateStaleLocalOnlyImagesForWrite) bloqueava em
+  // silêncio imagens restauradas por backup que ainda não estivessem na
+  // nuvem. Diagnóstico (blockedLesionIds) + marcação retroativa nos dois
+  // branches do handler de importação — tudo antes das 4 âncoras (a
+  // marcação em si fica DENTRO do próprio handler de importação, por isso
+  // não desloca nada depois dele).
+  assert.equal(recovery.line, 12216);
+  assert.equal(brokenArtifacts.line, 12206);
+  assert.equal(loadData.line, 16337);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
@@ -675,7 +683,11 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // nas três primeiras âncoras acima).
   // +12 no importHandler (3o ajuste lrev_mulfu0x2_ocobn9, ver comentário
   // nas três primeiras âncoras acima).
-  assert.equal(importHandler.line, 21895);
+  // +13 nesta continuação (mesmo dia, ver comentário nas três primeiras
+  // âncoras acima): a própria marcação retroativa fica DENTRO do handler de
+  // importação (depois do marcador que esta âncora localiza), então não
+  // desloca este número — só o que vier antes dele no arquivo desloca.
+  assert.equal(importHandler.line, 21908);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

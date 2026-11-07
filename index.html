@@ -2564,12 +2564,17 @@ async function savePendingLocalImageAdds(){
   try{ await storage.set(PENDING_LOCAL_IMAGE_ADDS_KEY, JSON.stringify(PENDING_LOCAL_IMAGE_ADDS), false); }catch(_e){}
 }
 let lastWriteStaleImagesBlocked = 0; // diagnóstico: imagens barradas na última escrita confirmada
+let lastWriteStaleImagesBlockedLesionIds = []; // diagnóstico: ids das lesões afetadas (só ids, nunca dado de imagem/paciente)
 function gateStaleLocalOnlyImagesForWrite(localData, remoteData, tombstones, pendingAdds){
   const remoteById = new Map();
   for(const r of (Array.isArray(remoteData) ? remoteData : [])){
     if(r && r.id) remoteById.set(String(r.id), r);
   }
   let blocked = 0, tombstoned = 0;
+  // DIAGNÓSTICO 2026-11-06 — só ids de lesão (nunca dado de imagem/paciente),
+  // pra investigar qual ação deixou de marcar inclusão pendente quando isso
+  // se repetir (ver achado real: import de backup, já corrigido acima).
+  const blockedLesionIds = [];
   const data = (Array.isArray(localData) ? localData : []).map(e=>{
     if(!e || !Array.isArray(e.images) || !e.images.length) return e;
     let images = e.images;
@@ -2582,20 +2587,22 @@ function gateStaleLocalOnlyImagesForWrite(localData, remoteData, tombstones, pen
     for(const im of (r && Array.isArray(r.images) ? r.images : [])){
       if(im) imageIdentityKeys(im).forEach(k=>remoteKeys.add(k));
     }
+    let blockedHere = 0;
     images = images.filter(im=>{
       if(!im) return true;
       if(imageIdentityKeys(im).some(k=>remoteKeys.has(k))) return true;
       if(hasPendingLocalImageAdd(pendingAdds, e.id, im)) return true;
-      blocked++;
+      blocked++; blockedHere++;
       return false;
     });
+    if(blockedHere) blockedLesionIds.push(e.id);
     if(tombstones){
       const tr = applyImageTombstonesToList(images, e.id, tombstones);
       if(tr.removed){ images = tr.images; tombstoned += tr.removed; }
     }
     return images.length === e.images.length ? e : { ...e, images };
   });
-  return { data, blocked, tombstoned };
+  return { data, blocked, tombstoned, blockedLesionIds };
 }
 /* ============================================================
    SNAPSHOT STORE — pendência local (Fase 3B). Nunca cresce dentro de
@@ -2801,6 +2808,7 @@ async function writeShardedState(ms=15000){
 
   let committedRevision = null;
   let committedStaleImagesBlocked = 0;
+  let committedStaleImagesBlockedLesionIds = [];
   let committedPayloadData = null;
   try{
     await withFirebaseTimeout(fbDb.runTransaction(async (tx)=>{
@@ -2957,6 +2965,7 @@ async function writeShardedState(ms=15000){
       }
       committedRevision = nextRevision;
       committedStaleImagesBlocked = gated.blocked;
+      committedStaleImagesBlockedLesionIds = gated.blockedLesionIds || [];
       committedPayloadData = gated.data;
     }), ms, 'gravar estado (transação com verificação de revisão)');
   }catch(e){
@@ -2978,11 +2987,15 @@ async function writeShardedState(ms=15000){
   lastKnownCloudRevision = committedRevision;
   lastWriteRefusedReason = null;
   lastWriteStaleImagesBlocked = committedStaleImagesBlocked;
+  lastWriteStaleImagesBlockedLesionIds = committedStaleImagesBlockedLesionIds;
   // ALTERAÇÃO 079d — escrita CONFIRMADA: o remoto agora contém exatamente
   // o payload gravado; só as imagens marcadas que estão nele saem da lista
   // de pendentes (erro/conflito/recusa nunca chegam aqui).
   if(confirmPendingLocalImageAdds(committedPayloadData)) await savePendingLocalImageAdds();
-  if(committedStaleImagesBlocked) console.info(`[Atlas] 079c: ${committedStaleImagesBlocked} imagem(ns) só-local sem evidência de edição NÃO enviada(s) à nuvem (continuam na cópia local).`);
+  // DIAGNÓSTICO 2026-11-06 — agora lista também os ids das lesões afetadas
+  // (só ids, nunca dado de imagem/paciente), pra identificar rapidamente
+  // qual ação deixou de marcar inclusão pendente se isso voltar a acontecer.
+  if(committedStaleImagesBlocked) console.info(`[Atlas] 079c: ${committedStaleImagesBlocked} imagem(ns) só-local sem evidência de edição NÃO enviada(s) à nuvem (continuam na cópia local). Lesões afetadas: ${committedStaleImagesBlockedLesionIds.join(', ')}`);
 
   // Limpa pedaços antigos que sobraram de uma lista maior no passado.
   const prevCount = Number(window.__lastKnownChunkCount || 0);
@@ -21926,6 +21939,19 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
       DATA = DATA.filter(e=>e && !isQuarantinedSeedId(e.id));
       await storage.set(STORAGE_KEY, JSON.stringify(DATA), false);
       renderAll();
+      // BUGFIX 2026-11-06 — backup importado nunca marcava as imagens como
+      // "inclusão pendente" (ver ALTERAÇÃO 079d/markPendingLocalImageAdds):
+      // a trava anti-imagem-fantasma (gateStaleLocalOnlyImagesForWrite)
+      // bloqueava pra sempre, em silêncio, qualquer imagem do backup que
+      // ainda não estivesse na nuvem — "envio concluído" sem erro, mas a
+      // imagem nunca saía deste dispositivo. Import é ação MANUAL explícita
+      // do usuário (createSafetySnapshot já rodou acima): tratar toda imagem
+      // restaurada como inclusão pendente é seguro (uma já sincronizada
+      // simplesmente não precisa da marca, sem efeito colateral).
+      try{
+        for(const e of DATA){ if(e && Array.isArray(e.images) && e.images.length) markPendingLocalImageAdds(e.id, [], e.images); }
+        await savePendingLocalImageAdds();
+      }catch(_e){}
       await pushToFirebaseNow();
       toast('Backup antigo importado. Progresso preservado.');
       ev.target.value='';
@@ -22000,6 +22026,14 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
     searchTerm='';
     document.getElementById('search').value='';
     renderAll();
+    // BUGFIX 2026-11-06 — mesmo motivo do branch de backup antigo acima:
+    // sem isto, imagens do backup completo que ainda não estivessem na
+    // nuvem ficavam bloqueadas pra sempre pela trava anti-imagem-fantasma,
+    // em silêncio ("envio concluído" sem erro). Ver comentário irmão acima.
+    try{
+      for(const e of DATA){ if(e && Array.isArray(e.images) && e.images.length) markPendingLocalImageAdds(e.id, [], e.images); }
+      await savePendingLocalImageAdds();
+    }catch(_e){}
     await pushToFirebaseNow();
     if(ownershipConflicts.length){
       toast(`Backup importado. ${ownershipConflicts.length} imagem(ns) mantiveram a atribuição local (conflito de ownership registrado).`);

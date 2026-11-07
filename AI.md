@@ -4011,3 +4011,60 @@ credencial desta sessão (`gh api .../branches/main/protection` retorna
 
 **Testes:** scripts verificados manualmente nos dois sentidos (passa
 e bloqueia); não alteram nenhum teste existente nem o `index.html`.
+
+### Bug real: imagem importada de backup nunca marcada como inclusão pendente (2026-11-06)
+
+**Causa raiz** (achada investigando relato do usuário: lesões com
+imagem no PC de casa, sem imagem no PC do hospital): `gateStaleLocalOnlyImagesForWrite()`
+(ALTERAÇÃO 079d, dentro de `writeShardedState()`) só deixa uma imagem
+só-local atravessar pra nuvem se ela já existir no lado remoto da MESMA
+lesão OU estiver marcada em `PENDING_LOCAL_IMAGE_ADDS` via
+`markPendingLocalImageAdds()`. Os 4 pontos que já chamavam essa função
+(Salvar do editor, Quiz "adicionar imagem", `addImageToLesionData`,
+fusão de duplicatas) estavam corretos — mas o handler de **importação
+de backup** (`document.getElementById('import-file')...`, os dois
+branches: formato antigo = array simples, e formato novo
+`atlas-radiologico-backup`) nunca chamava `markPendingLocalImageAdds()`
+depois de `DATA = parsed[...]`. Resultado: toda imagem vinda de um
+backup restaurado que ainda não estivesse na nuvem ficava bloqueada
+pra sempre pela trava 079d — `writeShardedState()`/`syncThisDeviceToCloud()`
+retornavam sucesso normalmente (a trava é silenciosa por design, só
+loga `console.info`), então não havia nenhum sinal de erro visível.
+Confirmado ao vivo pelo usuário: 113 imagens em 62 lesões presas assim
+(IDs `restored1018_*`, condizentes com uma restauração de backup
+anterior).
+
+**Implementado:**
+- Nos dois branches do handler de importação, logo antes do
+  `pushToFirebaseNow()` final: `for(const e of DATA){ if(...images.length) markPendingLocalImageAdds(e.id, [], e.images); } await savePendingLocalImageAdds();`
+  dentro de `try/catch` silencioso (mesmo padrão já usado nos pontos
+  existentes). Marcar uma imagem que já está na nuvem como pendente é
+  inofensivo (o gate já deixa passar pelo primeiro critério, a marcação
+  nunca é consultada nesse caso) — por isso é seguro marcar TODAS as
+  imagens do backup importado, sem precisar diferenciar quais já
+  estavam sincronizadas.
+- `gateStaleLocalOnlyImagesForWrite()` agora também devolve
+  `blockedLesionIds` (só os `id`, nunca dado de imagem/paciente);
+  `writeShardedState()` propaga isso em `lastWriteStaleImagesBlockedLesionIds`
+  e o `console.info` existente (079c) agora lista os ids das lesões
+  afetadas — puramente diagnóstico (nenhuma mudança de comportamento),
+  pra identificar rapidamente a origem se uma imagem ficar bloqueada
+  por outro motivo no futuro.
+
+**Mitigação imediata aplicada pelo usuário** (antes desta correção
+existir): script no Console do navegador marcou retroativamente as 496
+imagens do dispositivo de casa como pendentes
+(`stableImageKeyV208`/`savePendingLocalImageAdds()`, mesma lógica
+interna) e rodou "sincronizar este dispositivo" de novo — confirmado
+"nuvem = este dispositivo" (496/496 imagens, 285/285 registros).
+
+**Arquivos modificados:** `index.html` (handler de importação × 2,
+`gateStaleLocalOnlyImagesForWrite`, `writeShardedState`), `tests/critical-flows.test.js`
+(4 âncoras de linha reajustadas em +13, mesmo mecanismo de sempre —
+nenhuma mudança de comportamento testado).
+
+**Testes:** `node scripts/check-syntax.js` OK. Suíte completa: 2582
+PASS / 151 FAIL — mesmas 151 falhas pré-existentes do baseline atual
+(`tests/known-failures-baseline.json`), zero regressão nova (confirmado
+por diff exato da lista de testes falhando contra HEAD limpo via `git
+stash`).
