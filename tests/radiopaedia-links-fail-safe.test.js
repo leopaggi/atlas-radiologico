@@ -207,19 +207,40 @@ test('10. loadData: mais de 1 link (referências extras adicionadas manualmente)
 // prioriza o termo em inglês do campo e AVISA (não fabrica em silêncio)
 // ===========================================================================
 
-test('11. openForm: "+ gerar busca no Radiopaedia" prioriza f-en-term; sem ele, avisa em vez de fabricar em silêncio', () => {
+test('11. openForm: "+ gerar busca no Radiopaedia" prioriza f-en-term; sem ele, tenta EN_TERMS; só então cai no nome em português e avisa', () => {
   // NÃO usa stripJsComments no openForm inteiro: a função tem dezenas de
   // "https://..." em placeholders/URLs, e o regex ingênuo de comentário de
   // linha ("//") do stripJsComments não é quote-aware — ele confunde essas
   // URLs com comentários e corrompe o texto ao longo de uma função de 1000+
   // linhas. Usa o source bruto (mesmo padrão de modal-cleanup.test.js).
+  //
+  // 2026-11-10: o botão ganhou um degrau intermediário — antes de cair no
+  // nome em português, consulta o dicionário curado EN_TERMS (via
+  // radiopaediaAutoEnTerm, a MESMA fonte do gerador automático). Usuário
+  // relatou que o botão gerava buscas em português (inúteis no Radiopaedia)
+  // mesmo quando a lesão já tinha termo em inglês cadastrado. Invariantes
+  // preservadas: f-en-term digitado continua tendo prioridade absoluta; a
+  // queda final para o português continua AVISANDO (nunca fabrica em
+  // silêncio); nenhuma tradução é inventada — EN_TERMS é curado à mão.
   const src = extractFunction(html, 'openForm').source;
   const idx = src.indexOf("getElementById('f-link-radiopaedia')");
   assert.notEqual(idx, -1);
-  const nearby = src.slice(idx, idx + 900);
-  assert.match(nearby, /const enTermField\s*=\s*document\.getElementById\('f-en-term'\)\.value\.trim\(\);/);
-  assert.match(nearby, /const nm\s*=\s*enTermField\s*\|\|\s*nameField;/);
-  assert.match(nearby, /if\(!enTermField\)\{\s*toast\(/, 'avisa quando cai no fallback do nome em português');
+  const nearby = src.slice(idx, idx + 3200);
+  // 2026-11-10: campo igual ao nome em português conta como VAZIO (herança
+  // do boot antigo que gravava o nome no lugar do enTerm, já propagado à nuvem).
+  assert.match(nearby, /const enTermRaw\s*=\s*enEl\.value\.trim\(\);/);
+  assert.match(nearby, /enTermRaw\.toLowerCase\(\)\s*!==\s*nameField\.toLowerCase\(\)/, 'termo igual ao nome em português é tratado como vazio');
+  assert.match(nearby, /let curatedTerm\s*=\s*nameField\s*\?\s*radiopaediaAutoEnTerm\(nameField\)\s*:\s*null;/, 'consulta EN_TERMS pela mesma função do gerador automático');
+  // 2o degrau (2026-11-10): enTerm da lesão de fábrica no SEED — por id da
+  // lesão em edição, depois por nome. Só se EN_TERMS não tiver entrada.
+  assert.match(nearby, /if\(!curatedTerm\s*&&\s*Array\.isArray\(SEED\)\)\{/, 'consulta o SEED só quando EN_TERMS não tem entrada');
+  assert.match(nearby, /SEED\.find\(x=>x\s*&&\s*x\.id===existing\.id\)/, 'SEED por id da lesão em edição');
+  assert.match(nearby, /SEED\.find\(x=>x\s*&&\s*x\.name===nameField\)/, 'SEED por nome como segunda tentativa');
+  assert.match(nearby, /const nm\s*=\s*enTermField\s*\|\|\s*curatedTerm\s*\|\|\s*nameField;/, 'ordem: campo digitado > EN_TERMS/SEED > nome em português');
+  assert.match(nearby, /if\(!enTermField\s*&&\s*curatedTerm\)\{[\s\S]*?enEl\.value\s*=\s*curatedTerm;/, 'preenche o campo quando usou termo curado');
+  assert.match(nearby, /else if\(!enTermField\)\{\s*toast\(/, 'avisa quando cai no fallback do nome em português');
+  // Nunca fabrica: nenhuma chamada de tradução/IA no handler.
+  assert.doesNotMatch(nearby, /translate|fetch\(|REVIEW_AI/i, 'handler não traduz nem chama IA');
 });
 
 // ===========================================================================
