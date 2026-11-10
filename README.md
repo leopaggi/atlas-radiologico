@@ -1668,3 +1668,15 @@ qualquer outro computador/celular, porque a imagem nunca tinha
 realmente chegado à nuvem. Agora, ao restaurar um backup, as imagens
 são marcadas corretamente como "inclusão intencional" e sobem à nuvem
 normalmente.
+
+### Botão "+ gerar busca no Radiopaedia" não gera mais busca em português à toa (2026-11-10)
+
+No formulário de edição da lesão, o botão "+ gerar busca no Radiopaedia
+com o nome acima" gerava o link com o nome em português sempre que o
+campo "termo em inglês" estivesse vazio — e busca em português não
+serve pra nada no Radiopaedia. Agora, antes de cair pro português, o
+botão consulta o dicionário interno de termos em inglês do Atlas (o
+mesmo que gera os links automáticos). Se a lesão já tem termo
+cadastrado, ele é usado e você recebe um aviso dizendo qual foi. Se
+não tem, o comportamento continua o de antes: gera com o nome em
+português e avisa que o resultado pode ser ruim.

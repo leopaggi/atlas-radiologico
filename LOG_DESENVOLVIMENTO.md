@@ -6148,3 +6148,53 @@ hospital agora.
 
 Autorizado explicitamente pelo usuário em 06/11/2026 (confirmar antes
 de publicar).
+
+## Alteração 2026-11-10 — Botão "+ gerar busca no Radiopaedia" gerava busca em português
+
+### Contexto
+
+Relato do usuário: ao clicar em "+ gerar busca no Radiopaedia com o
+nome acima" (dentro do formulário de edição da lesão), o link gerado
+vinha com o nome em português — inútil no Radiopaedia, que é um site
+em inglês. Isso acontecia mesmo em lesões que já tinham um termo em
+inglês cadastrado no dicionário interno do Atlas (`EN_TERMS`), porque
+o botão só olhava o campo "termo em inglês" do formulário e, se ele
+estivesse vazio, caía direto para o nome em português (com um aviso).
+
+### O que mudou (linguagem simples)
+
+O botão agora tenta três coisas, nesta ordem:
+
+1. O "termo em inglês" digitado no formulário (se preenchido) — como
+   antes, tem prioridade absoluta.
+2. **Novo:** o termo em inglês já cadastrado para esse nome de lesão
+   no dicionário interno do Atlas — a mesma fonte curada que o
+   gerador automático de links usa. Se achar, usa ele e avisa
+   ("usei X, já cadastrado para esta lesão").
+3. Só se nenhum dos dois existir, cai para o nome em português — e
+   continua avisando que o resultado pode ser ruim, como já fazia.
+
+Nenhuma tradução é inventada: o dicionário é curado à mão; sem
+entrada nele, o comportamento é idêntico ao anterior.
+
+### Arquivos modificados
+
+- `index.html`: handler de clique de `#f-link-radiopaedia` dentro de
+  `openForm` (1 linha de lógica nova + 1 condição de aviso + comentários).
+- `tests/radiopaedia-links-fail-safe.test.js`: teste 11 atualizado
+  para o novo degrau (campo digitado > `EN_TERMS` > português), mantendo
+  as invariantes antigas (prioridade do campo, aviso no fallback).
+- `tests/critical-flows.test.js`: âncora `importHandler.line`
+  reajustada (+7), mesmo mecanismo de sempre.
+
+### Testes realizados
+
+- `node scripts/check-syntax.js`: OK.
+- `node tests/radiopaedia-links-fail-safe.test.js`: 12/12.
+- Gate completo (`node scripts/run-tests-gate.js`): 2582 PASS / 151
+  FAIL — exatamente a baseline, zero falha nova.
+
+### Commit
+
+Pendente de autorização do usuário (publicação exige PR + CI, pela
+proteção de branch ativa desde 06/11).

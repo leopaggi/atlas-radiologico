@@ -619,9 +619,23 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // branches do handler de importação — tudo antes das 4 âncoras (a
   // marcação em si fica DENTRO do próprio handler de importação, por isso
   // não desloca nada depois dele).
-  assert.equal(recovery.line, 12216);
-  assert.equal(brokenArtifacts.line, 12206);
-  assert.equal(loadData.line, 16337);
+  // +34 só no importHandler (2026-11-10): botão "+ gerar busca no Radiopaedia
+  // com o nome acima" (handler em openForm — fica DEPOIS de loadData e ANTES
+  // do handler de importação no arquivo) passou a consultar fontes curadas
+  // antes de cair para o nome em português: dicionário EN_TERMS e enTerm da
+  // lesão de fábrica no SEED (por id, depois por nome), preenchendo o campo
+  // "termo em inglês" quando acha. Usuário relatou busca em português
+  // (inútil no Radiopaedia) numa lesão cujo SEED já tinha o termo. Só
+  // comentários + lógica dentro do handler do botão; as outras 3 âncoras
+  // (recovery/brokenArtifacts/loadData) ficam antes e não deslocam.
+  // +7 nas 3 primeiras âncoras e +11 no importHandler (mesmo dia, causa raiz): boot do SEED (linha ~10995,
+  // antes de tudo) deixou de sobrescrever o enTerm real do SEED com o nome
+  // em português quando EN_TERMS não tem entrada (204 lesões) —
+  // comentário + 1 linha de lógica; e +3 no handler do botão (campo igual
+  // ao nome em português tratado como vazio).
+  assert.equal(recovery.line, 12223);
+  assert.equal(brokenArtifacts.line, 12213);
+  assert.equal(loadData.line, 16344);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
@@ -687,7 +701,7 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // âncoras acima): a própria marcação retroativa fica DENTRO do handler de
   // importação (depois do marcador que esta âncora localiza), então não
   // desloca este número — só o que vier antes dele no arquivo desloca.
-  assert.equal(importHandler.line, 21908);
+  assert.equal(importHandler.line, 21942);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

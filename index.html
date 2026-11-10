@@ -10992,7 +10992,14 @@ const TAG_VOCAB = Object.values(TAG_GROUPS).flat();
 SEED.forEach((e,i)=>{
   e.id = 'seed_'+i;
   e.img = e.img || '';
-  e.enTerm = EN_TERMS[e.name] || e.name;
+  // 2026-11-10: NÃO apagar o enTerm real que o SEED já traz. Antes, sem
+  // entrada em EN_TERMS (204 lesões), o nome em PORTUGUÊS era gravado como
+  // "termo em inglês" — e, propagado para a nuvem, enchia o campo do
+  // formulário com português, fazendo o botão do Radiopaedia gerar busca
+  // inútil. Prioridade: EN_TERMS (curado) > enTerm do SEED (também curado,
+  // em inglês) > nome (último recurso, comportamento antigo).
+  const seedOwnEnTerm = (typeof e.enTerm === 'string' && e.enTerm.trim() && e.enTerm.trim() !== String(e.name||'').trim()) ? e.enTerm.trim() : '';
+  e.enTerm = EN_TERMS[e.name] || seedOwnEnTerm || e.name;
   const autoTerm = radiopaediaAutoEnTerm(e.name);
   e.links = autoTerm ? [{label:"Radiopaedia — buscar casos", url: radiopaediaSearchUrl(autoTerm)}] : [];
 });
@@ -17953,15 +17960,42 @@ function openForm(id, opts){
     // próprio; sem ele, cai para o nome em português (ação manual/explícita
     // do usuário, não o gerador automático), mas AVISA em vez de fabricar em
     // silêncio — reportar, nunca fingir que é uma tradução real.
-    const enTermField = document.getElementById('f-en-term').value.trim();
+    // 2026-11-10: antes de cair para o nome em português, tenta fontes
+    // curadas que o Atlas JÁ tem (nunca inventa tradução): (1) o dicionário
+    // EN_TERMS (mesma fonte do gerador automático de link); (2) o enTerm da
+    // lesão de fábrica no SEED (todas as 1197 têm — pelo id da lesão em
+    // edição e, se não bater, pelo nome; cobre as 204 que não estão em
+    // EN_TERMS e os casos em que a cópia na nuvem perdeu o enTerm).
+    // Relatado pelo usuário: o botão gerava busca em português no
+    // Radiopaedia (site em inglês), inútil, numa lesão cujo SEED tinha o
+    // termo em inglês. Quando acha, PREENCHE o campo "termo em inglês"
+    // (visível, salvo só se o usuário clicar em Salvar) e avisa de onde veio.
+    const enEl = document.getElementById('f-en-term');
     const nameField = document.getElementById('f-name').value.trim();
-    const nm = enTermField || nameField;
+    // Campo igual ao nome em português = "termo em inglês" falso (herança do
+    // fallback antigo do boot que gravava o nome no lugar do enTerm e foi
+    // propagado para a nuvem). Tratar como vazio para cair nas fontes curadas.
+    const enTermRaw = enEl.value.trim();
+    const enTermField = (enTermRaw && enTermRaw.toLowerCase() !== nameField.toLowerCase()) ? enTermRaw : '';
+    let curatedTerm = nameField ? radiopaediaAutoEnTerm(nameField) : null;
+    let curatedFrom = curatedTerm ? 'dicionário' : '';
+    if(!curatedTerm && Array.isArray(SEED)){
+      const seedHit = (existing ? SEED.find(x=>x && x.id===existing.id) : null)
+        || (nameField ? SEED.find(x=>x && x.name===nameField) : null);
+      const t = seedHit && typeof seedHit.enTerm==='string' ? seedHit.enTerm.trim() : '';
+      if(t){ curatedTerm = t; curatedFrom = 'lesão de fábrica'; }
+    }
+    const nm = enTermField || curatedTerm || nameField;
     if(!nm){ toast('Escreva o nome da lesão (ou o termo em inglês) primeiro.'); return; }
     const url = radiopaediaSearchUrl(nm);
     if(links.some(l=>l.url === url)) { toast('Esse link já foi adicionado.'); return; }
     links.push({label:'Radiopaedia — buscar casos', url});
     renderLinks();
-    if(!enTermField){ toast('⚠ Sem "termo em inglês" preenchido — o link foi gerado com o nome em português e pode trazer resultados ruins no Radiopaedia (em inglês). Considere preencher o termo em inglês.'); }
+    if(!enTermField && curatedTerm){
+      enEl.value = curatedTerm;
+      toast('Termo em inglês estava vazio — usei "'+curatedTerm+'" ('+curatedFrom+') e preenchi o campo; será salvo junto se você clicar em Salvar.');
+    }
+    else if(!enTermField){ toast('⚠ Sem "termo em inglês" preenchido — o link foi gerado com o nome em português e pode trazer resultados ruins no Radiopaedia (em inglês). Considere preencher o termo em inglês.'); }
   };
 
   const chipWrap = document.getElementById('chip-wrap');

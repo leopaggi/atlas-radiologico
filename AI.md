@@ -4068,3 +4068,31 @@ PASS / 151 FAIL — mesmas 151 falhas pré-existentes do baseline atual
 (`tests/known-failures-baseline.json`), zero regressão nova (confirmado
 por diff exato da lista de testes falhando contra HEAD limpo via `git
 stash`).
+
+### Botão manual do Radiopaedia consulta `EN_TERMS` antes do fallback em português (2026-11-10)
+
+**Sintoma:** `#f-link-radiopaedia` (openForm) usava `enTermField || nameField`
+— sem o campo, gerava `radiopaediaSearchUrl(<nome pt>)`, inútil no
+Radiopaedia (en), mesmo quando `EN_TERMS[nameField]` existia.
+
+**Correção:** degrau intermediário via `radiopaediaAutoEnTerm(nameField)`
+(a MESMA função curada que o gerador automático/reparo de boot usa — ver
+comentário `lrev_mul8vsjq_0bfwkd` em `radiopaediaSearchUrl`):
+
+```js
+const curatedTerm = nameField ? radiopaediaAutoEnTerm(nameField) : null;
+const nm = enTermField || curatedTerm || nameField;
+```
+
+Toast distinto quando usou `curatedTerm` (informativo) vs. fallback pt
+(o aviso ⚠ antigo, inalterado). Invariantes preservadas: campo digitado
+tem prioridade absoluta; nunca fabrica tradução (`EN_TERMS` é curado à
+mão; sem entrada → `null` → comportamento idêntico ao anterior).
+
+**Arquivos:** `index.html` (openForm, handler `f-link-radiopaedia`),
+`tests/radiopaedia-links-fail-safe.test.js` (teste 11: asserts da nova
+ordem + janela de 2200 chars), `tests/critical-flows.test.js`
+(`importHandler.line` 21908 → 21915).
+
+**Testes:** check-syntax OK; radiopaedia-links-fail-safe 12/12; gate
+2582 PASS / 151 FAIL = baseline exata.
