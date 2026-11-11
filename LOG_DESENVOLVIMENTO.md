@@ -1,5 +1,16 @@
 # Diario de desenvolvimento
 
+## Filtro por tags clínicas (2026-11-11)
+
+A barra de tags agora se chama "TAGS DE RADIOLOGIA" (antes "CARACTERÍSTICAS") e
+ganhou um botão laranja "TAGS CLÍNICAS". Por padrão só as tags de radiologia
+ficam visíveis; ao clicar no botão, a barra se divide ao meio e as tags
+clínicas aparecem ao lado, com contagem, e podem ser combinadas (E) com as tags
+de radiologia. A busca por texto também passou a procurar nas tags clínicas, e
+"limpar filtros" zera os dois conjuntos. Motivo: tags como "emergência" existiam
+na lesão mas não havia como filtrar por elas. A mudança só altera a tela: nenhum
+dado, imagem ou sincronização é tocado.
+
 ## Capa e reordenação de imagens (2026-10-19)
 
 A galeria do formulário Editar lesão e o modal "Adicionar imagem" do Quiz agora

@@ -633,9 +633,12 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // em português quando EN_TERMS não tem entrada (204 lesões) —
   // comentário + 1 linha de lógica; e +3 no handler do botão (campo igual
   // ao nome em português tratado como vazio).
-  assert.equal(recovery.line, 12223);
-  assert.equal(brokenArtifacts.line, 12213);
-  assert.equal(loadData.line, 16344);
+  // +14 nas 3 primeiras âncoras e +67 no importHandler (2026-11-11): filtro por TAGS CLÍNICAS
+  // (CSS do painel, estado activeClinicalTags e renderClinicalTagbar) — só código novo, nenhuma
+  // lógica de dados/importação alterada.
+  assert.equal(recovery.line, 12237);
+  assert.equal(brokenArtifacts.line, 12227);
+  assert.equal(loadData.line, 16358);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
@@ -701,7 +704,7 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // âncoras acima): a própria marcação retroativa fica DENTRO do handler de
   // importação (depois do marcador que esta âncora localiza), então não
   // desloca este número — só o que vier antes dele no arquivo desloca.
-  assert.equal(importHandler.line, 21942);
+  assert.equal(importHandler.line, 22009);
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
