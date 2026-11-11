@@ -247,6 +247,17 @@ body{
   display:flex;flex-wrap:wrap;gap:6px;align-items:center;max-height:120px;overflow-y:auto;
 }
 #tagbar .tagbar-label{color:var(--muted-2);font-size:11px;font-family:'IBM Plex Mono',monospace;margin-right:4px;letter-spacing:.04em;}
+/* FILTRO DE TAGS CLÍNICAS — painel opcional ao lado das tags de radiologia (oculto por padrão). */
+#tagbars{display:flex;align-items:stretch;border-bottom:1px solid var(--line);}
+#tagbars #tagbar{flex:1 1 50%;min-width:0;border-bottom:0;}
+#tagbar-clinical{display:none;flex:1 1 50%;min-width:0;padding:12px 28px 12px 16px;border-left:1px solid var(--line);flex-wrap:wrap;gap:6px;align-items:center;max-height:120px;overflow-y:auto;}
+#tagbars.clinical-open #tagbar-clinical{display:flex;}
+#tagbar .clinical-toggle{color:var(--amber);background:transparent;border:1px solid var(--amber);border-radius:12px;padding:3px 9px;font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:.04em;cursor:pointer;margin-right:4px;}
+#tagbar .clinical-toggle:hover,#tagbar .clinical-toggle.open{background:var(--amber-dim);}
+#tagbar-clinical .tagbar-label{color:var(--amber);font-size:11px;font-family:'IBM Plex Mono',monospace;margin-right:4px;letter-spacing:.04em;}
+.tag-chip.clinical:hover{border-color:var(--amber);}
+.tag-chip.clinical.active{background:var(--amber-dim);border-color:var(--amber);color:var(--amber);}
+.tag-chip.clinical.active .n{color:var(--amber);}
 .tag-chip{
   background:var(--tag-bg);border:1px solid var(--line);color:var(--muted);
   padding:5px 10px;border-radius:12px;font-size:12px;cursor:pointer;user-select:none;
@@ -2131,7 +2142,7 @@ body{
       <button id="quiz-btn" style="display:none">🧠 Quiz<span id="quiz-due-badge" class="quiz-due-badge" style="display:none;"></span></button>
       <button id="add-btn">+ Nova lesão</button>
     </div>
-    <div id="tagbar"></div>
+    <div id="tagbars"><div id="tagbar"></div><div id="tagbar-clinical"></div></div>
     <div id="reviewbar"></div>
     <div id="results">
       <div id="result-count"></div>
@@ -11166,6 +11177,9 @@ function loadQuizScopePref(){ return validateScopePref(readScopePref(QUIZ_SCOPE_
 function saveQuizScopePref(){ writeScopePref(QUIZ_SCOPE_KEY, quizScope); }
 function quizScopeEntries(){ return DATA.filter(e=> entryMatchesScope(e, quizScope.section, quizScope.site)); }
 let activeTags = new Set();
+let activeClinicalTags = new Set(); // filtro por tags clínicas (AND com as tags de radiologia)
+let clinicalPanelOpen = false;   // painel de tags clínicas: oculto por padrão, não persiste
+const entryClinicalTags = e => Array.isArray(e && e.clinicalTags) ? e.clinicalTags : [];
 let searchTerm = '';
 let editingId = null;
 let reviewFilter = null; // null = todas, 0/1/2 = filtra por status
@@ -16986,7 +17000,7 @@ function filteredEntries(){
   let list = scopedEntries();
   if(searchTerm.trim()){
     const q = searchTerm.trim().toLowerCase();
-    list = list.filter(e=> e.name.toLowerCase().includes(q) || (e.notes||'').toLowerCase().includes(q) || e.tags.some(t=>t.toLowerCase().includes(q)));
+    list = list.filter(e=> e.name.toLowerCase().includes(q) || (e.notes||'').toLowerCase().includes(q) || e.tags.some(t=>t.toLowerCase().includes(q)) || entryClinicalTags(e).some(t=>t.toLowerCase().includes(q)));
   }
   if(activeTags.has(IMG_TAG)){
     list = list.filter(e=> hasEntryImgs(e));
@@ -16997,6 +17011,9 @@ function filteredEntries(){
   const realTags = [...activeTags].filter(t=> t!==IMG_TAG && t!==NO_IMG_TAG);
   if(realTags.length>0){
     list = list.filter(e=> realTags.every(t=> e.tags.includes(t)));
+  }
+  if(activeClinicalTags.size>0){
+    list = list.filter(e=> [...activeClinicalTags].every(t=> entryClinicalTags(e).includes(t)));
   }
   if(reviewFilter !== null){
     list = list.filter(e=> getReview(e.id) === reviewFilter);
@@ -17009,8 +17026,16 @@ function renderTagbar(){
   bar.innerHTML = '';
   const label = document.createElement('span');
   label.className = 'tagbar-label';
-  label.textContent = 'CARACTERÍSTICAS';
+  label.textContent = 'TAGS DE RADIOLOGIA';
   bar.appendChild(label);
+
+  // FILTRO DE TAGS CLÍNICAS — botão laranja que abre/fecha o painel ao lado (oculto por padrão)
+  const clinToggle = document.createElement('button');
+  clinToggle.type = 'button';
+  clinToggle.className = 'clinical-toggle' + (clinicalPanelOpen?' open':'');
+  clinToggle.textContent = 'TAGS CLÍNICAS ' + (clinicalPanelOpen?'◂':'▸') + (activeClinicalTags.size?` (${activeClinicalTags.size})`:'');
+  clinToggle.onclick = ()=>{ clinicalPanelOpen = !clinicalPanelOpen; renderTagbar(); };
+  bar.appendChild(clinToggle);
 
   // botão de limpar vem logo aqui no início — sempre visível, mesmo com a lista de tags
   // muito longa e uma tag ativa "escondida" lá no final/embaixo. Aparece sempre
@@ -17018,13 +17043,14 @@ function renderTagbar(){
   // restaura o estado padrão de fábrica: Todas as seções, sem tags,
   // Revisões=Todas. Não toca em dados/SRS/imagens/preferências.
   const hasScopeFilter = !!(scope.section || scope.site);
-  const activeFilterCount = activeTags.size + (reviewFilter!==null?1:0) + (hasScopeFilter?1:0) + (searchTerm.trim()?1:0);
+  const activeFilterCount = activeTags.size + activeClinicalTags.size + (reviewFilter!==null?1:0) + (hasScopeFilter?1:0) + (searchTerm.trim()?1:0);
   if(activeFilterCount>0){
     const clr = document.createElement('button');
     clr.id='clear-tags';
     clr.textContent = `limpar filtros (${activeFilterCount}) ✕`;
     clr.onclick = ()=>{
       activeTags.clear();
+      activeClinicalTags.clear();
       searchTerm = '';
       const searchInput = document.getElementById('search');
       if(searchInput) searchInput.value = '';
@@ -17041,7 +17067,7 @@ function renderTagbar(){
     let list = scopedEntries();
     if(searchTerm.trim()){
       const q=searchTerm.trim().toLowerCase();
-      list = list.filter(e=> e.name.toLowerCase().includes(q) || (e.notes||'').toLowerCase().includes(q) || e.tags.some(t=>t.toLowerCase().includes(q)));
+      list = list.filter(e=> e.name.toLowerCase().includes(q) || (e.notes||'').toLowerCase().includes(q) || e.tags.some(t=>t.toLowerCase().includes(q)) || entryClinicalTags(e).some(t=>t.toLowerCase().includes(q)));
     }
     return list;
   })();
@@ -17087,6 +17113,47 @@ function renderTagbar(){
     chip.innerHTML = `${t}<span class="n">${counts[t]}</span>`;
     chip.onclick = ()=>{
       if(activeTags.has(t)) activeTags.delete(t); else activeTags.add(t);
+      renderResults(); renderTagbar();
+    };
+    bar.appendChild(chip);
+  });
+  renderClinicalTagbar();
+}
+
+// FILTRO DE TAGS CLÍNICAS — lista as tags clínicas do escopo atual (contagem ignora o próprio filtro clínico).
+function renderClinicalTagbar(){
+  const wrap = document.getElementById('tagbars');
+  const bar = document.getElementById('tagbar-clinical');
+  if(!wrap || !bar) return;
+  wrap.classList.toggle('clinical-open', !!clinicalPanelOpen);
+  bar.innerHTML = '';
+  if(!clinicalPanelOpen) return;
+  const label = document.createElement('span');
+  label.className = 'tagbar-label';
+  label.textContent = 'TAGS CLÍNICAS';
+  bar.appendChild(label);
+  let base = scopedEntries();
+  if(searchTerm.trim()){
+    const q = searchTerm.trim().toLowerCase();
+    base = base.filter(e=> e.name.toLowerCase().includes(q) || (e.notes||'').toLowerCase().includes(q) || e.tags.some(t=>t.toLowerCase().includes(q)) || entryClinicalTags(e).some(t=>t.toLowerCase().includes(q)));
+  }
+  const counts = {};
+  base.forEach(e=> entryClinicalTags(e).forEach(t=> counts[t]=(counts[t]||0)+1 ));
+  const tags = Object.keys(counts).sort((a,b)=> counts[b]-counts[a] || a.localeCompare(b));
+  if(!tags.length){
+    const none = document.createElement('span');
+    none.style.color='var(--muted-2)'; none.style.fontSize='12px';
+    none.textContent = 'nenhuma tag clínica neste escopo';
+    bar.appendChild(none);
+    return;
+  }
+  tags.forEach(t=>{
+    const chip = document.createElement('div');
+    chip.className = 'tag-chip clinical' + (activeClinicalTags.has(t)?' active':'');
+    chip.textContent = t;
+    const n = document.createElement('span'); n.className='n'; n.textContent = counts[t]; chip.appendChild(n);
+    chip.onclick = ()=>{
+      if(activeClinicalTags.has(t)) activeClinicalTags.delete(t); else activeClinicalTags.add(t);
       renderResults(); renderTagbar();
     };
     bar.appendChild(chip);
@@ -22056,7 +22123,7 @@ document.getElementById('import-file').addEventListener('change', async (ev)=>{
     try{ await storage.set(RECOVERY_KEY,RECOVERY_VERSION,false); }catch(_e){}
 
     scope={section:null,site:null};
-    activeTags.clear();
+    activeTags.clear(); activeClinicalTags.clear();
     searchTerm='';
     document.getElementById('search').value='';
     renderAll();
@@ -22098,7 +22165,7 @@ async function restoreFactoryDefault(){
   DATA = JSON.parse(JSON.stringify(activeCanonicalSeedV172()));
   await saveData();
   try{ await storage.set(RECOVERY_KEY,RECOVERY_VERSION,false); }catch(_e){}
-  scope={section:null,site:null}; activeTags.clear(); searchTerm=''; document.getElementById('search').value='';
+  scope={section:null,site:null}; activeTags.clear(); activeClinicalTags.clear(); searchTerm=''; document.getElementById('search').value='';
   renderAll();
   toast('Banco restaurado ao padrão.');
 }
