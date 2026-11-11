@@ -255,9 +255,12 @@ body{
 #tagbar .clinical-toggle{color:var(--amber);background:transparent;border:1px solid var(--amber);border-radius:12px;padding:3px 9px;font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:.04em;cursor:pointer;margin-right:4px;}
 #tagbar .clinical-toggle:hover,#tagbar .clinical-toggle.open{background:var(--amber-dim);}
 #tagbar-clinical .tagbar-label{color:var(--amber);font-size:11px;font-family:'IBM Plex Mono',monospace;margin-right:4px;letter-spacing:.04em;}
-.tag-chip.clinical:hover{border-color:var(--amber);}
-.tag-chip.clinical.active{background:var(--amber-dim);border-color:var(--amber);color:var(--amber);}
-.tag-chip.clinical.active .n{color:var(--amber);}
+/* mesma cor âmbar das tags clínicas dos cards/detalhe (.mini-tag.clinical); ativa = âmbar cheio */
+.tag-chip.clinical{background:var(--amber-dim);border-color:var(--amber-dim);color:var(--amber);}
+.tag-chip.clinical .n{color:var(--amber);opacity:.7;}
+.tag-chip.clinical:hover{border-color:var(--amber);color:var(--amber);}
+.tag-chip.clinical.active{background:var(--amber);border-color:var(--amber);color:#1a1108;font-weight:600;}
+.tag-chip.clinical.active .n{color:#1a1108;opacity:.75;}
 .tag-chip{
   background:var(--tag-bg);border:1px solid var(--line);color:var(--muted);
   padding:5px 10px;border-radius:12px;font-size:12px;cursor:pointer;user-select:none;
