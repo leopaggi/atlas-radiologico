@@ -170,6 +170,13 @@ body{
 #scope-title{
   font-family:'IBM Plex Serif',serif;font-size:20px;font-weight:600;flex-shrink:0;
 }
+#scope-title-wrap{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+/* CADEADO DA ORGANIZAÇÃO — bloqueado por padrão: impede arrastar/reordenar seções e sítios sem querer */
+.sections-lock-btn{background:transparent;border:1px solid var(--line);color:var(--muted-2);border-radius:8px;width:30px;height:30px;font-size:14px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;}
+.sections-lock-btn:hover{border-color:var(--amber);color:var(--amber);}
+.sections-lock-btn.unlocked{border-color:var(--amber);background:var(--amber-dim);color:var(--amber);}
+#tree.sections-locked .drag-handle{visibility:hidden;}
+#tree.sections-locked .tree-section-head .reorder-btns{display:none;}
 #scope-title .path{color:var(--muted-2);font-weight:500;font-size:13px;font-family:'IBM Plex Sans',sans-serif;}
 #search-wrap{flex:1;position:relative;max-width:360px;}
 #search{
@@ -2135,7 +2142,7 @@ body{
 
   <div id="main">
     <div id="header">
-      <div id="scope-title"><span class="path" id="scope-path"></span><div id="scope-name">Todas as seções</div></div>
+      <div id="scope-title-wrap"><div id="scope-title"><span class="path" id="scope-path"></span><div id="scope-name">Todas as seções</div></div><button id="sections-lock-btn" type="button" class="sections-lock-btn" aria-pressed="true" title="Organização das seções bloqueada — clique para liberar"><span aria-hidden="true">🔒</span></button></div>
       <div id="search-wrap"><input id="search" placeholder="Buscar lesão…"></div>
       <div class="review-center-actions">
         <button id="pending-reviews-btn" class="review-center-btn is-empty" title="Revisões pendentes" aria-label="Revisões pendentes"><span class="review-center-icon" aria-hidden="true">🔔</span><span id="pending-reviews-badge" class="review-center-badge"></span></button>
@@ -11130,6 +11137,7 @@ function runDuplicateCleanup(){
   return { changed, reviewOrSrsChanged };
 }
 let DATA = [];
+let sectionsLocked = true; // cadeado da organização: sempre começa bloqueado a cada carregamento (não persiste de propósito)
 let sectionOrder = [...DEFAULT_SECTION_ORDER];
 let siteOrder = {}; // { [nomeDaSeção]: [siteA, siteB, ...] } — ordem manual dos sítios dentro de cada seção
 let ORDER_STAMPS = { section: 0, sites: {} }; // PROTEÇÃO 085 — carimbo da última reordenação MANUAL (seções / sítios por seção)
@@ -16809,6 +16817,7 @@ function orderedSiteNames(sectionName, sitesMap){
 }
 /* usada pelo drag-and-drop: move um sítio para uma nova posição dentro da seção */
 function reorderSite(sectionName, fromIdx, toIdx){
+  if(sectionsLocked) return; // cadeado
   const arr = siteOrder[sectionName];
   if(!Array.isArray(arr) || fromIdx===toIdx || fromIdx<0 || toIdx<0 || fromIdx>=arr.length || toIdx>=arr.length) return;
   const [moved] = arr.splice(fromIdx,1);
@@ -16817,6 +16826,7 @@ function reorderSite(sectionName, fromIdx, toIdx){
   saveSiteOrder();
 }
 async function moveSection(name, dir){
+  if(sectionsLocked) return; // cadeado
   const idx = sectionOrder.indexOf(name);
   const swapWith = idx + dir;
   if(idx<0 || swapWith<0 || swapWith>=sectionOrder.length) return;
@@ -16828,6 +16838,7 @@ async function moveSection(name, dir){
 /* reordenação por arrastar-e-soltar das seções — move uma seção pra qualquer
    posição de uma vez, em vez de só trocar com a vizinha (como as setas fazem) */
 async function reorderSectionDrag(fromName, toName){
+  if(sectionsLocked) return; // cadeado
   if(fromName===toName) return;
   const fromIdx = sectionOrder.indexOf(fromName);
   const toIdx = sectionOrder.indexOf(toName);
@@ -16873,6 +16884,7 @@ function renderTree(){
   const imgStats = buildSidebarImageStats(DATA);
   const tree = document.getElementById('tree');
   tree.innerHTML = '';
+  tree.classList.toggle('sections-locked', sectionsLocked);
 
   // "todas" pseudo-item
   const allDiv = document.createElement('div');
@@ -16893,7 +16905,7 @@ function renderTree(){
 
     const head = document.createElement('div');
     head.className = 'tree-section-head' + (isOpen?' open':'') + (isActiveScope?' active-scope':'');
-    head.draggable = true;
+    head.draggable = !sectionsLocked;
     head.dataset.sectionName = sectionName;
     const secStats = (imgStats.sections && imgStats.sections[sectionName]) || blankImageStats();
     head.innerHTML = `<span class="drag-handle" title="arraste para reordenar a seção">⠿</span><span class="chev">▸</span><span class="tree-name">${sectionName}</span>
@@ -16912,6 +16924,7 @@ function renderTree(){
       renderAll();
     };
     head.ondragstart = (ev)=>{
+      if(sectionsLocked){ ev.preventDefault(); return; }
       head.classList.add('dragging');
       ev.dataTransfer.effectAllowed = 'move';
       ev.dataTransfer.setData('text/plain', sectionName);
@@ -16947,13 +16960,14 @@ function renderTree(){
       const sEl = document.createElement('div');
       const active = scope.section===sectionName && scope.site===siteName;
       sEl.className = 'tree-site' + (active?' active-scope':'');
-      sEl.draggable = true;
+      sEl.draggable = !sectionsLocked;
       sEl.dataset.siteIdx = siteIdx;
       const stStats = (imgStats.sites && imgStats.sites[sectionName] && imgStats.sites[sectionName][siteName]) || blankImageStats();
       sEl.innerHTML = `<span class="drag-handle" title="arraste para reordenar">⠿</span><span class="tree-site-name">${siteName}</span><span class="count tree-cov" title="${sidebarStatsTitle(stStats)}">${sidebarCoverageHtml(stStats)}</span>`;
       sEl.onclick = (ev)=>{ ev.stopPropagation(); scope = {section:sectionName, site:siteName}; saveSidebarScopePref(); renderAll(); };
       sEl.ondragstart = (ev)=>{
         ev.stopPropagation();
+        if(sectionsLocked){ ev.preventDefault(); return; }
         sEl.classList.add('dragging');
         ev.dataTransfer.effectAllowed = 'move';
         ev.dataTransfer.setData('text/plain', String(siteIdx));
@@ -17197,6 +17211,20 @@ function renderReviewBar(){
   });
 }
 
+function renderSectionsLockBtn(){
+  const b = document.getElementById('sections-lock-btn');
+  if(!b) return;
+  b.classList.toggle('unlocked', !sectionsLocked);
+  b.setAttribute('aria-pressed', sectionsLocked ? 'true' : 'false');
+  b.title = sectionsLocked ? 'Organização das seções bloqueada — clique para liberar' : 'Organização liberada (arraste ou use ▲▼) — clique para bloquear';
+  b.firstElementChild.textContent = sectionsLocked ? '🔒' : '🔓';
+}
+(function initSectionsLockBtn(){
+  const b = document.getElementById('sections-lock-btn');
+  if(!b) return;
+  b.onclick = ()=>{ sectionsLocked = !sectionsLocked; renderSectionsLockBtn(); renderTree(); };
+})();
+
 function renderHeader(){
   const path = document.getElementById('scope-path');
   const name = document.getElementById('scope-name');
@@ -17309,6 +17337,7 @@ function renderResults(){
 function renderAll(){
   renderTree();
   renderHeader();
+  renderSectionsLockBtn();
   renderTagbar();
   renderReviewBar();
   renderResults();
