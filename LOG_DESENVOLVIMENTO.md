@@ -1,5 +1,15 @@
 # Diario de desenvolvimento
 
+## Cadeado da organização das seções (2026-11-12)
+
+Ao lado do título "Todas as seções" (cabeçalho) agora há um cadeado. Por padrão
+(a cada carregamento) ele fica **bloqueado**: seções e sítios não podem ser
+arrastados, as setas ▲▼ e as alças de arraste ficam ocultas, e as funções
+`reorderSite`, `moveSection` e `reorderSectionDrag` ignoram a chamada. Clicar no
+cadeado (🔓) libera a organização; clicar de novo bloqueia. O estado não é
+persistido de propósito (volta bloqueado após F5). Só interface: nenhum dado,
+ordem salva ou sincronização é alterado.
+
 ## Filtro por tags clínicas (2026-11-11)
 
 A barra de tags agora se chama "TAGS DE RADIOLOGIA" (antes "CARACTERÍSTICAS") e

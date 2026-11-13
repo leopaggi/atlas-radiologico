@@ -3819,6 +3819,7 @@ function makeOrderDevice085(cloud, { fresh = false, backing } = {}) {
     set: async (key, value) => { store[key] = value; }
   };
   c.DEFAULT_SECTION_ORDER = DEFAULTS085;
+  c.sectionsLocked = false; // cadeado das seções (2026-11-12): estes testes simulam a organização liberada
   c.renderTree = () => {};
   c.markDeviceInitialized = () => {};
   c.runNewDeviceBootstrapFlow = async () => { await c.applyNewDeviceBootstrapChoice('load'); };
