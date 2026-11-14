@@ -53,8 +53,9 @@ test('3. filteredEntries filtra por clinicalTags (AND) e a busca textual inclui 
 });
 
 test('4. limpar filtros zera também as tags clínicas, sem tocar em dados', () => {
-  const tagbar = extractBlock(html, 'function renderTagbar(){', '\nfunction renderReviewBar(){');
-  assert.match(tagbar, /activeClinicalTags\.clear\(\)/);
-  assert.match(tagbar, /activeTags\.size \+ activeClinicalTags\.size/);
-  assert.doesNotMatch(tagbar, /saveData|pushToFirebase|storage\.set\(/);
+  const clear = extractBlock(html, 'function clearAllFilters(){', '\nfunction syncSearchClearBtn(){');
+  const counter = extractBlock(html, 'function countActiveFilters(){', '\n// Restaura o estado padrão');
+  assert.match(clear, /activeClinicalTags\.clear\(\)/);
+  assert.match(counter, /activeTags\.size \+ activeClinicalTags\.size/);
+  assert.doesNotMatch(clear, /saveData|pushToFirebase|storage\.set\(/);
 });

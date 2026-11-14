@@ -161,7 +161,7 @@ test('FILTROS-RESET: reload nasce em Todas as seções, sem tags, Revisões=Toda
 });
 
 test('FILTROS-RESET: Limpar filtros restaura o mesmo estado de fábrica', () => {
-  const tagbar = extractBlock(html, 'function renderTagbar(){', '\nfunction renderReviewBar(){');
+  const tagbar = extractBlock(html, 'function clearAllFilters(){', '\nfunction syncSearchClearBtn(){');
   assert.match(tagbar, /activeTags\.clear\(\)/, '4. limpa tags (e sítio via scope abaixo)');
   assert.match(tagbar, /scope\s*=\s*\{section:null,\s*site:null\}/, '5. remove sítio/escopo específico');
   assert.match(tagbar, /reviewFilter = null;/, 'Revisões volta para Todas');
@@ -172,8 +172,9 @@ test('FILTROS-RESET: Limpar filtros restaura o mesmo estado de fábrica', () => 
 
 test('FILTROS-RESET: botão aparece com qualquer filtro ativo, não só com tags', () => {
   const tagbar = extractBlock(html, 'function renderTagbar(){', '\nfunction renderReviewBar(){');
+  const counter = extractBlock(html, 'function countActiveFilters(){', '\n// Restaura o estado padrão');
   assert.match(tagbar, /activeFilterCount/, 'conta todas as facetas ativas');
-  assert.match(tagbar, /reviewFilter!==null\?1:0/);
+  assert.match(counter, /reviewFilter!==null\?1:0/);
   assert.match(tagbar, /limpar filtros/);
 });
 
