@@ -1,5 +1,16 @@
 # Diario de desenvolvimento
 
+## Busca: limpar filtros sempre à mão (2026-11-14)
+
+Ao digitar na busca, o botão "limpar filtros" não aparecia (a barra de tags só era
+redesenhada ao clicar numa tag). Agora cada digitação também atualiza a barra de tags,
+então o botão aparece. Novidades, todas só de interface:
+- ✕ dentro do campo de busca limpa só o texto da busca;
+- dentro do detalhe de uma lesão, com busca/filtro ativo, aparece o botão
+  "✕ limpar filtros e voltar às seções" (fecha a lesão e restaura Todas as seções);
+- `countActiveFilters()` e `clearAllFilters()` viraram a fonte única (a barra de tags usa os mesmos).
+Nenhum dado, imagem ou sincronização é tocado.
+
 ## Cadeado da organização das seções (2026-11-12)
 
 Ao lado do título "Todas as seções" (cabeçalho) agora há um cadeado. Por padrão

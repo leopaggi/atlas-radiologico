@@ -184,6 +184,8 @@ body{
   padding:9px 12px 9px 30px;border-radius:var(--radius);font-family:inherit;font-size:13px;
 }
 #search:focus{outline:none;border-color:var(--teal);}
+#search-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted-2);font-size:13px;cursor:pointer;padding:4px 6px;border-radius:4px;}
+#search-clear:hover{color:var(--text);background:var(--line);}
 #search-wrap::before{
   content:"⌕";position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted-2);font-size:15px;
 }
@@ -2143,7 +2145,7 @@ body{
   <div id="main">
     <div id="header">
       <div id="scope-title-wrap"><div id="scope-title"><span class="path" id="scope-path"></span><div id="scope-name">Todas as seções</div></div><button id="sections-lock-btn" type="button" class="sections-lock-btn" aria-pressed="true" title="Organização das seções bloqueada — clique para liberar"><span aria-hidden="true">🔒</span></button></div>
-      <div id="search-wrap"><input id="search" placeholder="Buscar lesão…"></div>
+      <div id="search-wrap"><input id="search" placeholder="Buscar lesão…"><button id="search-clear" type="button" title="limpar busca" aria-label="limpar busca" style="display:none">✕</button></div>
       <div class="review-center-actions">
         <button id="pending-reviews-btn" class="review-center-btn is-empty" title="Revisões pendentes" aria-label="Revisões pendentes"><span class="review-center-icon" aria-hidden="true">🔔</span><span id="pending-reviews-badge" class="review-center-badge"></span></button>
         <button id="ready-solutions-btn" class="review-center-btn is-empty" title="Soluções disponíveis" aria-label="Soluções disponíveis"><span class="review-center-icon" aria-hidden="true">💡</span><span id="ready-solutions-badge" class="review-center-badge"></span></button>
@@ -17038,6 +17040,33 @@ function filteredEntries(){
   return list;
 }
 
+// Conta TODOS os filtros ativos (tags, tags clínicas, Revisões, escopo e
+// busca) — fonte única para o botão "limpar filtros" da barra de tags, o ✕ da
+// busca e o atalho dentro do detalhe da lesão.
+function countActiveFilters(){
+  const hasScopeFilter = !!(scope.section || scope.site);
+  return activeTags.size + activeClinicalTags.size + (reviewFilter!==null?1:0) + (hasScopeFilter?1:0) + (searchTerm.trim()?1:0);
+}
+// Restaura o estado padrão: Todas as seções, sem tags, sem busca, Revisões=Todas.
+// Não toca em dados/SRS/imagens/preferências (só estado de visualização).
+function clearAllFilters(){
+  activeTags.clear();
+  activeClinicalTags.clear();
+  searchTerm = '';
+  const searchInput = document.getElementById('search');
+  if(searchInput) searchInput.value = '';
+  scope = {section:null, site:null};
+  reviewFilter = null;
+  saveSidebarScopePref();
+  renderAll();
+  syncSearchClearBtn();
+}
+function syncSearchClearBtn(){
+  const b = document.getElementById('search-clear');
+  const i = document.getElementById('search');
+  if(b && i) b.style.display = i.value ? 'block' : 'none';
+}
+
 function renderTagbar(){
   const bar = document.getElementById('tagbar');
   bar.innerHTML = '';
@@ -17059,23 +17088,12 @@ function renderTagbar(){
   // que QUALQUER filtro estiver ativo (tags, Revisões, escopo ou busca) e
   // restaura o estado padrão de fábrica: Todas as seções, sem tags,
   // Revisões=Todas. Não toca em dados/SRS/imagens/preferências.
-  const hasScopeFilter = !!(scope.section || scope.site);
-  const activeFilterCount = activeTags.size + activeClinicalTags.size + (reviewFilter!==null?1:0) + (hasScopeFilter?1:0) + (searchTerm.trim()?1:0);
+  const activeFilterCount = countActiveFilters();
   if(activeFilterCount>0){
     const clr = document.createElement('button');
     clr.id='clear-tags';
     clr.textContent = `limpar filtros (${activeFilterCount}) ✕`;
-    clr.onclick = ()=>{
-      activeTags.clear();
-      activeClinicalTags.clear();
-      searchTerm = '';
-      const searchInput = document.getElementById('search');
-      if(searchInput) searchInput.value = '';
-      scope = {section:null, site:null};
-      reviewFilter = null;
-      saveSidebarScopePref();
-      renderAll();
-    };
+    clr.onclick = clearAllFilters;
     bar.appendChild(clr);
   }
 
@@ -17415,6 +17433,7 @@ function openDetail(id, opts){
         <button class="btn btn-danger" id="btn-del">excluir</button>
         <div style="display:flex;gap:8px;">
           ${returnTo ? `<button class="btn btn-ghost" id="btn-back-today">← Voltar para imagens de hoje</button>` : ''}
+          ${(!returnTo && typeof countActiveFilters==='function' && countActiveFilters()>0) ? `<button class="btn btn-ghost" id="btn-clear-filters" title="fecha a lesão, remove busca/filtros e volta a todas as seções">✕ limpar filtros e voltar às seções</button>` : ''}
           <button class="btn btn-ghost" id="btn-close">fechar</button>
           <button class="btn btn-primary" id="btn-edit">editar</button>
         </div>
@@ -17488,6 +17507,9 @@ function openDetail(id, opts){
   // Dashboard/Quiz de fundo fica intacto) e reabre a lista, recalculada do
   // DATA (mesmo dia, mesmas contagens atualizadas). Sem history/reload.
   if(backTodayBtn) backTodayBtn.onclick = ()=>{ try{ ov.remove(); }catch(_e){} openImagesTodayModal(); };
+  // Atalho: com busca/filtros ativos, fecha a lesão e volta a Todas as seções.
+  const clearFiltersBtn = document.getElementById('btn-clear-filters');
+  if(clearFiltersBtn) clearFiltersBtn.onclick = ()=>{ closeOverlay(); clearAllFilters(); };
   // NAVEGAÇÃO APÓS EDIÇÃO (lrev_mul8jrtq_l2atyp): editar a partir do detalhe
   // reabre a MESMA lesão em modo visualização após salvar, e o formulário
   // ganha um botão próprio para voltar à visualização sem perder o contexto
@@ -21978,7 +22000,12 @@ async function forceDuplicateCleanupNow(){
     toast('Duplicatas fundidas com sucesso.');
   }
 }
-document.getElementById('search').addEventListener('input', (e)=>{ searchTerm = e.target.value; renderResults(); });
+document.getElementById('search').addEventListener('input', (e)=>{ searchTerm = e.target.value; renderResults(); renderTagbar(); syncSearchClearBtn(); });
+document.getElementById('search-clear').addEventListener('click', ()=>{
+  searchTerm = '';
+  const i = document.getElementById('search'); i.value = ''; i.focus();
+  renderResults(); renderTagbar(); syncSearchClearBtn();
+});
 
 document.getElementById('btn-export').onclick = async ()=>{
   // Corrige um risco real: se esta aba ficou aberta por um tempo enquanto
