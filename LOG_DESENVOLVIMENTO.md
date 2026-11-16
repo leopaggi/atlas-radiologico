@@ -1,5 +1,17 @@
 # Diario de desenvolvimento
 
+## Pedido manual para a IA leva o vocabulário de tags (2026-11-16)
+
+O texto gerado por "copiar para IA" não dizia quais tags já existem: a IA inventava tags
+soltas (sinônimos, termos anatômicos, nome da entidade) e desfazia a limpeza do vocabulário.
+Agora `buildReviewAiPrompt` inclui (via `reviewAiTagRules()`):
+- a lista de TAGS DE RADIOLOGIA e de TAGS CLÍNICAS usadas em ≥ 3 lesões (calculada do acervo
+  na hora, mais usadas primeiro; `reviewAiTagVocabulary()`);
+- regras: usar só tags da lista (grafia exata), no máximo 1 tag nova com justificativa em
+  "reasoning", e nunca usar tag anatômica/local, nome ou sinônimo da própria entidade,
+  diferencial, achado genérico ou variação de grafia/plural.
+Só texto do pedido: nenhum dado, importação ou sincronização é alterado. Testes J e J2.
+
 ## Busca: limpar filtros sempre à mão (2026-11-14)
 
 Ao digitar na busca, o botão "limpar filtros" não aparecia (a barra de tags só era

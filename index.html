@@ -8859,6 +8859,33 @@ const GLOBAL_REVIEW_AI_RULES = [
   'NÃO invente lesionId e NÃO proponha alteração automática de dados (nada de proposedChanges): o Atlas não aplica nada a partir desta resposta.',
   'Produza a análise, o plano ou o resultado da auditoria em texto (summary + reasoning), citando as lesões por nome quando útil; ou indique "manual_action_required" se exigir trabalho manual.'
 ];
+// Vocabulário de tags que o pedido manual para a IA leva junto. Calculado do
+// próprio acervo (tags usadas em ≥ REVIEW_AI_VOCAB_MIN lesões): sem isso a IA
+// inventa tags soltas e desfaz a limpeza do vocabulário. Só leitura — nunca altera dados.
+const REVIEW_AI_VOCAB_MIN = 3;
+function reviewAiTagVocabulary(){
+  const rad = new Map(), clin = new Map();
+  const list = (typeof DATA !== 'undefined' && Array.isArray(DATA)) ? DATA : [];
+  list.forEach(e=>{
+    if(!e) return;
+    (Array.isArray(e.tags)?e.tags:[]).forEach(t=>{ if(typeof t==='string' && t.trim()) rad.set(t, (rad.get(t)||0)+1); });
+    (Array.isArray(e.clinicalTags)?e.clinicalTags:[]).forEach(t=>{ if(typeof t==='string' && t.trim()) clin.set(t, (clin.get(t)||0)+1); });
+  });
+  const top = m => [...m.entries()].filter(x=>x[1]>=REVIEW_AI_VOCAB_MIN)
+    .sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0],'pt')).map(x=>x[0]);
+  return { radiologic: top(rad), clinical: top(clin) };
+}
+function reviewAiTagRules(){
+  const v = reviewAiTagVocabulary();
+  const out = [
+    '- "tags" (RADIOLOGIA): 2 a 6 tags que descrevem o ACHADO de imagem (sinal, realce, morfologia, distribuição, modalidade). Use SOMENTE tags da lista "TAGS DE RADIOLOGIA" abaixo, copiando a grafia exata. Se nenhuma servir, proponha NO MÁXIMO 1 tag nova e justifique em "reasoning" por que nenhuma existente serve.',
+    '  NUNCA use como tag: local/estrutura anatômica (fígado, joelho, ombro… — o local já está em seção/sítio), o nome ou sinônimo da própria entidade/diagnóstico, diagnóstico diferencial, achado genérico, nem variação de grafia/plural/gênero de uma tag que já existe. Não troque tags boas já existentes sem erro real.',
+    '- "clinicalTags": use SOMENTE a lista "TAGS CLÍNICAS" abaixo (grafia exata); no máximo 1 nova, com justificativa em "reasoning". Tag clínica é contexto verdadeiro (sintoma, faixa etária, mecanismo, fator de risco, cenário) e nunca repita ali os achados radiológicos de "tags".'
+  ];
+  if(v.radiologic.length) out.push('', 'TAGS DE RADIOLOGIA existentes (mais usadas primeiro): ' + v.radiologic.join('; '));
+  if(v.clinical.length) out.push('', 'TAGS CLÍNICAS existentes (mais usadas primeiro): ' + v.clinical.join('; '));
+  return out;
+}
 function buildReviewAiPrompt(reviewId){
   const built = buildReviewAiPacket(reviewId);
   if(!built.ok) return built;
@@ -8890,7 +8917,7 @@ function buildReviewAiPrompt(reviewId){
     'Diretrizes de conteúdo (use o que for pertinente — não exija tudo de toda lesão):',
     '- "notes": descrição radiológica + achados discriminativos. SE esta revisão foi aberta por "sem nenhuma menção a diferencial" (veja requestText) E a lacuna ainda existir no estado atual, você é OBRIGADO a (A) acrescentar diferenciais pertinentes com critérios próprios OU (B) justificar explicitamente em "reasoning" por que não agregam. Diferenciais já bons não precisam ser reescritos.',
     REVIEW_AI_NOTES_FORMAT_RULES[0],
-    '- "clinicalTags": contexto CLÍNICO verdadeiro (sintoma, faixa etária, mecanismo de trauma, fator de risco, contexto sindrômico) — nunca repita ali os achados radiológicos de "tags".',
+    ...reviewAiTagRules(),
     '- "classification": verifique se existe um sistema oficial ESPECÍFICO pra esta entidade exata (ex.: Lichtman para doença de Kienböck, Graf para displasia do desenvolvimento do quadril, ENSAT para carcinoma adrenocortical) — nunca proponha um sistema só porque a lesão está na mesma região anatômica de outro sistema conhecido (ex.: mielolipoma adrenal NÃO é Bosniak, mesmo perto do rim).',
     '- Se nada acima tiver melhoria real, devolva "proposedChanges": {} (equivalente a no_change) em vez de inventar conteúdo.'
   ];

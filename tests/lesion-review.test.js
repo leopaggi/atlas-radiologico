@@ -2181,6 +2181,42 @@ test('I. prompt continua instruindo explicitamente a não duplicar tags radioló
   assert.match(built.text, /clinicalTags.*nunca repita (ali )?(os )?achados radiológicos de "tags"/s);
 });
 
+test('J. prompt leva o vocabulário existente (tags usadas em ≥3 lesões) e as regras de tags', () => {
+  const mk = (i, tags, clin) => makeLesion({ id: 'seed_' + i, name: 'L' + i, tags, clinicalTags: clin });
+  const data = [
+    mk(1, ['realce periférico', 'rara'], ['trauma', 'raro-clinico']),
+    mk(2, ['realce periférico', 'rara'], ['trauma', 'raro-clinico']),
+    mk(3, ['realce periférico'], ['trauma']),
+    mk(4, ['restrição à difusão'], ['idade pediátrica'])
+  ];
+  const ctx = buildTestContext({ data });
+  const { review } = ctx.createLesionReview('seed_1', 'tags');
+  const before = JSON.stringify(ctx.DATA || data);
+  const built = ctx.buildReviewAiPrompt(review.id);
+  assert.equal(built.ok, true);
+  assert.match(built.text, /TAGS DE RADIOLOGIA existentes[^\n]*realce periférico/);
+  assert.match(built.text, /TAGS CLÍNICAS existentes[^\n]*trauma/);
+  const radLine = built.text.split('\n').find(l => l.startsWith('TAGS DE RADIOLOGIA existentes'));
+  const clinLine = built.text.split('\n').find(l => l.startsWith('TAGS CLÍNICAS existentes'));
+  assert.doesNotMatch(radLine, /rara|restrição à difusão/, 'tags usadas em <3 lesões ficam fora da lista');
+  assert.doesNotMatch(clinLine, /raro-clinico|idade pediátrica/, 'clínicas usadas em <3 lesões ficam fora da lista');
+  assert.match(built.text, /SOMENTE tags da lista/);
+  assert.match(built.text, /NO MÁXIMO 1 tag nova/);
+  assert.match(built.text, /NUNCA use como tag: local\/estrutura anatômica/);
+  assert.match(built.text, /sinônimo da própria entidade/);
+  assert.equal(JSON.stringify(ctx.DATA || data), before, 'gerar o pedido nunca altera dados');
+});
+
+test('J2. vocabulário ordena por frequência e ignora valores inválidos', () => {
+  const data = [];
+  for (let i = 0; i < 3; i++) data.push(makeLesion({ id: 'seed_a' + i, tags: ['b-tag', 'a-tag', null, ''] }));
+  for (let i = 0; i < 5; i++) data.push(makeLesion({ id: 'seed_b' + i, tags: ['b-tag'] }));
+  const ctx = buildTestContext({ data });
+  const v = ctx.reviewAiTagVocabulary();
+  assert.deepEqual(Array.from(v.radiologic), ['b-tag', 'a-tag']);
+  assert.deepEqual(Array.from(v.clinical), []);
+});
+
 test('IA (importar): rejected (após desfazer) permite NOVA tentativa com novo snapshot', async () => {
   const lesion = makeLesion();
   const ctx = buildTestContext({ data: [lesion] });
