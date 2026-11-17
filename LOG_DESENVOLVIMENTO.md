@@ -6242,3 +6242,9 @@ entrada nele, o comportamento é idêntico ao anterior.
 
 Pendente de autorização do usuário (publicação exige PR + CI, pela
 proteção de branch ativa desde 06/11).
+
+## 2026-11-16 — Quebra de linha na apresentação clínica
+- Problema: tópicos digitados em "Apresentação clínica" (uma linha por tópico) apareciam juntos na mesma linha ao ver as imagens (lightbox/card) e no Quiz.
+- Causa: o texto era exibido com `white-space` normal, que colapsa `\n`.
+- Correção: `white-space:pre-line` em `.clinical-case-presentation` e nos blocos "História clínica"/"Observações" do Quiz. Só muda a exibição; o dado salvo não muda.
+- Teste: tests/clinical-presentation-linebreaks.test.js.
