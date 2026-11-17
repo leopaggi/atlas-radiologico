@@ -1,0 +1,1321 @@
+{
+ "results": [
+  {
+   "reviewId": "lrev_mw6dh5um_57gfx3",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Agenesia renal bilateral\".",
+   "reasoning": "requestText do usuário ('casos clinicos e imagens erroneamente vinculadas de incompetencia istmocervical') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Agenesia renal bilateral); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Agenesia renal bilateral' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6df35b_tcvhy5",
+   "result": "manual_action_required",
+   "summary": "Lesão relatada como posicionada na seção/sessão errada do Atlas.",
+   "reasoning": "requestText ('erroneamente classificado na sessão Medicina fetal') indica que a seção atual não é a correta para esta entidade. Seção/site são campos fora da allowlist (estrutural); mudança de local exige ação manual do usuário, pois pode afetar navegação, contagens e IDs de ordenação.",
+   "manualAction": {
+    "type": "section_correction",
+    "description": "Mover manualmente esta lesão para a seção/site correta no app, conforme indicado pelo usuário no pedido original."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6dd4jn_5hjtty",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Rabdomiossarcoma\".",
+   "reasoning": "requestText do usuário ('casos clinicos   erroneamente vinculadas de osteocondrite dissecante') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Rabdomiossarcoma); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Rabdomiossarcoma' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6d9d1q_zpwmqo",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Cordoma\".",
+   "reasoning": "requestText do usuário ('casos clinicos e imagens erroneamente vinculadas de sindrome de haglund') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Cordoma); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Cordoma' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6d86lm_b2sw8u",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Bursite bicipitorradial\".",
+   "reasoning": "requestText do usuário ('casos clinicos e imagens erroneamente vinculadas de bursite anserina e fratura de cabeça do rádio') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Linfadenite bacteriana supurativa cervical) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Bursite bicipitorradial); desvincular as que pertencem a 'Linfadenite bacteriana supurativa cervical' e, se necessário, revincular as imagens corretas de 'Bursite bicipitorradial' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6d1xr7_wmtv45",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Osteólise da clavícula distal\".",
+   "reasoning": "requestText do usuário ('casos clinicos e imagens erroneamente vinculadas de fasciite plantar') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Osteogênese imperfeita) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Osteólise da clavícula distal); desvincular as que pertencem a 'Osteogênese imperfeita' e, se necessário, revincular as imagens corretas de 'Osteólise da clavícula distal' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6cyhz2_c2qthd",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Liposarcoma\".",
+   "reasoning": "requestText do usuário ('casos clinicos e imagens erroneamente vinculadas de fibroma nao ossificante') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Liposarcoma); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Liposarcoma' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6cxysg_pyg7bf",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Lesão da sindesmose tibiofibular\".",
+   "reasoning": "requestText do usuário ('casos clinicos e imagens erroneamente vinculadas de bursite pré-patelar') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Lesão da sindesmose tibiofibular); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Lesão da sindesmose tibiofibular' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6cw3s5_r6lbu2",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Instabilidade da articulação radioulnar distal (DRUJ)\".",
+   "reasoning": "requestText do usuário ('casos clinicos e imagens erroneamente vinculadas de lesão por PIVOT SHIFT') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Lesão HAGL (avulsão umeral do ligamento glenoumeral inferior)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Instabilidade da articulação radioulnar distal (DRUJ)); desvincular as que pertencem a 'Lesão HAGL (avulsão umeral do ligamento glenoumeral inferior)' e, se necessário, revincular as imagens corretas de 'Instabilidade da articulação radioulnar distal (DRUJ)' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6ctxvo_i0djif",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Hematoma organizado de partes moles\".",
+   "reasoning": "requestText do usuário ('casos clinicos e imagens erroneamente vinculadas de bursite anserina (pata de ganso)') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Neuropatia do nervo supraescapular (incisura espinoglenoidal)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Hematoma organizado de partes moles); desvincular as que pertencem a 'Neuropatia do nervo supraescapular (incisura espinoglenoidal)' e, se necessário, revincular as imagens corretas de 'Hematoma organizado de partes moles' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6cq9wu_alrohj",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Fístula arteriovenosa adquirida\".",
+   "reasoning": "requestText do usuário ('casos clinicos e imagens erroneamente vinculadas de síndrome do tunel do carpo') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Fístula arteriovenosa adquirida); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Fístula arteriovenosa adquirida' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6cp8d6_s2s17e",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Exostose hereditária múltipla\".",
+   "reasoning": "requestText do usuário ('casos clinicos e imagens erroneamente vinculadas de displasia do desenvolvimento do quadril') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Exostose hereditária múltipla); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Exostose hereditária múltipla' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6cn5f4_t39vyy",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Displasia fibrosa\".",
+   "reasoning": "requestText do usuário ('IMAGENS E CASOS ERRONEAMENTE VINCULADOS DE CISTO OSSEO SIMPLES') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Displasia fibrosa); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Displasia fibrosa' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6c4awf_e43e2l",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Compressão do nervo radial no sulco espiral\".",
+   "reasoning": "requestText do usuário ('CASOS E IMAGENS ERRRADAS = DOENÇA DE KIENBOCK') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Encondroma de mão (falange)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Compressão do nervo radial no sulco espiral); desvincular as que pertencem a 'Encondroma de mão (falange)' e, se necessário, revincular as imagens corretas de 'Compressão do nervo radial no sulco espiral' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6c3dhe_hpvce8",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Cisto paralabral com compressão do nervo supraescapular\".",
+   "reasoning": "requestText do usuário ('CASO E IMAGENS ERRADAS = RAQUITISMO') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Cisto paralabral com compressão do nervo supraescapular); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Cisto paralabral com compressão do nervo supraescapular' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6c299p_hhe2aq",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Bursite isquiática\".",
+   "reasoning": "requestText do usuário ('TEM 1 IMAGEM CORRETA E MUITOS CASOS CLINICOS COM IMAGENS ERRADAS = DOENÇA DE KIENBOCK E TENOSSINOVITE ESTENOSANTE (DEDO EM GATILHO)') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Bursite isquiática); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Bursite isquiática' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6by6uy_ucwn1a",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Acondroplasia\".",
+   "reasoning": "requestText do usuário ('IMAGENS TODAS ERRADAS = RUPTURA LIGAMENTO TALOFIBULAR') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Acondroplasia); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Acondroplasia' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6bwl06_d9gnuz",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Abscesso de Brodie\".",
+   "reasoning": "requestText do usuário ('CASOS CLINICOS ATRIBUIDOS ERRONEAMENTE = CONDROBLASTOMA') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Abscesso de Brodie); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Abscesso de Brodie' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6bp46w_sa7t01",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Ruptura do tendão de Aquiles\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = síndrome de Parsonage-Turner') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Ruptura do tendão de Aquiles); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Ruptura do tendão de Aquiles' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6b0pn9_pgcfut",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Encondroma\".",
+   "reasoning": "requestText do usuário ('Caso clinico mencionado errado = fibroma nao ossificante') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Encondroma); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Encondroma' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6ayi0r_8nwc9b",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Cotovelo de babá (subluxação da cabeça do rádio)\".",
+   "reasoning": "requestText do usuário ('CASOS CLINICOS ERRADOS = CISTO DE BAKER') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Cotovelo de babá (subluxação da cabeça do rádio)); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Cotovelo de babá (subluxação da cabeça do rádio)' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6ams2u_d0dapa",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6alre9_sdyzir",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Tendinopatia do manguito rotador\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = ARTRITE SÉPTICA') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Artrite séptica) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Tendinopatia do manguito rotador); desvincular as que pertencem a 'Artrite séptica' e, se necessário, revincular as imagens corretas de 'Tendinopatia do manguito rotador' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6ak4b9_qnp4tz",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Neuroma de Morton\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = OSTEOCONDRITE DISSECANTE') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Neuroma de Morton); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Neuroma de Morton' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6agn6n_h3exci",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Lipoma de partes moles\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = OSTEOCONDROMA') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Osteocondroma) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Lipoma de partes moles); desvincular as que pertencem a 'Osteocondroma' e, se necessário, revincular as imagens corretas de 'Lipoma de partes moles' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw6abo1i_dfffdb",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Gota\".",
+   "reasoning": "requestText do usuário ('Casos clinicos e classificações ERRADAS  (SÍNDROME TUNEL DO CARPO)') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Gota); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Gota' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw5oq09d_eu248q",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"AVC isquêmico agudo\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = GESTAÇÃO ECTÓPICA') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (AVC isquêmico agudo); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'AVC isquêmico agudo' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw5elmsi_ifg5ad",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Síndrome de transfusão feto-fetal (STFF)\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = ACRETISMO PLACENTÁRIO / LINK DE BUSCAR CASOS RADIOPAEDIA DUPLICADO') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Síndrome de transfusão feto-fetal (STFF)); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Síndrome de transfusão feto-fetal (STFF)' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw5ek905_d83tx2",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Encefalopatia hipóxico-isquêmica\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = RETENÇÃO PRODUTOS CONCEPÇÃO E CLASSIFICADA COMO OBSTETRICIA erroneamente') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Encefalopatia hipóxico-isquêmica); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Encefalopatia hipóxico-isquêmica' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw5ej2xt_bq0ekl",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw5eihft_u4kc62",
+   "result": "manual_action_required",
+   "summary": "Lesão relatada como posicionada na seção/sessão errada do Atlas.",
+   "reasoning": "requestText ('erroneamente classificado como obstetricia') indica que a seção atual não é a correta para esta entidade. Seção/site são campos fora da allowlist (estrutural); mudança de local exige ação manual do usuário, pois pode afetar navegação, contagens e IDs de ordenação.",
+   "manualAction": {
+    "type": "section_correction",
+    "description": "Mover manualmente esta lesão para a seção/site correta no app, conforme indicado pelo usuário no pedido original."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw5eczw9_86ygl1",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Hematoma de parede abdominal pós-cesárea\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = disgenesia corpo caloso') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Hematoma de parede abdominal pós-cesárea); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Hematoma de parede abdominal pós-cesárea' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw5eb25m_st49p7",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw5dojvo_ytbt9k",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Sarcoma botrioide (rabdomiossarcoma vaginal)\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = cancer colo de utero') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Cisto mesonéfrico cervical (remanescente de Wolff)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Sarcoma botrioide (rabdomiossarcoma vaginal)); desvincular as que pertencem a 'Cisto mesonéfrico cervical (remanescente de Wolff)' e, se necessário, revincular as imagens corretas de 'Sarcoma botrioide (rabdomiossarcoma vaginal)' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw5dnmhl_tgst8b",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Fibroma vaginal\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = cisto de gartner') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Fibroma vaginal); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Fibroma vaginal' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw5dl0qz_eh07o7",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Pólipo endometrial\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = adenomiose') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Pólipo endometrial); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Pólipo endometrial' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw5a81xc_2qluie",
+   "result": "analysis",
+   "summary": "Pendência geral do Atlas sem lesão-alvo única: estudar e padronizar achados ultrassonográficos de endometriose em todo o acervo.",
+   "reasoning": "scope=global — não se refere a uma lesão específica. Requer plano de trabalho manual: (1) levantar todas as lesões do Atlas relacionadas a endometriose (ovariana, profunda, de parede abdominal, etc.), (2) revisar se os achados ultrassonográficos atuais (vs. apenas RM) estão descritos de forma completa e correta em cada uma, (3) padronizar terminologia (ex.: 'kissing ovaries', sinal do deslizamento ausente, endometrioma com ecos de baixo nível) entre as lesões correlatas. Não é uma correção de campo único, por isso não pode ser 'apply'."
+  },
+  {
+   "reviewId": "lrev_mw58bt0m_b97dyy",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Cisto mesonéfrico cervical (remanescente de Wolff)\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = CANCER COLO DE UTERO') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Cisto mesonéfrico cervical (remanescente de Wolff)); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Cisto mesonéfrico cervical (remanescente de Wolff)' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw55gnal_k5r8fa",
+   "result": "apply",
+   "summary": "Notas reescritas (estavam quase vazias) e classificação O-RADS removida (sistema é para massas anexiais, não se aplica a leiomioma cervical).",
+   "reasoning": "currentFields.notes tinha apenas 99 caracteres, insuficiente para descrever o padrão de imagem. O-RADS (ACR Ovarian-Adnexal Reporting and Data System) classifica massas ANEXIAIS/ovarianas, não se aplica anatomicamente a um leiomioma do colo uterino — por isso a classificação foi removida, conforme regra de compatibilidade anatômica.",
+   "proposedChanges": {
+    "notes": "Padrão: nódulo sólido bem circunscrito originado da parede do colo uterino, com sinal tipicamente baixo em T2 (semelhante aos leiomiomas de corpo uterino) e realce homogêneo pós-contraste; pode causar efeito de massa sobre o canal cervical ou órgãos adjacentes quando volumoso.\n\nDiferenciais-chave: Leiomioma de corpo uterino com extensão cervical (origem no corpo uterino, não isolado no colo); Pólipo cervical (lesão polipoide mais superficial/intracanalicular, geralmente menor e pediculada); Carcinoma cervical (massa infiltrativa, irregular, com restrição à difusão e realce heterogêneo, em vez de nódulo bem circunscrito e homogêneo).",
+    "classification": null
+   }
+  },
+  {
+   "reviewId": "lrev_mw546um9_z4l9iy",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Malformação mülleriana (útero bicorno/septado)\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = ADENOMIOSE') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Pólipo endometrial) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Malformação mülleriana (útero bicorno/septado)); desvincular as que pertencem a 'Pólipo endometrial' e, se necessário, revincular as imagens corretas de 'Malformação mülleriana (útero bicorno/septado)' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw53rjrc_gn16yf",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw5397kv_zpgl2a",
+   "result": "apply",
+   "summary": "Notas e tags reescritas; removidos descritores contaminados de outra condição (estenose segmentar, colaterais) que não se aplicam a fibroma/fibrotecoma ovariano. Classificação O-RADS mantida (compatível com massa ovariana).",
+   "reasoning": "notes tinha só 90 caracteres e as tags incluíam termos vasculares/intestinais (\"estenose segmentar\", \"colaterais\") incompatíveis com fibroma/fibrotecoma ovariano — provável contaminação cruzada de conteúdo de outra lesão. Corrigido para refletir o padrão real da entidade.",
+   "proposedChanges": {
+    "notes": "Padrão: massa ovariana sólida bem circunscrita, com sinal baixo em T2 (conteúdo fibroso/colágeno denso) e realce geralmente discreto e progressivo; pode haver sombra acústica ao US pela densidade fibrosa. Fibrotecomas podem apresentar sinal discretamente mais alto que fibromas puros por componente tecal.\n\nDiferenciais-chave: Leiomioma subseroso pediculado (origem uterina identificável, continuidade com o miométrio); Tumor de células da granulosa (massa sólido-cística com componentes hipervascularizados, podendo associar-se a efeitos hormonais); Tumor de Krukenberg/metástase ovariana (geralmente bilateral, com história de tumor primário, frequentemente mais heterogêneo).",
+    "tags": [
+     "hipossinal T2",
+     "sólido",
+     "bem circunscrita",
+     "sombra acústica",
+     "realce discreto"
+    ]
+   }
+  },
+  {
+   "reviewId": "lrev_mw537qxh_hi28ir",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw536ctc_efs7b7",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw534voz_kdo7g0",
+   "result": "apply",
+   "summary": "Notas reescritas (94 caracteres) e removida tag duplicada em inglês ('Paraovarian cyst', que já está em enTerm). A ausência de imagens é uma questão separada, fora do allowlist — requer ação manual.",
+   "reasoning": "Pedido tinha duas partes: (1) tags+descrição — campo permitido, corrigido; (2) ausência de imagem — fora da allowlist, não pode ser resolvido aqui; fica registrado para ação manual do usuário.",
+   "proposedChanges": {
+    "notes": "Padrão: cisto anexial extraovariano, separado do ovário e da tuba, geralmente adjacente ao mesossalpinge; é anecoico, unilocular, de parede fina e sem componente sólido, sem alteração ao longo do ciclo menstrual (não funcional).\n\nDiferenciais-chave: Cisto funcional ovariano (localizado dentro do ovário, com variação ao longo do ciclo); Hidrossalpinge (estrutura tubular alongada e serpiginosa, em vez de cisto arredondado simples); Cistadenoma seroso ovariano (origem ovariana identificável, podendo ter septos finos).",
+    "tags": [
+     "cístico",
+     "ausência de realce",
+     "bem circunscrita",
+     "extraovariano"
+    ]
+   }
+  },
+  {
+   "reviewId": "lrev_mw53449o_8vuse5",
+   "result": "apply",
+   "summary": "Notas reescritas (94 caracteres); tags mantidas, adequadas à entidade.",
+   "reasoning": "Pedido explícito: 'atualizar tags + descrição'. Notas eram insuficientes (94 caracteres).",
+   "proposedChanges": {
+    "notes": "Padrão: cisto remanescente do ducto mesonéfrico (de Gartner), localizado na parede anterolateral da vagina, geralmente assintomático e incidental; anecoico/hipointenso em T1, hiperintenso em T2, sem realce ou componente sólido. Pode associar-se a outras anomalias müllerianas/mesonéfricas (ex.: agenesia renal ipsilateral).\n\nDiferenciais-chave: Divertículo uretral (comunicação com a uretra, podendo mudar de tamanho com a micção); Cisto de inclusão vaginal (geralmente pós-traumático/pós-parto, mais superficial na parede vaginal); Ureterocele ectópica (estrutura cística associada a ureter ectópico, com continuidade demonstrável)."
+   }
+  },
+  {
+   "reviewId": "lrev_mw533qiu_epsddl",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw532bop_4j4881",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Condiloma cervical (HPV)\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = pólipo cervical') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Condiloma cervical (HPV)); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Condiloma cervical (HPV)' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw530hd8_7a8gfj",
+   "result": "apply",
+   "summary": "Notas reescritas (estavam com apenas 88 caracteres); tags e classificação O-RADS mantidas, compatíveis com a entidade.",
+   "reasoning": "Pedido do usuário foi explicitamente 'atualizar tags, descrição, diferenciais'. notes tinha só 88 caracteres. Tags atuais já eram adequadas; adicionada apenas a descrição e diferenciais.",
+   "proposedChanges": {
+    "notes": "Padrão: cisto ovariano simples, unilocular, anecoico, de paredes finas e sem componente sólido ou vascularização interna ao Doppler; cisto de corpo lúteo pode apresentar parede mais espessa com padrão de \"anel de fogo\" ao Doppler e conteúdo com debris por conteúdo hemorrágico, sem sinal de malignidade.\n\nDiferenciais-chave: Cistadenoma seroso (cisto persistente além de alguns ciclos, sem resolução espontânea esperada do cisto funcional); Cisto hemorrágico (conteúdo reticular/em teia de aranha nas fases iniciais, evoluindo de forma semelhante ao corpo lúteo); Endometrioma (conteúdo com ecos de baixo nível difusos \"em vidro fosco\", sem o padrão anecoico puro do cisto funcional)."
+   }
+  },
+  {
+   "reviewId": "lrev_mw52zg44_80ee21",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw52yzku_jsh9b3",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Tumor de células de Leydig\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS =  cisto paraovariano / cisto paratubário (encontrar lesão com nome correspondente)') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Tumor de células de Leydig); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Tumor de células de Leydig' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw52xc3j_jswkzx",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Tuberculose epididimária\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = Cisto epididimário') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Tuberculose epididimária); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Tuberculose epididimária' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw52vzmg_nrs97g",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Schwannoma retroperitoneal\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS =  adenoma polimórfico de parótida') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Linfoma mediastinal) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Schwannoma retroperitoneal); desvincular as que pertencem a 'Linfoma mediastinal' e, se necessário, revincular as imagens corretas de 'Schwannoma retroperitoneal' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw52t6al_izfqhx",
+   "result": "manual_action_required",
+   "summary": "Link/hiperlink de referência (Radiopaedia) duplicado nesta lesão.",
+   "reasoning": "requestText ('CASOS  ↗ Radiopaedia — buscar casos (esta duplicado esse hiperlink)') refere-se a um link duplicado — não é um dos campos de texto da allowlist (name/notes/classification/tags/enTerm/clinicalTags) de forma inequívoca; pode estar embutido em notes mas sem clareza de qual trecho remover sem risco de apagar conteúdo correto.",
+   "manualAction": {
+    "type": "duplicate_reference_link",
+    "description": "Verificar manualmente o campo de referência/link desta lesão no app e remover a duplicata do hiperlink do Radiopaedia."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw52rayf_dg0hmh",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Retocolite ulcerativa\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = adenomiomatose') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Retocolite ulcerativa); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Retocolite ulcerativa' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw52qcen_yevz4z",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Endoleak pós-EVAR\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS =  Chondroblastoma') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Endoleak pós-EVAR); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Endoleak pós-EVAR' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw52mkda_7lsmju",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw52m5ug_zf6ezv",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Acalasia\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS =   müllerian duct cyst / cisto prostático (verificar qual é correspondente no atlas)') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Acalasia); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Acalasia' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw52kx8u_eb4ury",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Úlcera péptica gástrica\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = lesão cerebelar, nao sei se é metastase ou o que?') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Úlcera péptica gástrica); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Úlcera péptica gástrica' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw52it9e_5a3182",
+   "result": "apply",
+   "summary": "Notas ampliadas com um parágrafo de esclarecimento sobre a relação entre 'carcinoma de células renais' (termo guarda-chuva) e 'carcinoma de células claras' (subtipo histológico mais comum), sem alterar o nome da lesão.",
+   "reasoning": "O usuário relatou confusão entre os dois termos. 'Carcinoma de células renais' é o termo correto para a entidade guarda-chuva nesta lesão (não um erro a corrigir no nome); a solução apropriada é esclarecer a relação dentro das notas, não criar/renomear a lesão. Nenhuma classificação específica se aplica de forma inequívoca a todos os subtipos de CCR, por isso 'classification' permanece null.",
+   "proposedChanges": {
+    "notes": "Padrão: massa renal sólida, geralmente heterogênea e hipervascular na fase arterial/corticomedular, com margens irregulares em formas mais agressivas; pode haver necrose central, componente cístico ou invasão da veia renal/cava.\n\nNota sobre nomenclatura: \"Carcinoma de células renais\" (CCR) é o termo guarda-chuva para as neoplasias malignas epiteliais do rim; \"carcinoma de células claras\" é o subtipo histológico mais comum (cerca de 70-80% dos casos) dentro desse grupo, caracterizado por hipervascularização intensa na fase corticomedular. Outros subtipos (papilífero, cromófobo, etc.) têm padrões de realce distintos (geralmente mais discretos/progressivos). A distinção definitiva entre subtipos é histológica, não radiológica isolada.\n\nDiferenciais-chave: Angiomiolipoma (componente de gordura macroscópica identificável na TC/RM, ausente no CCR); Oncocitoma (massa homogênea com padrão em roda de carroça em alguns casos, realce intenso porém sem invasão típica); Metástase renal (história de neoplasia primária conhecida, frequentemente múltipla/bilateral)."
+   }
+  },
+  {
+   "reviewId": "lrev_mw52hef5_xqt604",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw52gqko_y42720",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4zotm1_y9hftr",
+   "result": "manual_action_required",
+   "summary": "Usuário tem incerteza sobre a correspondência da imagem vinculada a esta lesão.",
+   "reasoning": "requestText ('DUVIDA = confirmar q esta imagem é correspondente') expressa dúvida, não uma correção de texto. Verificação visual da imagem é necessária e está fora da allowlist de campos de texto.",
+   "manualAction": {
+    "type": "verify_image_correspondence",
+    "description": "Revisar visualmente a imagem vinculada e confirmar (ou corrigir manualmente) se ela realmente corresponde a esta lesão."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4zn7s5_9b5m7y",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Pseudoaneurisma aórtico\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS =  contusão muscular') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Pseudoaneurisma aórtico); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Pseudoaneurisma aórtico' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4zmg8e_n2v3eb",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4zlk8i_kck09n",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4zk8a0_zn5okt",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Pneumotórax hipertensivo\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = apendicite') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Obstrução intestinal mecânica) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Pneumotórax hipertensivo); desvincular as que pertencem a 'Obstrução intestinal mecânica' e, se necessário, revincular as imagens corretas de 'Pneumotórax hipertensivo' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4zjgvj_2l8z0t",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4zhqtk_2w8qu1",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Abscesso da parede torácica\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS =  HIPERPLASIA DE ADENOIDE') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Adenoidite) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Abscesso da parede torácica); desvincular as que pertencem a 'Adenoidite' e, se necessário, revincular as imagens corretas de 'Abscesso da parede torácica' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4zffxw_ec7e45",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4zcpcx_6sod8z",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Hipertrofia do ligamento amarelo\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = cisto ósseo unicameral') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Cisto ósseo unicameral pediátrico) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Hipertrofia do ligamento amarelo); desvincular as que pertencem a 'Cisto ósseo unicameral pediátrico' e, se necessário, revincular as imagens corretas de 'Hipertrofia do ligamento amarelo' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4zc0cq_69x43c",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Fratura de insuficiência sacral\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = DESCOLAMENTO DE PLLACENTA') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Fratura de insuficiência sacral); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Fratura de insuficiência sacral' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4za6b8_x8eilh",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Schwannoma espinhal\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS =  CARCINOMA ENDOMETRIAL') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Síndrome de vasoconstrição cerebral reversível) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Schwannoma espinhal); desvincular as que pertencem a 'Síndrome de vasoconstrição cerebral reversível' e, se necessário, revincular as imagens corretas de 'Schwannoma espinhal' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4z99rd_0pxt50",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4z84hg_7rzdyl",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4z6yl9_j7hbpj",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4z5i3k_zssjk2",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Sinusite fúngica invasiva\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = bursite trocantérica') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Sinusite fúngica invasiva); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Sinusite fúngica invasiva' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4yx0h7_e6i3qr",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Paralisia de prega vocal\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = RETENÇÃO DE PRODUTOS DA CONCEPÇÃO\n\nALÉM DISSO ESTA NA SESSÃO DE OBSTETRICIA (erro de imagem + sessão)') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Paralisia de prega vocal); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Paralisia de prega vocal' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4yvag7_3fot7l",
+   "result": "manual_action_required",
+   "summary": "Usuário tem incerteza sobre a correspondência da imagem vinculada a esta lesão.",
+   "reasoning": "requestText ('achei no cloudinary esse ID = atlas-radiologico/sli8e7ei1rbrosbl185f') expressa dúvida, não uma correção de texto. Verificação visual da imagem é necessária e está fora da allowlist de campos de texto.",
+   "manualAction": {
+    "type": "verify_image_correspondence",
+    "description": "Revisar visualmente a imagem vinculada e confirmar (ou corrigir manualmente) se ela realmente corresponde a esta lesão."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4ys92k_taowbj",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Papiloma escamoso oral (HPV)\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = newcastle disease') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Doença de Castleman) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Papiloma escamoso oral (HPV)); desvincular as que pertencem a 'Doença de Castleman' e, se necessário, revincular as imagens corretas de 'Papiloma escamoso oral (HPV)' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4yq7lc_tsa0wb",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Linfadenite cervical reacional\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = tenossinovite de quervain') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Tenossinovite de De Quervain) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Linfadenite cervical reacional); desvincular as que pertencem a 'Tenossinovite de De Quervain' e, se necessário, revincular as imagens corretas de 'Linfadenite cervical reacional' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4ypp9w_neanx1",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4yoosu_liv1e1",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Estenose carotídea aterosclerótica\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = condrocalcinose') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Estenose carotídea aterosclerótica); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Estenose carotídea aterosclerótica' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4ym2qr_izfz0l",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4y4rio_g8lnx4",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4y3q4i_mg07n4",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4y3f7l_1kglj5",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Tumor do parênquima pineal de diferenciação intermediária\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = LESÃO DO JOELHO (parece bursa de hoffa) nao sei') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Tendinopatia patelar) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Tumor do parênquima pineal de diferenciação intermediária); desvincular as que pertencem a 'Tendinopatia patelar' e, se necessário, revincular as imagens corretas de 'Tumor do parênquima pineal de diferenciação intermediária' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4y10pj_7gbqgv",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xz950_xhnqio",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Subependimoma\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS = LEIOMIOMAS') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Subependimoma); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Subependimoma' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xx8m2_r1e1mh",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xvwhe_zbbti1",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xv96b_qikeo8",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xurs7_3mk467",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Glioma das vias ópticas\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS =  NAO RECORDO DO Q ESSAS IMAGENS SE REFEREM') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Linfocele retroperitoneal) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Glioma das vias ópticas); desvincular as que pertencem a 'Linfocele retroperitoneal' e, se necessário, revincular as imagens corretas de 'Glioma das vias ópticas' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xtz0y_4y34ou",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xtn37_mcghtw",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xsrh4_hp1chp",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xsbfb_47gamx",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xs14b_ql2g9o",
+   "result": "manual_action_required",
+   "summary": "Usuário tem incerteza sobre a correspondência da imagem vinculada a esta lesão.",
+   "reasoning": "requestText ('DUVIDA - NAO TENHO CTZA SE IMAGEM É CORRESPONDENTE') expressa dúvida, não uma correção de texto. Verificação visual da imagem é necessária e está fora da allowlist de campos de texto.",
+   "manualAction": {
+    "type": "verify_image_correspondence",
+    "description": "Revisar visualmente a imagem vinculada e confirmar (ou corrigir manualmente) se ela realmente corresponde a esta lesão."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xqvr1_vqqc0o",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xpxrx_pejjz1",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xpel7_9y84gy",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Abscesso cerebelar\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS =  artropatia hemofílica') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Abscesso cerebelar); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Abscesso cerebelar' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xnjaq_u81ypl",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xn3it_4okwi9",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xmujq_y8vwme",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xmmv9_rh2vdu",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xma75_s9tbl0",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xlesq_cbjjox",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xkw04_t0r44g",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Herniação cerebral (transtentorial/subfalcina)\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS =  ABORTO RETIDO E ENCEFALOPATIA HIPOXEMICA') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Encefalopatia hipóxico-isquêmica) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Herniação cerebral (transtentorial/subfalcina)); desvincular as que pertencem a 'Encefalopatia hipóxico-isquêmica' e, se necessário, revincular as imagens corretas de 'Herniação cerebral (transtentorial/subfalcina)' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xk2gh_i5cgk5",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xjlzd_9wy4ha",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Hematoma subdural\".",
+   "reasoning": "requestText do usuário ('IMAGENS DUPLICADAS') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Hematoma subdural); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Hematoma subdural' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xikc4_kxygn9",
+   "result": "manual_action_required",
+   "summary": "Lesão relatada como posicionada na seção/sessão errada do Atlas.",
+   "reasoning": "requestText ('ERRONEAMENTE CLASSIFICADO NA SESSÃO NEURORRADIOLOGIA') indica que a seção atual não é a correta para esta entidade. Seção/site são campos fora da allowlist (estrutural); mudança de local exige ação manual do usuário, pois pode afetar navegação, contagens e IDs de ordenação.",
+   "manualAction": {
+    "type": "section_correction",
+    "description": "Mover manualmente esta lesão para a seção/site correta no app, conforme indicado pelo usuário no pedido original."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xgtp5_ehbu6x",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xgklv_tutorr",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xf56s_2e8v89",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xeul5_8fmkf5",
+   "result": "manual_action_required",
+   "summary": "Imagem relatada como ausente nesta lesão.",
+   "reasoning": "Imagem é campo fora da allowlist. Além disso, parte das lesões marcadas como 'ausente' pode já ter se resolvido com a correção do bug de sincronização hospital/casa publicada em 2026-11-06 (importação de backup não marcava imagens como pendentes de envio à nuvem) — por isso recomenda-se verificar visualmente no app ANTES de qualquer re-upload manual, para não duplicar trabalho.",
+   "manualAction": {
+    "type": "missing_image",
+    "description": "Confirmar no app (ambos os dispositivos já sincronizados) se a imagem desta lesão aparece normalmente agora; se ainda estiver ausente, re-anexar manualmente a imagem correta."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xe20t_4pjgw0",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Adenocarcinoma ductal pancreático\".",
+   "reasoning": "requestText do usuário ('imagens erradas = ADENOCARCINOMA PULMONAR') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Adenocarcinoma pulmonar) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Adenocarcinoma ductal pancreático); desvincular as que pertencem a 'Adenocarcinoma pulmonar' e, se necessário, revincular as imagens corretas de 'Adenocarcinoma ductal pancreático' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xbsg6_zctjmu",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Mola hidatiforme\".",
+   "reasoning": "requestText do usuário ('imagens erradas = ruptura de cisto ovariano') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Mola hidatiforme); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Mola hidatiforme' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4xaaj5_fgode0",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Sequestro pulmonar\".",
+   "reasoning": "requestText do usuário ('IMAGENS ERRADAS fratura em galho verde') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Sequestro pulmonar); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Sequestro pulmonar' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4x9nl1_nkt7i7",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Trombose de seio venoso cerebral\".",
+   "reasoning": "requestText do usuário ('imagens erradas = DOENÇA DE BUERGER') e/ou o campo images[].lesionName apontam conteúdo de outra entidade (Doença de Buerger (tromboangeíte obliterante)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Trombose de seio venoso cerebral); desvincular as que pertencem a 'Doença de Buerger (tromboangeíte obliterante)' e, se necessário, revincular as imagens corretas de 'Trombose de seio venoso cerebral' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  },
+  {
+   "reviewId": "lrev_mw4x8baw_lll45u",
+   "result": "manual_action_required",
+   "summary": "Imagens/casos clínicos vinculados a esta lesão pertencem a outra condição, não a \"Doença de Osgood-Schlatter\".",
+   "reasoning": "requestText do usuário ('imagens erradas (CISTO DE BAKER)') e/ou o campo images[].lesionName apontam conteúdo de outra entidade ((ver requestText)) vinculado por engano a esta lesão. Reassociação/remoção de imagem está fora da allowlist de campos de texto (images é campo proibido) e é protegida pela regra de ownership do Atlas — só pode ser feita manualmente pelo usuário via UI, nunca automaticamente.",
+   "manualAction": {
+    "type": "wrong_image_linkage",
+    "description": "Verificar manualmente as imagens desta lesão (Doença de Osgood-Schlatter); desvincular as que pertencem a '(ver requestText)' e, se necessário, revincular as imagens corretas de 'Doença de Osgood-Schlatter' nas lesões doadoras correspondentes."
+   },
+   "proposedChanges": {}
+  }
+ ]
+}

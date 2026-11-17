@@ -1,0 +1,2828 @@
+[
+ {
+  "rid": "lrev_mw6dh5um_57gfx3",
+  "scope": "lesion",
+  "lid": "seed_872",
+  "lname": "Agenesia renal bilateral",
+  "req": "casos clinicos e imagens erroneamente vinculadas de incompetencia istmocervical",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 1084,
+  "tags": [
+   "malformação congênita",
+   "lojas renais vazias",
+   "bexiga não visualizada",
+   "anidrâmnio"
+  ],
+  "clin": [
+   "procedimento abdominal recente"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6df35b_tcvhy5",
+  "scope": "lesion",
+  "lid": "seed_1101",
+  "lname": "Impacto femoroacetabular",
+  "req": "erroneamente classificado na sessão Medicina fetal",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 1180,
+  "tags": [
+   "cam",
+   "pincer",
+   "offset cabeça-colo reduzido",
+   "ângulo alfa",
+   "sobrecobertura acetabular",
+   "lesão labral",
+   "dano condral"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6dd4jn_5hjtty",
+  "scope": "lesion",
+  "lid": "seed_294",
+  "lname": "Rabdomiossarcoma",
+  "req": "casos clinicos   erroneamente vinculadas de osteocondrite dissecante",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 781,
+  "tags": [
+   "realce heterogêneo",
+   "margens irregulares",
+   "idade pediátrica",
+   "infiltrativa",
+   "crescimento rápido"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6d9d1q_zpwmqo",
+  "scope": "lesion",
+  "lid": "seed_1135",
+  "lname": "Cordoma",
+  "req": "casos clinicos e imagens erroneamente vinculadas de sindrome de haglund",
+  "cls": null,
+  "n_imgs": 3,
+  "img_mismatch": [],
+  "notes_len": 786,
+  "tags": [
+   "lítica",
+   "linha média",
+   "sacro",
+   "clivo",
+   "hipersinal T2",
+   "destruição óssea",
+   "massa de partes moles"
+  ],
+  "clin": [
+   "atrito mecânico por calçado",
+   "uso de salto alto"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6d86lm_b2sw8u",
+  "scope": "lesion",
+  "lid": "seed_1093",
+  "lname": "Bursite bicipitorradial",
+  "req": "casos clinicos e imagens erroneamente vinculadas de bursite anserina e fratura de cabeça do rádio",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [
+   "Linfadenite bacteriana supurativa cervical"
+  ],
+  "notes_len": 878,
+  "tags": [
+   "anecoico",
+   "aumento de volume",
+   "doppler positivo"
+  ],
+  "clin": [
+   "queda sobre a mão espalmada"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6d1xr7_wmtv45",
+  "scope": "lesion",
+  "lid": "seed_1052",
+  "lname": "Osteólise da clavícula distal",
+  "req": "casos clinicos e imagens erroneamente vinculadas de fasciite plantar",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [
+   "Osteogênese imperfeita"
+  ],
+  "notes_len": 1094,
+  "tags": [
+   "lítica",
+   "reabsorção óssea"
+  ],
+  "clin": [
+   "dor no calcanhar"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6cyhz2_c2qthd",
+  "scope": "lesion",
+  "lid": "seed_287",
+  "lname": "Liposarcoma",
+  "req": "casos clinicos e imagens erroneamente vinculadas de fibroma nao ossificante",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 906,
+  "tags": [
+   "gorduroso",
+   "septos espessos",
+   "nódulos não adiposos",
+   "realce heterogêneo",
+   "ALT/WDL",
+   "dediferenciação"
+  ],
+  "clin": [
+   "criança ou adolescente",
+   "achado incidental",
+   "dor após fratura patológica"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6cxysg_pyg7bf",
+  "scope": "lesion",
+  "lid": "seed_1119",
+  "lname": "Lesão da sindesmose tibiofibular",
+  "req": "casos clinicos e imagens erroneamente vinculadas de bursite pré-patelar",
+  "cls": null,
+  "n_imgs": 3,
+  "img_mismatch": [],
+  "notes_len": 1077,
+  "tags": [
+   "alargamento articular",
+   "margens irregulares",
+   "trauma"
+  ],
+  "clin": [
+   "trauma direto no joelho",
+   "apoio repetido sobre o joelho"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6cw3s5_r6lbu2",
+  "scope": "lesion",
+  "lid": "seed_1165",
+  "lname": "Instabilidade da articulação radioulnar distal (DRUJ)",
+  "req": "casos clinicos e imagens erroneamente vinculadas de lesão por PIVOT SHIFT",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [
+   "Lesão HAGL (avulsão umeral do ligamento glenoumeral inferior)"
+  ],
+  "notes_len": 779,
+  "tags": [
+   "RM",
+   "TC dinâmica",
+   "DRUJ",
+   "subluxação radioulnar",
+   "TFCC",
+   "pronação-supinação"
+  ],
+  "clin": [
+   "trauma rotacional do joelho"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6ctxvo_i0djif",
+  "scope": "lesion",
+  "lid": "seed_1138",
+  "lname": "Hematoma organizado de partes moles",
+  "req": "casos clinicos e imagens erroneamente vinculadas de bursite anserina (pata de ganso)",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [
+   "Neuropatia do nervo supraescapular (incisura espinoglenoidal)"
+  ],
+  "notes_len": 787,
+  "tags": [
+   "coleção encapsulada",
+   "hemossiderina",
+   "níveis líquido-líquido",
+   "produtos hemáticos",
+   "cápsula fibrosa"
+  ],
+  "clin": [
+   "obesidade",
+   "diabetes",
+   "osteoartrose medial do joelho"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6cq9wu_alrohj",
+  "scope": "lesion",
+  "lid": "seed_555",
+  "lname": "Fístula arteriovenosa adquirida",
+  "req": "casos clinicos e imagens erroneamente vinculadas de síndrome do tunel do carpo",
+  "cls": null,
+  "n_imgs": 3,
+  "img_mismatch": [],
+  "notes_len": 1171,
+  "tags": [
+   "shunt arteriovenoso",
+   "enchimento venoso precoce",
+   "arterialização venosa",
+   "fluxo de alta velocidade",
+   "baixa resistência arterial"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6cp8d6_s2s17e",
+  "scope": "lesion",
+  "lid": "seed_369",
+  "lname": "Exostose hereditária múltipla",
+  "req": "casos clinicos e imagens erroneamente vinculadas de displasia do desenvolvimento do quadril",
+  "cls": null,
+  "n_imgs": 3,
+  "img_mismatch": [],
+  "notes_len": 1053,
+  "tags": [
+   "exofítica",
+   "matriz condroide",
+   "idade pediátrica",
+   "multifocal",
+   "malformação congênita"
+  ],
+  "clin": [
+   "recém-nascido ou lactente",
+   "desconforto respiratório"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6cn5f4_t39vyy",
+  "scope": "lesion",
+  "lid": "seed_284",
+  "lname": "Displasia fibrosa",
+  "req": "IMAGENS E CASOS ERRONEAMENTE VINCULADOS DE CISTO OSSEO SIMPLES",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 897,
+  "tags": [
+   "matriz em vidro fosco",
+   "expansiva",
+   "córtex adelgaçado",
+   "intramedular"
+  ],
+  "clin": [
+   "idade pediátrica"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6c4awf_e43e2l",
+  "scope": "lesion",
+  "lid": "seed_1144",
+  "lname": "Compressão do nervo radial no sulco espiral",
+  "req": "CASOS E IMAGENS ERRRADAS = DOENÇA DE KIENBOCK",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [
+   "Encondroma de mão (falange)"
+  ],
+  "notes_len": 875,
+  "tags": [
+   "nervo radial",
+   "sulco espiral",
+   "compressão neural",
+   "queda do punho",
+   "denervação muscular",
+   "US",
+   "RM"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6c3dhe_hpvce8",
+  "scope": "lesion",
+  "lid": "seed_1068",
+  "lname": "Cisto paralabral com compressão do nervo supraescapular",
+  "req": "CASO E IMAGENS ERRADAS = RAQUITISMO",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 804,
+  "tags": [
+   "cístico",
+   "bem circunscrita",
+   "compressão nervosa"
+  ],
+  "clin": [
+   "idade pediátrica",
+   "deficiência de vitamina D"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6c299p_hhe2aq",
+  "scope": "lesion",
+  "lid": "seed_1114",
+  "lname": "Bursite isquiática",
+  "req": "TEM 1 IMAGEM CORRETA E MUITOS CASOS CLINICOS COM IMAGENS ERRADAS = DOENÇA DE KIENBOCK E TENOSSINOVITE ESTENOSANTE (DEDO EM GATILHO)",
+  "cls": null,
+  "n_imgs": 4,
+  "img_mismatch": [],
+  "notes_len": 805,
+  "tags": [
+   "anecoico",
+   "aumento de volume",
+   "trauma"
+  ],
+  "clin": [
+   "bloqueio mecânico do dedo à flexão ou extensão"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6by6uy_ucwn1a",
+  "scope": "lesion",
+  "lid": "seed_1051",
+  "lname": "Acondroplasia",
+  "req": "IMAGENS TODAS ERRADAS = RUPTURA LIGAMENTO TALOFIBULAR",
+  "cls": null,
+  "n_imgs": 3,
+  "img_mismatch": [],
+  "notes_len": 1137,
+  "tags": [
+   "rizomelia",
+   "canal lombar estreito",
+   "distância interpedicular reduzida",
+   "mãos em tridente",
+   "ilíacos pequenos",
+   "forame magno estreito"
+  ],
+  "clin": [
+   "herança autossômica dominante"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6bwl06_d9gnuz",
+  "scope": "lesion",
+  "lid": "seed_541",
+  "lname": "Abscesso de Brodie",
+  "req": "CASOS CLINICOS ATRIBUIDOS ERRONEAMENTE = CONDROBLASTOMA",
+  "cls": null,
+  "n_imgs": 3,
+  "img_mismatch": [],
+  "notes_len": 636,
+  "tags": [
+   "lesão lítica bem delimitada",
+   "realce periférico",
+   "sinal da penumbra",
+   "edema medular",
+   "reação periosteal"
+  ],
+  "clin": [
+   "idade pediátrica",
+   "dor localizada",
+   "claudicação",
+   "febre",
+   "dor aos esforços",
+   "massa palpável"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6bp46w_sa7t01",
+  "scope": "lesion",
+  "lid": "seed_310",
+  "lname": "Ruptura do tendão de Aquiles",
+  "req": "IMAGENS ERRADAS = síndrome de Parsonage-Turner",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 647,
+  "tags": [
+   "hipersinal T2",
+   "margens irregulares",
+   "trauma"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6b0pn9_pgcfut",
+  "scope": "lesion",
+  "lid": "seed_279",
+  "lname": "Encondroma",
+  "req": "Caso clinico mencionado errado = fibroma nao ossificante",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 1084,
+  "tags": [
+   "matriz condroide",
+   "intramedular",
+   "calcificações em anéis e arcos",
+   "bem circunscrita",
+   "hipossinal T1",
+   "hipersinal T2",
+   "realce septal"
+  ],
+  "clin": [
+   "criança ou adolescente",
+   "achado incidental",
+   "dor após fratura patológica"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6ayi0r_8nwc9b",
+  "scope": "lesion",
+  "lid": "seed_1080",
+  "lname": "Cotovelo de babá (subluxação da cabeça do rádio)",
+  "req": "CASOS CLINICOS ERRADOS = CISTO DE BAKER",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 1137,
+  "tags": [
+   "idade pediátrica",
+   "subluxação",
+   "tração"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6ams2u_d0dapa",
+  "scope": "lesion",
+  "lid": "seed_536",
+  "lname": "Artrite séptica",
+  "req": "IMAGENS AUSENTES",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 585,
+  "tags": [
+   "derrame articular",
+   "sinovite com realce",
+   "edema periarticular",
+   "erosões",
+   "edema medular",
+   "coleções periarticulares"
+  ],
+  "clin": [
+   "monoartrite aguda dolorosa",
+   "febre"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6alre9_sdyzir",
+  "scope": "lesion",
+  "lid": "seed_542",
+  "lname": "Tendinopatia do manguito rotador",
+  "req": "IMAGENS ERRADAS = ARTRITE SÉPTICA",
+  "cls": null,
+  "n_imgs": 4,
+  "img_mismatch": [
+   "Artrite séptica"
+  ],
+  "notes_len": 853,
+  "tags": [
+   "espessamento tendíneo",
+   "heterogêneo",
+   "hipoecoico",
+   "alteração fibrilar",
+   "sem defeito de fibras"
+  ],
+  "clin": [
+   "monoartrite aguda dolorosa",
+   "febre"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6ak4b9_qnp4tz",
+  "scope": "lesion",
+  "lid": "seed_302",
+  "lname": "Neuroma de Morton",
+  "req": "IMAGENS ERRADAS = OSTEOCONDRITE DISSECANTE",
+  "cls": null,
+  "n_imgs": 4,
+  "img_mismatch": [],
+  "notes_len": 692,
+  "tags": [
+   "bem circunscrita",
+   "hipossinal T2",
+   "hipossinal T1",
+   "fusiforme",
+   "neuropatia compressiva",
+   "hipoecogênico"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6agn6n_h3exci",
+  "scope": "lesion",
+  "lid": "seed_282",
+  "lname": "Lipoma de partes moles",
+  "req": "IMAGENS ERRADAS = OSTEOCONDROMA",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [
+   "Osteocondroma"
+  ],
+  "notes_len": 857,
+  "tags": [
+   "gorduroso",
+   "bem circunscrita",
+   "homogêneo"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw6abo1i_dfffdb",
+  "scope": "lesion",
+  "lid": "seed_543",
+  "lname": "Gota",
+  "req": "Casos clinicos e classificações ERRADAS  (SÍNDROME TUNEL DO CARPO)",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 570,
+  "tags": [
+   "erosões",
+   "multifocal",
+   "calcificações",
+   "esclerótica"
+  ],
+  "clin": [
+   "hiperuricemia",
+   "podagra",
+   "crises recorrentes de artrite aguda"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw5oq09d_eu248q",
+  "scope": "lesion",
+  "lid": "seed_417",
+  "lname": "AVC isquêmico agudo",
+  "req": "IMAGENS ERRADAS = GESTAÇÃO ECTÓPICA",
+  "cls": "ASPECTS",
+  "n_imgs": 3,
+  "img_mismatch": [],
+  "notes_len": 1033,
+  "tags": [
+   "restrição à difusão",
+   "ausência de realce",
+   "emergência",
+   "malignidade",
+   "lítica ou esclerótica",
+   "realce",
+   "hematogênico"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw5elmsi_ifg5ad",
+  "scope": "lesion",
+  "lid": "seed_860",
+  "lname": "Síndrome de transfusão feto-fetal (STFF)",
+  "req": "IMAGENS ERRADAS = ACRETISMO PLACENTÁRIO / LINK DE BUSCAR CASOS RADIOPAEDIA DUPLICADO",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 1086,
+  "tags": [
+   "sequência oligo-poli",
+   "bexiga do doador não visível",
+   "cardiomegalia do receptor",
+   "hidropisia fetal",
+   "hipovascular",
+   "bem circunscrita",
+   "emergência"
+  ],
+  "clin": [
+   "placenta prévia"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw5ek905_d83tx2",
+  "scope": "lesion",
+  "lid": "seed_416",
+  "lname": "Encefalopatia hipóxico-isquêmica",
+  "req": "IMAGENS ERRADAS = RETENÇÃO PRODUTOS CONCEPÇÃO E CLASSIFICADA COMO OBSTETRICIA erroneamente",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 630,
+  "tags": [
+   "restrição à difusão",
+   "bilateral",
+   "emergência"
+  ],
+  "clin": [
+   "parada cardiorrespiratória",
+   "asfixia",
+   "hipotensão grave"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw5ej2xt_bq0ekl",
+  "scope": "lesion",
+  "lid": "restored1018_250_y8fv2b",
+  "lname": "Acretismo placentário (placenta acreta/increta/percreta)",
+  "req": "IMAGENS AUSENTES",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 1027,
+  "tags": [
+   "lacunas placentárias",
+   "perda da zona retroplacentária",
+   "adelgaçamento miometrial",
+   "hipervascularização útero-placentária",
+   "interface útero-bexiga",
+   "vasos de ponte",
+   "placenta acreta spectrum"
+  ],
+  "clin": [
+   "placenta prévia"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw5eihft_u4kc62",
+  "scope": "lesion",
+  "lid": "seed_412",
+  "lname": "Ruptura de aneurisma de aorta abdominal",
+  "req": "erroneamente classificado como obstetricia",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 809,
+  "tags": [
+   "hemorrágico",
+   "hiperdensidade espontânea",
+   "emergência"
+  ],
+  "clin": [
+   "sangramento vaginal",
+   "história recente de gestação"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw5eczw9_86ygl1",
+  "scope": "lesion",
+  "lid": "seed_878",
+  "lname": "Hematoma de parede abdominal pós-cesárea",
+  "req": "IMAGENS ERRADAS = disgenesia corpo caloso",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 871,
+  "tags": [
+   "hemorrágico",
+   "heterogêneo"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw5eb25m_st49p7",
+  "scope": "lesion",
+  "lid": "restored1018_251_c2nnuv",
+  "lname": "Descolamento prematuro de placenta",
+  "req": "IMAGENS AUSENTES",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 670,
+  "tags": [
+   "hematoma retroplacentário",
+   "coleção avascular",
+   "hemorrágico",
+   "espessamento placentário"
+  ],
+  "clin": [
+   "dor abdominal na gestação",
+   "sangramento vaginal"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw5dojvo_ytbt9k",
+  "scope": "lesion",
+  "lid": "seed_222",
+  "lname": "Sarcoma botrioide (rabdomiossarcoma vaginal)",
+  "req": "IMAGENS ERRADAS = cancer colo de utero",
+  "cls": null,
+  "n_imgs": 3,
+  "img_mismatch": [
+   "Cisto mesonéfrico cervical (remanescente de Wolff)"
+  ],
+  "notes_len": 873,
+  "tags": [
+   "massa polipoide",
+   "cacho de uvas",
+   "idade pediátrica",
+   "vagina",
+   "hipersinal T2",
+   "realce heterogêneo",
+   "rabdomiossarcoma embrionário"
+  ],
+  "clin": [
+   "idade pediátrica"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw5dnmhl_tgst8b",
+  "scope": "lesion",
+  "lid": "seed_229",
+  "lname": "Fibroma vaginal",
+  "req": "IMAGENS ERRADAS = cisto de gartner",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 911,
+  "tags": [
+   "bem circunscrita",
+   "hipossinal T2"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw5dl0qz_eh07o7",
+  "scope": "lesion",
+  "lid": "seed_193",
+  "lname": "Pólipo endometrial",
+  "req": "IMAGENS ERRADAS = adenomiose",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 928,
+  "tags": [
+   "bem circunscrita",
+   "pedículo vascular",
+   "intracavitário"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw5a81xc_2qluie",
+  "scope": "global",
+  "lid": null,
+  "lname": null,
+  "req": "ESTUDAR ENDOMETRIOSE ULTRASSONOGRAFICA",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 0,
+  "tags": null,
+  "clin": null,
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw58bt0m_b97dyy",
+  "scope": "lesion",
+  "lid": "seed_218",
+  "lname": "Cisto mesonéfrico cervical (remanescente de Wolff)",
+  "req": "IMAGENS ERRADAS = CANCER COLO DE UTERO",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 850,
+  "tags": [
+   "cístico",
+   "ausência de realce",
+   "bem circunscrita",
+   "malformação congênita",
+   "linha de fratura",
+   "base do crânio",
+   "hemossinus",
+   "pneumocefalia",
+   "fístula liquórica",
+   "canal carotídeo"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw55gnal_k5r8fa",
+  "scope": "lesion",
+  "lid": "seed_220",
+  "lname": "Leiomioma cervical",
+  "req": "IMAGENS ERRADAS = cisto ovariano hemorrágico",
+  "cls": "ORADS",
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 99,
+  "tags": [
+   "bem circunscrita",
+   "hipossinal T2",
+   "realce homogêneo"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw546um9_z4l9iy",
+  "scope": "lesion",
+  "lid": "seed_197",
+  "lname": "Malformação mülleriana (útero bicorno/septado)",
+  "req": "IMAGENS ERRADAS = ADENOMIOSE",
+  "cls": null,
+  "n_imgs": 4,
+  "img_mismatch": [
+   "Pólipo endometrial"
+  ],
+  "notes_len": 919,
+  "tags": [
+   "US 3D",
+   "RM",
+   "contorno fúndico externo",
+   "septo uterino",
+   "útero bicorno",
+   "anomalia mülleriana"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw53rjrc_gn16yf",
+  "scope": "lesion",
+  "lid": "restored1018_259_e2atn2",
+  "lname": "Retenção de produtos da concepção",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 1038,
+  "tags": [
+   "material intracavitário",
+   "cavidade endometrial",
+   "vascularização ao Doppler",
+   "realce variável",
+   "pós-gestacional"
+  ],
+  "clin": [
+   "pós-parto",
+   "pós-abortamento"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw5397kv_zpgl2a",
+  "scope": "lesion",
+  "lid": "seed_206",
+  "lname": "Fibroma / Fibrotecoma ovariano",
+  "req": "IMAGENS ERRADAS = teratoma maduro / cisto dermoide",
+  "cls": "ORADS",
+  "n_imgs": 2,
+  "img_mismatch": [
+   "Teratoma maduro (cisto dermoide)"
+  ],
+  "notes_len": 90,
+  "tags": [
+   "hipossinal T2",
+   "sólido",
+   "bem circunscrita",
+   "estenose segmentar",
+   "colaterais",
+   "bilateral"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw537qxh_hi28ir",
+  "scope": "lesion",
+  "lid": "seed_218",
+  "lname": "Cisto mesonéfrico cervical (remanescente de Wolff)",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 850,
+  "tags": [
+   "cístico",
+   "ausência de realce",
+   "bem circunscrita",
+   "malformação congênita",
+   "linha de fratura",
+   "base do crânio",
+   "hemossinus",
+   "pneumocefalia",
+   "fístula liquórica",
+   "canal carotídeo"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw536ctc_efs7b7",
+  "scope": "lesion",
+  "lid": "restored1018_258_7w2seh",
+  "lname": "Endometrite",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 976,
+  "tags": [
+   "infeccioso/inflamatório",
+   "espessamento endometrial",
+   "realce"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw534voz_kdo7g0",
+  "scope": "lesion",
+  "lid": "restored1018_268_bbxux1",
+  "lname": "Cisto paratubário (cisto de Morgagni)",
+  "req": "1 - ATUAlizar tags + descrição \n2 - ausencia de imagens",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 97,
+  "tags": [
+   "cístico",
+   "ausência de realce",
+   "bem circunscrita",
+   "Paraovarian cyst"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw53449o_8vuse5",
+  "scope": "lesion",
+  "lid": "restored1018_272_049enu",
+  "lname": "Cisto do ducto de Gartner",
+  "req": "atualizar tags + descrição",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 94,
+  "tags": [
+   "cístico",
+   "ausência de realce",
+   "bem circunscrita",
+   "malformação congênita"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw533qiu_epsddl",
+  "scope": "lesion",
+  "lid": "restored1018_272_049enu",
+  "lname": "Cisto do ducto de Gartner",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 94,
+  "tags": [
+   "cístico",
+   "ausência de realce",
+   "bem circunscrita",
+   "malformação congênita"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw532bop_4j4881",
+  "scope": "lesion",
+  "lid": "seed_223",
+  "lname": "Condiloma cervical (HPV)",
+  "req": "IMAGENS ERRADAS = pólipo cervical",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 808,
+  "tags": [
+   "espessamento nodular",
+   "exofítica"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw530hd8_7a8gfj",
+  "scope": "lesion",
+  "lid": "seed_204",
+  "lname": "Cisto funcional (folicular/corpo lúteo)",
+  "req": "atualizar tags, descrição, diferenciais",
+  "cls": "ORADS",
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 88,
+  "tags": [
+   "cístico",
+   "bem circunscrita",
+   "ausência de realce"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw52zg44_80ee21",
+  "scope": "lesion",
+  "lid": "restored1018_275_ul1rsr",
+  "lname": "Adenomiose",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 4,
+  "img_mismatch": [],
+  "notes_len": 361,
+  "tags": [
+   "hipersinal T2",
+   "espessamento juncional",
+   "infiltrativa"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw52yzku_jsh9b3",
+  "scope": "lesion",
+  "lid": "seed_237",
+  "lname": "Tumor de células de Leydig",
+  "req": "IMAGENS ERRADAS =  cisto paraovariano / cisto paratubário (encontrar lesão com nome correspondente)",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 643,
+  "tags": [
+   "bem circunscrita",
+   "hipoecogênico",
+   "hipervascular"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw52xc3j_jswkzx",
+  "scope": "lesion",
+  "lid": "seed_274",
+  "lname": "Tuberculose epididimária",
+  "req": "IMAGENS ERRADAS = Cisto epididimário",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 932,
+  "tags": [
+   "heterogêneo",
+   "calcificações",
+   "nódulos epididimários",
+   "necrose",
+   "trajeto fistuloso"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw52vzmg_nrs97g",
+  "scope": "lesion",
+  "lid": "seed_595",
+  "lname": "Schwannoma retroperitoneal",
+  "req": "IMAGENS ERRADAS =  adenoma polimórfico de parótida",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [
+   "Linfoma mediastinal"
+  ],
+  "notes_len": 654,
+  "tags": [
+   "bem delimitado",
+   "realce heterogêneo",
+   "crescimento lento",
+   "heterogêneo",
+   "calcificações"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw52t6al_izfqhx",
+  "scope": "lesion",
+  "lid": "seed_1000",
+  "lname": "Ruptura do fórnix calicial (urinoma)",
+  "req": "CASOS  ↗ Radiopaedia — buscar casos (esta duplicado esse hiperlink)",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 734,
+  "tags": [
+   "dilatação focal",
+   "derrame associado",
+   "emergência"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw52rayf_dg0hmh",
+  "scope": "lesion",
+  "lid": "seed_524",
+  "lname": "Retocolite ulcerativa",
+  "req": "IMAGENS ERRADAS = adenomiomatose",
+  "cls": null,
+  "n_imgs": 3,
+  "img_mismatch": [],
+  "notes_len": 1086,
+  "tags": [
+   "parede espessa",
+   "difuso"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw52qcen_yevz4z",
+  "scope": "lesion",
+  "lid": "seed_553",
+  "lname": "Endoleak pós-EVAR",
+  "req": "IMAGENS ERRADAS =  Chondroblastoma",
+  "cls": null,
+  "n_imgs": 3,
+  "img_mismatch": [],
+  "notes_len": 899,
+  "tags": [
+   "opacificação do saco aneurismático",
+   "realce tardio",
+   "aumento do saco aneurismático"
+  ],
+  "clin": [
+   "adolescente ou adulto jovem"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw52mkda_7lsmju",
+  "scope": "lesion",
+  "lid": "restored1018_53_f75935",
+  "lname": "Adenomiomatose da vesícula biliar",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 3,
+  "img_mismatch": [],
+  "notes_len": 614,
+  "tags": [
+   "espessamento mural",
+   "seios de Rokitansky-Aschoff",
+   "artefato em cauda de cometa",
+   "espaços císticos intramurais"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw52m5ug_zf6ezv",
+  "scope": "lesion",
+  "lid": "seed_799",
+  "lname": "Acalasia",
+  "req": "IMAGENS ERRADAS =   müllerian duct cyst / cisto prostático (verificar qual é correspondente no atlas)",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 920,
+  "tags": [
+   "dilatação esofágica",
+   "bico de pássaro",
+   "retenção de contraste",
+   "aperistalse"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw52kx8u_eb4ury",
+  "scope": "lesion",
+  "lid": "seed_804",
+  "lname": "Úlcera péptica gástrica",
+  "req": "IMAGENS ERRADAS = lesão cerebelar, nao sei se é metastase ou o que?",
+  "cls": "CRADS",
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 669,
+  "tags": [
+   "nicho ulceroso",
+   "cratera ulcerada",
+   "pregas convergentes",
+   "espessamento focal"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw52it9e_5a3182",
+  "scope": "lesion",
+  "lid": "seed_159",
+  "lname": "Carcinoma de células renais",
+  "req": "ficou confuso o TÍTULO, diferenciar do células claras (nao entendi muito bem), verificar e descrever da forma mais adequada",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 920,
+  "tags": [
+   "realce heterogêneo",
+   "sólido",
+   "margens irregulares",
+   "hipervascular"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw52hef5_xqt604",
+  "scope": "lesion",
+  "lid": "seed_806",
+  "lname": "Carcinoma colorretal",
+  "req": "IMAGEM AUSENTE",
+  "cls": "CRADS",
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 935,
+  "tags": [
+   "margens irregulares",
+   "espessamento nodular",
+   "restrição à difusão",
+   "parede espessa",
+   "estenose segmentar"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw52gqko_y42720",
+  "scope": "lesion",
+  "lid": "restored1018_21_a753lc",
+  "lname": "Apendicite aguda",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 845,
+  "tags": [
+   "aumento de volume",
+   "realce heterogêneo",
+   "densificação da gordura",
+   "edema",
+   "emergência"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4zotm1_y9hftr",
+  "scope": "lesion",
+  "lid": "seed_106",
+  "lname": "Traqueobroncomalácia",
+  "req": "DUVIDA = confirmar q esta imagem é correspondente",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 1008,
+  "tags": [
+   "colapso expiratório",
+   "TC dinâmica",
+   "redução do calibre"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4zn7s5_9b5m7y",
+  "scope": "lesion",
+  "lid": "seed_320",
+  "lname": "Pseudoaneurisma aórtico",
+  "req": "IMAGENS ERRADAS =  contusão muscular",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 953,
+  "tags": [
+   "pseudoaneurisma aórtico",
+   "colo focal",
+   "descontinuidade mural",
+   "hematoma periaórtico",
+   "risco de ruptura"
+  ],
+  "clin": [
+   "trauma direto"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4zmg8e_n2v3eb",
+  "scope": "lesion",
+  "lid": "restored1018_311_liji18",
+  "lname": "Paralisia do nervo frênico",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 1042,
+  "tags": [
+   "elevação do hemidiafragma",
+   "movimento paradoxal"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4zlk8i_kck09n",
+  "scope": "lesion",
+  "lid": "seed_561",
+  "lname": "Aspergilose broncopulmonar alérgica",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 572,
+  "tags": [
+   "bronquiectasias centrais",
+   "impactação mucoide",
+   "muco de alta atenuação",
+   "central"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4zk8a0_zn5okt",
+  "scope": "lesion",
+  "lid": "seed_392",
+  "lname": "Pneumotórax hipertensivo",
+  "req": "IMAGENS ERRADAS = apendicite",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [
+   "Obstrução intestinal mecânica"
+  ],
+  "notes_len": 981,
+  "tags": [
+   "ar pleural",
+   "colapso pulmonar",
+   "desvio mediastinal",
+   "hemidiafragma deprimido",
+   "emergência"
+  ],
+  "clin": [
+   "instabilidade hemodinâmica",
+   "dispneia aguda"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4zjgvj_2l8z0t",
+  "scope": "lesion",
+  "lid": "seed_1001",
+  "lname": "Nódulo em vidro fosco persistente (adenocarcinoma in situ)",
+  "req": "VINCULAR IMAGENS DO ADENOCARCINOMA PULMONAR",
+  "cls": "LUNGRADS",
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 623,
+  "tags": [
+   "vidro fosco",
+   "bem circunscrita",
+   "crescimento lento"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4zhqtk_2w8qu1",
+  "scope": "lesion",
+  "lid": "seed_715",
+  "lname": "Abscesso da parede torácica",
+  "req": "IMAGENS ERRADAS =  HIPERPLASIA DE ADENOIDE",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [
+   "Adenoidite"
+  ],
+  "notes_len": 500,
+  "tags": [
+   "infeccioso",
+   "coleção",
+   "realce periférico"
+  ],
+  "clin": [
+   "idade pediátrica",
+   "ronco",
+   "fala hiponasal",
+   "apneia obstrutiva do sono"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4zffxw_ec7e45",
+  "scope": "lesion",
+  "lid": "seed_557",
+  "lname": "Adenocarcinoma pulmonar",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 612,
+  "tags": [
+   "sólido",
+   "subsólido",
+   "vidro fosco",
+   "espiculado",
+   "componente sólido"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4zcpcx_6sod8z",
+  "scope": "lesion",
+  "lid": "seed_948",
+  "lname": "Hipertrofia do ligamento amarelo",
+  "req": "IMAGENS ERRADAS = cisto ósseo unicameral",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [
+   "Cisto ósseo unicameral pediátrico"
+  ],
+  "notes_len": 994,
+  "tags": [
+   "espessamento ligamentar",
+   "baixo sinal em T2",
+   "estenose do canal vertebral",
+   "degeneração facetária"
+  ],
+  "clin": [
+   "idade pediátrica"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4zc0cq_69x43c",
+  "scope": "lesion",
+  "lid": "seed_968",
+  "lname": "Fratura de insuficiência sacral",
+  "req": "IMAGENS ERRADAS = DESCOLAMENTO DE PLLACENTA",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 999,
+  "tags": [
+   "esclerótica",
+   "bilateral",
+   "Fratura por insuficiência sacral"
+  ],
+  "clin": [
+   "osteoporose",
+   "radioterapia pélvica prévia"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4za6b8_x8eilh",
+  "scope": "lesion",
+  "lid": "seed_582",
+  "lname": "Schwannoma espinhal",
+  "req": "IMAGENS ERRADAS =  CARCINOMA ENDOMETRIAL",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [
+   "Síndrome de vasoconstrição cerebral reversível"
+  ],
+  "notes_len": 671,
+  "tags": [
+   "sólido",
+   "bem circunscrita",
+   "realce heterogêneo"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4z99rd_0pxt50",
+  "scope": "lesion",
+  "lid": "seed_923",
+  "lname": "Ameloblastoma",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 795,
+  "tags": [
+   "multilocular",
+   "bolhas de sabão",
+   "mandíbula posterior",
+   "expansão cortical",
+   "reabsorção radicular",
+   "tumor odontogênico"
+  ],
+  "clin": [
+   "radioterapia torácica"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4z84hg_7rzdyl",
+  "scope": "lesion",
+  "lid": "seed_1082",
+  "lname": "Síndrome de Lemierre",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 920,
+  "tags": [
+   "falha de enchimento",
+   "realce parietal venoso",
+   "inflamação perivascular",
+   "nódulos pulmonares cavitados"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4z6yl9_j7hbpj",
+  "scope": "lesion",
+  "lid": "seed_978",
+  "lname": "Querubismo",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 904,
+  "tags": [
+   "multisseptado",
+   "bilateral",
+   "idade pediátrica"
+  ],
+  "clin": [
+   "início na infância",
+   "herança autossômica dominante"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4z5i3k_zssjk2",
+  "scope": "lesion",
+  "lid": "seed_558",
+  "lname": "Sinusite fúngica invasiva",
+  "req": "IMAGENS ERRADAS = bursite trocantérica",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 734,
+  "tags": [
+   "infiltrativa",
+   "necrótico",
+   "emergência"
+  ],
+  "clin": [
+   "tabagismo"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4yx0h7_e6i3qr",
+  "scope": "lesion",
+  "lid": "seed_710",
+  "lname": "Paralisia de prega vocal",
+  "req": "IMAGENS ERRADAS = RETENÇÃO DE PRODUTOS DA CONCEPÇÃO\n\nALÉM DISSO ESTA NA SESSÃO DE OBSTETRICIA (erro de imagem + sessão)",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 1001,
+  "tags": [
+   "neuropático",
+   "assimetria",
+   "imobilidade de prega vocal",
+   "dilatação do ventrículo laríngeo"
+  ],
+  "clin": [
+   "pós-parto",
+   "pós-abortamento"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4yvag7_3fot7l",
+  "scope": "lesion",
+  "lid": "seed_359",
+  "lname": "Astrocitoma pilocítico",
+  "req": "achei no cloudinary esse ID = atlas-radiologico/sli8e7ei1rbrosbl185f",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 868,
+  "tags": [
+   "cístico",
+   "realce homogêneo",
+   "idade pediátrica",
+   "bem circunscrita"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4ys92k_taowbj",
+  "scope": "lesion",
+  "lid": "seed_447",
+  "lname": "Papiloma escamoso oral (HPV)",
+  "req": "IMAGENS ERRADAS = newcastle disease",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [
+   "Doença de Castleman"
+  ],
+  "notes_len": 1112,
+  "tags": [
+   "séssil",
+   "bem circunscrita",
+   "exofítica"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4yq7lc_tsa0wb",
+  "scope": "lesion",
+  "lid": "seed_667",
+  "lname": "Linfadenite cervical reacional",
+  "req": "IMAGENS ERRADAS = tenossinovite de quervain",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [
+   "Tenossinovite de De Quervain"
+  ],
+  "notes_len": 858,
+  "tags": [
+   "inflamatório/infeccioso",
+   "oval",
+   "hilo gorduroso preservado"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4ypp9w_neanx1",
+  "scope": "lesion",
+  "lid": "restored1018_84_axeqbn",
+  "lname": "Hiperplasia adenoideana",
+  "req": ": IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 1014,
+  "tags": [
+   "idade pediátrica",
+   "redução da coluna aérea",
+   "bem circunscrita"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4yoosu_liv1e1",
+  "scope": "lesion",
+  "lid": "seed_550",
+  "lname": "Estenose carotídea aterosclerótica",
+  "req": "IMAGENS ERRADAS = condrocalcinose",
+  "cls": null,
+  "n_imgs": 3,
+  "img_mismatch": [],
+  "notes_len": 989,
+  "tags": [
+   "estenose segmentar",
+   "calcificações"
+  ],
+  "clin": [
+   "pseudogota",
+   "monoartrite aguda"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4ym2qr_izfz0l",
+  "scope": "lesion",
+  "lid": "restored1018_74_6wzs3t",
+  "lname": "Adenoma pleomórfico de parótida",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 620,
+  "tags": [
+   "sólido",
+   "bem delimitado",
+   "lobulado",
+   "hipersinal T2",
+   "realce heterogêneo"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4y4rio_g8lnx4",
+  "scope": "lesion",
+  "lid": "seed_37",
+  "lname": "Neurocitoma central",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 825,
+  "tags": [
+   "bem circunscrita",
+   "calcificações",
+   "intraventricular",
+   "microcistos",
+   "realce heterogêneo"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4y3q4i_mg07n4",
+  "scope": "lesion",
+  "lid": "seed_362",
+  "lname": "Tumor teratoide/rabdoide atípico (ATRT)",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 701,
+  "tags": [
+   "restrição à difusão",
+   "realce heterogêneo",
+   "idade pediátrica"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4y3f7l_1kglj5",
+  "scope": "lesion",
+  "lid": "seed_738",
+  "lname": "Tumor do parênquima pineal de diferenciação intermediária",
+  "req": "IMAGENS ERRADAS = LESÃO DO JOELHO (parece bursa de hoffa) nao sei",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [
+   "Tendinopatia patelar"
+  ],
+  "notes_len": 709,
+  "tags": [
+   "neoplasia",
+   "massa pineal",
+   "realce",
+   "restrição à difusão variável"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4y10pj_7gbqgv",
+  "scope": "lesion",
+  "lid": "seed_1059",
+  "lname": "Esquizencefalia",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 839,
+  "tags": [
+   "idade pediátrica",
+   "margens irregulares",
+   "malformação congênita"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xz950_xhnqio",
+  "scope": "lesion",
+  "lid": "seed_581",
+  "lname": "Subependimoma",
+  "req": "IMAGENS ERRADAS = LEIOMIOMAS",
+  "cls": null,
+  "n_imgs": 3,
+  "img_mismatch": [],
+  "notes_len": 698,
+  "tags": [
+   "sólido",
+   "bem circunscrita",
+   "hipovascular"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xx8m2_r1e1mh",
+  "scope": "lesion",
+  "lid": "restored1018_226_jx5td4",
+  "lname": "Malformação de Dandy-Walker",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 953,
+  "tags": [
+   "idade pediátrica",
+   "cístico",
+   "expansiva",
+   "malformação congênita"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xvwhe_zbbti1",
+  "scope": "lesion",
+  "lid": "seed_577",
+  "lname": "Hipotensão intracraniana espontânea",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 1041,
+  "tags": [
+   "realce dural",
+   "coleção",
+   "difuso"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xv96b_qikeo8",
+  "scope": "lesion",
+  "lid": "seed_851",
+  "lname": "Holoprosencefalia",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 880,
+  "tags": [
+   "malformação congênita",
+   "fusão hemisférica",
+   "monoventrículo",
+   "anomalia da linha média"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xurs7_3mk467",
+  "scope": "lesion",
+  "lid": "seed_727",
+  "lname": "Glioma das vias ópticas",
+  "req": "IMAGENS ERRADAS =  NAO RECORDO DO Q ESSAS IMAGENS SE REFEREM",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [
+   "Linfocele retroperitoneal"
+  ],
+  "notes_len": 912,
+  "tags": [
+   "neoplasia",
+   "idade pediátrica",
+   "realce variável"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xtz0y_4y34ou",
+  "scope": "lesion",
+  "lid": "restored1018_224_4n89qk",
+  "lname": "Hemangioblastoma cerebelar",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 796,
+  "tags": [
+   "sólido-cístico",
+   "realce nodular periférico",
+   "hipervascular",
+   "cístico"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xtn37_mcghtw",
+  "scope": "lesion",
+  "lid": "restored1018_232_cj4t0s",
+  "lname": "Estado de mal epiléptico (alterações pós-ictais)",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 902,
+  "tags": [
+   "hipersinal T2",
+   "restrição à difusão",
+   "emergência"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xsrh4_hp1chp",
+  "scope": "lesion",
+  "lid": "seed_416",
+  "lname": "Encefalopatia hipóxico-isquêmica",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 630,
+  "tags": [
+   "restrição à difusão",
+   "bilateral",
+   "emergência"
+  ],
+  "clin": [
+   "parada cardiorrespiratória",
+   "asfixia",
+   "hipotensão grave"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xsbfb_47gamx",
+  "scope": "lesion",
+  "lid": "seed_914",
+  "lname": "Depósito de gadolínio no SNC",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 901,
+  "tags": [
+   "hipersinal T1",
+   "núcleo denteado",
+   "globo pálido",
+   "bilateral e simétrico"
+  ],
+  "clin": [
+   "radioterapia hepática recente"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xs14b_ql2g9o",
+  "scope": "lesion",
+  "lid": "seed_1",
+  "lname": "Craniofaringioma (adamantinomatoso)",
+  "req": "DUVIDA - NAO TENHO CTZA SE IMAGEM É CORRESPONDENTE",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 884,
+  "tags": [
+   "cístico",
+   "calcificações",
+   "hipersinal T1",
+   "multisseptado",
+   "idade pediátrica"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xqvr1_vqqc0o",
+  "scope": "lesion",
+  "lid": "seed_850",
+  "lname": "Agenesia do corpo caloso",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 1142,
+  "tags": [
+   "malformação congênita",
+   "colpocefalia",
+   "ventrículos paralelos",
+   "terceiro ventrículo elevado"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xpxrx_pejjz1",
+  "scope": "lesion",
+  "lid": "seed_462",
+  "lname": "PRES (síndrome de encefalopatia posterior reversível)",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 978,
+  "tags": [
+   "edema vasogênico",
+   "parieto-occipital",
+   "bilateral",
+   "ADC elevado",
+   "hemorragia possível"
+  ],
+  "clin": [
+   "crise hipertensiva",
+   "eclâmpsia",
+   "imunossupressores/citotóxicos"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xpel7_9y84gy",
+  "scope": "lesion",
+  "lid": "seed_802",
+  "lname": "Abscesso cerebelar",
+  "req": "IMAGENS ERRADAS =  artropatia hemofílica",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 659,
+  "tags": [
+   "infeccioso",
+   "coleção",
+   "realce periférico",
+   "restrição à difusão"
+  ],
+  "clin": [
+   "hemofilia",
+   "hemartroses recorrentes"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xnjaq_u81ypl",
+  "scope": "lesion",
+  "lid": "restored1018_227_4k1j6f",
+  "lname": "Meduloblastoma",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 968,
+  "tags": [
+   "restrição à difusão",
+   "realce heterogêneo",
+   "idade pediátrica"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xn3it_4okwi9",
+  "scope": "lesion",
+  "lid": "seed_1072",
+  "lname": "Malformação de Chiari tipo I",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 1102,
+  "tags": [
+   "idade pediátrica",
+   "herniação tonsilar",
+   "malformação congênita"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xmujq_y8vwme",
+  "scope": "lesion",
+  "lid": "restored1018_225_ns832e",
+  "lname": "Infarto cerebelar",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 900,
+  "tags": [
+   "vascular",
+   "restrição de difusão",
+   "território arterial",
+   "efeito de massa possível"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xmmv9_rh2vdu",
+  "scope": "lesion",
+  "lid": "seed_467",
+  "lname": "Hidrocefalia de pressão normal",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 915,
+  "tags": [
+   "ventriculomegalia desproporcional",
+   "DESH",
+   "ângulo caloso reduzido",
+   "sulcos da convexidade estreitos"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xma75_s9tbl0",
+  "scope": "lesion",
+  "lid": "seed_743",
+  "lname": "Hidrocefalia comunicante",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 1026,
+  "tags": [
+   "distúrbio liquórico",
+   "ventriculomegalia difusa"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xlesq_cbjjox",
+  "scope": "lesion",
+  "lid": "restored1018_223_0qtl3q",
+  "lname": "Hemorragia subaracnóidea aneurismática",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 1090,
+  "tags": [
+   "hiperdensidade espontânea",
+   "difuso",
+   "hemorrágico",
+   "emergência"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xkw04_t0r44g",
+  "scope": "lesion",
+  "lid": "seed_420",
+  "lname": "Herniação cerebral (transtentorial/subfalcina)",
+  "req": "IMAGENS ERRADAS =  ABORTO RETIDO E ENCEFALOPATIA HIPOXEMICA",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [
+   "Encefalopatia hipóxico-isquêmica"
+  ],
+  "notes_len": 561,
+  "tags": [
+   "efeito de massa",
+   "desvio de linha média",
+   "apagamento cisternal",
+   "emergência"
+  ],
+  "clin": [
+   "parada cardiorrespiratória",
+   "asfixia",
+   "hipotensão grave"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xk2gh_i5cgk5",
+  "scope": "lesion",
+  "lid": "seed_373",
+  "lname": "Hemorragia intraventricular do prematuro",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 1016,
+  "tags": [
+   "hiperdensidade espontânea",
+   "hemorrágico",
+   "idade pediátrica"
+  ],
+  "clin": [
+   "recém-nascido ou lactente",
+   "desconforto respiratório"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xjlzd_9wy4ha",
+  "scope": "lesion",
+  "lid": "seed_18",
+  "lname": "Hematoma subdural",
+  "req": "IMAGENS DUPLICADAS",
+  "cls": null,
+  "n_imgs": 4,
+  "img_mismatch": [],
+  "notes_len": 808,
+  "tags": [
+   "hemorrágico",
+   "coleção em crescente",
+   "densidade variável",
+   "efeito de massa possível"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xikc4_kxygn9",
+  "scope": "lesion",
+  "lid": "seed_878",
+  "lname": "Hematoma de parede abdominal pós-cesárea",
+  "req": "ERRONEAMENTE CLASSIFICADO NA SESSÃO NEURORRADIOLOGIA",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 871,
+  "tags": [
+   "hemorrágico",
+   "heterogêneo"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xgtp5_ehbu6x",
+  "scope": "lesion",
+  "lid": "restored1018_222_poyipk",
+  "lname": "Hiperostose frontal interna",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 749,
+  "tags": [
+   "hiperostose",
+   "incidental",
+   "poupa tábua externa"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xgklv_tutorr",
+  "scope": "lesion",
+  "lid": "restored1018_233_ekkbp2",
+  "lname": "Hemorragia intracraniana espontânea (hipertensiva)",
+  "req": "IMAGEM AUSENTE",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 1112,
+  "tags": [
+   "hiperdensidade espontânea",
+   "bem circunscrita",
+   "hemorrágico",
+   "emergência"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xf56s_2e8v89",
+  "scope": "lesion",
+  "lid": "restored1018_231_3zezqa",
+  "lname": "Esclerose múltipla",
+  "req": "IMAGENS AUSENTES",
+  "cls": null,
+  "n_imgs": 1,
+  "img_mismatch": [],
+  "notes_len": 1045,
+  "tags": [
+   "hipersinal T2",
+   "multifocal",
+   "realce em anel"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xeul5_8fmkf5",
+  "scope": "lesion",
+  "lid": "seed_359",
+  "lname": "Astrocitoma pilocítico",
+  "req": "AUSENCIA DE IMAGENS = ja foi referenciado imagem desta lesão antes",
+  "cls": null,
+  "n_imgs": 0,
+  "img_mismatch": [],
+  "notes_len": 868,
+  "tags": [
+   "cístico",
+   "realce homogêneo",
+   "idade pediátrica",
+   "bem circunscrita"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xe20t_4pjgw0",
+  "scope": "lesion",
+  "lid": "seed_563",
+  "lname": "Adenocarcinoma ductal pancreático",
+  "req": "imagens erradas = ADENOCARCINOMA PULMONAR",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [
+   "Adenocarcinoma pulmonar"
+  ],
+  "notes_len": 660,
+  "tags": [
+   "massa hipovascular",
+   "infiltrativa",
+   "interrupção ductal abrupta",
+   "dilatação ductal a montante",
+   "atrofia pancreática a montante"
+  ],
+  "clin": [
+   "60 anos",
+   "desconforto abdominal"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xbsg6_zctjmu",
+  "scope": "lesion",
+  "lid": "seed_418",
+  "lname": "Mola hidatiforme",
+  "req": "imagens erradas = ruptura de cisto ovariano",
+  "cls": null,
+  "n_imgs": 5,
+  "img_mismatch": [],
+  "notes_len": 747,
+  "tags": [
+   "multisseptado",
+   "heterogêneo",
+   "hipervascular",
+   "multifocal",
+   "cístico",
+   "emergência"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4xaaj5_fgode0",
+  "scope": "lesion",
+  "lid": "seed_372",
+  "lname": "Sequestro pulmonar",
+  "req": "IMAGENS ERRADAS fratura em galho verde",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [],
+  "notes_len": 1095,
+  "tags": [
+   "sólido-cístico",
+   "hipervascular",
+   "idade pediátrica",
+   "malformação congênita"
+  ],
+  "clin": [
+   "idade pediátrica",
+   "trauma"
+  ],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4x9nl1_nkt7i7",
+  "scope": "lesion",
+  "lid": "seed_341",
+  "lname": "Trombose de seio venoso cerebral",
+  "req": "imagens erradas = DOENÇA DE BUERGER",
+  "cls": null,
+  "n_imgs": 2,
+  "img_mismatch": [
+   "Doença de Buerger (tromboangeíte obliterante)"
+  ],
+  "notes_len": 771,
+  "tags": [
+   "falha de enchimento",
+   "hiperdensidade espontânea",
+   "hemorrágico",
+   "emergência",
+   "edema"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ },
+ {
+  "rid": "lrev_mw4x8baw_lll45u",
+  "scope": "lesion",
+  "lid": "seed_1125",
+  "lname": "Doença de Osgood-Schlatter",
+  "req": "imagens erradas (CISTO DE BAKER)",
+  "cls": null,
+  "n_imgs": 3,
+  "img_mismatch": [],
+  "notes_len": 887,
+  "tags": [
+   "idade pediátrica",
+   "edema",
+   "irregularidade",
+   "aumento de volume"
+  ],
+  "clin": [],
+  "prevAtt": [],
+  "fb": null,
+  "rej": null,
+  "roll": null
+ }
+]

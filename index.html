@@ -366,7 +366,7 @@ body{
    define SEU próprio max-height em .is-clamped (teaser curto do caso clínico
    vs. ~3 linhas do texto de sinais/classificações, abaixo). O clique só
    alterna a classe is-clamped (ver wireClampToggles) — nunca corta o HTML. */
-.is-clampable{cursor:pointer;} .is-clampable:focus-visible{outline:2px solid var(--teal-dim);outline-offset:2px;}
+.is-clampable{cursor:pointer;} .is-clampable:focus-visible{outline:2px solid var(--teal-dim);outline-offset:2px;} .clinical-case-presentation{white-space:pre-line;}
 .clinical-case-presentation.is-clamped{max-height:2.1em;line-height:1.4;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,#000 55%,transparent);mask-image:linear-gradient(180deg,#000 55%,transparent);}
 /* PROTEÇÃO 093/otimização — texto de Sinais radiológicos e Classificações e
    esquemas (renderDidacticRichText: pode ter subtítulo ## + lista + parágrafos)
@@ -23929,8 +23929,8 @@ function quizImageClinicalContextHtml(clinicalContext){
   return `<div class="quiz-clinical-context" style="font-size:14px;line-height:1.4;color:var(--text);background:rgba(250,204,21,.08);border:1px solid rgba(202,138,4,.45);border-radius:10px;padding:7px 14px;margin-bottom:10px;max-width:100%;overflow-wrap:anywhere;text-align:left;white-space:pre-wrap;">`
     + `<div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);margin-bottom:3px;">Caso clínico</div>`
     + (pac ? `<div><b>Paciente:</b> ${pac}</div>` : '')
-    + (c.presentation ? `<div><b>História clínica:</b> ${esc(c.presentation)}</div>` : '')
-    + (c.notes ? `<div><b>Observações:</b> ${esc(c.notes)}</div>` : '')
+    + (c.presentation ? `<div style="white-space:pre-line;"><b>História clínica:</b> ${esc(c.presentation)}</div>` : '')
+    + (c.notes ? `<div style="white-space:pre-line;"><b>Observações:</b> ${esc(c.notes)}</div>` : '')
     + `</div>`;
 }
 
