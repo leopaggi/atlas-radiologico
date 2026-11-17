@@ -10,4 +10,5 @@ ok(/\.clinical-case-presentation\{white-space:pre-line;\}/.test(html), 'CSS: apr
 ok(/<div style="white-space:pre-line;"><b>História clínica:<\/b> \$\{esc\(c\.presentation\)\}<\/div>/.test(html), 'Quiz: História clínica preserva quebras de linha');
 ok(/<div style="white-space:pre-line;"><b>Observações:<\/b> \$\{esc\(c\.notes\)\}<\/div>/.test(html), 'Quiz: Observações preserva quebras de linha');
 ok(/function clinicalCasePresentationHtml\(text\)\{[\s\S]*?esc\(t\)/.test(html), 'texto continua escapado (esc) — só muda a exibição, nunca o dado');
+ok(/\.lightbox-clinical-host \.clinical-case-presentation\.is-clamped\{max-height:30vh;overflow-y:auto;/.test(html), 'lightbox mostra a apresentação completa (sem cortar em 2 linhas)');
 process.exit(fails ? 1 : 0);

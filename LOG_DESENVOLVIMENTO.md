@@ -6248,3 +6248,6 @@ proteção de branch ativa desde 06/11).
 - Causa: o texto era exibido com `white-space` normal, que colapsa `\n`.
 - Correção: `white-space:pre-line` em `.clinical-case-presentation` e nos blocos "História clínica"/"Observações" do Quiz. Só muda a exibição; o dado salvo não muda.
 - Teste: tests/clinical-presentation-linebreaks.test.js.
+
+## 2026-11-16 — Lightbox mostra a apresentação clínica completa
+- A faixa clínica do lightbox cortava o texto em ~2 linhas (clamp), escondendo os tópicos. Agora, no lightbox, mostra até 30% da altura da tela, com rolagem se precisar. Teste atualizado.
