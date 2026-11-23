@@ -24623,7 +24623,12 @@ function externalPendingBlockHtml(draft){
 }
 
 // Lista de candidatos (pura; re-renderizada a cada edição do nome).
-function externalMatchesHtml(matches){
+// Há imagens do Radiopaedia (botão 📸) esperando por ESTE caso?
+function externalImagesPendingFor(draft){
+  const pend = pendingExternalImages;
+  return !!(pend && draft && (Date.now() - pend.at) <= 30 * 60 * 1000 && sameExternalUrl(pend.sourceUrl, draft.sourceUrl));
+}
+function externalMatchesHtml(matches, draft){
   if (!matches.length) return '<div style="color:var(--muted-2);font-size:13px;">✅ Nenhuma correspondência relevante encontrada no acervo.</div>';
   return matches.map(m => {
     const e = m.entry;
@@ -24632,6 +24637,9 @@ function externalMatchesHtml(matches){
       + `<div style="font-weight:700;">${esc(e.name)}</div>`
       + (ctx ? `<div style="color:var(--muted-2);font-size:12px;">${ctx}</div>` : '')
       + `<div style="font-size:12px;margin:4px 0;">${m.via === 'url' ? '🟢 URL já registrada' : '🔎 ' + esc(externalBandLabel(m.band))}</div>`
+      + (typeof externalImagesPendingFor === 'function' && externalImagesPendingFor(draft)
+        ? `<button type="button" class="btn btn-primary external-link-case-btn" data-lesion-id="${esc(e.id)}" style="margin-right:6px;">📸 Vincular caso e adicionar imagens</button>`
+        : '')
       + `<button type="button" class="btn btn-ghost external-open-btn" data-lesion-id="${esc(e.id)}">Abrir esta lesão</button>`
       + `</div>`;
   }).join('');
@@ -24706,11 +24714,12 @@ function externalImportModalHtml(draft, matches, suggestion, catalog){
     + `<div id="external-new-pane">`
     + (suggestion ? externalSuggestionHtml(suggestion) : '')
     + `<div class="detail-links-label">PRÉ-CHECAGEM DO ACERVO</div>`
-    + `<div id="external-matches">` + externalMatchesHtml(matches) + `</div>`
+    + `<div id="external-matches">` + externalMatchesHtml(matches, draft) + `</div>`
     + `<div id="external-alert"></div>`
     + `</div>`
     + `<div id="external-link-pane" hidden>`
     + `<div id="external-ai-state-link" style="font-size:12px;color:var(--teal);"></div>`
+    + (typeof externalImagesPendingFor === 'function' && externalImagesPendingFor(draft) ? `<div style="font-size:13px;margin:6px 0;color:var(--teal);">📸 ${pendingExternalImages.images.length} imagem(ns) do Radiopaedia prontas — ao vincular o caso a uma lesão, abrem no quadro de imagens para você aprovar.</div>` : '')
     + `<div class="detail-links-label">CANDIDATOS AUTOMÁTICOS PARA VÍNCULO</div>`
     + `<div id="external-link-candidates">` + externalLinkCandidatesHtml(linkMatches) + `</div>`
     + `<div class="field" style="margin-top:10px;">`
@@ -24783,8 +24792,9 @@ function refreshExternalMatches(ov, draft, suggestion, baseMatches){
   const probe = Object.assign({}, draft, { title: nameNow });
   const fresh = findExternalImportCandidates(probe, DATA);
   const box = ov.querySelector('#external-matches');
-  if (box) box.innerHTML = externalMatchesHtml(fresh);
+  if (box) box.innerHTML = externalMatchesHtml(fresh, draft);
   wireExternalOpenButtons(ov, draft);
+  wireExternalLinkCaseButtons(ov, draft);
   refreshExternalLinkCandidates(ov, probe, suggestion, draft);
   const known = new Set((baseMatches || []).map(m => m.entry.id));
   const novel = fresh.filter(m => (m.band === 'exata' || m.band === 'alta') && !known.has(m.entry.id));
@@ -24958,7 +24968,9 @@ function openExternalImportModal(draft){
     paintExternalModeTab(tabLink, isLink);
     paintExternalModeTab(tabNew, !isLink);
   }
-  setExternalMode('new');
+  // Com imagens do Radiopaedia esperando, o caminho útil é VINCULAR a uma lesão
+  // existente (é lá que o quadro de imagens abre) — começa nessa aba.
+  setExternalMode((typeof externalImagesPendingFor === 'function' && externalImagesPendingFor(draft)) ? 'link' : 'new');
   if (tabLink) tabLink.onclick = () => setExternalMode('link');
   if (tabNew) tabNew.onclick = () => setExternalMode('new');
   // Busca manual (regra 3): nome parcial/normalizado + enTerm/tags.

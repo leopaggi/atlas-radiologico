@@ -6265,3 +6265,8 @@ proteção de branch ativa desde 06/11).
 - Bug real: caso "galactocele" (2 exames de 1 imagem cada) não achava imagens — nomes como `0..png` e `0._big_gallery.jpeg` não eram reconhecidos. Agora qualquer `prod-images-static.radiopaedia.org/images/<id>/<arquivo>` vale (banners/ícones ignorados); `dr-thumb`→`dr-original`, `_gallery`→`_big_gallery`; mesma imagem em 2 tamanhos conta 1 vez; se a versão grande não existir, baixa a que aparece na página. Rótulo de exame sem título usa a modalidade ("ultrasound", "pathology").
 - Cloudinary: todo upload do Atlas agora é salvo com `public_id` = nome da lesão (sem acento, minúsculo, hífens) + sufixo curto único (ex.: `carcinoma-ductal-in-situ-cdis-xxxx`). Se o preset recusar `public_id`, reenvia uma vez sem ele (nome aleatório como antes). Metadados `lesion_name`/`lesion_id` e tags continuam.
 - Testes: tests/radiopaedia-images-quadro.test.js (12–15).
+
+## 2026-11-23 — Modal de importação: caminho com imagens para lesão existente
+- Problema real: com "📸 Enviar com imagens", se o atlas achava a lesão por correspondência exata (ex.: "Galactocele"), o modal abria na aba "Nova lesão" e o único botão da lesão encontrada era "Abrir esta lesão", que não vincula o caso nem repassa as imagens.
+- Agora, havendo imagens pendentes DESTE caso (mesma URL, até 30 min): o modal abre na aba "Vincular existente" com aviso "N imagem(ns) prontas"; os cartões de correspondência ganham o botão "📸 Vincular caso e adicionar imagens" (mesmo vínculo de sempre → abre o quadro de imagens). Sem imagens pendentes, nada muda (aba padrão "Nova lesão").
+- Testes: tests/radiopaedia-images-quadro.test.js (16–17).

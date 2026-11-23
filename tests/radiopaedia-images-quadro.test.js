@@ -221,3 +221,27 @@ test('15. upload usa public_id legível e reenvia sem ele se o preset recusar', 
   assert.match(up, /buildForm\(false\)/);
   assert.match(up, /lesion_name='\+lesion\.name/, 'metadado do nome continua');
 });
+
+// ---------- modal: caminho com imagens ----------
+test('16. com imagens pendentes: abre na aba "Vincular", oferece "Vincular caso e adicionar imagens" e avisa quantas imagens', () => {
+  assert.match(html, /setExternalMode\(\(typeof externalImagesPendingFor === 'function' && externalImagesPendingFor\(draft\)\) \? 'link' : 'new'\);/);
+  assert.match(html, /📸 Vincular caso e adicionar imagens/);
+  assert.match(html, /externalMatchesHtml\(matches, draft\)/);
+  assert.match(html, /externalMatchesHtml\(fresh, draft\)/);
+  assert.match(html, /imagem\(ns\) do Radiopaedia prontas/);
+});
+
+test('17. externalImagesPendingFor: só vale para o MESMO caso e dentro de 30 min', () => {
+  const ctx = vm.createContext({ Date });
+  vm.runInContext(['let pendingExternalImages = null;',
+    'function sameExternalUrl(a,b){ return String(a).replace(/[?#].*$/,"").replace(/\\/$/,"") === String(b).replace(/[?#].*$/,"").replace(/\\/$/,""); }',
+    fn(html, 'externalImagesPendingFor'),
+    'this.set = (p) => { pendingExternalImages = p; }; this.f = externalImagesPendingFor;'].join('\n'), ctx);
+  const url = 'https://radiopaedia.org/cases/galactocele-7';
+  assert.equal(ctx.f({ sourceUrl: url }), false, 'sem pendência');
+  ctx.set({ sourceUrl: url + '#image-1', images: [{}], at: Date.now() });
+  assert.equal(ctx.f({ sourceUrl: url }), true);
+  assert.equal(ctx.f({ sourceUrl: 'https://radiopaedia.org/cases/outro' }), false, 'outro caso');
+  ctx.set({ sourceUrl: url, images: [{}], at: Date.now() - 31 * 60 * 1000 });
+  assert.equal(ctx.f({ sourceUrl: url }), false, 'expirou');
+});
