@@ -35,7 +35,7 @@ function fn(source, name) {
 function usCtx() {
   const ctx = vm.createContext({});
   const code = ['var MAX_FIELD = 500;', 'var IMG_MAX_COUNT = 8;',
-    fn(us, 'cleanText'), fn(us, 'radiopaediaFullImageUrl'), fn(us, 'collectImageCandidates')].join('\n');
+    fn(us, 'cleanText'), fn(us, 'radiopaediaFullImageUrl'), fn(us, 'radiopaediaImageId'), fn(us, 'radiopaediaBestImageUrl'), fn(us, 'collectImageCandidates')].join('\n');
   vm.runInContext(code, ctx);
   return ctx;
 }
@@ -170,4 +170,54 @@ test('11. canal recebe imagens, vínculo do caso abre o construtor e nada salva 
   assert.match(open, /sameExternalUrl\(pend\.sourceUrl, draft\.sourceUrl\)/);
   assert.match(open, /openQuizAddImageModal\(entry\.id/);
   assert.doesNotMatch(open, /saveData|uploadToCloudinary/);
+});
+
+test('12. outros formatos reais de imagem (caso galactocele): aceita, sobe _gallery e ignora banner/ícone', () => {
+  const c = usCtx();
+  const H = 'https://prod-images-static.radiopaedia.org/';
+  assert.equal(c.radiopaediaBestImageUrl(H + 'images/56133843/0..png'), H + 'images/56133843/0..png');
+  assert.equal(c.radiopaediaBestImageUrl(H + 'images/56133848/0._big_gallery.jpeg'), H + 'images/56133848/0._big_gallery.jpeg');
+  assert.equal(c.radiopaediaBestImageUrl(H + 'images/56133845/2._gallery.jpeg'), H + 'images/56133845/2._big_gallery.jpeg');
+  assert.equal(c.radiopaediaBestImageUrl(H + 'images/76198237/dr-thumb.jpg'), H + 'images/76198237/dr-original.jpg');
+  assert.equal(c.radiopaediaBestImageUrl(H + 'promotional_banner_images/3565/WL-DESK_case-read-1584-monteggia.png'), '');
+  assert.equal(c.radiopaediaBestImageUrl('https://prod-assets-static.radiopaedia.org/assets/logo.png'), '');
+});
+
+test('13. dois exames de 1 imagem cada: rótulo pela modalidade quando não há título, e mesma imagem em 2 tamanhos conta 1 vez', () => {
+  const c = usCtx();
+  const H = 'https://prod-images-static.radiopaedia.org/';
+  const st = (modality, srcs) => ({
+    querySelector: (sel) => sel === 'h2' ? null : (sel === '.study-modality' ? { innerText: modality } : null),
+    querySelectorAll: (sel) => sel === 'img' ? srcs.map(img) : []
+  });
+  const r = c.collectImageCandidates(root([st('ultrasound', [H + 'images/56133848/0._big_gallery.jpeg', H + 'images/56133848/0._gallery.jpeg']), st('pathology', [H + 'images/56133843/0..png'])]));
+  assert.equal(r.items.length, 2);
+  assert.deepEqual(Array.from(r.items.map(x => x.seq)), ['ultrasound', 'pathology']);
+  assert.equal(r.items[0].fallback, H + 'images/56133848/0._big_gallery.jpeg');
+});
+
+// ---------- nome legível no Cloudinary ----------
+function pidCtx() {
+  const ctx = vm.createContext({});
+  vm.runInContext(fn(html, 'cloudinaryPublicIdForLesion') + '\nthis.f = cloudinaryPublicIdForLesion;', ctx);
+  return ctx.f;
+}
+test('14. arquivo no Cloudinary leva o nome da lesão (sem acento, minúsculo, único)', () => {
+  const f = pidCtx();
+  const a = f('Carcinoma ductal in situ (CDIS)', 1795470000000);
+  assert.match(a, /^carcinoma-ductal-in-situ-cdis-[a-z0-9]+$/);
+  assert.notEqual(f('Fibroadenoma', 1), f('Fibroadenoma', 1), 'sufixo aleatório evita colisão');
+  assert.match(f('Hérnia de Spiegel / ação', 5), /^hernia-de-spiegel-acao-/);
+  assert.equal(f('', 1), '');
+  assert.equal(f(null, 1), '');
+  assert.ok(f('x'.repeat(200), 1).length <= 60 + 1 + 12);
+});
+
+test('15. upload usa public_id legível e reenvia sem ele se o preset recusar', () => {
+  const i0 = html.indexOf('async function uploadToCloudinary(');
+  const up = html.slice(i0, html.indexOf('function openCloudinarySettings', i0));
+  assert.match(up, /cloudinaryPublicIdForLesion\(lesion\.name\)/);
+  assert.match(up, /fd\.append\('public_id',publicId\)/);
+  assert.match(up, /buildForm\(false\)/);
+  assert.match(up, /lesion_name='\+lesion\.name/, 'metadado do nome continua');
 });
