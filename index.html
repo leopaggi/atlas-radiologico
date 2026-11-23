@@ -6471,30 +6471,54 @@ function cloudinaryLesionContext(meta){
   const name=String(meta&&meta.name||'').trim();
   return {id,name};
 }
+/* Nome legível no Cloudinary: o arquivo é salvo como "<nome-da-lesao>-<sufixo>"
+   (sem acentos, minúsculo, só a-z0-9 e hífen) em vez de um código aleatório —
+   fácil de achar na biblioteca. O sufixo curto (data em base 36 + 3 letras)
+   mantém o nome único; vazio se a lesão não tem nome (Cloudinary escolhe). */
+function cloudinaryPublicIdForLesion(lesionName, now){
+  const slug = String(lesionName == null ? '' : lesionName).normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60).replace(/-+$/,'');
+  if(!slug) return '';
+  return slug + '-' + (Number(now) || Date.now()).toString(36) + Math.random().toString(36).slice(2,5);
+}
 async function uploadToCloudinary(file, lesionMeta={}){
   const cfg=getCloudinaryConfig();
   if(!cfg.cloudName || !cfg.uploadPreset) throw new Error('Configure o Cloudinary primeiro.');
   if(!file || !file.type || !file.type.startsWith('image/')) throw new Error('Arquivo de imagem inválido.');
 
   const lesion=cloudinaryLesionContext(lesionMeta);
-  const fd=new FormData();
-  fd.append('file',file,file.name||('atlas-'+Date.now()+'.png'));
-  fd.append('upload_preset',cfg.uploadPreset);
-  if(cfg.folder) fd.append('folder',cfg.folder);
+  const publicId=cloudinaryPublicIdForLesion(lesion.name);
+  const buildForm=(withPublicId)=>{
+    const fd=new FormData();
+    fd.append('file',file,file.name||('atlas-'+Date.now()+'.png'));
+    fd.append('upload_preset',cfg.uploadPreset);
+    if(cfg.folder) fd.append('folder',cfg.folder);
+    if(withPublicId && publicId) fd.append('public_id',publicId);
 
-  const tags=['atlas-radiologico'];
-  if(lesion.id) tags.push('lesion-'+safeCloudTagPart(lesion.id));
-  fd.append('tags',tags.join(','));
+    const tags=['atlas-radiologico'];
+    if(lesion.id) tags.push('lesion-'+safeCloudTagPart(lesion.id));
+    fd.append('tags',tags.join(','));
 
-  const ctx=[];
-  if(lesion.id) ctx.push('lesion_id='+lesion.id.replace(/[|=]/g,'_'));
-  if(lesion.name) ctx.push('lesion_name='+lesion.name.replace(/[|=]/g,'_'));
-  ctx.push('atlas_version=v193');
-  if(ctx.length) fd.append('context',ctx.join('|'));
+    const ctx=[];
+    if(lesion.id) ctx.push('lesion_id='+lesion.id.replace(/[|=]/g,'_'));
+    if(lesion.name) ctx.push('lesion_name='+lesion.name.replace(/[|=]/g,'_'));
+    ctx.push('atlas_version=v193');
+    if(ctx.length) fd.append('context',ctx.join('|'));
+    return fd;
+  };
 
   const endpoint='https://api.cloudinary.com/v1_1/'+encodeURIComponent(cfg.cloudName)+'/image/upload';
-  const res=await fetch(endpoint,{method:'POST',body:fd});
+  let res=await fetch(endpoint,{method:'POST',body:buildForm(true)});
   let out=null; try{ out=await res.json(); }catch(e){}
+  // Se o preset não aceitar nome próprio, reenvia UMA vez sem ele (nome aleatório
+  // como sempre) — nunca perde o upload por causa do nome legível.
+  if(!res.ok && publicId){
+    const m=String(out&&out.error&&out.error.message||'');
+    if(/public[_ ]?id|not allowed|unsigned|invalid param/i.test(m)){
+      res=await fetch(endpoint,{method:'POST',body:buildForm(false)});
+      out=null; try{ out=await res.json(); }catch(e){}
+    }
+  }
   if(!res.ok || !out || !out.secure_url){
     const msg=(out&&out.error&&out.error.message) || ('HTTP '+res.status);
     throw new Error(String(msg));

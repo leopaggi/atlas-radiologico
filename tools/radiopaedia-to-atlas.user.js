@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.5.0
+// @version      1.5.1
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e entrega o caso à aba do Atlas já aberta (ou abre o Atlas com o payload no fragmento da URL). O botão "📸 Enviar com imagens" (1.5.0) também baixa as imagens do caso (uma por série), reduz cada uma e entrega ao Atlas só para APROVAÇÃO — nada é salvo sem você. Não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -237,6 +237,23 @@
     return '';
   }
 
+  // 1.5.1 — qualquer imagem de caso (prod-images-static/images/<id>/<arquivo>):
+  // dr-thumb/_thumb viram a versão grande; "_gallery" sobe para "_big_gallery";
+  // o resto (ex.: "0..png", "x._big_gallery.jpeg", "<hash>.jpg") vale como está.
+  // Banners e imagens de interface (fora de /images/<id>/) são ignorados.
+  function radiopaediaImageId(src) {
+    var m = /^https:\/\/prod-images-static\.radiopaedia\.org\/images\/(\d+)\/[^\/?#]+$/i.exec(String(src || ''));
+    return m ? m[1] : '';
+  }
+  function radiopaediaBestImageUrl(src) {
+    var s = String(src || '');
+    if (!radiopaediaImageId(s)) return '';
+    var full = radiopaediaFullImageUrl(s);
+    if (full) return full;
+    if (/\._gallery\.jpe?g$/i.test(s)) return s.replace(/\._gallery\.jpe?g$/i, '._big_gallery.jpeg');
+    return s;
+  }
+
   // Varre os blocos de exame (.case-study). Rótulo = título do exame só quando
   // o caso tem mais de um exame (ex.: "FU US after 7 days"); com um exame só o
   // rótulo fica vazio (o usuário escolhe a sequência no Atlas).
@@ -247,17 +264,22 @@
     for (var i = 0; i < studies.length; i++) {
       var label = '';
       if (multi) {
-        try { var h = studies[i].querySelector('h2'); label = cleanText(h && h.innerText ? h.innerText : '').slice(0, 40); } catch (e) {}
+        try {
+          var h = studies[i].querySelector('h2');
+          label = cleanText(h && h.innerText ? h.innerText : '').slice(0, 40);
+          if (!label) { var mo = studies[i].querySelector('.study-modality'); label = cleanText(mo && mo.innerText ? mo.innerText : '').slice(0, 40); }
+        } catch (e) {}
       }
       var imgs = [];
       try { imgs = studies[i].querySelectorAll('img'); } catch (e) {}
       for (var j = 0; j < imgs.length; j++) {
         var src = imgs[j].currentSrc || (imgs[j].getAttribute && imgs[j].getAttribute('src')) || '';
-        var full = radiopaediaFullImageUrl(src);
-        if (!full || seen[full]) continue;
-        seen[full] = true;
+        var id = radiopaediaImageId(src);
+        var full = radiopaediaBestImageUrl(src);
+        if (!id || !full || seen[id]) continue;
+        seen[id] = true;
         total++;
-        if (items.length < IMG_MAX_COUNT) items.push({ full: full, seq: label });
+        if (items.length < IMG_MAX_COUNT) items.push({ full: full, fallback: String(src), seq: label });
       }
     }
     return { items: items, total: total };
@@ -292,7 +314,11 @@
   }
 
   function downloadAndShrink(item) {
-    return fetchImageBlob(item.full)
+    // tenta a versão grande; se não existir, cai para a imagem como aparece na página
+    return fetchImageBlob(item.full).catch(function (err) {
+      if (item.fallback && item.fallback !== item.full) return fetchImageBlob(item.fallback);
+      throw err;
+    })
       .then(function (blob) { return createImageBitmap(blob); })
       .then(function (bmp) { var d = shrinkToJpegDataUrl(bmp); try { bmp.close(); } catch (e) {} return { url: d, seq: item.seq }; })
       .catch(function () { return null; });
@@ -508,7 +534,7 @@
     setInterval(mountButton, 5000);
   }
   // Diagnóstico (DevTools do Chrome): confirma que o script rodou nesta página.
-  try { console.info('[Atlas userscript 1.5.0] ativo — ' + (onAtlasPage ? 'ponte do Atlas' : 'botão Enviar ao Atlas')); } catch (_) {}
+  try { console.info('[Atlas userscript 1.5.1] ativo — ' + (onAtlasPage ? 'ponte do Atlas' : 'botão Enviar ao Atlas')); } catch (_) {}
 
   // 091g: na página do Atlas este script é SÓ a ponte (sem botão). Isolada:
   // qualquer erro aqui fica aqui (o Radiopaedia cai no fallback por timeout).

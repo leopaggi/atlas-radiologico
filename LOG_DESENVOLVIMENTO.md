@@ -6260,3 +6260,8 @@ proteção de branch ativa desde 06/11).
 - Limites: até 8 imagens por caso, JPEG/PNG/WEBP em data URL, 900 KB por imagem e 5 MB no total. Só pela ponte do Tampermonkey (Atlas aberto numa aba); sem a ponte, só o caso vai.
 - Caminho "Criar nova lesão" não recebe imagens (v1).
 - Testes: tests/radiopaedia-images-quadro.test.js (novo); atualizados os testes que conferiam texto exato (versão do userscript, assinatura/toBlob do construtor, âncora do importHandler).
+
+## 2026-11-23 — Userscript 1.5.1 (outros formatos de imagem) + nome da lesão no Cloudinary
+- Bug real: caso "galactocele" (2 exames de 1 imagem cada) não achava imagens — nomes como `0..png` e `0._big_gallery.jpeg` não eram reconhecidos. Agora qualquer `prod-images-static.radiopaedia.org/images/<id>/<arquivo>` vale (banners/ícones ignorados); `dr-thumb`→`dr-original`, `_gallery`→`_big_gallery`; mesma imagem em 2 tamanhos conta 1 vez; se a versão grande não existir, baixa a que aparece na página. Rótulo de exame sem título usa a modalidade ("ultrasound", "pathology").
+- Cloudinary: todo upload do Atlas agora é salvo com `public_id` = nome da lesão (sem acento, minúsculo, hífens) + sufixo curto único (ex.: `carcinoma-ductal-in-situ-cdis-xxxx`). Se o preset recusar `public_id`, reenvia uma vez sem ele (nome aleatório como antes). Metadados `lesion_name`/`lesion_id` e tags continuam.
+- Testes: tests/radiopaedia-images-quadro.test.js (12–15).
