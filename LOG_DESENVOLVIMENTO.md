@@ -6251,3 +6251,12 @@ proteção de branch ativa desde 06/11).
 
 ## 2026-11-16 — Lightbox mostra a apresentação clínica completa
 - A faixa clínica do lightbox cortava o texto em ~2 linhas (clamp), escondendo os tópicos. Agora, no lightbox, mostra até 30% da altura da tela, com rolagem se precisar. Teste atualizado.
+
+## 2026-11-23 — Imagens do Radiopaedia direto no quadro de imagens (userscript 1.5.0)
+- Objetivo: acelerar o cadastro de casos. Em vez de print + recorte + colar, um botão novo no Radiopaedia ("📸 Enviar com imagens") baixa as imagens de cada série do caso, reduz cada uma (lado maior 800 px, ~110 KB) e entrega ao Atlas JUNTO com o caso.
+- Fluxo no Atlas: o modal de importação continua igual; ao clicar em "Adicionar como caso clínico exemplo" numa lesão existente, abre o "Adicionar imagem" dessa lesão com o construtor de quadro já carregado com as imagens. O usuário remove/ordena/legenda e só no "concluído" sobe e salva (mesmo caminho de sempre: posse, tombstones, assignedAt).
+- Nada é escolhido automaticamente (a "imagem-chave" é decisão do usuário) e nada persiste antes da aprovação; as imagens ficam só em memória por até 30 min.
+- Peso: o quadro final agora é limitado a ~500 KB para TODOS os quadros (qualidade .92 → .50 e, se preciso, resolução até ~60%). O quadro vindo do Radiopaedia não guarda painéis (`omitPanels`), então não há cópias separadas pesadas.
+- Limites: até 8 imagens por caso, JPEG/PNG/WEBP em data URL, 900 KB por imagem e 5 MB no total. Só pela ponte do Tampermonkey (Atlas aberto numa aba); sem a ponte, só o caso vai.
+- Caminho "Criar nova lesão" não recebe imagens (v1).
+- Testes: tests/radiopaedia-images-quadro.test.js (novo); atualizados os testes que conferiam texto exato (versão do userscript, assinatura/toBlob do construtor, âncora do importHandler).

@@ -19059,8 +19059,36 @@ function collageInitialDesc(existingLabel, seqs){
   const auto = (Array.isArray(seqs) ? seqs : []).filter(Boolean).join(' · ');
   return (cur !== auto) ? cur : '';
 }
-function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpload, existingLabel){
+/* Teto de peso do quadro final (≈500 KB). Antes o quadro saía sempre em
+   JPEG .92 na resolução escolhida e podia passar de vários MB. Agora tenta
+   qualidades decrescentes e, se ainda estourar, reduz a resolução do canvas
+   (nunca abaixo de ~60%). Devolve o MENOR resultado encontrado; se nem assim
+   couber, devolve o último (melhor esforço) — nunca falha por tamanho. */
+const COLLAGE_MAX_BYTES = 500 * 1024;
+async function collageEncodeUnderLimit(canvas, maxBytes){
+  const limit = maxBytes || COLLAGE_MAX_BYTES;
+  const encode = (cv, q) => new Promise((res, rej) => { try { cv.toBlob(b => res(b), 'image/jpeg', q); } catch (err) { rej(err); } });
+  let cur = canvas, blob = null;
+  for (let step = 0; step < 4; step++) {
+    for (let q = 0.92; q >= 0.5; q -= 0.07) {
+      blob = await encode(cur, Math.round(q * 100) / 100);
+      if (!blob || blob.size <= limit) return blob;
+    }
+    if (step === 3) break;
+    const next = document.createElement('canvas');
+    next.width = Math.max(1, Math.round(cur.width * 0.85));
+    next.height = Math.max(1, Math.round(cur.height * 0.85));
+    next.getContext('2d').drawImage(cur, 0, 0, next.width, next.height);
+    cur = next;
+  }
+  return blob;
+}
+function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpload, existingLabel, opts){
   const isEditMode = Array.isArray(existingPanels);
+  // opts.preload: painéis já prontos [{url,seq}] (ex.: imagens do Radiopaedia, já
+  // reduzidas) — abre o construtor normal (modo Criar) com eles carregados.
+  // opts.omitPanels: o quadro final não guarda os painéis (só a imagem única).
+  const preloadList = (!isEditMode && opts && Array.isArray(opts.preload)) ? opts.preload.filter(x=>x&&x.url).slice(0,8) : [];
   const cov=document.createElement('div'); cov.className='overlay';
   cov.style.zIndex='10030';
   cov.innerHTML=`<div class="modal collage-modal">
@@ -19091,7 +19119,7 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
   document.body.appendChild(cov);
   let items = isEditMode
     ? existingPanels.map(p=>({file:null, url:p.url, durableUrl:p.url, seq:p.seq||''}))
-    : [];
+    : preloadList.map(p=>({file:null, url:p.url, durableUrl:p.url, seq:p.seq||''}));
   // Pré-preenche a descrição geral ao reeditar um quadro que já tinha uma
   // (lida via .value, nunca via HTML).
   cov.querySelector('#collage-desc').value = isEditMode
@@ -19160,7 +19188,7 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
     });
   }
   async function loadImg(url){return await new Promise((res,rej)=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>res(im);im.onerror=()=>rej(new Error('Não foi possível carregar uma das imagens do quadro (link quebrado ou bloqueio de origem).'));im.src=url;});}
-  if(isEditMode && items.length){ render(); generateCollage(); }
+  if((isEditMode || preloadList.length) && items.length){ render(); generateCollage(); }
   async function generateCollage(){
     if(items.length<2){toast('Adicione pelo menos 2 imagens.');return;} if(items.length>8){toast('Máximo de 8 imagens.');return;}
     try{
@@ -19181,10 +19209,7 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
         if(pos==='top'){ctx.fillStyle='#050505';ctx.fillRect(x,y,cellW,labelH);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,y+labelH/2);}
         else{const bh=46;ctx.fillStyle='rgba(0,0,0,.72)';ctx.fillRect(x,iy+ih-bh,cellW,bh);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,iy+ih-bh/2);}
       }
-      finalBlob=await new Promise((res,rej)=>{
-        try{ canvas.toBlob(b=>res(b), 'image/jpeg', .92); }
-        catch(err){ rej(err); }
-      });
+      finalBlob=await collageEncodeUnderLimit(canvas);
       if(!finalBlob){
         toast('⚠ Não foi possível gerar o quadro: uma das imagens veio de um site que bloqueia esse uso (CORS). Tente subir a imagem como arquivo em vez de link direto.');
         return;
@@ -19205,7 +19230,7 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
     // continuam em `panels[].seq` e queimadas no canvas como antes. O canvas
     // NUNCA recebe esta descrição.
     const label=resolveCollageLabel(cov.querySelector('#collage-desc').value, items.map(x=>x.seq));
-    const panels=items.map(x=>({url:x.durableUrl||x.url, seq:x.seq||''}));
+    const panels=(opts && opts.omitPanels) ? [] : items.map(x=>({url:x.durableUrl||x.url, seq:x.seq||''}));
     if(deferUpload){
       // Upload diferido (formulário Editar): NÃO envia o quadro agora. Cria um
       // File temporário + blob URL própria (separada do preview, que é revogada
@@ -22919,7 +22944,7 @@ function refreshStudyDashboardLive(){
    uma vez, o que destruiria a overlay do Quiz (#study-overlay) por baixo.
    Este painel só remove a si mesmo — exatamente como openCommonsImageSearch
    já faz há muito tempo. */
-function openQuizAddImageModal(lesionId, onImagesAdded){
+function openQuizAddImageModal(lesionId, onImagesAdded, opts){
   const lesion = DATA.find(x=>x.id===lesionId);
   if(!lesion){ toast('Lesão não encontrada.'); return; }
   const cov = document.createElement('div');
@@ -23148,6 +23173,14 @@ function openQuizAddImageModal(lesionId, onImagesAdded){
     toast('Imagens salvas na lesão.');
   };
   cov.querySelector('#quiz-add-img-upload-box').focus();
+  // Imagens vindas do Radiopaedia (já reduzidas): abre o construtor de quadro
+  // com elas carregadas. Nada é enviado/salvo até o "concluído" normal.
+  if(opts && Array.isArray(opts.preload) && opts.preload.length){
+    openCollageBuilder({id: lesion.id, name: lesion.name}, collage=>{
+      if(collage && collage.source==='pending' && collage._objectUrl) draftObjectUrls.add(collage._objectUrl);
+      addDraftImages([collage]);
+    }, null, true, '', {preload: opts.preload, omitPanels: true});
+  }
 }
 function openQuizReviewModal(lesionId){
   const lesion = DATA.find(x=>x.id===lesionId);
@@ -24711,6 +24744,7 @@ async function handleExternalLinkCaseClick(draft, lesionId, aiInstruction){
     }
     toast('Caso clínico vinculado a "' + entry.name + '".' + aiNotice);
     openDetail(entry.id);
+    try { openPendingExternalImagesFor(entry, draft); } catch (e) { console.warn('Imagens externas pendentes não abriram.', e); }
     return;
   }
   if (result.reason === 'duplicate_same_lesion') { toast('Este caso já está vinculado a esta lesão — não foi duplicado.'); return; }
@@ -25226,6 +25260,40 @@ function clearAtlasTabAttention(){
     if (atlasTabTitleBeforeSignal !== null && typeof document !== 'undefined' && !document.hidden) { document.title = atlasTabTitleBeforeSignal; atlasTabTitleBeforeSignal = null; }
   } catch (e) {}
 }
+/* Imagens do Radiopaedia (userscript 1.5+): chegam JUNTO do caso, já reduzidas
+   (JPEG em data URL). Ficam só em memória até o usuário vincular o caso a uma
+   lesão; aí abre o construtor de quadro. Nunca persistem sozinhas. */
+const EXTERNAL_IMAGES_MAX_COUNT = 8;
+const EXTERNAL_IMAGE_MAX_CHARS = 900 * 1024;      // por imagem (data URL)
+const EXTERNAL_IMAGES_MAX_TOTAL_CHARS = 5 * 1024 * 1024;
+let pendingExternalImages = null; // {sourceUrl, images:[{url,seq}], at}
+function validateExternalImages(list){
+  if (!Array.isArray(list)) return [];
+  const out = []; let total = 0;
+  for (const it of list) {
+    if (out.length >= EXTERNAL_IMAGES_MAX_COUNT) break;
+    const url = it && typeof it.url === 'string' ? it.url : '';
+    if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/.test(url)) continue;
+    if (url.length > EXTERNAL_IMAGE_MAX_CHARS || total + url.length > EXTERNAL_IMAGES_MAX_TOTAL_CHARS) continue;
+    total += url.length;
+    const seq = typeof it.seq === 'string' ? it.seq.trim().slice(0, 80) : '';
+    out.push({ url, seq });
+  }
+  return out;
+}
+function setPendingExternalImages(sourceUrl, list){
+  const images = validateExternalImages(list);
+  pendingExternalImages = images.length ? { sourceUrl: String(sourceUrl || ''), images, at: Date.now() } : null;
+  return images.length;
+}
+// Chamado depois que o caso foi VINCULADO a uma lesão existente.
+function openPendingExternalImagesFor(entry, draft){
+  const pend = pendingExternalImages;
+  if (!pend || (Date.now() - pend.at) > 30 * 60 * 1000 || !entry || !draft || !sameExternalUrl(pend.sourceUrl, draft.sourceUrl)) return false;
+  pendingExternalImages = null;
+  openQuizAddImageModal(entry.id, () => { try { renderAll(); } catch (e) {} try { openDetail(entry.id); } catch (e) {} }, { preload: pend.images });
+  return true;
+}
 function deliverExternalImportPayload(payload){
   if (!appStateReady) { pendingBroadcastImport = payload; return { status: 'aguardando_boot' }; }
   if (externalImportFormBlocked()) return { status: 'adiado_formulario_aberto' };
@@ -25245,7 +25313,10 @@ function handleAtlasImportChannelMessage(data, reply){
     if (id && handledBroadcastImports.has(id)) return { status: 'duplicado' };
     if (id) handledBroadcastImports.add(id);
     let res;
-    try { res = deliverExternalImportPayload(data.payload); }
+    try {
+      if (Array.isArray(data.images) && data.payload && typeof data.payload === 'object') setPendingExternalImages(data.payload.sourceUrl, data.images);
+      res = deliverExternalImportPayload(data.payload);
+    }
     catch (e) { console.warn('Falha na importação externa (canal).', e); res = { status: 'erro' }; }
     send({ type: 'import-ack', requestId: id || null, tabId: ATLAS_TAB_ID, status: res && res.status });
     return res;

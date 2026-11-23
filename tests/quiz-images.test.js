@@ -251,7 +251,7 @@ test('Ctrl+V: listener fica restrito ao modal ativo e não captura paste globalm
 
 test('Quadro de Imagem: Quiz e editor reutilizam o mesmo openCollageBuilder() parametrizado', () => {
   assert.match(openQuizAddImageModalFn.source, /openCollageBuilder\(\{id:\s*lesion\.id,\s*name:\s*lesion\.name\}/);
-  assert.match(openCollageBuilderFn.source, /function openCollageBuilder\(lesionMeta,\s*onCollageReady,\s*existingPanels,\s*deferUpload(?:,\s*existingLabel)?\)/);
+  assert.match(openCollageBuilderFn.source, /function openCollageBuilder\(lesionMeta,\s*onCollageReady,\s*existingPanels,\s*deferUpload(?:,\s*existingLabel)?(?:,\s*opts)?\)/);
   assert.match(openCollageBuilderFn.source, /uploadToCloudinary\(file,lesionMeta\)/);
   assert.match(openCollageBuilderFn.source, /onCollageReady\(imgObj\)/);
   assert.doesNotMatch(openCollageBuilderFn.source, /pendingImgs/, 'o construtor compartilhado não pode depender do estado privado do formulário');
@@ -434,7 +434,7 @@ test('SEM DELETE REMOTO: backend de análise não contém função de exclusão 
 test('QUADRO (Editar): aberto com deferUpload=true e NÃO envia painéis ao Cloudinary', () => {
   const src = openFormSlice();
   assert.match(src, /openCollageBuilder\(getCurrentLesionMeta\(\),\s*collage=>\{[\s\S]*?\},\s*null,\s*true\)/);
-  assert.match(openCollageBuilderFn.source, /function openCollageBuilder\(lesionMeta,\s*onCollageReady,\s*existingPanels,\s*deferUpload(?:,\s*existingLabel)?\)/);
+  assert.match(openCollageBuilderFn.source, /function openCollageBuilder\(lesionMeta,\s*onCollageReady,\s*existingPanels,\s*deferUpload(?:,\s*existingLabel)?(?:,\s*opts)?\)/);
   assert.match(openCollageBuilderFn.source, /if\(deferUpload\)\{ item\.durableUrl = item\.url; return; \}/);
 });
 
