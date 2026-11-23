@@ -168,7 +168,7 @@ test('14. Cloudinary continua seguindo o fluxo atual', () => {
   const src = builderSrc();
   assert.match(src, /source:'pending'/, 'diferido continua pending');
   assert.match(src, /uploadToCloudinary\(file,lesionMeta\)/, 'envio só no fluxo imediato/Salvar');
-  assert.match(src, /canvas\.toBlob/, 'composição visual intocada');
+  assert.match(src, /collageEncodeUnderLimit\(canvas\)/, 'composição visual intocada; peso limitado a ~500 KB');
 });
 
 test('15. carrossel/lightbox continuam funcionando', () => {

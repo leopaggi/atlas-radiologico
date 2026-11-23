@@ -85,7 +85,7 @@ test('087 QUADRO: fiação — personalizada abre o campo e grava o texto (trim)
   assert.match(builder, /if\(e\.target\.value===CUSTOM_SEQUENCE_OPTION\)\{ customSeq\.hidden=false; items\[i\]\.seq=normalizeCustomSequence\(customSeq\.value\); customSeq\.focus\(\); \}/);
   assert.match(builder, /else \{ customSeq\.hidden=true; items\[i\]\.seq=e\.target\.value; \}/);
   assert.match(builder, /customSeq\.oninput=e=>\{items\[i\]\.seq=normalizeCustomSequence\(e\.target\.value\);\};/);
-  assert.match(builder, /const panels=items\.map\(x=>\(\{url:x\.durableUrl\|\|x\.url, seq:x\.seq\|\|''\}\)\);/, 'persistido em panels[].seq como antes');
+  assert.match(builder, /const panels=\(opts && opts\.omitPanels\) \? \[\] : items\.map\(x=>\(\{url:x\.durableUrl\|\|x\.url, seq:x\.seq\|\|''\}\)\);/, 'persistido em panels[].seq como antes (exceto quando omitPanels)');
   assert.match(builder, /existingPanels\.map\(p=>\(\{file:null, url:p\.url, durableUrl:p\.url, seq:p\.seq\|\|''\}\)\)/, 'reabrir o quadro recarrega o seq exato');
 });
 
