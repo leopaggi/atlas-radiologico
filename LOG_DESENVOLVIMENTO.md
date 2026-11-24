@@ -6297,3 +6297,6 @@ proteção de branch ativa desde 06/11).
 ## 2026-11-24 — Botão "editar" travado após enviar caso/imagens do Radiopaedia
 - Causa: ao concluir, o atlas reabre o detalhe da lesão com o detalhe anterior ainda por baixo; os dois tinham os mesmos ids (btn-edit, btn-close…) e openDetail achava os botões por document.getElementById, ligando as ações nos botões do detalhe DE BAIXO. Os botões do detalhe de cima ficavam sem função.
 - Correção: openDetail procura os botões dentro da própria janela (ov.querySelector). Teste: tests/detail-duplicate-overlay.test.js.
+
+## 2026-11-24 — Termos de busca do Radiopaedia (Mamas)
+- EN_TERMS (dicionário do termo em inglês usado no link "Radiopaedia — buscar casos") atualizado para 39 lesões de Mamas, conforme a planilha de termos sugeridos (linhas de confiança Alta/Média). As 9 de confiança "Baixa" ficaram de fora. Só muda o termo de busca/enTerm; nome, tags e notas intactos. Os links automáticos e o enTerm das lesões se atualizam sozinhos ao abrir o atlas (reparo de boot / sincronização canônica).
