@@ -252,7 +252,7 @@ function jsonCtx(fetchImpl) {
   const code = ['var MAX_FIELD = 500;', 'var IMG_MAX_COUNT = 8;',
     "var IMG_BASE = 'https://prod-images-static.radiopaedia.org/images/';",
     'var SKIP_MODALITIES = /patholog|histolog|photograph|illustration|diagram/i;',
-    fn(us, 'cleanText'), fn(us, 'pickFrames'), fn(us, 'safeImageFile'), fn(us, 'annotatedSliceIndexes'), fn(us, 'evenlyPick'), fn(us, 'imagesFromStudyJson'),
+    fn(us, 'cleanText'), fn(us, 'pickFrames'), fn(us, 'safeImageFile'), fn(us, 'annotatedSliceIndexes'), fn(us, 'arrowsAt'), fn(us, 'evenlyPick'), fn(us, 'imagesFromStudyJson'),
     fn(us, 'studyIdsFromPage'), fn(us, 'collectImagesViaStudyJson')].join('\n');
   vm.runInContext(code, ctx);
   return ctx;
@@ -485,4 +485,44 @@ test('37. duas séries marcadas dividem o limite do quadro', () => {
   assert.equal(r.items.length, 8);
   assert.equal(r.items.filter(x => /\/images\/1\d\d\//.test(x.full)).length, 4);
   assert.equal(r.items.filter(x => /\/images\/9\d\d\//.test(x.full)).length, 4);
+});
+
+// ---------- seta laranja desenhada por cima do corte ----------
+test('38. cada corte marcado leva as setas dele (x, y, rotação); sem marcação não leva seta', () => {
+  const c = jsonCtx(null);
+  const ser = ctSeries(300, 1000, [
+    { label_positions: [{ slice_idx: 185 }], arrow_positions: [{ slice_idx: 185, rotation: -435, x: 313, y: 265 }, { slice_idx: 185, rotation: -233, x: 275, y: 244 }] },
+    { arrow_positions: [{ slice_idx: 268, rotation: -419, x: 267, y: 283 }] }
+  ]);
+  const r = c.imagesFromStudyJson({ study: { modality: 'CT', series: [ser] } }, 8, '');
+  assert.equal(r.items.length, 2);
+  assert.equal(r.items[0].arrows.length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(r.items[0].arrows[1])), { x: 275, y: 244, rotation: -233 });
+  assert.equal(r.items[1].arrows.length, 1);
+  const old = c.imagesFromStudyJson({ study: { modality: 'CT', series: [ctSeries(20, 1, [])] } }, 8, '');
+  assert.ok(old.items.every(x => x.arrows.length === 0));
+});
+
+test('39. desenho da seta: posição acompanha a redução da imagem; rotação = rotação do site + inclinação da seta-base; sem seta não desenha', () => {
+  const calls = [];
+  const ctx = { canvas: { width: 512 },
+    save() { calls.push(['save']); }, restore() { calls.push(['restore']); },
+    translate(x, y) { calls.push(['translate', x, y]); }, rotate(a) { calls.push(['rotate', a]); },
+    beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, stroke() {}, fill() { calls.push(['fill', this.fillStyle]); } };
+  const code = ['var DRAW_ARROWS = true;', 'var ARROW_BASE_TILT_DEG = 20;', fn(us, 'drawArrows'), 'this.f = drawArrows;'].join('\n');
+  const vctx = vm.createContext({ Math });
+  vm.runInContext(code, vctx);
+  vctx.f(ctx, [{ x: 313, y: 265, rotation: -435 }], 0.5);
+  const tr = calls.find(x => x[0] === 'translate'), ro = calls.find(x => x[0] === 'rotate');
+  assert.equal(tr[1], 156.5); assert.equal(tr[2], 132.5);
+  assert.ok(Math.abs(ro[1] - (-415 * Math.PI / 180)) < 1e-9);
+  assert.equal(calls.find(x => x[0] === 'fill')[1], '#f5821f');
+  const n = calls.length;
+  vctx.f(ctx, [], 0.5); vctx.f(ctx, null, 0.5);
+  assert.equal(calls.length, n);
+});
+
+test('40. fiação: só desenha na imagem grande (a miniatura de reserva não tem a mesma escala)', () => {
+  assert.match(us, /shrinkToJpegDataUrl\(bmp, usedFull \? item\.arrows : null\)/);
+  assert.match(us, /drawArrows\(ctx, arrows, w \/ bitmap\.width\)/);
 });

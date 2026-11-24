@@ -413,6 +413,20 @@
     out.sort(function (x, y) { return x - y; });
     return out;
   }
+  // Setas do corte `ix` (posição x/y na imagem original e rotação, como o site guarda).
+  function arrowsAt(se, ix) {
+    var anns = (se && Array.isArray(se.annotations)) ? se.annotations : [], out = [];
+    for (var a = 0; a < anns.length; a++) {
+      var ap = anns[a] && Array.isArray(anns[a].arrow_positions) ? anns[a].arrow_positions : [];
+      for (var i = 0; i < ap.length; i++) {
+        var p = ap[i];
+        if (p && Number(p.slice_idx) === ix && isFinite(Number(p.x)) && isFinite(Number(p.y))) {
+          out.push({ x: Number(p.x), y: Number(p.y), rotation: isFinite(Number(p.rotation)) ? Number(p.rotation) : 0 });
+        }
+      }
+    }
+    return out.slice(0, 6);
+  }
   function evenlyPick(list, n) {
     if (list.length <= n) return list.slice();
     if (n <= 1) return [list[Math.floor((list.length - 1) / 2)]];
@@ -441,10 +455,11 @@
       var frames = Array.isArray(se.frames) ? se.frames : [];
       var files = (se.encodings && Array.isArray(se.encodings.thumbnailed_files)) ? se.encodings.thumbnailed_files : [];
       res.total += frames.length;
-      var picked;
+      var picked, pickedIdx = null;
       if (res.marked) {
         if (!marks[s].length) continue; // série sem marcação: não entra
-        picked = evenlyPick(marks[s], per).map(function (ix) { return frames[ix]; });
+        pickedIdx = evenlyPick(marks[s], per);
+        picked = pickedIdx.map(function (ix) { return frames[ix]; });
       } else {
         picked = pickFrames(frames, per);
       }
@@ -457,7 +472,8 @@
         res.items.push({
           full: IMG_BASE + f.id + '/' + orig,
           fallback: small ? IMG_BASE + f.id + '/' + small : '',
-          seq: label || ''
+          seq: label || '',
+          arrows: pickedIdx ? arrowsAt(se, pickedIdx[i]) : []
         });
       }
     }
@@ -513,13 +529,43 @@
 
   // Reduz até caber em ~IMG_TARGET_CHARS (data URL). Tenta lados menores e
   // qualidades decrescentes; devolve a menor versão se nada couber.
-  function shrinkToJpegDataUrl(bitmap) {
+  /* 1.5.4 — SETA LARANJA. O site guarda a seta à parte (x, y na imagem original e
+     rotação em graus, no sentido horário); aqui ela é desenhada por cima do corte,
+     como o visualizador faz. A seta-base aponta "para cima, levemente à direita"
+     (ARROW_BASE_TILT_DEG), calibrado no caso atrial-septal-defect-14. */
+  var DRAW_ARROWS = true;
+  var ARROW_BASE_TILT_DEG = 20;
+  function drawArrows(ctx, arrows, scale) {
+    if (!DRAW_ARROWS || !arrows || !arrows.length || !(scale > 0)) return;
+    var L = Math.max(14, Math.round(ctx.canvas.width * 0.05));
+    for (var i = 0; i < arrows.length; i++) {
+      var a = arrows[i];
+      ctx.save();
+      ctx.translate(a.x * scale, a.y * scale);
+      ctx.rotate((a.rotation + ARROW_BASE_TILT_DEG) * Math.PI / 180);
+      ctx.beginPath();
+      ctx.moveTo(0, -L * 0.6);
+      ctx.lineTo(L * 0.5, L * 0.5);
+      ctx.lineTo(0, L * 0.2);
+      ctx.lineTo(-L * 0.5, L * 0.5);
+      ctx.closePath();
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = Math.max(2, L * 0.12);
+      ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+      ctx.stroke();
+      ctx.fillStyle = '#f5821f';
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  function shrinkToJpegDataUrl(bitmap, arrows) {
     var best = '';
     for (var s = 0; s < IMG_SIDES.length; s++) {
       var scale = Math.min(1, IMG_SIDES[s] / Math.max(bitmap.width, bitmap.height));
       var w = Math.max(1, Math.round(bitmap.width * scale)), h = Math.max(1, Math.round(bitmap.height * scale));
       var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
       var ctx = cv.getContext('2d'); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h); ctx.drawImage(bitmap, 0, 0, w, h);
+      drawArrows(ctx, arrows, w / bitmap.width);
       for (var q = 0.85; q >= 0.45; q -= 0.08) {
         best = cv.toDataURL('image/jpeg', Math.round(q * 100) / 100);
         if (best.length <= IMG_TARGET_CHARS) return best;
@@ -530,12 +576,14 @@
 
   function downloadAndShrink(item) {
     // tenta a versão grande; se não existir, cai para a imagem como aparece na página
+    // (nesse caso a seta não é desenhada: a posição dela vale para a imagem original)
+    var usedFull = true;
     return fetchImageBlob(item.full).catch(function (err) {
-      if (item.fallback && item.fallback !== item.full) return fetchImageBlob(item.fallback);
+      if (item.fallback && item.fallback !== item.full) { usedFull = false; return fetchImageBlob(item.fallback); }
       throw err;
     })
       .then(function (blob) { return createImageBitmap(blob); })
-      .then(function (bmp) { var d = shrinkToJpegDataUrl(bmp); try { bmp.close(); } catch (e) {} return { url: d, seq: item.seq }; })
+      .then(function (bmp) { var d = shrinkToJpegDataUrl(bmp, usedFull ? item.arrows : null); try { bmp.close(); } catch (e) {} return { url: d, seq: item.seq }; })
       .catch(function () { return null; });
   }
 

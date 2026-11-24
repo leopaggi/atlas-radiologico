@@ -6304,3 +6304,4 @@ proteção de branch ativa desde 06/11).
 ## 2026-11-24 — Userscript 1.5.4: só os cortes marcados com setas (TC/RM)
 - Em casos novos o autor marca os cortes com achado (study.series[].annotations[].arrow_positions/label_positions[].slice_idx = posição na lista de frames; estrutura conferida em caso real). O botão 📸 passa a enviar só esses cortes e ignora séries sem marcação (as "sequências pretas"). Casos antigos, sem marcação, seguem como antes. Limite do quadro (8) respeitado, espalhando entre as marcações quando há muitas. Testes 34–37.
 - Não desenha as setas na imagem (só escolhe o corte).
+- (1.5.4, mesmo PR) O botão 📸 também desenha a seta laranja por cima do corte (x, y na imagem original; rotação em graus no sentido horário; seta-base apontando para cima com inclinação ARROW_BASE_TILT_DEG=20, calibrada pelo print do caso atrial-septal-defect-14). Só na imagem grande (a miniatura de reserva não recebe seta). DRAW_ARROWS=false desliga. Testes 38–40.
