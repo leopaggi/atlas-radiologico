@@ -91,7 +91,7 @@ function atlasCtx() {
   const ctx = vm.createContext({});
   const code = ['const EXTERNAL_IMAGES_MAX_COUNT = 8;', 'const EXTERNAL_IMAGE_MAX_CHARS = 900 * 1024;',
     'const EXTERNAL_IMAGES_MAX_TOTAL_CHARS = 5 * 1024 * 1024;', 'let pendingExternalImages = null;',
-    fn(html, 'validateExternalImages'), fn(html, 'setPendingExternalImages'),
+    'const EXTERNAL_DESC_MAX_CHARS = 5000;', fn(html, 'validateExternalImages'), fn(html, 'sanitizeExternalDescription'), fn(html, 'setPendingExternalImages'),
     'this.v = validateExternalImages; this.set = setPendingExternalImages; this.get = () => pendingExternalImages;'].join('\n');
   vm.runInContext(code, ctx);
   return ctx;
@@ -163,7 +163,7 @@ test('10. construtor aceita imagens pré-carregadas e pode omitir painéis; usa 
 });
 
 test('11. canal recebe imagens, vínculo do caso abre o construtor e nada salva antes do "concluído"', () => {
-  assert.match(html, /setPendingExternalImages\(data\.payload\.sourceUrl, data\.images\)/);
+  assert.match(html, /setPendingExternalImages\(data\.payload\.sourceUrl, data\.images, data\.description\)/);
   assert.match(html, /try \{ openPendingExternalImagesFor\(entry, draft\); \}/);
   assert.match(html, /function openQuizAddImageModal\(lesionId, onImagesAdded, opts\)/);
   const open = fn(html, 'openPendingExternalImagesFor');
@@ -332,4 +332,61 @@ test('24. botão usa a lista completa e cai para a coleta da página se ela falh
   assert.match(f, /collectImagesViaStudyJson\(document\)\.catch/);
   assert.match(f, /found = collectImageCandidates\(document\)/);
   assert.match(us, /\/studies\/' \+ id \+ '\/annotated_viewer_json\.json\?lang=us/);
+});
+
+// ---------- 1.5.3: descrição do quadro (achados + legenda + discussão + fonte) ----------
+function descCtx() {
+  const ctx = vm.createContext({});
+  vm.runInContext(['var DESC_BLOCK_MAX = 1500;', 'var DESC_TOTAL_MAX = 4000;',
+    fn(us, 'htmlToPlainText'), fn(us, 'clipText'), fn(us, 'buildImageDescription')].join('\n'), ctx);
+  return ctx;
+}
+test('25. HTML do Radiopaedia vira texto simples (parágrafos, entidades; "<5 mm" literal é preservado)', () => {
+  const c = descCtx();
+  const t = c.htmlToPlainText('<p>A well circumscribed lesion with fat fluid level &amp; absent vascularity.</p><p> </p><p>Size &lt;5 mm</p>');
+  assert.equal(t, 'A well circumscribed lesion with fat fluid level & absent vascularity.\nSize <5 mm');
+  assert.equal(c.htmlToPlainText(null), '');
+});
+
+test('26. descrição: achados + legenda (sem repetir) + discussão + fonte com link e crédito', () => {
+  const c = descCtx();
+  const d = c.buildImageDescription(
+    [{ findings: '<p>Lesion with fat fluid level.</p>', caption: '', modality: '', author: 'rania' }],
+    'Galactoceles are milk retention cysts.',
+    { title: 'Galactocele', url: 'https://radiopaedia.org/cases/galactocele-7', author: 'rania' });
+  assert.match(d, /^\*\*Achados de imagem:\*\* Lesion with fat fluid level\./);
+  assert.match(d, /\n\n\*\*Discussão:\*\* Galactoceles are milk retention cysts\./);
+  assert.match(d, /\n\nFonte: Radiopaedia — Galactocele, rania — https:\/\/radiopaedia\.org\/cases\/galactocele-7$/);
+  assert.doesNotMatch(d, /Legenda/);
+  const same = c.buildImageDescription([{ findings: 'x', caption: 'x', modality: 'US' }], '', { url: 'u' });
+  assert.equal((same.match(/Legenda/g) || []).length, 0, 'legenda igual aos achados não duplica');
+  assert.match(c.buildImageDescription([{ findings: 'a', caption: 'b', modality: 'US' }], '', { url: 'u' }), /\*\*Achados de imagem \(US\):\*\* a\n\n\*\*Legenda \(US\):\*\* b/);
+});
+
+test('27. sem nenhum texto do Radiopaedia, não inventa descrição (fica vazia)', () => {
+  const c = descCtx();
+  assert.equal(c.buildImageDescription([{ findings: '', caption: '' }], '', { url: 'u', title: 't' }), '');
+  assert.equal(c.buildImageDescription([], '', null), '');
+});
+
+test('28. descrição respeita os tetos e mantém a linha de fonte inteira', () => {
+  const c = descCtx();
+  const big = 'palavra '.repeat(2000);
+  const d = c.buildImageDescription([{ findings: big, caption: big + 'z', modality: 'US' }], big, { title: 'T', url: 'https://radiopaedia.org/cases/x', author: 'a' });
+  assert.ok(d.length <= 4000, 'ficou em ' + d.length);
+  assert.match(d, /Fonte: Radiopaedia — T, a — https:\/\/radiopaedia\.org\/cases\/x$/);
+});
+
+test('29. Atlas: descrição é só texto limpo (sem controle) e vira o valor inicial do campo do quadro', () => {
+  const ctx = vm.createContext({});
+  vm.runInContext(['const EXTERNAL_DESC_MAX_CHARS = 5000;', fn(html, 'sanitizeExternalDescription'), 'this.f = sanitizeExternalDescription;'].join('\n'), ctx);
+  assert.equal(ctx.f('  ok\u0000\u0007 linha\nseguinte  '), 'ok linha\nseguinte');
+  assert.equal(ctx.f(null), '');
+  assert.equal(ctx.f('x'.repeat(9000)).length, 5000);
+  assert.match(html, /setPendingExternalImages\(data\.payload\.sourceUrl, data\.images, data\.description\)/);
+  assert.match(html, /\{ preload: pend\.images, initialDesc: pend\.description \|\| '' \}/);
+  assert.match(html, /\{preload: opts\.preload, omitPanels: true, initialDesc: opts\.initialDesc \|\| ''\}/);
+  assert.match(html, /\(\(opts && typeof opts\.initialDesc === 'string'\) \? opts\.initialDesc : ''\)/);
+  assert.match(us, /description: description \|\| ''/);
+  assert.match(us, /description: v\.description \|\| ''/);
 });
