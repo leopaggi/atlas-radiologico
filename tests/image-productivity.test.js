@@ -258,7 +258,7 @@ test('15. nova imagem salva atualiza o dashboard (refresh ligado aos saves)', ()
   const formSrc = extractFunction(html, 'openForm');
   assert.match(formSrc, /refreshStudyDashboardLive\(\)/, 'Salvar do editor atualiza o dashboard');
   const doneMarker = "cov.querySelector('#quiz-add-img-done').onclick";
-  const doneRegion = html.slice(html.indexOf(doneMarker), html.indexOf(doneMarker) + 3000);
+  const doneRegion = html.slice(html.indexOf(doneMarker), html.indexOf(doneMarker) + 3600);
   assert.match(doneRegion, /refreshStudyDashboardLive\(\)/, 'Concluído do Quiz atualiza o dashboard');
   const refreshSrc = extractFunction(html, 'refreshStudyDashboardLive');
   assert.match(refreshSrc, /kpi-images-today/);

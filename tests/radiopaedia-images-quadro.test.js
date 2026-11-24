@@ -384,9 +384,55 @@ test('29. Atlas: descrição é só texto limpo (sem controle) e vira o valor in
   assert.equal(ctx.f(null), '');
   assert.equal(ctx.f('x'.repeat(9000)).length, 5000);
   assert.match(html, /setPendingExternalImages\(data\.payload\.sourceUrl, data\.images, data\.description\)/);
-  assert.match(html, /\{ preload: pend\.images, initialDesc: pend\.description \|\| '' \}/);
+  assert.match(html, /\{ preload: pend\.images, initialDesc: pend\.description \|\| '', linkToCaseUrl:/);
   assert.match(html, /\{preload: opts\.preload, omitPanels: true, initialDesc: opts\.initialDesc \|\| ''\}/);
   assert.match(html, /\(\(opts && typeof opts\.initialDesc === 'string'\) \? opts\.initialDesc : ''\)/);
   assert.match(us, /description: description \|\| ''/);
   assert.match(us, /description: v\.description \|\| ''/);
+});
+
+// ---------- quadro vinculado ao caso clínico enviado ----------
+function linkCtx() {
+  const ctx = vm.createContext({ console });
+  const names = ['stableImageKeyV208', 'sameExternalUrl', 'didacticImageId', 'imageRefTime', 'activeImageRefs',
+    'isDidacticItemVisible', 'didacticStr', 'sortDidacticItems', 'didacticPickKey', 'clinicalCaseIdentityKey',
+    'ensureClinicalCaseIdentity', 'genDidacticId', 'linkImageRef', 'updateDidacticItemImageRefs', 'linkNewImagesToExternalCase'];
+  let code = html.match(/const DIDACTIC_LIMITS = \{[^}]*\};/)[0] + '\n';
+  for (const n of names) code += fn(html, n) + '\n';
+  vm.runInContext(code, ctx);
+  return ctx;
+}
+
+test('31. imagem nova do quadro fica vinculada ao caso enviado (mesma sourceUrl) e só a ela', () => {
+  const c = linkCtx();
+  const url = 'https://radiopaedia.org/cases/galactocele-1';
+  const old = { source: 'cloudinary', data: 'https://res.cloudinary.com/x/old.jpg', publicId: 'old', assetId: 'a-old' };
+  const novo = { source: 'cloudinary', data: 'https://res.cloudinary.com/x/new.jpg', publicId: 'new', assetId: 'a-new' };
+  const lesion = {
+    images: [old, novo],
+    clinicalCases: [
+      { id: 'c1', title: 'Outro', sourceUrl: 'https://radiopaedia.org/cases/outro', createdAt: 1, updatedAt: 1 },
+      { id: 'c2', title: 'Galactocele', sourceUrl: url, createdAt: 2, updatedAt: 2 }
+    ]
+  };
+  const n = c.linkNewImagesToExternalCase(lesion, [old], url);
+  assert.equal(n, 1);
+  const refs2 = lesion.clinicalCases.find(x => x.id === 'c2').imageRefs;
+  assert.equal(refs2.length, 1);
+  assert.equal(refs2[0].imageId, c.didacticImageId(novo));
+  assert.ok(!lesion.clinicalCases.find(x => x.id === 'c1').imageRefs, 'outro caso intacto');
+});
+
+test('32. sem caso com essa URL ou sem imagem nova: não muda nada', () => {
+  const c = linkCtx();
+  const old = { source: 'cloudinary', data: 'https://res.cloudinary.com/x/old.jpg', publicId: 'old', assetId: 'a-old' };
+  const lesion = { images: [old], clinicalCases: [{ id: 'c1', sourceUrl: 'https://radiopaedia.org/cases/a', createdAt: 1, updatedAt: 1 }] };
+  assert.equal(c.linkNewImagesToExternalCase(lesion, [old], 'https://radiopaedia.org/cases/a'), 0);
+  assert.equal(c.linkNewImagesToExternalCase(lesion, [], 'https://radiopaedia.org/cases/zzz'), 0);
+  assert.ok(!lesion.clinicalCases[0].imageRefs);
+});
+
+test('33. fiação: o "concluído" do modal de imagens chama o vínculo só quando veio do Radiopaedia', () => {
+  assert.match(html, /linkToCaseUrl: pend\.sourceUrl/);
+  assert.match(html, /if\(opts && opts\.linkToCaseUrl && typeof linkNewImagesToExternalCase === 'function'\) linkNewImagesToExternalCase\(lesion, prevQuizImgs, opts\.linkToCaseUrl\)/);
 });
