@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.5.1
+// @version      1.5.2
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e entrega o caso à aba do Atlas já aberta (ou abre o Atlas com o payload no fragmento da URL). O botão "📸 Enviar com imagens" (1.5.0) também baixa as imagens do caso (uma por série), reduz cada uma e entrega ao Atlas só para APROVAÇÃO — nada é salvo sem você. Não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -262,6 +262,10 @@
     try { studies = root.querySelectorAll('.case-study'); } catch (e) {}
     var multi = studies.length > 1;
     for (var i = 0; i < studies.length; i++) {
+      try {
+        var mod0 = studies[i].querySelector('.study-modality');
+        if (mod0 && SKIP_MODALITIES.test(mod0.innerText || '')) continue;
+      } catch (e) {}
       var label = '';
       if (multi) {
         try {
@@ -283,6 +287,99 @@
       }
     }
     return { items: items, total: total };
+  }
+
+
+  /* 1.5.2 — LISTA COMPLETA DO EXAME. A página só mostra a "capa" de cada exame;
+     as demais imagens carregam ao rolar. O próprio site busca a lista inteira em
+     /studies/<id>/annotated_viewer_json.json (study.series[].frames[] + o nome
+     do arquivo em encodings.thumbnailed_files[i].original). Lemos essa lista,
+     pulamos exames que não são de imagem (patologia, fotos, ilustrações) e
+     escolhemos no máximo 8 imagens, espaçadas ao longo do exame. */
+  var IMG_BASE = 'https://prod-images-static.radiopaedia.org/images/';
+  var SKIP_MODALITIES = /patholog|histolog|photograph|illustration|diagram/i;
+
+  // n quadros espaçados (com n=1, o quadro "current" ou o do meio)
+  function pickFrames(frames, n) {
+    if (!frames || !frames.length || n < 1) return [];
+    if (n === 1) {
+      for (var i = 0; i < frames.length; i++) if (frames[i] && frames[i].current) return [frames[i]];
+      return [frames[Math.floor((frames.length - 1) / 2)]];
+    }
+    if (frames.length <= n) return frames.slice();
+    var out = [], used = {};
+    for (var k = 0; k < n; k++) {
+      var idx = Math.round(k * (frames.length - 1) / (n - 1));
+      if (!used[idx]) { used[idx] = true; out.push(frames[idx]); }
+    }
+    return out;
+  }
+
+  function safeImageFile(name) { return /^[A-Za-z0-9._-]+$/.test(String(name || '')) ? String(name) : ''; }
+
+  // JSON de um exame -> { items:[{full,fallback,seq}], total, skipped }
+  function imagesFromStudyJson(j, maxTotal, label) {
+    var st = j && j.study;
+    var res = { items: [], total: 0, skipped: false };
+    if (!st || !Array.isArray(st.series)) return res;
+    if (SKIP_MODALITIES.test(String(st.modality || ''))) { res.skipped = true; return res; }
+    var series = st.series.slice(0, maxTotal);
+    var per = Math.max(1, Math.floor(maxTotal / Math.max(1, series.length)));
+    for (var s = 0; s < series.length; s++) {
+      var se = series[s] || {};
+      var frames = Array.isArray(se.frames) ? se.frames : [];
+      var files = (se.encodings && Array.isArray(se.encodings.thumbnailed_files)) ? se.encodings.thumbnailed_files : [];
+      res.total += frames.length;
+      var picked = pickFrames(frames, per);
+      for (var i = 0; i < picked.length; i++) {
+        var f = picked[i];
+        if (!f || !/^\d+$/.test(String(f.id))) continue;
+        var file = files[frames.indexOf(f)] || {};
+        var orig = safeImageFile(file.original) || 'dr-original.jpg';
+        var small = safeImageFile(file.small) || safeImageFile(file.thumb);
+        res.items.push({
+          full: IMG_BASE + f.id + '/' + orig,
+          fallback: small ? IMG_BASE + f.id + '/' + small : '',
+          seq: label || ''
+        });
+      }
+    }
+    return res;
+  }
+
+  function studyIdsFromPage(root) {
+    var ids = [];
+    try {
+      var els = root.querySelectorAll('.main-study-desc');
+      for (var i = 0; i < els.length; i++) {
+        var m = /^study-(\d+)$/.exec(els[i].id || '');
+        if (m && ids.indexOf(m[1]) < 0) ids.push(m[1]);
+      }
+    } catch (e) {}
+    return ids;
+  }
+
+  // Promise -> {items,total} | null (null = não deu; usa a coleta antiga da página)
+  function collectImagesViaStudyJson(root) {
+    var ids = studyIdsFromPage(root);
+    if (!ids.length || typeof fetch !== 'function') return Promise.resolve(null);
+    return Promise.all(ids.map(function (id) {
+      return fetch('/studies/' + id + '/annotated_viewer_json.json?lang=us', { credentials: 'same-origin' })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .catch(function () { return null; });
+    })).then(function (jsons) {
+      if (jsons.every(function (j) { return !j; })) return null;
+      var kept = jsons.filter(function (j) { return j && j.study && !SKIP_MODALITIES.test(String(j.study.modality || '')); });
+      var budget = Math.max(1, Math.floor(IMG_MAX_COUNT / Math.max(1, kept.length)));
+      var items = [], total = 0;
+      kept.forEach(function (j) {
+        var label = kept.length > 1 ? cleanText(String(j.study.modality || '')).slice(0, 40) : '';
+        var r = imagesFromStudyJson(j, budget, label);
+        total += r.total;
+        items = items.concat(r.items);
+      });
+      return { items: items.slice(0, IMG_MAX_COUNT), total: total };
+    });
   }
 
   function fetchImageBlob(url) {
@@ -332,10 +429,13 @@
       alert('Atlas: este navegador/Tampermonkey não permite baixar as imagens. Use o botão "📥 Enviar ao Atlas" (só o caso).');
       return;
     }
-    var found = collectImageCandidates(document);
-    if (!found.items.length) { alert('Atlas: não encontrei imagens de séries nesta página. Use o botão "📥 Enviar ao Atlas" (só o caso).'); return; }
-    showSentNotice('Baixando ' + found.items.length + ' imagem(ns)…' + (found.total > found.items.length ? ' (limite de ' + IMG_MAX_COUNT + ' de ' + found.total + ')' : ''));
-    Promise.all(found.items.map(downloadAndShrink)).then(function (list) {
+    collectImagesViaStudyJson(document).catch(function () { return null; }).then(function (found) {
+      if (!found || !found.items.length) found = collectImageCandidates(document);
+      if (!found.items.length) { alert('Atlas: não encontrei imagens de exame nesta página (exames de patologia/foto são ignorados). Use o botão "📥 Enviar ao Atlas" (só o caso).'); return null; }
+      showSentNotice('Baixando ' + found.items.length + ' imagem(ns)…' + (found.total > found.items.length ? ' (amostra de ' + found.total + ')' : ''));
+      return Promise.all(found.items.map(downloadAndShrink));
+    }).then(function (list) {
+      if (!list) return;
       var images = list.filter(function (x) { return x && x.url; });
       if (!images.length) { alert('Atlas: não foi possível baixar as imagens. Nada foi enviado.'); return; }
       var base = ATLAS_URL.replace(/\/+$/, '') + '/';
@@ -534,7 +634,7 @@
     setInterval(mountButton, 5000);
   }
   // Diagnóstico (DevTools do Chrome): confirma que o script rodou nesta página.
-  try { console.info('[Atlas userscript 1.5.1] ativo — ' + (onAtlasPage ? 'ponte do Atlas' : 'botão Enviar ao Atlas')); } catch (_) {}
+  try { console.info('[Atlas userscript 1.5.2] ativo — ' + (onAtlasPage ? 'ponte do Atlas' : 'botão Enviar ao Atlas')); } catch (_) {}
 
   // 091g: na página do Atlas este script é SÓ a ponte (sem botão). Isolada:
   // qualquer erro aqui fica aqui (o Radiopaedia cai no fallback por timeout).

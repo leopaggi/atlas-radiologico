@@ -6270,3 +6270,9 @@ proteção de branch ativa desde 06/11).
 - Problema real: com "📸 Enviar com imagens", se o atlas achava a lesão por correspondência exata (ex.: "Galactocele"), o modal abria na aba "Nova lesão" e o único botão da lesão encontrada era "Abrir esta lesão", que não vincula o caso nem repassa as imagens.
 - Agora, havendo imagens pendentes DESTE caso (mesma URL, até 30 min): o modal abre na aba "Vincular existente" com aviso "N imagem(ns) prontas"; os cartões de correspondência ganham o botão "📸 Vincular caso e adicionar imagens" (mesmo vínculo de sempre → abre o quadro de imagens). Sem imagens pendentes, nada muda (aba padrão "Nova lesão").
 - Testes: tests/radiopaedia-images-quadro.test.js (16–17).
+
+## 2026-11-23 — Userscript 1.5.2: lista COMPLETA de imagens do exame
+- Problema: o botão 📸 só levava a "capa" de cada exame (as demais imagens carregam ao rolar) e incluía patologia.
+- Descoberta (console do usuário no caso galactocele): o site busca `/studies/<id>/annotated_viewer_json.json?lang=us` → `study.series[].frames[]` (ids) + `encodings.thumbnailed_files[i].original` (nome do arquivo; URL = `prod-images-static.radiopaedia.org/images/<frameId>/<original>`).
+- Agora: lê o JSON de cada exame da página (mesma origem, sem Tampermonkey); pula modalidades que não são imagem (patologia, histologia, foto, ilustração, diagrama); escolhe até 8 imagens — vários quadros espaçados se o exame tem 1 série, 1 por série (a "current" ou a do meio) se tem várias. Nome de arquivo validado; se o original falhar, tenta a versão `small`. Se o JSON não vier, cai na coleta antiga da página (que também pula patologia).
+- Testes: tests/radiopaedia-images-quadro.test.js (18–24), com o JSON real do caso.
