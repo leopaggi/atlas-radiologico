@@ -245,3 +245,91 @@ test('17. externalImagesPendingFor: só vale para o MESMO caso e dentro de 30 mi
   ctx.set({ sourceUrl: url, images: [{}], at: Date.now() - 31 * 60 * 1000 });
   assert.equal(ctx.f({ sourceUrl: url }), false, 'expirou');
 });
+
+// ---------- 1.5.2: lista completa do exame (annotated_viewer_json) ----------
+function jsonCtx(fetchImpl) {
+  const ctx = vm.createContext({ fetch: fetchImpl, Promise });
+  const code = ['var MAX_FIELD = 500;', 'var IMG_MAX_COUNT = 8;',
+    "var IMG_BASE = 'https://prod-images-static.radiopaedia.org/images/';",
+    'var SKIP_MODALITIES = /patholog|histolog|photograph|illustration|diagram/i;',
+    fn(us, 'cleanText'), fn(us, 'pickFrames'), fn(us, 'safeImageFile'), fn(us, 'imagesFromStudyJson'),
+    fn(us, 'studyIdsFromPage'), fn(us, 'collectImagesViaStudyJson')].join('\n');
+  vm.runInContext(code, ctx);
+  return ctx;
+}
+// JSON REAL do caso galactocele (resposta colada pelo usuário), reduzido ao essencial
+const GALACTO_US = { study: { id: 112138, modality: 'Ultrasound', series: [{
+  stack_root_id: 56133845, frames: [{ id: 56133843 }, { id: 56133844 }, { id: 56133845, current: true }, { id: 56133846 }, { id: 56133847 }],
+  encodings: { thumbnailed_files: [0, 1, 2, 3, 4].map(n => ({ thumb: `${n}._thumb.jpeg`, small: `${n}._small.jpeg`, tiny: `${n}._tiny.jpeg`, original: `${n}..png` })) } }] } };
+const GALACTO_PATH = { study: { id: 112359, modality: 'Pathology', series: [{ frames: [{ id: 56133848 }], encodings: { thumbnailed_files: [{ original: '0..png' }] } }] } };
+
+test('18. exame real (5 imagens de US): usa o nome do arquivo original de cada quadro', () => {
+  const c = jsonCtx(null);
+  const r = c.imagesFromStudyJson(GALACTO_US, 8, '');
+  assert.equal(r.items.length, 5);
+  assert.equal(r.total, 5);
+  assert.equal(r.items[0].full, 'https://prod-images-static.radiopaedia.org/images/56133843/0..png');
+  assert.equal(r.items[4].full, 'https://prod-images-static.radiopaedia.org/images/56133847/4..png');
+  assert.equal(r.items[2].fallback, 'https://prod-images-static.radiopaedia.org/images/56133845/2._small.jpeg');
+});
+
+test('19. patologia/foto/ilustração são ignoradas', () => {
+  const c = jsonCtx(null);
+  assert.equal(c.imagesFromStudyJson(GALACTO_PATH, 8, '').items.length, 0);
+  assert.equal(c.imagesFromStudyJson(GALACTO_PATH, 8, '').skipped, true);
+  assert.equal(c.imagesFromStudyJson({ study: { modality: 'Photograph', series: [{ frames: [{ id: 1 }] }] } }, 8, '').skipped, true);
+});
+
+test('20. exame com muitas imagens: 8 espaçadas ao longo do exame, incluindo primeira e última', () => {
+  const c = jsonCtx(null);
+  const frames = Array.from({ length: 100 }, (_, i) => ({ id: 1000 + i }));
+  const files = frames.map(() => ({ original: 'dr-original.jpg' }));
+  const r = c.imagesFromStudyJson({ study: { modality: 'CT', series: [{ frames, encodings: { thumbnailed_files: files } }] } }, 8, '');
+  assert.equal(r.items.length, 8);
+  assert.equal(r.total, 100);
+  assert.match(r.items[0].full, /\/1000\//);
+  assert.match(r.items[7].full, /\/1099\//);
+});
+
+test('21. várias séries (RM): uma imagem por série (a "current" ou a do meio), no máximo 8 séries', () => {
+  const c = jsonCtx(null);
+  const mk = (base, n, cur) => ({ frames: Array.from({ length: n }, (_, i) => ({ id: base + i, current: i === cur })), encodings: { thumbnailed_files: Array.from({ length: n }, () => ({ original: 'dr-original.jpg' })) } });
+  const r = c.imagesFromStudyJson({ study: { modality: 'MRI', series: [mk(100, 30, 7), mk(200, 31, -1), mk(300, 5, -1)] } }, 8, '');
+  assert.equal(r.items.length, 6, '8 / 3 séries = 2 por série');
+  const r1 = c.imagesFromStudyJson({ study: { modality: 'MRI', series: [mk(100, 30, 7), mk(200, 31, -1), mk(300, 5, -1), mk(400, 5, -1), mk(500, 5, -1), mk(600, 5, -1), mk(700, 5, -1), mk(800, 5, -1), mk(900, 5, -1), mk(1000, 5, -1)] } }, 8, '');
+  assert.equal(r1.items.length, 8, 'mais de 8 séries: 1 por série até 8');
+  assert.match(r1.items[0].full, /\/107\//, 'usa o quadro "current" quando existe');
+  assert.match(r1.items[1].full, /\/215\//, 'sem "current": o do meio');
+});
+
+test('22. nome de arquivo suspeito é descartado (cai para dr-original.jpg)', () => {
+  const c = jsonCtx(null);
+  const r = c.imagesFromStudyJson({ study: { modality: 'X-ray', series: [{ frames: [{ id: 7 }], encodings: { thumbnailed_files: [{ original: '../../x?y=1', small: 'ok.jpeg' }] } }] } }, 8, '');
+  assert.match(r.items[0].full, /\/7\/dr-original\.jpg$/);
+  const bad = c.imagesFromStudyJson({ study: { modality: 'X-ray', series: [{ frames: [{ id: 'abc' }] }] } }, 8, '');
+  assert.equal(bad.items.length, 0);
+});
+
+test('23. leitura pela página: pega os ids dos exames, busca o JSON de cada um, só rótulo quando há mais de um exame útil', async () => {
+  const urls = [];
+  const fetchStub = (u) => { urls.push(u); const j = u.includes('112138') ? GALACTO_US : GALACTO_PATH; return Promise.resolve({ ok: true, json: () => Promise.resolve(j) }); };
+  const c = jsonCtx(fetchStub);
+  const doc = { querySelectorAll: (sel) => sel === '.main-study-desc' ? [{ id: 'study-112138' }, { id: 'study-112359' }, { id: 'outro' }] : [] };
+  assert.deepEqual(Array.from(c.studyIdsFromPage(doc)), ['112138', '112359']);
+  const found = await c.collectImagesViaStudyJson(doc);
+  assert.equal(found.items.length, 5, 'só o ultrassom; patologia fora');
+  assert.equal(found.items[0].seq, '', 'um exame útil só: sem rótulo');
+  assert.ok(urls.every(u => u.startsWith('/studies/') && u.includes('annotated_viewer_json.json')));
+  // falha total do fetch -> null (usa a coleta antiga da página)
+  const c2 = jsonCtx(() => Promise.reject(new Error('rede')));
+  assert.equal(await c2.collectImagesViaStudyJson(doc), null);
+  // sem exames na página -> null
+  assert.equal(await c.collectImagesViaStudyJson({ querySelectorAll: () => [] }), null);
+});
+
+test('24. botão usa a lista completa e cai para a coleta da página se ela falhar', () => {
+  const f = fn(us, 'sendToAtlasWithImages');
+  assert.match(f, /collectImagesViaStudyJson\(document\)\.catch/);
+  assert.match(f, /found = collectImageCandidates\(document\)/);
+  assert.match(us, /\/studies\/' \+ id \+ '\/annotated_viewer_json\.json\?lang=us/);
+});
