@@ -252,7 +252,7 @@ function jsonCtx(fetchImpl) {
   const code = ['var MAX_FIELD = 500;', 'var IMG_MAX_COUNT = 8;',
     "var IMG_BASE = 'https://prod-images-static.radiopaedia.org/images/';",
     'var SKIP_MODALITIES = /patholog|histolog|photograph|illustration|diagram/i;',
-    fn(us, 'cleanText'), fn(us, 'pickFrames'), fn(us, 'safeImageFile'), fn(us, 'imagesFromStudyJson'),
+    fn(us, 'cleanText'), fn(us, 'pickFrames'), fn(us, 'safeImageFile'), fn(us, 'annotatedSliceIndexes'), fn(us, 'arrowsAt'), fn(us, 'evenlyPick'), fn(us, 'imagesFromStudyJson'),
     fn(us, 'studyIdsFromPage'), fn(us, 'collectImagesViaStudyJson')].join('\n');
   vm.runInContext(code, ctx);
   return ctx;
@@ -435,4 +435,94 @@ test('32. sem caso com essa URL ou sem imagem nova: não muda nada', () => {
 test('33. fiação: o "concluído" do modal de imagens chama o vínculo só quando veio do Radiopaedia', () => {
   assert.match(html, /linkToCaseUrl: pend\.sourceUrl/);
   assert.match(html, /if\(opts && opts\.linkToCaseUrl && typeof linkNewImagesToExternalCase === 'function'\) linkNewImagesToExternalCase\(lesion, prevQuizImgs, opts\.linkToCaseUrl\)/);
+});
+
+// ---------- 1.5.4: só os cortes marcados com setas (TC/RM novos) ----------
+// Estrutura REAL (caso atrial-septal-defect-14): 3 séries, 450 cortes; só a 1ª tem marcações.
+function ctSeries(n, base, anns) {
+  return { frames: Array.from({ length: n }, (_, i) => ({ id: base + i })),
+    annotations: anns,
+    encodings: { thumbnailed_files: Array.from({ length: n }, (_, i) => ({ small: `${i}._small.jpeg`, original: `${i}..jpeg` })) } };
+}
+const ANN = (idx, arrows) => ({ key_arrow_idx: 0, label_positions: [{ slice_idx: idx, x: 204, y: 341 }], arrow_positions: arrows.map(() => ({ slice_idx: idx, rotation: -300, x: 1, y: 2 })) });
+const ASD = { study: { id: 150516, modality: 'CT', series: [
+  ctSeries(450, 1000, [ANN(178, [1]), ANN(185, [1, 2]), ANN(204, [1]), ANN(268, [1, 2])]),
+  ctSeries(100, 5000, []),
+  ctSeries(100, 7000, [])
+] } };
+
+test('34. TC com setas: só os 4 cortes marcados da série marcada; séries sem marcação ficam de fora', () => {
+  const c = jsonCtx(null);
+  const r = c.imagesFromStudyJson(ASD, 8, '');
+  assert.equal(r.marked, true);
+  assert.equal(r.items.length, 4);
+  assert.deepEqual(Array.from(r.items, x => x.full), [178, 185, 204, 268].map(i => `https://prod-images-static.radiopaedia.org/images/${1000 + i}/${i}..jpeg`));
+});
+
+test('35. sem marcações (casos antigos): comportamento de sempre (cortes espalhados, todas as séries)', () => {
+  const c = jsonCtx(null);
+  const old = { study: { id: 1, modality: 'CT', series: [ctSeries(50, 100, []), ctSeries(50, 900, [])] } };
+  const r = c.imagesFromStudyJson(old, 8, '');
+  assert.equal(r.marked, false);
+  assert.equal(r.items.length, 8);
+  assert.ok(r.items.some(x => /\/images\/1\d\d\//.test(x.full)) && r.items.some(x => /\/images\/9\d\d\//.test(x.full)));
+});
+
+test('36. muitas marcações: respeita o limite do quadro e espalha entre elas; posição inválida é ignorada', () => {
+  const c = jsonCtx(null);
+  const many = Array.from({ length: 20 }, (_, i) => ANN(10 + i * 5, [1]));
+  many.push({ label_positions: [{ slice_idx: 9999 }], arrow_positions: [{ slice_idx: -3 }, { slice_idx: 'x' }] });
+  const r = c.imagesFromStudyJson({ study: { modality: 'MR', series: [ctSeries(200, 100, many)] } }, 8, '');
+  assert.equal(r.items.length, 8);
+  assert.ok(r.items[0].full.includes('/images/110/'));
+  assert.ok(r.items[7].full.includes('/images/205/'));
+});
+
+test('37. duas séries marcadas dividem o limite do quadro', () => {
+  const c = jsonCtx(null);
+  const a = Array.from({ length: 6 }, (_, i) => ANN(i * 3, [1]));
+  const r = c.imagesFromStudyJson({ study: { modality: 'CT', series: [ctSeries(50, 100, a), ctSeries(50, 900, a)] } }, 8, '');
+  assert.equal(r.items.length, 8);
+  assert.equal(r.items.filter(x => /\/images\/1\d\d\//.test(x.full)).length, 4);
+  assert.equal(r.items.filter(x => /\/images\/9\d\d\//.test(x.full)).length, 4);
+});
+
+// ---------- seta laranja desenhada por cima do corte ----------
+test('38. cada corte marcado leva as setas dele (x, y, rotação); sem marcação não leva seta', () => {
+  const c = jsonCtx(null);
+  const ser = ctSeries(300, 1000, [
+    { label_positions: [{ slice_idx: 185 }], arrow_positions: [{ slice_idx: 185, rotation: -435, x: 313, y: 265 }, { slice_idx: 185, rotation: -233, x: 275, y: 244 }] },
+    { arrow_positions: [{ slice_idx: 268, rotation: -419, x: 267, y: 283 }] }
+  ]);
+  const r = c.imagesFromStudyJson({ study: { modality: 'CT', series: [ser] } }, 8, '');
+  assert.equal(r.items.length, 2);
+  assert.equal(r.items[0].arrows.length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(r.items[0].arrows[1])), { x: 275, y: 244, rotation: -233 });
+  assert.equal(r.items[1].arrows.length, 1);
+  const old = c.imagesFromStudyJson({ study: { modality: 'CT', series: [ctSeries(20, 1, [])] } }, 8, '');
+  assert.ok(old.items.every(x => x.arrows.length === 0));
+});
+
+test('39. desenho da seta: posição acompanha a redução da imagem; rotação = rotação do site + inclinação da seta-base; sem seta não desenha', () => {
+  const calls = [];
+  const ctx = { canvas: { width: 512 },
+    save() { calls.push(['save']); }, restore() { calls.push(['restore']); },
+    translate(x, y) { calls.push(['translate', x, y]); }, rotate(a) { calls.push(['rotate', a]); },
+    beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, stroke() {}, fill() { calls.push(['fill', this.fillStyle]); } };
+  const code = ['var DRAW_ARROWS = true;', 'var ARROW_BASE_TILT_DEG = 20;', fn(us, 'drawArrows'), 'this.f = drawArrows;'].join('\n');
+  const vctx = vm.createContext({ Math });
+  vm.runInContext(code, vctx);
+  vctx.f(ctx, [{ x: 313, y: 265, rotation: -435 }], 0.5);
+  const tr = calls.find(x => x[0] === 'translate'), ro = calls.find(x => x[0] === 'rotate');
+  assert.equal(tr[1], 156.5); assert.equal(tr[2], 132.5);
+  assert.ok(Math.abs(ro[1] - (-415 * Math.PI / 180)) < 1e-9);
+  assert.equal(calls.find(x => x[0] === 'fill')[1], '#f5821f');
+  const n = calls.length;
+  vctx.f(ctx, [], 0.5); vctx.f(ctx, null, 0.5);
+  assert.equal(calls.length, n);
+});
+
+test('40. fiação: só desenha na imagem grande (a miniatura de reserva não tem a mesma escala)', () => {
+  assert.match(us, /shrinkToJpegDataUrl\(bmp, usedFull \? item\.arrows : null\)/);
+  assert.match(us, /drawArrows\(ctx, arrows, w \/ bitmap\.width\)/);
 });
