@@ -19118,6 +19118,37 @@ async function collageEncodeUnderLimit(canvas, maxBytes){
   }
   return blob;
 }
+/* TRADUÇÃO DA DESCRIÇÃO (EN -> PT) com o tradutor embutido do Chrome (Translator API):
+   roda no próprio computador, sem chave e sem enviar o texto a terceiros. Mantém os
+   rótulos em negrito ("**Achados de imagem (CT):**") e a linha "Fonte: …" intactos e
+   traduz só o texto de cada linha. Se o navegador não tiver o tradutor, nada muda. */
+let __ptTranslatorPromise = null;
+async function getPtTranslator(allowDownload){
+  try{
+    if(typeof Translator === 'undefined' || !Translator || typeof Translator.availability !== 'function') return null;
+    const opts = { sourceLanguage: 'en', targetLanguage: 'pt' };
+    const av = await Translator.availability(opts);
+    if(av === 'unavailable') return null;
+    if(av !== 'available' && !allowDownload) return null; // baixar o idioma exige um clique do usuário
+    if(!__ptTranslatorPromise) __ptTranslatorPromise = Translator.create(opts).catch(e=>{ __ptTranslatorPromise = null; throw e; });
+    return await __ptTranslatorPromise;
+  }catch(_e){ return null; }
+}
+async function translateDescriptionToPt(text, translator){
+  const lines = String(text == null ? '' : text).split('\n');
+  const out = [];
+  for(const line of lines){
+    if(!line.trim() || /^\s*Fonte:/.test(line) || /^\s*https?:\/\/\S+\s*$/.test(line)){ out.push(line); continue; }
+    const m = line.match(/^(\*\*[^*\n]{1,80}:\*\*\s*)([\s\S]*)$/);
+    const label = m ? m[1] : '';
+    const body = m ? m[2] : line;
+    if(!body.trim()){ out.push(line); continue; }
+    const t = await translator.translate(body);
+    out.push(label + String(t == null ? body : t));
+  }
+  return out.join('\n');
+}
+
 function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpload, existingLabel, opts){
   const isEditMode = Array.isArray(existingPanels);
   // opts.preload: painéis já prontos [{url,seq}] (ex.: imagens do Radiopaedia, já
@@ -19145,6 +19176,7 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
       <div class="rich-text-toolbar" role="toolbar" aria-label="Formatação da descrição">
         <button type="button" class="rich-text-btn" data-rich-wrap="**" title="negrito (Ctrl+B)"><b>B</b></button>
         <button type="button" class="rich-text-btn" data-rich-wrap="__" title="sublinhado (Ctrl+U)"><u>U</u></button>
+        <button type="button" class="rich-text-btn" id="collage-translate-btn" title="traduzir a descrição do inglês para o português (tradutor do Chrome)">🌐 traduzir</button>
         <span class="rich-text-hint">**negrito** · __sublinhado__ · links automáticos</span>
       </div>
     </div>
@@ -19161,6 +19193,38 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
     ? collageInitialDesc(existingLabel, items.map(x=>x.seq))
     : ((opts && typeof opts.initialDesc === 'string') ? opts.initialDesc : '');
   wireRichTextArea(cov.querySelector('#collage-desc'), cov.querySelector('.rich-text-toolbar'));
+  // Tradução EN -> PT da descrição (botão + automática ao abrir um quadro vindo do Radiopaedia).
+  (function wireCollageTranslate(){
+    const dEl = cov.querySelector('#collage-desc'), tBtn = cov.querySelector('#collage-translate-btn');
+    if(!dEl || !tBtn) return;
+    let original = null; // texto em inglês guardado enquanto o traduzido está na tela
+    const showTranslated = ()=>{ tBtn.textContent = '↩ ver original'; };
+    const showIdle = ()=>{ tBtn.textContent = '🌐 traduzir'; };
+    tBtn.onclick = async ()=>{
+      if(original !== null){ dEl.value = original; original = null; showIdle(); return; }
+      const src = dEl.value;
+      if(!src.trim()) return;
+      tBtn.disabled = true; tBtn.textContent = '🌐 traduzindo…';
+      try{
+        const tr = await getPtTranslator(true);
+        if(!tr){ toast('Tradutor do Chrome indisponível neste navegador (use o Chrome no computador).'); showIdle(); return; }
+        const out = await translateDescriptionToPt(src, tr);
+        original = src; dEl.value = out; showTranslated();
+      }catch(e){ console.error('traduzir descrição', e); toast('Não foi possível traduzir agora.'); showIdle(); }
+      finally{ tBtn.disabled = false; }
+    };
+    const init = (!isEditMode && opts && typeof opts.initialDesc === 'string') ? opts.initialDesc : '';
+    if(init.trim()){
+      (async ()=>{
+        try{
+          const tr = await getPtTranslator(false); // automático só se o idioma já está instalado
+          if(!tr) return;
+          const out = await translateDescriptionToPt(init, tr);
+          if(cov.isConnected && dEl.value === init){ original = init; dEl.value = out; showTranslated(); }
+        }catch(_e){}
+      })();
+    }
+  })();
   let finalBlob=null; let finalUrl='';
   const seqs=IMAGE_SEQUENCE_PRESETS;
   const list=cov.querySelector('#collage-list'), drop=cov.querySelector('#collage-drop'), input=cov.querySelector('#collage-files');
