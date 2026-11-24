@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.5.3
+// @version      1.5.4
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e entrega o caso à aba do Atlas já aberta (ou abre o Atlas com o payload no fragmento da URL). O botão "📸 Enviar com imagens" (1.5.0) também baixa as imagens do caso (uma por série), reduz cada uma e entrega ao Atlas só para APROVAÇÃO — nada é salvo sem você. Não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -388,19 +388,66 @@
   function safeImageFile(name) { return /^[A-Za-z0-9._-]+$/.test(String(name || '')) ? String(name) : ''; }
 
   // JSON de um exame -> { items:[{full,fallback,seq}], total, skipped }
+  /* 1.5.4 — CORTES MARCADOS. Em casos novos de TC/RM o autor marca com setas os
+     cortes que mostram o achado (study.series[].annotations[], cada uma com
+     label_positions/arrow_positions[].slice_idx = posição na lista de frames).
+     Se o estudo tem marcações, o quadro usa SÓ esses cortes (como o botão de
+     setas do próprio visualizador); séries sem marcação do mesmo estudo ficam
+     de fora (eram as sequências "pretas" sem achado). Sem nenhuma marcação
+     (casos antigos), o comportamento é o de sempre. */
+  function annotatedSliceIndexes(se, nFrames) {
+    var anns = (se && Array.isArray(se.annotations)) ? se.annotations : [];
+    var seen = {}, out = [];
+    function add(list) {
+      if (!Array.isArray(list)) return;
+      for (var i = 0; i < list.length; i++) {
+        var n = list[i] && Number(list[i].slice_idx);
+        if (isFinite(n) && n >= 0 && n < nFrames && n === Math.floor(n) && !seen[n]) { seen[n] = true; out.push(n); }
+      }
+    }
+    for (var a = 0; a < anns.length; a++) {
+      if (!anns[a]) continue;
+      add(anns[a].arrow_positions);
+      add(anns[a].label_positions);
+    }
+    out.sort(function (x, y) { return x - y; });
+    return out;
+  }
+  function evenlyPick(list, n) {
+    if (list.length <= n) return list.slice();
+    if (n <= 1) return [list[Math.floor((list.length - 1) / 2)]];
+    var out = [], used = {};
+    for (var k = 0; k < n; k++) {
+      var idx = Math.round(k * (list.length - 1) / (n - 1));
+      if (!used[idx]) { used[idx] = true; out.push(list[idx]); }
+    }
+    return out;
+  }
   function imagesFromStudyJson(j, maxTotal, label) {
     var st = j && j.study;
-    var res = { items: [], total: 0, skipped: false };
+    var res = { items: [], total: 0, skipped: false, marked: false };
     if (!st || !Array.isArray(st.series)) return res;
     if (SKIP_MODALITIES.test(String(st.modality || ''))) { res.skipped = true; return res; }
     var series = st.series.slice(0, maxTotal);
-    var per = Math.max(1, Math.floor(maxTotal / Math.max(1, series.length)));
+    var marks = series.map(function (se) {
+      var fr = (se && Array.isArray(se.frames)) ? se.frames : [];
+      return annotatedSliceIndexes(se, fr.length);
+    });
+    var withMarks = marks.filter(function (m) { return m.length > 0; }).length;
+    res.marked = withMarks > 0;
+    var per = Math.max(1, Math.floor(maxTotal / Math.max(1, res.marked ? withMarks : series.length)));
     for (var s = 0; s < series.length; s++) {
       var se = series[s] || {};
       var frames = Array.isArray(se.frames) ? se.frames : [];
       var files = (se.encodings && Array.isArray(se.encodings.thumbnailed_files)) ? se.encodings.thumbnailed_files : [];
       res.total += frames.length;
-      var picked = pickFrames(frames, per);
+      var picked;
+      if (res.marked) {
+        if (!marks[s].length) continue; // série sem marcação: não entra
+        picked = evenlyPick(marks[s], per).map(function (ix) { return frames[ix]; });
+      } else {
+        picked = pickFrames(frames, per);
+      }
       for (var i = 0; i < picked.length; i++) {
         var f = picked[i];
         if (!f || !/^\d+$/.test(String(f.id))) continue;
@@ -710,7 +757,7 @@
     setInterval(mountButton, 5000);
   }
   // Diagnóstico (DevTools do Chrome): confirma que o script rodou nesta página.
-  try { console.info('[Atlas userscript 1.5.3] ativo — ' + (onAtlasPage ? 'ponte do Atlas' : 'botão Enviar ao Atlas')); } catch (_) {}
+  try { console.info('[Atlas userscript 1.5.4] ativo — ' + (onAtlasPage ? 'ponte do Atlas' : 'botão Enviar ao Atlas')); } catch (_) {}
 
   // 091g: na página do Atlas este script é SÓ a ponte (sem botão). Isolada:
   // qualquer erro aqui fica aqui (o Radiopaedia cai no fallback por timeout).

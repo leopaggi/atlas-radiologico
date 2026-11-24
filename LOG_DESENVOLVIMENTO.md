@@ -6300,3 +6300,7 @@ proteção de branch ativa desde 06/11).
 
 ## 2026-11-24 — Termos de busca do Radiopaedia (Mamas)
 - EN_TERMS (dicionário do termo em inglês usado no link "Radiopaedia — buscar casos") atualizado para 39 lesões de Mamas, conforme a planilha de termos sugeridos (linhas de confiança Alta/Média). As 9 de confiança "Baixa" ficaram de fora. Só muda o termo de busca/enTerm; nome, tags e notas intactos. Os links automáticos e o enTerm das lesões se atualizam sozinhos ao abrir o atlas (reparo de boot / sincronização canônica).
+
+## 2026-11-24 — Userscript 1.5.4: só os cortes marcados com setas (TC/RM)
+- Em casos novos o autor marca os cortes com achado (study.series[].annotations[].arrow_positions/label_positions[].slice_idx = posição na lista de frames; estrutura conferida em caso real). O botão 📸 passa a enviar só esses cortes e ignora séries sem marcação (as "sequências pretas"). Casos antigos, sem marcação, seguem como antes. Limite do quadro (8) respeitado, espalhando entre as marcações quando há muitas. Testes 34–37.
+- Não desenha as setas na imagem (só escolhe o corte).

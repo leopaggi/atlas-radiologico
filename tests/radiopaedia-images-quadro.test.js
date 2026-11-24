@@ -252,7 +252,7 @@ function jsonCtx(fetchImpl) {
   const code = ['var MAX_FIELD = 500;', 'var IMG_MAX_COUNT = 8;',
     "var IMG_BASE = 'https://prod-images-static.radiopaedia.org/images/';",
     'var SKIP_MODALITIES = /patholog|histolog|photograph|illustration|diagram/i;',
-    fn(us, 'cleanText'), fn(us, 'pickFrames'), fn(us, 'safeImageFile'), fn(us, 'imagesFromStudyJson'),
+    fn(us, 'cleanText'), fn(us, 'pickFrames'), fn(us, 'safeImageFile'), fn(us, 'annotatedSliceIndexes'), fn(us, 'evenlyPick'), fn(us, 'imagesFromStudyJson'),
     fn(us, 'studyIdsFromPage'), fn(us, 'collectImagesViaStudyJson')].join('\n');
   vm.runInContext(code, ctx);
   return ctx;
@@ -435,4 +435,54 @@ test('32. sem caso com essa URL ou sem imagem nova: não muda nada', () => {
 test('33. fiação: o "concluído" do modal de imagens chama o vínculo só quando veio do Radiopaedia', () => {
   assert.match(html, /linkToCaseUrl: pend\.sourceUrl/);
   assert.match(html, /if\(opts && opts\.linkToCaseUrl && typeof linkNewImagesToExternalCase === 'function'\) linkNewImagesToExternalCase\(lesion, prevQuizImgs, opts\.linkToCaseUrl\)/);
+});
+
+// ---------- 1.5.4: só os cortes marcados com setas (TC/RM novos) ----------
+// Estrutura REAL (caso atrial-septal-defect-14): 3 séries, 450 cortes; só a 1ª tem marcações.
+function ctSeries(n, base, anns) {
+  return { frames: Array.from({ length: n }, (_, i) => ({ id: base + i })),
+    annotations: anns,
+    encodings: { thumbnailed_files: Array.from({ length: n }, (_, i) => ({ small: `${i}._small.jpeg`, original: `${i}..jpeg` })) } };
+}
+const ANN = (idx, arrows) => ({ key_arrow_idx: 0, label_positions: [{ slice_idx: idx, x: 204, y: 341 }], arrow_positions: arrows.map(() => ({ slice_idx: idx, rotation: -300, x: 1, y: 2 })) });
+const ASD = { study: { id: 150516, modality: 'CT', series: [
+  ctSeries(450, 1000, [ANN(178, [1]), ANN(185, [1, 2]), ANN(204, [1]), ANN(268, [1, 2])]),
+  ctSeries(100, 5000, []),
+  ctSeries(100, 7000, [])
+] } };
+
+test('34. TC com setas: só os 4 cortes marcados da série marcada; séries sem marcação ficam de fora', () => {
+  const c = jsonCtx(null);
+  const r = c.imagesFromStudyJson(ASD, 8, '');
+  assert.equal(r.marked, true);
+  assert.equal(r.items.length, 4);
+  assert.deepEqual(Array.from(r.items, x => x.full), [178, 185, 204, 268].map(i => `https://prod-images-static.radiopaedia.org/images/${1000 + i}/${i}..jpeg`));
+});
+
+test('35. sem marcações (casos antigos): comportamento de sempre (cortes espalhados, todas as séries)', () => {
+  const c = jsonCtx(null);
+  const old = { study: { id: 1, modality: 'CT', series: [ctSeries(50, 100, []), ctSeries(50, 900, [])] } };
+  const r = c.imagesFromStudyJson(old, 8, '');
+  assert.equal(r.marked, false);
+  assert.equal(r.items.length, 8);
+  assert.ok(r.items.some(x => /\/images\/1\d\d\//.test(x.full)) && r.items.some(x => /\/images\/9\d\d\//.test(x.full)));
+});
+
+test('36. muitas marcações: respeita o limite do quadro e espalha entre elas; posição inválida é ignorada', () => {
+  const c = jsonCtx(null);
+  const many = Array.from({ length: 20 }, (_, i) => ANN(10 + i * 5, [1]));
+  many.push({ label_positions: [{ slice_idx: 9999 }], arrow_positions: [{ slice_idx: -3 }, { slice_idx: 'x' }] });
+  const r = c.imagesFromStudyJson({ study: { modality: 'MR', series: [ctSeries(200, 100, many)] } }, 8, '');
+  assert.equal(r.items.length, 8);
+  assert.ok(r.items[0].full.includes('/images/110/'));
+  assert.ok(r.items[7].full.includes('/images/205/'));
+});
+
+test('37. duas séries marcadas dividem o limite do quadro', () => {
+  const c = jsonCtx(null);
+  const a = Array.from({ length: 6 }, (_, i) => ANN(i * 3, [1]));
+  const r = c.imagesFromStudyJson({ study: { modality: 'CT', series: [ctSeries(50, 100, a), ctSeries(50, 900, a)] } }, 8, '');
+  assert.equal(r.items.length, 8);
+  assert.equal(r.items.filter(x => /\/images\/1\d\d\//.test(x.full)).length, 4);
+  assert.equal(r.items.filter(x => /\/images\/9\d\d\//.test(x.full)).length, 4);
 });
