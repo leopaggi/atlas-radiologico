@@ -622,7 +622,7 @@ test('QUIZ (upload diferido): Esc/clique fora/cancelar descartam o rascunho sem 
   const slice = src.slice(idx, idx + 220);
   assert.doesNotMatch(slice, /saveData|uploadPendingImage|uploadToCloudinary|lesion\.images/);
   // clique fora agora pergunta antes de descartar (confirmDiscardChanges); Esc/cancelar fecham direto
-  assert.match(src, /cov\.addEventListener\('click', ev=>\{ if\(ev\.target===cov\) confirmDiscardChanges\([\s\S]*?, close\); \}\);/);
+  assert.match(src, /onBackdropClick\(cov, \(\)=>\{ confirmDiscardChanges\([\s\S]*?, close\); \}\);/);
   assert.match(src, /ev\.key==='Escape'[\s\S]*?close\(\)/);
 });
 

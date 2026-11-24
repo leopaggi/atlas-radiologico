@@ -22,9 +22,11 @@ test('aviso de descarte: existe, pergunta sim/não e foca em "não" (seguro)', (
 });
 
 test('aviso de descarte: clique fora do construtor de quadro, do modal de imagens e do editor passa pelo aviso', () => {
-  assert.match(html, /cov\.onclick=e=>\{ if\(e\.target===cov\) confirmDiscardChanges\(/);
-  assert.match(html, /cov\.addEventListener\('click', ev=>\{ if\(ev\.target===cov\) confirmDiscardChanges\(/);
-  assert.match(html, /if\(ev\.target===ov\)\{\s*confirmDiscardChanges\(/);
+  assert.match(html, /onBackdropClick\(cov, \(\)=>\{ confirmDiscardChanges\(\(\)=>\{ const d=cov\.querySelector\('#collage-desc'\)/);
+  assert.match(html, /onBackdropClick\(cov, \(\)=>\{ confirmDiscardChanges\(\(\)=>\{\s*const orig/);
+  assert.match(html, /onBackdropClick\(ov, \(\)=>\{\s*confirmDiscardChanges\(/);
+  // arrastar de dentro para fora não conta como clique fora
+  assert.match(html, /function onBackdropClick\(el, handler\)[\s\S]*?downOnBackdrop/);
 });
 
 test('aviso de descarte: Esc continua fechando direto (sem pergunta) nos três lugares', () => {

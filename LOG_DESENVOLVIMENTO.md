@@ -6286,3 +6286,7 @@ proteção de branch ativa desde 06/11).
 ## 2026-11-23 — Aviso "sair e perder as alterações?" ao clicar fora
 - Clicar fora do construtor de quadro, do modal "Adicionar imagem" e do editor da lesão não descarta mais direto: aparece um pequeno aviso (sim, sair / não, continuar editando; foco em "não"). Só pergunta quando há algo a perder (imagens/texto no quadro; imagens novas no modal; qualquer campo mudado no editor). Esc continua fechando direto.
 - confirmDiscardChanges() em index.html; testes em tests/confirm-discard.test.js; âncora do importHandler (+42) e regex do teste de descarte do Quiz atualizados.
+
+## 2026-11-23 — Clique fora mais seguro + imagens do Radiopaedia não somem ao fechar
+- onBackdropClick(): só conta como "clique fora" se o mouse foi pressionado E solto no fundo (arrastar de dentro para fora não fecha mais).
+- As imagens/descrição enviadas do Radiopaedia ficam na memória até serem realmente adicionadas ("concluído") — fechar sem salvar permite reabrir pelo mesmo caso (até 30 min).

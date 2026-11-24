@@ -17848,10 +17848,8 @@ function openForm(id, opts){
     }catch(_e){ return null; }
   };
   setTimeout(()=>{ if(ov.isConnected) formBaseline = formSnapshot(); }, 600);
-  ov.addEventListener('click', (ev)=>{
-    if(ev.target===ov){
-      confirmDiscardChanges(()=> formBaseline === null || formSnapshot() !== formBaseline, ()=>{ releasePendingObjectUrls(); closeForm(); });
-    }
+  onBackdropClick(ov, ()=>{
+    confirmDiscardChanges(()=> formBaseline === null || formSnapshot() !== formBaseline, ()=>{ releasePendingObjectUrls(); closeForm(); });
   });
   const closeFormOnEsc = (ev)=>{
     if(ev.key==='Escape' && ov.isConnected){
@@ -19166,7 +19164,7 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
   const list=cov.querySelector('#collage-list'), drop=cov.querySelector('#collage-drop'), input=cov.querySelector('#collage-files');
   drop.focus();
   const cleanup=()=>{ if(finalUrl) URL.revokeObjectURL(finalUrl); cov.remove(); };
-  cov.onclick=e=>{ if(e.target===cov) confirmDiscardChanges(()=>{ const d=cov.querySelector('#collage-desc'); return items.length>0 || !!(d && d.value.trim()); }, cleanup); };
+  onBackdropClick(cov, ()=>{ confirmDiscardChanges(()=>{ const d=cov.querySelector('#collage-desc'); return items.length>0 || !!(d && d.value.trim()); }, cleanup); });
   cov.querySelector('#collage-cancel').onclick=cleanup;
   cov.querySelector('#collage-pick').onclick=(e)=>{e.stopPropagation();input.click();};
   drop.onclick=(e)=>{ if(e.target!==input) input.click(); };
@@ -19303,6 +19301,19 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
 
 function stripHtmlText(v){
   const d=document.createElement('div'); d.innerHTML=String(v||''); return (d.textContent||'').replace(/\s+/g,' ').trim();
+}
+
+/* Clique "fora" de verdade: só conta se o botão do mouse foi PRESSIONADO e SOLTO
+   no fundo escuro. Arrastar (ex.: selecionar texto) de dentro da janela e soltar
+   fora não pode fechar nada. */
+function onBackdropClick(el, handler){
+  let downOnBackdrop = false;
+  el.addEventListener('mousedown', ev=>{ downOnBackdrop = (ev.target === el); }, true);
+  el.addEventListener('click', ev=>{
+    const ok = (ev.target === el) && downOnBackdrop;
+    downOnBackdrop = false;
+    if(ok) handler(ev);
+  });
 }
 
 /* CONFIRMAR DESCARTE: pequeno aviso "sair e perder as alterações?" usado quando
@@ -23052,7 +23063,7 @@ function openQuizAddImageModal(lesionId, onImagesAdded, opts){
 
   const escHandler = ev=>{ if(ev.key==='Escape' && cov.isConnected){ ev.stopPropagation(); close(); } };
   const close = ()=>{ releaseDraftObjectUrls(); if(cov.isConnected) cov.remove(); document.removeEventListener('keydown', escHandler, true); };
-  cov.addEventListener('click', ev=>{ if(ev.target===cov) confirmDiscardChanges(()=>{
+  onBackdropClick(cov, ()=>{ confirmDiscardChanges(()=>{
     const orig = Array.isArray(lesion.images) ? lesion.images.length : 0;
     return draftImgs.length !== orig || draftImgs.some(x=>x && x.source==='pending');
   }, close); });
@@ -25377,8 +25388,9 @@ function setPendingExternalImages(sourceUrl, list, description){
 function openPendingExternalImagesFor(entry, draft){
   const pend = pendingExternalImages;
   if (!pend || (Date.now() - pend.at) > 30 * 60 * 1000 || !entry || !draft || !sameExternalUrl(pend.sourceUrl, draft.sourceUrl)) return false;
-  pendingExternalImages = null;
-  openQuizAddImageModal(entry.id, () => { try { renderAll(); } catch (e) {} try { openDetail(entry.id); } catch (e) {} }, { preload: pend.images, initialDesc: pend.description || '' });
+  // As imagens só saem da memória quando realmente forem adicionadas ("concluído");
+  // se a janela for fechada sem salvar, dá para reabrir pelo mesmo caso (até 30 min).
+  openQuizAddImageModal(entry.id, () => { pendingExternalImages = null; try { renderAll(); } catch (e) {} try { openDetail(entry.id); } catch (e) {} }, { preload: pend.images, initialDesc: pend.description || '' });
   return true;
 }
 function deliverExternalImportPayload(payload){
