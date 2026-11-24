@@ -6290,3 +6290,6 @@ proteção de branch ativa desde 06/11).
 ## 2026-11-23 — Clique fora mais seguro + imagens do Radiopaedia não somem ao fechar
 - onBackdropClick(): só conta como "clique fora" se o mouse foi pressionado E solto no fundo (arrastar de dentro para fora não fecha mais).
 - As imagens/descrição enviadas do Radiopaedia ficam na memória até serem realmente adicionadas ("concluído") — fechar sem salvar permite reabrir pelo mesmo caso (até 30 min).
+
+## 2026-11-23 — Quadro do Radiopaedia vinculado ao caso clínico enviado
+- No "concluído" do modal de imagens (fluxo "Vincular caso e adicionar imagens"), a imagem NOVA do quadro é vinculada ao caso clínico recém-enviado (mesma sourceUrl) pelos vínculos normais (clinicalCases[].imageRefs). Só nesse fluxo; adicionar imagens manualmente continua sem vincular sozinho. Função linkNewImagesToExternalCase; testes 31–33.

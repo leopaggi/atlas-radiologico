@@ -23243,6 +23243,8 @@ function openQuizAddImageModal(lesionId, onImagesAdded, opts){
     try{ stampNewImagesAssignedAt(prevQuizImgs, lesion.images, new Date().toISOString()); }catch(_e){}
     // ALTERAÇÃO 079d — marcador explícito das imagens incluídas neste Concluído.
     try{ if(markPendingLocalImageAdds(lesion.id, prevQuizImgs, lesion.images)) await savePendingLocalImageAdds(); }catch(_e){}
+    // Quadro vindo do Radiopaedia: vincula a imagem nova ao caso clínico enviado.
+    try{ if(opts && opts.linkToCaseUrl && typeof linkNewImagesToExternalCase === 'function') linkNewImagesToExternalCase(lesion, prevQuizImgs, opts.linkToCaseUrl); }catch(_e){}
     lesion._userUpdatedAt = Date.now();
     await saveData();
     try{ refreshStudyDashboardLive(); }catch(_e){} // dashboard reflete a nova imagem sem F5
@@ -25385,12 +25387,35 @@ function setPendingExternalImages(sourceUrl, list, description){
   return images.length;
 }
 // Chamado depois que o caso foi VINCULADO a uma lesão existente.
+/* Quadro vindo do Radiopaedia: no "concluído", as imagens NOVAS ficam vinculadas
+   ao caso clínico que o usuário acabou de enviar (mesma sourceUrl), usando os
+   vínculos normais (clinicalCases[].imageRefs). Só roda nesse fluxo, que o
+   próprio usuário iniciou ao clicar em "Vincular caso e adicionar imagens".
+   Muta a lesão passada; devolve quantas imagens foram vinculadas. */
+function linkNewImagesToExternalCase(lesion, prevImages, sourceUrl){
+  if(!lesion || !sourceUrl || !Array.isArray(lesion.clinicalCases)) return 0;
+  const target = lesion.clinicalCases.find(c => c && !c.deletedAt && sameExternalUrl(c.sourceUrl, sourceUrl));
+  if(!target) return 0;
+  const before = new Set((Array.isArray(prevImages) ? prevImages : []).map(x => didacticImageId(x)).filter(Boolean));
+  const ids = (Array.isArray(lesion.images) ? lesion.images : []).map(x => didacticImageId(x)).filter(id => id && !before.has(id));
+  if(!ids.length) return 0;
+  const now = Date.now();
+  let list = lesion.clinicalCases;
+  let n = 0;
+  for(const id of ids){
+    const r = updateDidacticItemImageRefs(list, didacticPickKey(target), refs => linkImageRef(refs, id, now), now);
+    if(r.changed){ list = r.list; n++; }
+  }
+  if(n) lesion.clinicalCases = list;
+  return n;
+}
+
 function openPendingExternalImagesFor(entry, draft){
   const pend = pendingExternalImages;
   if (!pend || (Date.now() - pend.at) > 30 * 60 * 1000 || !entry || !draft || !sameExternalUrl(pend.sourceUrl, draft.sourceUrl)) return false;
   // As imagens só saem da memória quando realmente forem adicionadas ("concluído");
   // se a janela for fechada sem salvar, dá para reabrir pelo mesmo caso (até 30 min).
-  openQuizAddImageModal(entry.id, () => { pendingExternalImages = null; try { renderAll(); } catch (e) {} try { openDetail(entry.id); } catch (e) {} }, { preload: pend.images, initialDesc: pend.description || '' });
+  openQuizAddImageModal(entry.id, () => { pendingExternalImages = null; try { renderAll(); } catch (e) {} try { openDetail(entry.id); } catch (e) {} }, { preload: pend.images, initialDesc: pend.description || '', linkToCaseUrl: pend.sourceUrl || (draft && draft.sourceUrl) || '' });
   return true;
 }
 function deliverExternalImportPayload(payload){
