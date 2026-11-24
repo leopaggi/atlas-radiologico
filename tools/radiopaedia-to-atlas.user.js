@@ -393,8 +393,8 @@
      label_positions/arrow_positions[].slice_idx = posição na lista de frames).
      Se o estudo tem marcações, o quadro usa SÓ esses cortes (como o botão de
      setas do próprio visualizador) + 1 corte (o "atual" do visualizador, senão o do
-     meio) de até 3 séries sem marcação do mesmo estudo (outras fases/planos), para
-     não vir só o mínimo. Sem nenhuma marcação (casos antigos), o comportamento é
+     meio) de até 3 séries sem marcação do mesmo estudo (outras fases/planos); o que
+     sobrar até o teto do quadro é distribuído entre elas (ver imagesFromStudyJson). Sem nenhuma marcação (casos antigos), o comportamento é
      o de sempre. */
   function annotatedSliceIndexes(se, nFrames) {
     var anns = (se && Array.isArray(se.annotations)) ? se.annotations : [];
@@ -438,6 +438,18 @@
     }
     return out;
   }
+  // Cortes espaçados de uma série SEM marcação, evitando as pontas (costumam ser pretas):
+  // 1 corte = o "atual" do visualizador (senão o do meio); 2+ = divide a pilha em partes iguais.
+  function spreadFrames(frames, q) {
+    if (!frames.length || q < 1) return [];
+    if (q === 1) return pickFrames(frames, 1);
+    var out = [], used = {};
+    for (var k = 1; k <= q; k++) {
+      var ix = Math.round(k * (frames.length - 1) / (q + 1));
+      if (!used[ix]) { used[ix] = true; out.push(frames[ix]); }
+    }
+    return out;
+  }
   function imagesFromStudyJson(j, maxTotal, label) {
     var st = j && j.study;
     var res = { items: [], total: 0, skipped: false, marked: false };
@@ -450,33 +462,51 @@
     });
     var withMarks = marks.filter(function (m) { return m.length > 0; }).length;
     res.marked = withMarks > 0;
-    // 1.5.5 — séries SEM marcação do mesmo estudo (outras fases/planos) entram com 1 corte
-    // cada (o corte "atual" do visualizador, senão o do meio), guardando lugar no quadro;
-    // os cortes marcados continuam tendo prioridade.
-    var unmarked = res.marked ? series.length - withMarks : 0;
-    var reserve = res.marked ? Math.max(0, Math.min(unmarked, 3, maxTotal - 2 * withMarks)) : 0;
-    var per = Math.max(1, Math.floor((maxTotal - reserve) / Math.max(1, res.marked ? withMarks : series.length)));
-    var extraLeft = reserve;
-    for (var s = 0; s < series.length; s++) {
-      var se = series[s] || {};
-      var frames = Array.isArray(se.frames) ? se.frames : [];
+    function framesOf(se) { return (se && Array.isArray(se.frames)) ? se.frames : []; }
+    var quota = series.map(function () { return 0; });
+    if (res.marked) {
+      /* 1.5.5 — DISTRIBUIÇÃO ATÉ O TETO. Em rodadas: (A) 1 corte marcado por série marcada;
+         (B) 1 corte de cada uma das 3 primeiras séries sem marcação; (C) o que sobrar até
+         o teto: todos os cortes marcados primeiro, depois mais cortes das sem marcação
+         (até 3 cada). Séries marcadas têm prioridade; nunca passa de maxTotal. */
+      var left = maxTotal, UNMARKED_SERIES = 3, UNMARKED_PER = 3, s, i;
+      function cap(i) { return marks[i].length ? marks[i].length : (framesOf(series[i]).length ? UNMARKED_PER : 0); }
+      for (s = 0; s < series.length && left > 0; s++) if (marks[s].length) { quota[s]++; left--; }
+      var seenU = 0;
+      for (s = 0; s < series.length && left > 0; s++) {
+        if (!marks[s].length && framesOf(series[s]).length && seenU < UNMARKED_SERIES) { seenU++; quota[s]++; left--; }
+      }
+      var progressed = true;
+      while (left > 0 && progressed) { // 1º: mais cortes MARCADOS, até esgotar as marcações
+        progressed = false;
+        for (s = 0; s < series.length && left > 0; s++) if (marks[s].length && quota[s] < cap(s)) { quota[s]++; left--; progressed = true; }
+      }
+      progressed = true;
+      while (left > 0 && progressed) { // 2º: o que sobrar vai para as séries sem marcação
+        progressed = false;
+        for (s = 0; s < series.length && left > 0; s++) if (!marks[s].length && quota[s] > 0 && quota[s] < cap(s)) { quota[s]++; left--; progressed = true; }
+      }
+    } else {
+      var per0 = Math.max(1, Math.floor(maxTotal / Math.max(1, series.length)));
+      for (var z = 0; z < series.length; z++) quota[z] = per0;
+    }
+    for (var s2 = 0; s2 < series.length; s2++) {
+      var se = series[s2] || {};
+      var frames = framesOf(se);
       var files = (se.encodings && Array.isArray(se.encodings.thumbnailed_files)) ? se.encodings.thumbnailed_files : [];
       res.total += frames.length;
+      if (quota[s2] < 1) continue;
       var picked, pickedIdx = null;
-      if (res.marked) {
-        if (!marks[s].length) {
-          if (extraLeft < 1) continue; // sem lugar: série sem marcação fica de fora
-          extraLeft--;
-          picked = pickFrames(frames, 1);
-        } else {
-          pickedIdx = evenlyPick(marks[s], per);
-          picked = pickedIdx.map(function (ix) { return frames[ix]; });
-        }
+      if (res.marked && marks[s2].length) {
+        pickedIdx = evenlyPick(marks[s2], quota[s2]);
+        picked = pickedIdx.map(function (ix) { return frames[ix]; });
+      } else if (res.marked) {
+        picked = spreadFrames(frames, quota[s2]);
       } else {
-        picked = pickFrames(frames, per);
+        picked = pickFrames(frames, quota[s2]);
       }
-      for (var i = 0; i < picked.length; i++) {
-        var f = picked[i];
+      for (var i2 = 0; i2 < picked.length; i2++) {
+        var f = picked[i2];
         if (!f || !/^\d+$/.test(String(f.id))) continue;
         var file = files[frames.indexOf(f)] || {};
         var orig = safeImageFile(file.original) || 'dr-original.jpg';
@@ -485,7 +515,7 @@
           full: IMG_BASE + f.id + '/' + orig,
           fallback: small ? IMG_BASE + f.id + '/' + small : '',
           seq: label || '',
-          arrows: pickedIdx ? arrowsAt(se, pickedIdx[i]) : []
+          arrows: pickedIdx ? arrowsAt(se, pickedIdx[i2]) : []
         });
       }
     }
