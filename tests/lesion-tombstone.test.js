@@ -185,7 +185,7 @@ test('094 PIPELINE: isQuarantinedSeedId/loadData/reconcile/adoptRemoteStateForNe
   assert.match(html, /lesionTombstones: LESION_TOMBSTONES, \/\/ PROTEÇÃO 094/, 'export do backup');
   assert.match(html, /LESION_TOMBSTONES = mergeLesionTombstones\(LESION_TOMBSTONES, parsed\.lesionTombstones\)/, 'import nunca encolhe o mapa');
   assert.doesNotMatch(html, /DATA = DATA\.filter\(x=>x\.id!==id\);\s*\n\s*await saveData\(\);/, 'botão Excluir não usa mais o caminho antigo vulnerável');
-  assert.match(html, /document\.getElementById\('btn-del'\)\.onclick[\s\S]{0,500}deleteLesionPermanently\(id\)/, 'botão Excluir chama a função oficial');
+  assert.match(html, /detailEl\('btn-del'\)\.onclick[\s\S]{0,500}deleteLesionPermanently\(id\)/, 'botão Excluir chama a função oficial');
 });
 
 const plain = (v) => JSON.parse(JSON.stringify(v));
