@@ -451,12 +451,24 @@ const ASD = { study: { id: 150516, modality: 'CT', series: [
   ctSeries(100, 7000, [])
 ] } };
 
-test('34. TC com setas: só os 4 cortes marcados da série marcada; séries sem marcação ficam de fora', () => {
+test('34. TC com setas: cortes marcados primeiro + 1 corte de cada série sem marcação (até 3)', () => {
   const c = jsonCtx(null);
   const r = c.imagesFromStudyJson(ASD, 8, '');
   assert.equal(r.marked, true);
-  assert.equal(r.items.length, 4);
-  assert.deepEqual(Array.from(r.items, x => x.full), [178, 185, 204, 268].map(i => `https://prod-images-static.radiopaedia.org/images/${1000 + i}/${i}..jpeg`));
+  assert.equal(r.items.length, 6);
+  assert.deepEqual(Array.from(r.items.slice(0, 4), x => x.full), [178, 185, 204, 268].map(i => `https://prod-images-static.radiopaedia.org/images/${1000 + i}/${i}..jpeg`));
+  assert.ok(r.items[4].full.includes('/images/50') && r.items[5].full.includes('/images/70'), 'corte do meio das séries sem marcação');
+  assert.equal(r.items[4].arrows.length, 0);
+});
+
+test('34b. séries sem marcação: usa o corte "atual" do visualizador quando existe; respeita o teto e deixa 2+ cortes por série marcada', () => {
+  const c = jsonCtx(null);
+  const cur = ctSeries(60, 300, []); cur.frames[7].current = true;
+  const marked = n => ctSeries(80, n, Array.from({ length: 6 }, (_, i) => ANN(5 + i * 10, [1])));
+  const r = c.imagesFromStudyJson({ study: { modality: 'CT', series: [marked(100), marked(900), cur, ctSeries(50, 500, []), ctSeries(50, 600, []), ctSeries(50, 700, [])] } }, 8, '');
+  assert.equal(r.items.length, 7); // 2 marcadas x 2 + 3 sem marcação
+  assert.ok(r.items.some(x => x.full.includes('/images/307/')), 'corte atual (current)');
+  assert.equal(r.items.filter(x => x.arrows.length > 0).length, 4);
 });
 
 test('35. sem marcações (casos antigos): comportamento de sempre (cortes espalhados, todas as séries)', () => {

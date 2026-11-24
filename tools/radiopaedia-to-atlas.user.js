@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.5.4
+// @version      1.5.5
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e entrega o caso à aba do Atlas já aberta (ou abre o Atlas com o payload no fragmento da URL). O botão "📸 Enviar com imagens" (1.5.0) também baixa as imagens do caso (uma por série), reduz cada uma e entrega ao Atlas só para APROVAÇÃO — nada é salvo sem você. Não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -392,9 +392,10 @@
      cortes que mostram o achado (study.series[].annotations[], cada uma com
      label_positions/arrow_positions[].slice_idx = posição na lista de frames).
      Se o estudo tem marcações, o quadro usa SÓ esses cortes (como o botão de
-     setas do próprio visualizador); séries sem marcação do mesmo estudo ficam
-     de fora (eram as sequências "pretas" sem achado). Sem nenhuma marcação
-     (casos antigos), o comportamento é o de sempre. */
+     setas do próprio visualizador) + 1 corte (o "atual" do visualizador, senão o do
+     meio) de até 3 séries sem marcação do mesmo estudo (outras fases/planos), para
+     não vir só o mínimo. Sem nenhuma marcação (casos antigos), o comportamento é
+     o de sempre. */
   function annotatedSliceIndexes(se, nFrames) {
     var anns = (se && Array.isArray(se.annotations)) ? se.annotations : [];
     var seen = {}, out = [];
@@ -449,7 +450,13 @@
     });
     var withMarks = marks.filter(function (m) { return m.length > 0; }).length;
     res.marked = withMarks > 0;
-    var per = Math.max(1, Math.floor(maxTotal / Math.max(1, res.marked ? withMarks : series.length)));
+    // 1.5.5 — séries SEM marcação do mesmo estudo (outras fases/planos) entram com 1 corte
+    // cada (o corte "atual" do visualizador, senão o do meio), guardando lugar no quadro;
+    // os cortes marcados continuam tendo prioridade.
+    var unmarked = res.marked ? series.length - withMarks : 0;
+    var reserve = res.marked ? Math.max(0, Math.min(unmarked, 3, maxTotal - 2 * withMarks)) : 0;
+    var per = Math.max(1, Math.floor((maxTotal - reserve) / Math.max(1, res.marked ? withMarks : series.length)));
+    var extraLeft = reserve;
     for (var s = 0; s < series.length; s++) {
       var se = series[s] || {};
       var frames = Array.isArray(se.frames) ? se.frames : [];
@@ -457,9 +464,14 @@
       res.total += frames.length;
       var picked, pickedIdx = null;
       if (res.marked) {
-        if (!marks[s].length) continue; // série sem marcação: não entra
-        pickedIdx = evenlyPick(marks[s], per);
-        picked = pickedIdx.map(function (ix) { return frames[ix]; });
+        if (!marks[s].length) {
+          if (extraLeft < 1) continue; // sem lugar: série sem marcação fica de fora
+          extraLeft--;
+          picked = pickFrames(frames, 1);
+        } else {
+          pickedIdx = evenlyPick(marks[s], per);
+          picked = pickedIdx.map(function (ix) { return frames[ix]; });
+        }
       } else {
         picked = pickFrames(frames, per);
       }
@@ -805,7 +817,7 @@
     setInterval(mountButton, 5000);
   }
   // Diagnóstico (DevTools do Chrome): confirma que o script rodou nesta página.
-  try { console.info('[Atlas userscript 1.5.4] ativo — ' + (onAtlasPage ? 'ponte do Atlas' : 'botão Enviar ao Atlas')); } catch (_) {}
+  try { console.info('[Atlas userscript 1.5.5] ativo — ' + (onAtlasPage ? 'ponte do Atlas' : 'botão Enviar ao Atlas')); } catch (_) {}
 
   // 091g: na página do Atlas este script é SÓ a ponte (sem botão). Isolada:
   // qualquer erro aqui fica aqui (o Radiopaedia cai no fallback por timeout).
