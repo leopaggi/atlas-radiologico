@@ -19148,7 +19148,7 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
   // (lida via .value, nunca via HTML).
   cov.querySelector('#collage-desc').value = isEditMode
     ? collageInitialDesc(existingLabel, items.map(x=>x.seq))
-    : '';
+    : ((opts && typeof opts.initialDesc === 'string') ? opts.initialDesc : '');
   wireRichTextArea(cov.querySelector('#collage-desc'), cov.querySelector('.rich-text-toolbar'));
   let finalBlob=null; let finalUrl='';
   const seqs=IMAGE_SEQUENCE_PRESETS;
@@ -23203,7 +23203,7 @@ function openQuizAddImageModal(lesionId, onImagesAdded, opts){
     openCollageBuilder({id: lesion.id, name: lesion.name}, collage=>{
       if(collage && collage.source==='pending' && collage._objectUrl) draftObjectUrls.add(collage._objectUrl);
       addDraftImages([collage]);
-    }, null, true, '', {preload: opts.preload, omitPanels: true});
+    }, null, true, '', {preload: opts.preload, omitPanels: true, initialDesc: opts.initialDesc || ''});
   }
 }
 function openQuizReviewModal(lesionId){
@@ -25317,9 +25317,15 @@ function validateExternalImages(list){
   }
   return out;
 }
-function setPendingExternalImages(sourceUrl, list){
+const EXTERNAL_DESC_MAX_CHARS = 5000;
+// Descrição vinda do Radiopaedia: só texto, sem caracteres de controle (exceto
+// quebra de linha); vira o valor INICIAL do campo "Descrição geral do quadro".
+function sanitizeExternalDescription(d){
+  return String(d == null ? '' : d).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').slice(0, EXTERNAL_DESC_MAX_CHARS).trim();
+}
+function setPendingExternalImages(sourceUrl, list, description){
   const images = validateExternalImages(list);
-  pendingExternalImages = images.length ? { sourceUrl: String(sourceUrl || ''), images, at: Date.now() } : null;
+  pendingExternalImages = images.length ? { sourceUrl: String(sourceUrl || ''), images, description: sanitizeExternalDescription(description), at: Date.now() } : null;
   return images.length;
 }
 // Chamado depois que o caso foi VINCULADO a uma lesão existente.
@@ -25327,7 +25333,7 @@ function openPendingExternalImagesFor(entry, draft){
   const pend = pendingExternalImages;
   if (!pend || (Date.now() - pend.at) > 30 * 60 * 1000 || !entry || !draft || !sameExternalUrl(pend.sourceUrl, draft.sourceUrl)) return false;
   pendingExternalImages = null;
-  openQuizAddImageModal(entry.id, () => { try { renderAll(); } catch (e) {} try { openDetail(entry.id); } catch (e) {} }, { preload: pend.images });
+  openQuizAddImageModal(entry.id, () => { try { renderAll(); } catch (e) {} try { openDetail(entry.id); } catch (e) {} }, { preload: pend.images, initialDesc: pend.description || '' });
   return true;
 }
 function deliverExternalImportPayload(payload){
@@ -25350,7 +25356,7 @@ function handleAtlasImportChannelMessage(data, reply){
     if (id) handledBroadcastImports.add(id);
     let res;
     try {
-      if (Array.isArray(data.images) && data.payload && typeof data.payload === 'object') setPendingExternalImages(data.payload.sourceUrl, data.images);
+      if (Array.isArray(data.images) && data.payload && typeof data.payload === 'object') setPendingExternalImages(data.payload.sourceUrl, data.images, data.description);
       res = deliverExternalImportPayload(data.payload);
     }
     catch (e) { console.warn('Falha na importação externa (canal).', e); res = { status: 'erro' }; }

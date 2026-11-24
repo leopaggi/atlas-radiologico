@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.5.2
+// @version      1.5.3
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e entrega o caso à aba do Atlas já aberta (ou abre o Atlas com o payload no fragmento da URL). O botão "📸 Enviar com imagens" (1.5.0) também baixa as imagens do caso (uma por série), reduz cada uma e entrega ao Atlas só para APROVAÇÃO — nada é salvo sem você. Não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -296,6 +296,76 @@
      do arquivo em encodings.thumbnailed_files[i].original). Lemos essa lista,
      pulamos exames que não são de imagem (patologia, fotos, ilustrações) e
      escolhemos no máximo 8 imagens, espaçadas ao longo do exame. */
+
+  /* 1.5.3 — DESCRIÇÃO DO QUADRO. Junta, em texto simples, o que o Radiopaedia
+     escreve sobre as imagens (achados + legenda de cada exame, vindos do mesmo
+     JSON) e a discussão do caso (seção "Discussion" da página, quando existe),
+     mais a linha de fonte/crédito. Vai para o campo "Descrição geral do
+     quadro" (editável antes de salvar). Texto continua em inglês, como na fonte. */
+  var DESC_BLOCK_MAX = 1500;
+  var DESC_TOTAL_MAX = 4000;
+
+  function htmlToPlainText(h) {
+    var t = String(h == null ? '' : h)
+      .replace(/<\s*br\s*\/?>/gi, '\n')
+      .replace(/<\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, '\n')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/gi, ' ').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"').replace(/&#0?39;/g, "'").replace(/&amp;/gi, '&');
+    return t.split('\n').map(function (l) { return l.replace(/[ \t\u00a0]+/g, ' ').trim(); })
+      .filter(function (l) { return l; }).join('\n');
+  }
+
+  function clipText(t, max) {
+    t = String(t || '');
+    if (t.length <= max) return t;
+    var cut = t.slice(0, max);
+    var sp = cut.lastIndexOf(' ');
+    return (sp > max * 0.6 ? cut.slice(0, sp) : cut) + '…';
+  }
+
+  // Texto (com parágrafos) da seção que segue o cabeçalho; '' se não houver.
+  function sectionTextWithBreaks(pattern, root) {
+    try {
+      var heads = (root || document).querySelectorAll('h1,h2,h3,h4,.case-section-title,.section-title');
+      for (var i = 0; i < heads.length; i++) {
+        var t = (heads[i].innerText || '').trim();
+        if (!pattern.test(t)) continue;
+        var node = heads[i].nextElementSibling, parts = [], guard = 0;
+        while (node && guard < 8 && !/^H[1-4]$/.test(node.tagName || '')) {
+          var it = (node.innerText || '').trim();
+          if (it) parts.push(it.split('\n').map(function (l) { return l.replace(/[ \t\u00a0]+/g, ' ').trim(); })
+            .filter(function (l) { return l; }).join('\n'));
+          node = node.nextElementSibling; guard++;
+        }
+        if (parts.length) return parts.join('\n');
+      }
+    } catch (e) { /* DOM inesperado — segue sem este campo */ }
+    return '';
+  }
+
+  // blocks: {findings, caption, modality}[]; discussion: texto; src: {title,url,author}
+  function buildImageDescription(blocks, discussion, src) {
+    var out = [];
+    (blocks || []).forEach(function (b) {
+      var tag = b.modality ? ' (' + b.modality + ')' : '';
+      var f = clipText(htmlToPlainText(b.findings), DESC_BLOCK_MAX);
+      var c = clipText(htmlToPlainText(b.caption), DESC_BLOCK_MAX);
+      if (f) out.push('**Achados de imagem' + tag + ':** ' + f);
+      if (c && c !== f) out.push('**Legenda' + tag + ':** ' + c);
+    });
+    var d = clipText(String(discussion || '').trim(), DESC_BLOCK_MAX);
+    if (d) out.push('**Discussão:** ' + d);
+    var head = out.join('\n\n');
+    var fonte = '';
+    if (src && src.url) {
+      fonte = 'Fonte: Radiopaedia' + (src.title ? ' — ' + src.title : '') + (src.author ? ', ' + src.author : '') + ' — ' + src.url;
+    }
+    if (!head) return '';
+    head = clipText(head, DESC_TOTAL_MAX - (fonte ? fonte.length + 2 : 0));
+    return fonte ? head + '\n\n' + fonte : head;
+  }
+
   var IMG_BASE = 'https://prod-images-static.radiopaedia.org/images/';
   var SKIP_MODALITIES = /patholog|histolog|photograph|illustration|diagram/i;
 
@@ -371,14 +441,15 @@
       if (jsons.every(function (j) { return !j; })) return null;
       var kept = jsons.filter(function (j) { return j && j.study && !SKIP_MODALITIES.test(String(j.study.modality || '')); });
       var budget = Math.max(1, Math.floor(IMG_MAX_COUNT / Math.max(1, kept.length)));
-      var items = [], total = 0;
+      var items = [], total = 0, blocks = [];
       kept.forEach(function (j) {
+        blocks.push({ findings: j.study.findings, caption: j.study.caption, modality: kept.length > 1 ? cleanText(String(j.study.modality || '')) : '', author: j.study.contributor_login || '' });
         var label = kept.length > 1 ? cleanText(String(j.study.modality || '')).slice(0, 40) : '';
         var r = imagesFromStudyJson(j, budget, label);
         total += r.total;
         items = items.concat(r.items);
       });
-      return { items: items.slice(0, IMG_MAX_COUNT), total: total };
+      return { items: items.slice(0, IMG_MAX_COUNT), total: total, blocks: blocks };
     });
   }
 
@@ -429,8 +500,13 @@
       alert('Atlas: este navegador/Tampermonkey não permite baixar as imagens. Use o botão "📥 Enviar ao Atlas" (só o caso).');
       return;
     }
+    var descriptionText = '';
     collectImagesViaStudyJson(document).catch(function () { return null; }).then(function (found) {
       if (!found || !found.items.length) found = collectImageCandidates(document);
+      var blocks = found.blocks || [];
+      descriptionText = buildImageDescription(blocks, sectionTextWithBreaks(/^(case\s+)?discussion$/i), {
+        title: payload.title, url: payload.sourceUrl, author: blocks.length && blocks[0].author ? blocks[0].author : ''
+      });
       if (!found.items.length) { alert('Atlas: não encontrei imagens de exame nesta página (exames de patologia/foto são ignorados). Use o botão "📥 Enviar ao Atlas" (só o caso).'); return null; }
       showSentNotice('Baixando ' + found.items.length + ' imagem(ns)…' + (found.total > found.items.length ? ' (amostra de ' + found.total + ')' : ''));
       return Promise.all(found.items.map(downloadAndShrink));
@@ -440,7 +516,7 @@
       if (!images.length) { alert('Atlas: não foi possível baixar as imagens. Nada foi enviado.'); return; }
       var base = ATLAS_URL.replace(/\/+$/, '') + '/';
       var url = base + '#external-import=' + encodePayload(payload);
-      try { sendToAtlasViaBridge(payload, url, defaultBridgeEnv(), images); } catch (e) { openAtlasWindow(url); }
+      try { sendToAtlasViaBridge(payload, url, defaultBridgeEnv(), images, descriptionText); } catch (e) { openAtlasWindow(url); }
     });
   }
 
@@ -505,7 +581,7 @@
 
   // Aba do Radiopaedia: pergunta se há uma aba do Atlas; com pong, entrega o
   // caso a ELA (nenhum window.open); sem pong, fallback. Nunca os dois.
-  function sendToAtlasViaBridge(payload, url, env, images) {
+  function sendToAtlasViaBridge(payload, url, env, images, description) {
     if (!env || !env.available) { env && env.openWindow ? env.openWindow(url) : openAtlasWindow(url); return 'fallback'; }
     var requestId = newRequestId();
     var settled = false;
@@ -518,7 +594,7 @@
       listenerId = env.addListener(BRIDGE_PONG_KEY, function (name, oldV, v) {
         if (settled || !v || v.requestId !== requestId) return;
         finish();
-        env.setValue(BRIDGE_IMPORT_KEY, { requestId: requestId, tabId: v.tabId, payload: payload, images: images || null, at: Date.now() });
+        env.setValue(BRIDGE_IMPORT_KEY, { requestId: requestId, tabId: v.tabId, payload: payload, images: images || null, description: description || '', at: Date.now() });
         env.notify(images ? '✓ Caso e imagens enviados para a aba do Atlas já aberta — alterne para ela.' : '✓ Caso enviado para a aba do Atlas já aberta — alterne para ela.');
       });
       env.setValue(BRIDGE_PING_KEY, { requestId: requestId, at: Date.now() });
@@ -560,7 +636,7 @@
     });
     env.addListener(BRIDGE_IMPORT_KEY, function (name, oldV, v, remote) {
       if (remote === false || !v || !v.tabId) return;
-      bc.postMessage({ type: 'external-import', requestId: v.requestId, tabId: v.tabId, payload: v.payload, images: v.images || null });
+      bc.postMessage({ type: 'external-import', requestId: v.requestId, tabId: v.tabId, payload: v.payload, images: v.images || null, description: v.description || '' });
     });
     return bc;
   }
@@ -634,7 +710,7 @@
     setInterval(mountButton, 5000);
   }
   // Diagnóstico (DevTools do Chrome): confirma que o script rodou nesta página.
-  try { console.info('[Atlas userscript 1.5.2] ativo — ' + (onAtlasPage ? 'ponte do Atlas' : 'botão Enviar ao Atlas')); } catch (_) {}
+  try { console.info('[Atlas userscript 1.5.3] ativo — ' + (onAtlasPage ? 'ponte do Atlas' : 'botão Enviar ao Atlas')); } catch (_) {}
 
   // 091g: na página do Atlas este script é SÓ a ponte (sem botão). Isolada:
   // qualquer erro aqui fica aqui (o Radiopaedia cai no fallback por timeout).

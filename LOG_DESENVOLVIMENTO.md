@@ -6276,3 +6276,9 @@ proteção de branch ativa desde 06/11).
 - Descoberta (console do usuário no caso galactocele): o site busca `/studies/<id>/annotated_viewer_json.json?lang=us` → `study.series[].frames[]` (ids) + `encodings.thumbnailed_files[i].original` (nome do arquivo; URL = `prod-images-static.radiopaedia.org/images/<frameId>/<original>`).
 - Agora: lê o JSON de cada exame da página (mesma origem, sem Tampermonkey); pula modalidades que não são imagem (patologia, histologia, foto, ilustração, diagrama); escolhe até 8 imagens — vários quadros espaçados se o exame tem 1 série, 1 por série (a "current" ou a do meio) se tem várias. Nome de arquivo validado; se o original falhar, tenta a versão `small`. Se o JSON não vier, cai na coleta antiga da página (que também pula patologia).
 - Testes: tests/radiopaedia-images-quadro.test.js (18–24), com o JSON real do caso.
+
+## 2026-11-23 — Userscript 1.5.3: descrição do quadro vinda do Radiopaedia
+- O botão 📸 agora também monta, em texto simples, a "Descrição geral do quadro": achados de imagem + legenda de cada exame útil (do mesmo JSON `annotated_viewer_json`), a seção "Discussion" da página (quando existe) e a linha "Fonte: Radiopaedia — <título>, <autor> — <url>" (crédito/licença). Texto fica em inglês, como na fonte; fica editável no construtor antes de salvar.
+- Atlas: a descrição entra como valor INICIAL do campo `#collage-desc` (opts.initialDesc; só texto, sem caracteres de controle, máx. 5000). Nenhum campo novo no modelo — continua o mesmo `label` do quadro (guarda de tests/image-description.test.js).
+- Sem texto no Radiopaedia → nada é inventado (campo vazio como antes).
+- Testes: tests/radiopaedia-images-quadro.test.js (25–29).
