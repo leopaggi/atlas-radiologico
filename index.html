@@ -17458,6 +17458,8 @@ function openDetail(id, opts){
   const links = filterReferenceLinksForDisplay(ensureLinks(e), e.clinicalCases);
   const ov = document.createElement('div');
   ov.className = 'overlay';
+  // Ids repetidos (detalhe antigo ainda aberto por baixo): sempre procura DENTRO desta janela.
+  const detailEl = (elId) => (typeof ov.querySelector === 'function' && ov.querySelector('#' + elId)) || document.getElementById(elId);
   ov.onclick = (ev)=>{ if(ev.target===ov) closeOverlay(); };
   ov.innerHTML = `
     <div class="modal">
@@ -17494,7 +17496,7 @@ function openDetail(id, opts){
   document.body.appendChild(ov);
   if(hasEntryImgs(e)){
     getEntryImgs(e).then(imgs=>{
-      const gal=document.getElementById('detail-img-gallery'); if(!gal) return;
+      const gal=detailEl('detail-img-gallery'); if(!gal) return;
       const all=imgs.length?imgs:(e.img?[{data:e.img,label:''}]:[]);
       const renderDetailGallery = ()=>{
       const cur = DATA.find(x=>x.id===id) || e;
@@ -17517,7 +17519,7 @@ function openDetail(id, opts){
     });
   }
   function renderReviewButtons(){
-    const row = document.getElementById('review-btn-row');
+    const row = detailEl('review-btn-row');
     const current = getReview(e.id);
     row.innerHTML = '';
     [0,1,2].forEach(st=>{
@@ -17553,14 +17555,14 @@ function openDetail(id, opts){
   wireClinicalCasesToggle(ov, e);
   wireDidacticImages(ov); // 093
   wireDidacticTextClamps(ov); // lrev_mulfu0x2_didclamp
-  document.getElementById('btn-close').onclick = closeOverlay;
-  const backTodayBtn = document.getElementById('btn-back-today');
+  detailEl('btn-close').onclick = closeOverlay;
+  const backTodayBtn = detailEl('btn-back-today');
   // Voltar fecha SOMENTE o detalhe (ov.remove, nunca closeOverlay — o
   // Dashboard/Quiz de fundo fica intacto) e reabre a lista, recalculada do
   // DATA (mesmo dia, mesmas contagens atualizadas). Sem history/reload.
   if(backTodayBtn) backTodayBtn.onclick = ()=>{ try{ ov.remove(); }catch(_e){} openImagesTodayModal(); };
   // Atalho: com busca/filtros ativos, fecha a lesão e volta a Todas as seções.
-  const clearFiltersBtn = document.getElementById('btn-clear-filters');
+  const clearFiltersBtn = detailEl('btn-clear-filters');
   if(clearFiltersBtn) clearFiltersBtn.onclick = ()=>{ closeOverlay(); clearAllFilters(); };
   // NAVEGAÇÃO APÓS EDIÇÃO (lrev_mul8jrtq_l2atyp): editar a partir do detalhe
   // reabre a MESMA lesão em modo visualização após salvar, e o formulário
@@ -17568,14 +17570,14 @@ function openDetail(id, opts){
   // (opts.returnTo, ex.: "← Voltar para imagens de hoje"). Reusa o hook
   // onSaved já existente (Quiz/imagens-hoje continuam sem esse callback e
   // portanto sem esse comportamento — nada muda para eles).
-  document.getElementById('btn-edit').onclick = ()=>{
+  detailEl('btn-edit').onclick = ()=>{
     closeOverlay();
     openForm(e.id, {
       onSaved: ()=>{ openDetail(e.id, opts); },
       onBackToView: ()=>{ openDetail(e.id, opts); }
     });
   };
-  document.getElementById('btn-del').onclick = async ()=>{
+  detailEl('btn-del').onclick = async ()=>{
     if(confirm(`Excluir "${e.name}" do seu banco?`)){
       // PROTEÇÃO 094 — caminho único de exclusão (nunca DATA.filter()+
       // saveData() direto): registra o tombstone antes de persistir/publicar,

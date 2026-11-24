@@ -6293,3 +6293,7 @@ proteção de branch ativa desde 06/11).
 
 ## 2026-11-23 — Quadro do Radiopaedia vinculado ao caso clínico enviado
 - No "concluído" do modal de imagens (fluxo "Vincular caso e adicionar imagens"), a imagem NOVA do quadro é vinculada ao caso clínico recém-enviado (mesma sourceUrl) pelos vínculos normais (clinicalCases[].imageRefs). Só nesse fluxo; adicionar imagens manualmente continua sem vincular sozinho. Função linkNewImagesToExternalCase; testes 31–33.
+
+## 2026-11-24 — Botão "editar" travado após enviar caso/imagens do Radiopaedia
+- Causa: ao concluir, o atlas reabre o detalhe da lesão com o detalhe anterior ainda por baixo; os dois tinham os mesmos ids (btn-edit, btn-close…) e openDetail achava os botões por document.getElementById, ligando as ações nos botões do detalhe DE BAIXO. Os botões do detalhe de cima ficavam sem função.
+- Correção: openDetail procura os botões dentro da própria janela (ov.querySelector). Teste: tests/detail-duplicate-overlay.test.js.

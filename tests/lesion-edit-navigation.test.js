@@ -65,8 +65,8 @@ function stripJsComments(src) {
 
 test('1. openDetail: botão "editar" abre openForm com onSaved e onBackToView reabrindo a MESMA lesão + mesmo opts', () => {
   const src = stripJsComments(extractFunction(html, 'openDetail').source);
-  assert.match(src, /document\.getElementById\('btn-edit'\)\.onclick\s*=\s*\(\)=>\{/);
-  const idx = src.indexOf("getElementById('btn-edit')");
+  assert.match(src, /detailEl\('btn-edit'\)\.onclick\s*=\s*\(\)=>\{/);
+  const idx = src.indexOf("detailEl('btn-edit')");
   const nearby = src.slice(idx, idx + 400);
   assert.match(nearby, /openForm\(e\.id,\s*\{/);
   assert.match(nearby, /onSaved:\s*\(\)=>\{\s*openDetail\(e\.id,\s*opts\);\s*\}/);
