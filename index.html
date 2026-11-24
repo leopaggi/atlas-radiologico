@@ -17839,8 +17839,19 @@ function openForm(id, opts){
   };
 
   // Fechar edição clicando fora da janela ou pressionando Esc.
+  let formBaseline = null;
+  const formSnapshot = ()=>{
+    try{
+      const m = ov.querySelector('.modal') || ov;
+      const vals = [...ov.querySelectorAll('input,textarea,select')].map(el=>(el.type==='checkbox'||el.type==='radio') ? (el.checked?'1':'0') : el.value).join('\u0001');
+      return vals + '\u0002' + m.innerHTML.length;
+    }catch(_e){ return null; }
+  };
+  setTimeout(()=>{ if(ov.isConnected) formBaseline = formSnapshot(); }, 600);
   ov.addEventListener('click', (ev)=>{
-    if(ev.target===ov){ releasePendingObjectUrls(); closeForm(); }
+    if(ev.target===ov){
+      confirmDiscardChanges(()=> formBaseline === null || formSnapshot() !== formBaseline, ()=>{ releasePendingObjectUrls(); closeForm(); });
+    }
   });
   const closeFormOnEsc = (ev)=>{
     if(ev.key==='Escape' && ov.isConnected){
@@ -19155,7 +19166,7 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
   const list=cov.querySelector('#collage-list'), drop=cov.querySelector('#collage-drop'), input=cov.querySelector('#collage-files');
   drop.focus();
   const cleanup=()=>{ if(finalUrl) URL.revokeObjectURL(finalUrl); cov.remove(); };
-  cov.onclick=e=>{ if(e.target===cov) cleanup(); };
+  cov.onclick=e=>{ if(e.target===cov) confirmDiscardChanges(()=>{ const d=cov.querySelector('#collage-desc'); return items.length>0 || !!(d && d.value.trim()); }, cleanup); };
   cov.querySelector('#collage-cancel').onclick=cleanup;
   cov.querySelector('#collage-pick').onclick=(e)=>{e.stopPropagation();input.click();};
   drop.onclick=(e)=>{ if(e.target!==input) input.click(); };
@@ -19292,6 +19303,37 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
 
 function stripHtmlText(v){
   const d=document.createElement('div'); d.innerHTML=String(v||''); return (d.textContent||'').replace(/\s+/g,' ').trim();
+}
+
+/* CONFIRMAR DESCARTE: pequeno aviso "sair e perder as alterações?" usado quando
+   o usuário clica FORA de uma janela de edição (clique acidental não pode
+   apagar imagens/texto). Esc continua fechando direto, sem pergunta.
+   Só pergunta quando há algo a perder (hasChanges() verdadeiro). */
+function confirmDiscardChanges(hasChanges, onDiscard){
+  let dirty = true;
+  try{ dirty = (typeof hasChanges === 'function') ? !!hasChanges() : true; }catch(_e){ dirty = true; }
+  if(!dirty){ onDiscard(); return; }
+  if(document.getElementById('discard-confirm-overlay')) return;
+  const box = document.createElement('div');
+  box.id = 'discard-confirm-overlay';
+  box.className = 'overlay';
+  box.style.zIndex = '10200';
+  box.innerHTML = `<div class="modal" style="max-width:420px;">
+    <h2>Sair sem salvar?</h2>
+    <div class="modal-sub">Gostaria mesmo de sair e perder as alterações realizadas?</div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="discard-confirm-no">não, continuar editando</button>
+      <button type="button" class="btn btn-primary" id="discard-confirm-yes">sim, sair</button>
+    </div>
+  </div>`;
+  document.body.appendChild(box);
+  const closeBox = ()=>{ if(box.isConnected) box.remove(); document.removeEventListener('keydown', onKey, true); };
+  const onKey = ev=>{ if(ev.key==='Escape'){ ev.stopPropagation(); ev.preventDefault(); closeBox(); } };
+  document.addEventListener('keydown', onKey, true);
+  box.addEventListener('click', ev=>{ ev.stopPropagation(); if(ev.target===box) closeBox(); });
+  box.querySelector('#discard-confirm-no').onclick = closeBox;
+  box.querySelector('#discard-confirm-yes').onclick = ()=>{ closeBox(); onDiscard(); };
+  box.querySelector('#discard-confirm-no').focus();
 }
 
 /* Busca de imagens livres (Wikimedia Commons). Movida pra fora de openForm()
@@ -23010,7 +23052,10 @@ function openQuizAddImageModal(lesionId, onImagesAdded, opts){
 
   const escHandler = ev=>{ if(ev.key==='Escape' && cov.isConnected){ ev.stopPropagation(); close(); } };
   const close = ()=>{ releaseDraftObjectUrls(); if(cov.isConnected) cov.remove(); document.removeEventListener('keydown', escHandler, true); };
-  cov.addEventListener('click', ev=>{ if(ev.target===cov) close(); });
+  cov.addEventListener('click', ev=>{ if(ev.target===cov) confirmDiscardChanges(()=>{
+    const orig = Array.isArray(lesion.images) ? lesion.images.length : 0;
+    return draftImgs.length !== orig || draftImgs.some(x=>x && x.source==='pending');
+  }, close); });
   document.addEventListener('keydown', escHandler, true);
   cov.querySelector('#quiz-add-img-cancel').onclick = close;
 

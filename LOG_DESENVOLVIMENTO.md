@@ -6282,3 +6282,7 @@ proteção de branch ativa desde 06/11).
 - Atlas: a descrição entra como valor INICIAL do campo `#collage-desc` (opts.initialDesc; só texto, sem caracteres de controle, máx. 5000). Nenhum campo novo no modelo — continua o mesmo `label` do quadro (guarda de tests/image-description.test.js).
 - Sem texto no Radiopaedia → nada é inventado (campo vazio como antes).
 - Testes: tests/radiopaedia-images-quadro.test.js (25–29).
+
+## 2026-11-23 — Aviso "sair e perder as alterações?" ao clicar fora
+- Clicar fora do construtor de quadro, do modal "Adicionar imagem" e do editor da lesão não descarta mais direto: aparece um pequeno aviso (sim, sair / não, continuar editando; foco em "não"). Só pergunta quando há algo a perder (imagens/texto no quadro; imagens novas no modal; qualquer campo mudado no editor). Esc continua fechando direto.
+- confirmDiscardChanges() em index.html; testes em tests/confirm-discard.test.js; âncora do importHandler (+42) e regex do teste de descarte do Quiz atualizados.
