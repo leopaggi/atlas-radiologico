@@ -6570,6 +6570,13 @@ const DEFAULT_SECTION_ORDER = ["Neurorradiologia","Cabeça e Pescoço","Coluna V
 function radiopaediaSearchUrl(term){
   return "https://radiopaedia.org/search?lang=us&q=" + encodeURIComponent(term);
 }
+// Link "buscar casos" que o atlas mostra: busca do Radiopaedia só em CASOS
+// com diagnóstico confirmado (filtro diagnostic_certainty=confirmed_substantiated,
+// o mesmo que o site coloca na barra ao marcar "Cases" + certeza do diagnóstico).
+// radiopaediaSearchUrl (sem filtro) continua existindo para comparar links antigos.
+function radiopaediaCasesUrl(term){
+  return radiopaediaSearchUrl(term) + "&scope=cases&diagnostic_certainty=confirmed_substantiated";
+}
 // LINKS AUTOMÁTICOS DO RADIOPAEDIA (lrev_mul8vsjq_0bfwkd): termo em inglês
 // REAL para o link automático "Radiopaedia — buscar casos" — nunca fabrica
 // tradução. Só existe quando o dicionário EN_TERMS tem uma entrada explícita
@@ -11076,7 +11083,7 @@ SEED.forEach((e,i)=>{
   const seedOwnEnTerm = (typeof e.enTerm === 'string' && e.enTerm.trim() && e.enTerm.trim() !== String(e.name||'').trim()) ? e.enTerm.trim() : '';
   e.enTerm = EN_TERMS[e.name] || seedOwnEnTerm || e.name;
   const autoTerm = radiopaediaAutoEnTerm(e.name);
-  e.links = autoTerm ? [{label:"Radiopaedia — buscar casos", url: radiopaediaSearchUrl(autoTerm)}] : [];
+  e.links = autoTerm ? [{label:"Radiopaedia — buscar casos", url: radiopaediaCasesUrl(autoTerm)}] : [];
 });
 
 /* limpeza única: tags que eram na verdade descrições relacionais específicas de um sítio
@@ -11444,7 +11451,7 @@ function ensureLinks(e){
     // Mesma regra fail-safe do bootstrap do SEED: sem EN_TERMS real, não
     // fabrica link em português (lrev_mul8vsjq_0bfwkd).
     const autoTerm = radiopaediaAutoEnTerm(e.name);
-    e.links = autoTerm ? [{label:"Radiopaedia — buscar casos", url: radiopaediaSearchUrl(autoTerm)}] : [];
+    e.links = autoTerm ? [{label:"Radiopaedia — buscar casos", url: radiopaediaCasesUrl(autoTerm)}] : [];
   }
   return e.links;
 }
@@ -16501,7 +16508,7 @@ async function loadData(){
         radAudited++;
         const autoTerm = radiopaediaAutoEnTerm(e.name);
         if(autoTerm){
-          const correctUrl = radiopaediaSearchUrl(autoTerm);
+          const correctUrl = radiopaediaCasesUrl(autoTerm);
           if(e.links[0].url !== correctUrl){ e.links[0].url = correctUrl; migrated = true; radCorrected++; }
         } else {
           // Sem EN_TERMS real: nunca fabrica inglês a partir do nome em
@@ -18171,8 +18178,8 @@ function openForm(id, opts){
     }
     const nm = enTermField || curatedTerm || nameField;
     if(!nm){ toast('Escreva o nome da lesão (ou o termo em inglês) primeiro.'); return; }
-    const url = radiopaediaSearchUrl(nm);
-    if(links.some(l=>l.url === url)) { toast('Esse link já foi adicionado.'); return; }
+    const url = radiopaediaCasesUrl(nm);
+    if(links.some(l=>l.url === url || l.url === radiopaediaSearchUrl(nm))) { toast('Esse link já foi adicionado.'); return; }
     links.push({label:'Radiopaedia — buscar casos', url});
     renderLinks();
     if(!enTermField && curatedTerm){

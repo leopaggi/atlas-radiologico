@@ -76,12 +76,13 @@ function loadPure() {
   const src = [
     sliceBetween('const EN_TERMS = {', '\n};') + '\n};',
     extractFunction(html, 'radiopaediaSearchUrl').source,
+    extractFunction(html, 'radiopaediaCasesUrl').source,
     extractFunction(html, 'radiopaediaAutoEnTerm').source,
     extractFunction(html, 'isAutoRadiopaediaLink').source,
     extractFunction(html, 'ensureLinks').source
   ].join('\n');
   const ctx = vm.createContext({ console: { warn() {}, log() {}, error() {} } });
-  vm.runInContext(src + '\nthis.__api = { EN_TERMS, radiopaediaSearchUrl, radiopaediaAutoEnTerm, isAutoRadiopaediaLink, ensureLinks };', ctx);
+  vm.runInContext(src + '\nthis.__api = { EN_TERMS, radiopaediaSearchUrl, radiopaediaCasesUrl, radiopaediaAutoEnTerm, isAutoRadiopaediaLink, ensureLinks };', ctx);
   return ctx.__api;
 }
 
@@ -118,7 +119,7 @@ test('4. ensureLinks: COM EN_TERMS real, gera o link automático com o termo em 
   const links = api.ensureLinks(e);
   assert.equal(links.length, 1);
   assert.equal(links[0].label, 'Radiopaedia — buscar casos');
-  assert.equal(links[0].url, api.radiopaediaSearchUrl(api.EN_TERMS[anyRealName]));
+  assert.equal(links[0].url, api.radiopaediaCasesUrl(api.EN_TERMS[anyRealName]));
 });
 
 test('5. ensureLinks: não mexe em lesão que já tem array de links (mesmo que outro conteúdo)', () => {
@@ -140,18 +141,19 @@ function loadSeedApi() {
   const src = [
     enSrc, seedSrc,
     extractFunction(html, 'radiopaediaSearchUrl').source,
+    extractFunction(html, 'radiopaediaCasesUrl').source,
     extractFunction(html, 'radiopaediaAutoEnTerm').source,
     forEachBlock // o MESMO código real do bootstrap, não uma cópia digitada à mão
   ].join('\n');
   const ctx = vm.createContext({ console: { warn() {}, log() {}, error() {} } });
-  vm.runInContext(src + '\nthis.__api = { SEED, EN_TERMS, radiopaediaSearchUrl };', ctx);
+  vm.runInContext(src + '\nthis.__api = { SEED, EN_TERMS, radiopaediaSearchUrl, radiopaediaCasesUrl };', ctx);
   return ctx.__api;
 }
 
 test('6. bootstrap real do SEED: literalmente usa radiopaediaAutoEnTerm + fallback [] (não é só um helper isolado — é o código que roda)', () => {
   const block = stripJsComments(sliceBetween('SEED.forEach((e,i)=>{', '});'));
   assert.match(block, /const autoTerm\s*=\s*radiopaediaAutoEnTerm\(e\.name\);/);
-  assert.match(block, /e\.links\s*=\s*autoTerm\s*\?\s*\[\{label:"Radiopaedia — buscar casos",\s*url:\s*radiopaediaSearchUrl\(autoTerm\)\}\]\s*:\s*\[\];/);
+  assert.match(block, /e\.links\s*=\s*autoTerm\s*\?\s*\[\{label:"Radiopaedia — buscar casos",\s*url:\s*radiopaediaCasesUrl\(autoTerm\)\}\]\s*:\s*\[\];/);
 });
 
 test('7. catálogo inteiro: NENHUMA lesão sem EN_TERMS acaba com link automático usando o próprio nome em português', () => {
@@ -162,12 +164,12 @@ test('7. catálogo inteiro: NENHUMA lesão sem EN_TERMS acaba com link automáti
     if (hasReal) {
       withTranslation++;
       assert.equal(e.links.length, 1, e.name);
-      assert.equal(e.links[0].url, api.radiopaediaSearchUrl(api.EN_TERMS[e.name]), e.name);
+      assert.equal(e.links[0].url, api.radiopaediaCasesUrl(api.EN_TERMS[e.name]), e.name);
     } else {
       withoutTranslation++;
       // fail-safe: SEM tradução real, o link automático não é criado — nunca
       // com o nome em português como termo de busca em inglês.
-      if (e.links.length === 1 && e.links[0].url === api.radiopaediaSearchUrl(e.name)) polluted.push(e.name);
+      if (e.links.length === 1 && (e.links[0].url === api.radiopaediaSearchUrl(e.name) || e.links[0].url === api.radiopaediaCasesUrl(e.name))) polluted.push(e.name);
     }
   });
   assert.ok(withoutTranslation > 0, 'sanity: precisa haver lesões sem tradução no catálogo real para este teste valer algo');
@@ -255,4 +257,10 @@ test('12. link manual (userEdited=true) sobrevive intacto ao reparo de boot mesm
   // reparo automático quando NÃO é userEdited.
   const shouldAutoRepair = manualLink.userEdited !== true && api.isAutoRadiopaediaLink(manualLink);
   assert.equal(shouldAutoRepair, false);
+});
+
+test('9. link "buscar casos": só casos com diagnóstico confirmado (mesmo filtro do site)', () => {
+  const api = loadPure();
+  assert.equal(api.radiopaediaCasesUrl('galactocele'), 'https://radiopaedia.org/search?lang=us&q=galactocele&scope=cases&diagnostic_certainty=confirmed_substantiated');
+  assert.equal(api.radiopaediaCasesUrl('adenoma (pituitary)'), 'https://radiopaedia.org/search?lang=us&q=adenoma%20(pituitary)&scope=cases&diagnostic_certainty=confirmed_substantiated');
 });
