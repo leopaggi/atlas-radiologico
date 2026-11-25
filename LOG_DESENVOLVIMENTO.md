@@ -6338,3 +6338,6 @@ proteção de branch ativa desde 06/11).
 
 ## 2026-11-25 — Quadro com 1 única imagem
 - O quadro de imagens exigia no mínimo 2 imagens, então uma lesão com só 1 imagem (ex.: panorâmica odontológica) não conseguia criar o quadro (e a descrição geral junto). Agora aceita de 1 a 8. Com 1 imagem: coluna única, altura seguindo a proporção da imagem, e sem rótulo "Imagem 1" quando não há sequência.
+
+## 2026-11-25 — Lightbox: clicar na legenda expande até ~metade da tela
+- Textos longos ficavam em só ~4 linhas. Agora, clicar no texto da legenda (margem inferior da imagem ampliada) expande o cartão até ~55% da altura da tela, por cima da imagem e com fundo translúcido (a imagem continua visível atrás). Clicar de novo recolhe; ESC recolhe primeiro e só o 2º ESC fecha. Selecionar texto com o mouse não expande/recolhe.
