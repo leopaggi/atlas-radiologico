@@ -6322,3 +6322,7 @@ proteção de branch ativa desde 06/11).
 ## 2026-11-24 — Descrição do quadro em bullets por método (userscript 1.5.7)
 - A descrição vinda do Radiopaedia agora sai como "- **TC:** achados", "- **RM:** achados" e "- **Discussão do caso:** …" (um bullet por exame, sem linha em branco, sem "Fonte"). O método (CT/MRI/Ultrasound…) vem do próprio exame e é convertido para TC/RM/US/RX/MAMOGRAFIA/etc.; a legenda é anexada ao mesmo bullet.
 - Tradução do Chrome preserva o "- **MÉTODO:**" de cada linha.
+
+## 2026-11-24 — Revisão dos termos de busca do Radiopaedia em todo o atlas
+- Revisados os 1259 termos do dicionário EN_TERMS: 223 foram encurtados/ajustados (a busca do Radiopaedia exige todas as palavras, então termos longos davam poucos ou nenhum resultado; foram tirados "imaging", "MRI", "pediatric", "fetal" e variações desnecessárias, e usados os nomes que o site usa — ex.: "cerebral cavernous malformation", "extradural hemorrhage", "Tarlov cyst", "usual interstitial pneumonia"). Itens de Mamas já aprovados não foram mexidos.
+- Acrescentados 136 termos para lesões criadas à mão que não estavam no dicionário (muitas buscavam em português ou com termo comprido: Miocardite, Criptorquidia, Craniossinostose, Bronquiolite obliterante, Fibroma condromixoide etc.). O reparo de boot reescreve só o link automático "Radiopaedia — buscar casos".

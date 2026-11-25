@@ -641,9 +641,9 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // +2 nas 3 primeiras e +27 no importHandler (2026-11-14, ✕ da busca e atalho "limpar filtros"):
   // CSS do ✕ (2 linhas, antes das âncoras) e helpers countActiveFilters/clearAllFilters + ligações
   // da busca/detalhe (entre loadData e o importHandler) — só código de visualização.
-  assert.equal(recovery.line, 12302);
-  assert.equal(brokenArtifacts.line, 12292);
-  assert.equal(loadData.line, 16423);
+  assert.equal(recovery.line, 12439);
+  assert.equal(brokenArtifacts.line, 12429);
+  assert.equal(loadData.line, 16560);
   // +27 no importHandler (Protecao 093c, 2026-09-26): imageCtx do formulario
   // com addPendingFile/removeImage (buildPendingImage, upload so no Salvar) e
   // remapeamento dos vinculos temporarios no Salvar — entre loadData e o
@@ -709,7 +709,7 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // âncoras acima): a própria marcação retroativa fica DENTRO do handler de
   // importação (depois do marcador que esta âncora localiza), então não
   // desloca este número — só o que vier antes dele no arquivo desloca.
-  assert.equal(importHandler.line, 22275); // +117 (aviso + clique fora real): aviso 'sair sem salvar?' (confirmDiscardChanges + baseline do openForm) antes do handler
+  assert.equal(importHandler.line, 22412); // +117 (aviso + clique fora real): aviso 'sair sem salvar?' (confirmDiscardChanges + baseline do openForm) antes do handler
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {
