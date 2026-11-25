@@ -6326,3 +6326,7 @@ proteção de branch ativa desde 06/11).
 ## 2026-11-24 — Revisão dos termos de busca do Radiopaedia em todo o atlas
 - Revisados os 1259 termos do dicionário EN_TERMS: 223 foram encurtados/ajustados (a busca do Radiopaedia exige todas as palavras, então termos longos davam poucos ou nenhum resultado; foram tirados "imaging", "MRI", "pediatric", "fetal" e variações desnecessárias, e usados os nomes que o site usa — ex.: "cerebral cavernous malformation", "extradural hemorrhage", "Tarlov cyst", "usual interstitial pneumonia"). Itens de Mamas já aprovados não foram mexidos.
 - Acrescentados 136 termos para lesões criadas à mão que não estavam no dicionário (muitas buscavam em português ou com termo comprido: Miocardite, Criptorquidia, Craniossinostose, Bronquiolite obliterante, Fibroma condromixoide etc.). O reparo de boot reescreve só o link automático "Radiopaedia — buscar casos".
+
+## 2026-11-25 — Tradução também depois de salvar a imagem + correção do botão "copiar p/ IA"
+- "🌐 traduzir" e "🤖 copiar p/ IA" agora também existem no editor de legenda de cada imagem (galeria da lesão e "✏ Editar"), onde a tradução fica no campo e só vale ao salvar; e há um "🌐 traduzir" na visualização ampliada (lightbox), só para ler (não altera o salvo; volta ao original ao trocar de imagem).
+- Correção: o botão "copiar p/ IA" tinha sido colocado por engano na barra de legenda de cada imagem (id duplicado, sem função) e não aparecia na barra do quadro. Agora está na barra do quadro, e na legenda de cada imagem usa classe própria.
