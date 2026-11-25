@@ -79,3 +79,10 @@ test('botão copiar p/ IA: prompt com o texto cru no lugar de <colar aqui> (sem 
   assert.ok(!out.includes('<colar aqui>'));
   assert.ok(out.includes('Discussão do caso'));
 });
+
+test('traduz bullets "- **TC:** texto" mantendo hífen e rótulo em negrito', async () => {
+  const c = load({});
+  const tr = { translate: async (t) => '[PT] ' + t };
+  const out = await c.t('- **TC:** Round nodule.\n- **RM:** Signal drop.\n- **Discussão do caso:** Adenoma.', tr);
+  assert.equal(out, '- **TC:** [PT] Round nodule.\n- **RM:** [PT] Signal drop.\n- **Discussão do caso:** [PT] Adenoma.');
+});

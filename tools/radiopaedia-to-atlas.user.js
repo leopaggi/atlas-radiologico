@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.5.6
+// @version      1.5.7
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e entrega o caso à aba do Atlas já aberta (ou abre o Atlas com o payload no fragmento da URL). O botão "📸 Enviar com imagens" (1.5.0) também baixa as imagens do caso (uma por série), reduz cada uma e entrega ao Atlas só para APROVAÇÃO — nada é salvo sem você. Não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -344,22 +344,41 @@
     return '';
   }
 
-  // blocks: {findings, caption, modality}[]; discussion: texto; src: {title,url,author}
-  function buildImageDescription(blocks, discussion, src) {
+  // Nome do método como o Radiopaedia escreve (CT, MRI, Ultrasound…) -> rótulo do Atlas (TC, RM, US…)
+  function modalityLabelPt(raw) {
+    var m = String(raw || '').toLowerCase();
+    if (!m) return '';
+    if (/pet/.test(m)) return 'PET-CT';
+    if (/nuclear|scintig|spect/.test(m)) return 'MEDICINA NUCLEAR';
+    if (/mammo/.test(m)) return 'MAMOGRAFIA';
+    if (/fluoro/.test(m)) return 'FLUOROSCOPIA';
+    if (/angio|dsa/.test(m)) return 'ANGIOGRAFIA';
+    if (/x-?ray|radiograph|plain/.test(m)) return 'RX';
+    if (/ultrasound|sonograph|\bus\b/.test(m)) return 'US';
+    if (/\bct\b|tomograph/.test(m)) return 'TC';
+    if (/\bmri?\b|magnetic/.test(m)) return 'RM';
+    return cleanText(String(raw)).toUpperCase().slice(0, 30);
+  }
+
+  // blocks: {findings, caption, modality}[]; discussion: texto
+  // Formato (uma linha por método, sem linha em branco):
+  //   - **TC:** achados…
+  //   - **Discussão do caso:** …
+  function buildImageDescription(blocks, discussion) {
     var out = [];
+    var oneLine = function (t) { return String(t || '').replace(/\s*\n+\s*/g, ' ').replace(/[ \t]{2,}/g, ' ').trim(); };
     (blocks || []).forEach(function (b) {
-      var tag = b.modality ? ' (' + b.modality + ')' : '';
-      var f = clipText(htmlToPlainText(b.findings), DESC_BLOCK_MAX);
-      var c = clipText(htmlToPlainText(b.caption), DESC_BLOCK_MAX);
-      if (f) out.push('**Achados de imagem' + tag + ':** ' + f);
-      if (c && c !== f) out.push('**Legenda' + tag + ':** ' + c);
+      var f = oneLine(clipText(htmlToPlainText(b.findings), DESC_BLOCK_MAX));
+      var c = oneLine(clipText(htmlToPlainText(b.caption), DESC_BLOCK_MAX));
+      var text = f;
+      if (c && c !== f && f.indexOf(c) === -1) text = text ? text + ' ' + c : c;
+      if (!text) return;
+      out.push('- **' + (modalityLabelPt(b.modality) || 'ACHADOS') + ':** ' + text);
     });
-    var d = clipText(String(discussion || '').trim(), DESC_BLOCK_MAX);
-    if (d) out.push('**Discussão:** ' + d);
-    // Sem linha em branco entre os títulos e sem linha de "Fonte" (o caso já fica vinculado ao quadro)
-    var head = out.join('\n');
-    if (!head) return '';
-    return clipText(head, DESC_TOTAL_MAX);
+    var d = oneLine(clipText(String(discussion || '').trim(), DESC_BLOCK_MAX));
+    if (d) out.push('- **Discussão do caso:** ' + d);
+    if (!out.length) return '';
+    return clipText(out.join('\n'), DESC_TOTAL_MAX);
   }
 
   var IMG_BASE = 'https://prod-images-static.radiopaedia.org/images/';
@@ -544,7 +563,7 @@
       var budget = Math.max(1, Math.floor(IMG_MAX_COUNT / Math.max(1, kept.length)));
       var items = [], total = 0, blocks = [];
       kept.forEach(function (j) {
-        blocks.push({ findings: j.study.findings, caption: j.study.caption, modality: kept.length > 1 ? cleanText(String(j.study.modality || '')) : '', author: j.study.contributor_login || '' });
+        blocks.push({ findings: j.study.findings, caption: j.study.caption, modality: cleanText(String(j.study.modality || '')), author: j.study.contributor_login || '' });
         var label = kept.length > 1 ? cleanText(String(j.study.modality || '')).slice(0, 40) : '';
         var r = imagesFromStudyJson(j, budget, label);
         total += r.total;

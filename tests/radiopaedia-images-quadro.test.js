@@ -338,7 +338,7 @@ test('24. botão usa a lista completa e cai para a coleta da página se ela falh
 function descCtx() {
   const ctx = vm.createContext({});
   vm.runInContext(['var DESC_BLOCK_MAX = 1500;', 'var DESC_TOTAL_MAX = 4000;',
-    fn(us, 'htmlToPlainText'), fn(us, 'clipText'), fn(us, 'buildImageDescription')].join('\n'), ctx);
+    fn(us, 'cleanText'), fn(us, 'htmlToPlainText'), fn(us, 'clipText'), fn(us, 'modalityLabelPt'), fn(us, 'buildImageDescription')].join('\n'), ctx);
   return ctx;
 }
 test('25. HTML do Radiopaedia vira texto simples (parágrafos, entidades; "<5 mm" literal é preservado)', () => {
@@ -348,32 +348,36 @@ test('25. HTML do Radiopaedia vira texto simples (parágrafos, entidades; "<5 mm
   assert.equal(c.htmlToPlainText(null), '');
 });
 
-test('26. descrição: achados + legenda (sem repetir) + discussão + fonte com link e crédito', () => {
+test('26. descrição: um bullet por método ("- **TC:** …"), discussão no fim, sem linha em branco nem Fonte', () => {
   const c = descCtx();
-  const d = c.buildImageDescription(
-    [{ findings: '<p>Lesion with fat fluid level.</p>', caption: '', modality: '', author: 'rania' }],
-    'Galactoceles are milk retention cysts.',
-    { title: 'Galactocele', url: 'https://radiopaedia.org/cases/galactocele-7', author: 'rania' });
-  assert.match(d, /^\*\*Achados de imagem:\*\* Lesion with fat fluid level\./);
-  assert.match(d, /\n\*\*Discussão:\*\* Galactoceles are milk retention cysts\./);
-  assert.doesNotMatch(d, /\n\n/, 'sem linha em branco entre os títulos');
-  assert.doesNotMatch(d, /Fonte/, 'sem linha de fonte');
-  assert.doesNotMatch(d, /Legenda/);
-  const same = c.buildImageDescription([{ findings: 'x', caption: 'x', modality: 'US' }], '', { url: 'u' });
-  assert.equal((same.match(/Legenda/g) || []).length, 0, 'legenda igual aos achados não duplica');
-  assert.match(c.buildImageDescription([{ findings: 'a', caption: 'b', modality: 'US' }], '', { url: 'u' }), /\*\*Achados de imagem \(US\):\*\* a\n\*\*Legenda \(US\):\*\* b/);
+  const d = c.buildImageDescription([
+    { findings: '<p>Round right adrenal nodule.</p><p>No other finding.</p>', caption: '', modality: 'CT' },
+    { findings: 'Signal drop on opposed-phase.', caption: 'Chemical shift', modality: 'MRI' }
+  ], 'Classic lipid-rich adenoma.');
+  assert.equal(d, '- **TC:** Round right adrenal nodule. No other finding.\n- **RM:** Signal drop on opposed-phase. Chemical shift\n- **Discussão do caso:** Classic lipid-rich adenoma.');
+  assert.doesNotMatch(d, /\n\n|Fonte|Legenda/);
+});
+
+test('26b. rótulos de método em português e fallback', () => {
+  const c = descCtx();
+  const L = c.modalityLabelPt;
+  assert.deepEqual([L('CT'), L('MRI'), L('Ultrasound'), L('X-ray'), L('Mammography'), L('Fluoroscopy'), L('Nuclear medicine'), L('PET-CT'), L('Angiography (DSA)')],
+    ['TC', 'RM', 'US', 'RX', 'MAMOGRAFIA', 'FLUOROSCOPIA', 'MEDICINA NUCLEAR', 'PET-CT', 'ANGIOGRAFIA']);
+  assert.equal(L(''), '');
+  assert.match(c.buildImageDescription([{ findings: 'x', caption: 'x', modality: '' }], ''), /^- \*\*ACHADOS:\*\* x$/);
+  assert.equal((c.buildImageDescription([{ findings: 'x', caption: 'x', modality: 'US' }], '').match(/x/g) || []).length, 1, 'legenda igual aos achados não duplica');
 });
 
 test('27. sem nenhum texto do Radiopaedia, não inventa descrição (fica vazia)', () => {
   const c = descCtx();
-  assert.equal(c.buildImageDescription([{ findings: '', caption: '' }], '', { url: 'u', title: 't' }), '');
-  assert.equal(c.buildImageDescription([], '', null), '');
+  assert.equal(c.buildImageDescription([{ findings: '', caption: '' }], ''), '');
+  assert.equal(c.buildImageDescription([], ''), '');
 });
 
 test('28. descrição respeita os tetos', () => {
   const c = descCtx();
   const big = 'palavra '.repeat(2000);
-  const d = c.buildImageDescription([{ findings: big, caption: big + 'z', modality: 'US' }], big, { title: 'T', url: 'https://radiopaedia.org/cases/x', author: 'a' });
+  const d = c.buildImageDescription([{ findings: big, caption: big + 'z', modality: 'US' }], big);
   assert.ok(d.length <= 4000, 'ficou em ' + d.length);
 });
 

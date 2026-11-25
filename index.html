@@ -19140,7 +19140,7 @@ async function translateDescriptionToPt(text, translator){
   const out = [];
   for(const line of lines){
     if(!line.trim() || /^\s*Fonte:/.test(line) || /^\s*https?:\/\/\S+\s*$/.test(line)){ out.push(line); continue; }
-    const m = line.match(/^(\*\*[^*\n]{1,80}:\*\*\s*)([\s\S]*)$/);
+    const m = line.match(/^((?:-\s+)?\*\*[^*\n]{1,80}:\*\*\s*)([\s\S]*)$/);
     const label = m ? m[1] : '';
     const body = m ? m[2] : line;
     if(!body.trim()){ out.push(line); continue; }
