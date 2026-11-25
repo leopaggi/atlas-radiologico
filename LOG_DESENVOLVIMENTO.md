@@ -6333,3 +6333,5 @@ proteção de branch ativa desde 06/11).
 
 ## 2026-11-25 — Lightbox: "🌐 traduzir" na mesma linha de "URL da imagem"
 - O botão ficava numa linha própria e empurrava a imagem para cima. Agora fica na linha da fonte (entre "URL da imagem" e "Copiar link"); só quando a imagem não tem fonte ele vai para o rodapé do cartão.
+## 2026-11-25 — Método "Annotated image" na descrição (userscript 1.5.8)
+- O Radiopaedia chama de "Annotated image" o estudo com a seta; isso não é um método. A descrição saía com "- ANNOTATED IMAGE: …". Agora esse bloco herda o método do bloco anterior (ex.: TC).
