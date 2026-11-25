@@ -368,6 +368,16 @@ test('26b. rótulos de método em português e fallback', () => {
   assert.equal((c.buildImageDescription([{ findings: 'x', caption: 'x', modality: 'US' }], '').match(/x/g) || []).length, 1, 'legenda igual aos achados não duplica');
 });
 
+test('26c. "Annotated image" herda o método do bloco anterior (não vira rótulo)', () => {
+  const c = descCtx();
+  const d = c.buildImageDescription([
+    { findings: 'a', caption: '', modality: 'CT' },
+    { findings: 'b', caption: '', modality: 'Annotated image' }
+  ], '');
+  assert.equal(d, '- **TC:** a\n- **TC:** b');
+  assert.equal(c.modalityLabelPt('Annotated image'), '');
+});
+
 test('27. sem nenhum texto do Radiopaedia, não inventa descrição (fica vazia)', () => {
   const c = descCtx();
   assert.equal(c.buildImageDescription([{ findings: '', caption: '' }], ''), '');

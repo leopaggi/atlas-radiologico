@@ -6330,3 +6330,6 @@ proteção de branch ativa desde 06/11).
 ## 2026-11-25 — Tradução também depois de salvar a imagem + correção do botão "copiar p/ IA"
 - "🌐 traduzir" e "🤖 copiar p/ IA" agora também existem no editor de legenda de cada imagem (galeria da lesão e "✏ Editar"), onde a tradução fica no campo e só vale ao salvar; e há um "🌐 traduzir" na visualização ampliada (lightbox), só para ler (não altera o salvo; volta ao original ao trocar de imagem).
 - Correção: o botão "copiar p/ IA" tinha sido colocado por engano na barra de legenda de cada imagem (id duplicado, sem função) e não aparecia na barra do quadro. Agora está na barra do quadro, e na legenda de cada imagem usa classe própria.
+
+## 2026-11-25 — Método "Annotated image" na descrição (userscript 1.5.8)
+- O Radiopaedia chama de "Annotated image" o estudo com a seta; isso não é um método. A descrição saía com "- ANNOTATED IMAGE: …". Agora esse bloco herda o método do bloco anterior (ex.: TC).

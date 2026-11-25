@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.5.7
+// @version      1.5.8
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e entrega o caso à aba do Atlas já aberta (ou abre o Atlas com o payload no fragmento da URL). O botão "📸 Enviar com imagens" (1.5.0) também baixa as imagens do caso (uma por série), reduz cada uma e entrega ao Atlas só para APROVAÇÃO — nada é salvo sem você. Não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -348,6 +348,7 @@
   function modalityLabelPt(raw) {
     var m = String(raw || '').toLowerCase();
     if (!m) return '';
+    if (/annotat/.test(m)) return ''; // "Annotated image" não é um método: herda o do bloco anterior
     if (/pet/.test(m)) return 'PET-CT';
     if (/nuclear|scintig|spect/.test(m)) return 'MEDICINA NUCLEAR';
     if (/mammo/.test(m)) return 'MAMOGRAFIA';
@@ -365,7 +366,7 @@
   //   - **TC:** achados…
   //   - **Discussão do caso:** …
   function buildImageDescription(blocks, discussion) {
-    var out = [];
+    var out = [], lastLab = '';
     var oneLine = function (t) { return String(t || '').replace(/\s*\n+\s*/g, ' ').replace(/[ \t]{2,}/g, ' ').trim(); };
     (blocks || []).forEach(function (b) {
       var f = oneLine(clipText(htmlToPlainText(b.findings), DESC_BLOCK_MAX));
@@ -373,7 +374,9 @@
       var text = f;
       if (c && c !== f && f.indexOf(c) === -1) text = text ? text + ' ' + c : c;
       if (!text) return;
-      out.push('- **' + (modalityLabelPt(b.modality) || 'ACHADOS') + ':** ' + text);
+      var lab = modalityLabelPt(b.modality) || lastLab || 'ACHADOS';
+      lastLab = lab;
+      out.push('- **' + lab + ':** ' + text);
     });
     var d = oneLine(clipText(String(discussion || '').trim(), DESC_BLOCK_MAX));
     if (d) out.push('- **Discussão do caso:** ' + d);
