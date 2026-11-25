@@ -6335,3 +6335,6 @@ proteção de branch ativa desde 06/11).
 - O botão ficava numa linha própria e empurrava a imagem para cima. Agora fica na linha da fonte (entre "URL da imagem" e "Copiar link"); só quando a imagem não tem fonte ele vai para o rodapé do cartão.
 ## 2026-11-25 — Método "Annotated image" na descrição (userscript 1.5.8)
 - O Radiopaedia chama de "Annotated image" o estudo com a seta; isso não é um método. A descrição saía com "- ANNOTATED IMAGE: …". Agora esse bloco herda o método do bloco anterior (ex.: TC).
+
+## 2026-11-25 — Quadro com 1 única imagem
+- O quadro de imagens exigia no mínimo 2 imagens, então uma lesão com só 1 imagem (ex.: panorâmica odontológica) não conseguia criar o quadro (e a descrição geral junto). Agora aceita de 1 a 8. Com 1 imagem: coluna única, altura seguindo a proporção da imagem, e sem rótulo "Imagem 1" quando não há sequência.

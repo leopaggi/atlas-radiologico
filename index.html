@@ -19329,7 +19329,7 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
   cov.style.zIndex='10030';
   cov.innerHTML=`<div class="modal collage-modal">
     <h2>▦ ${isEditMode?'Editar':'Criar'} quadro de imagens</h2>
-    <div class="modal-sub">${isEditMode?'ajuste, adicione ou remova painéis, corrija as legendas, e gere de novo':'cole ou selecione de 2 a 8 imagens · organize · identifique as sequências · gere uma única imagem'}</div>
+    <div class="modal-sub">${isEditMode?'ajuste, adicione ou remova painéis, corrija as legendas, e gere de novo':'cole ou selecione de 1 a 8 imagens · organize · identifique as sequências · gere uma única imagem'}</div>
     <div class="collage-drop" id="collage-drop" tabindex="0">
       <button type="button" class="btn btn-ghost" id="collage-pick">📎 selecionar imagens</button>
       <span style="color:var(--muted-2);font-size:12px;margin-left:8px;">ou Ctrl+V / arraste aqui</span>
@@ -19461,17 +19461,22 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
       customSeq.onfocus=()=>{d.draggable=false;}; customSeq.onblur=()=>{d.draggable=true;};
       d.querySelector('[data-a="left"]').onclick=()=>{if(i){[items[i-1],items[i]]=[items[i],items[i-1]];render();if(finalBlob)generateCollage();}};
       d.querySelector('[data-a="right"]').onclick=()=>{if(i<items.length-1){[items[i+1],items[i]]=[items[i],items[i+1]];render();if(finalBlob)generateCollage();}};
-      d.querySelector('[data-a="del"]').onclick=()=>{URL.revokeObjectURL(items[i].url);items.splice(i,1);render();if(finalBlob&&items.length>=2)generateCollage();}; list.appendChild(d);
+      d.querySelector('[data-a="del"]').onclick=()=>{URL.revokeObjectURL(items[i].url);items.splice(i,1);render();if(finalBlob&&items.length>=1)generateCollage();}; list.appendChild(d);
     });
   }
   async function loadImg(url){return await new Promise((res,rej)=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>res(im);im.onerror=()=>rej(new Error('Não foi possível carregar uma das imagens do quadro (link quebrado ou bloqueio de origem).'));im.src=url;});}
   if((isEditMode || preloadList.length) && items.length){ render(); generateCollage(); }
   async function generateCollage(){
-    if(items.length<2){toast('Adicione pelo menos 2 imagens.');return;} if(items.length>8){toast('Máximo de 8 imagens.');return;}
+    if(items.length<1){toast('Adicione pelo menos 1 imagem.');return;} if(items.length>8){toast('Máximo de 8 imagens.');return;}
     try{
       const width=+cov.querySelector('#collage-size').value; const lv=cov.querySelector('#collage-layout').value;
-      const cols=lv==='auto'?(items.length<=4?2:(items.length<=6?3:4)):+lv; const rows=Math.ceil(items.length/cols);
-      const gap=4, labelH=54, cellW=Math.floor((width-gap*(cols-1))/cols), cellH=Math.round(cellW*.78);
+      // Quadro de 1 imagem: coluna única, sem "Imagem 1" se não houver sequência, e altura
+      // seguindo a proporção da própria imagem (evita faixas pretas enormes em panorâmicas).
+      const single=items.length===1;
+      const cols=single?1:(lv==='auto'?(items.length<=4?2:(items.length<=6?3:4)):+lv); const rows=Math.ceil(items.length/cols);
+      const gap=4, labelH=(single&&!items[0].seq)?0:54, cellW=Math.floor((width-gap*(cols-1))/cols);
+      let cellH=Math.round(cellW*.78);
+      if(single){ const im0=await loadImg(items[0].url); cellH=Math.max(Math.round(cellW*.5), Math.min(Math.round(cellW*1.3), Math.round(cellW*im0.height/im0.width))); }
       const canvas=cov.querySelector('#collage-canvas'); canvas.width=width; canvas.height=rows*(cellH+labelH)+gap*(rows-1);
       const ctx=canvas.getContext('2d'); ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height); ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='600 28px Arial';
       const pos=cov.querySelector('#collage-label-pos').value;
@@ -19480,10 +19485,11 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
         const iy=pos==='top'?y+labelH:y, ih=pos==='top'?cellH:cellH+labelH;
         const scale=Math.min(cellW/im.width,ih/im.height),dw=im.width*scale,dh=im.height*scale;
         ctx.drawImage(im,x+(cellW-dw)/2,iy+(ih-dh)/2,dw,dh);
-        const lab=items[i].seq||('Imagem '+(i+1));
+        const lab=items[i].seq||(single?'':('Imagem '+(i+1)));
         // PROTEÇÃO 087 — sequência livre pode ser longa: reduz a fonte (nunca trunca).
         let fs=28; ctx.font='600 '+fs+'px Arial'; while(fs>14 && ctx.measureText(lab).width>cellW-16){ fs-=2; ctx.font='600 '+fs+'px Arial'; }
-        if(pos==='top'){ctx.fillStyle='#050505';ctx.fillRect(x,y,cellW,labelH);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,y+labelH/2);}
+        if(!lab){ /* sem rótulo (quadro de 1 imagem sem sequência) */ }
+        else if(pos==='top'){ctx.fillStyle='#050505';ctx.fillRect(x,y,cellW,labelH);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,y+labelH/2);}
         else{const bh=46;ctx.fillStyle='rgba(0,0,0,.72)';ctx.fillRect(x,iy+ih-bh,cellW,bh);ctx.fillStyle='#fff';ctx.fillText(lab,x+cellW/2,iy+ih-bh/2);}
       }
       finalBlob=await collageEncodeUnderLimit(canvas);
