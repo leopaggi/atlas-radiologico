@@ -22691,7 +22691,7 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
           <a class="lightbox-source-link" target="_blank" rel="noopener noreferrer"><span class="lightbox-source-link-icon" aria-hidden="true">🔗</span><span class="lightbox-source-link-label"></span></a>
           <button type="button" class="lightbox-source-copy" title="copiar link da imagem">Copiar link</button>
         </div>
-        <button type="button" class="lightbox-translate rich-text-btn" style="align-self:flex-start;margin-top:6px;" title="traduzir esta legenda do inglês para o português (só para ler; não altera o que está salvo)" hidden>🌐 traduzir</button>
+        <button type="button" class="lightbox-translate rich-text-btn" style="align-self:flex-start;" title="traduzir esta legenda do inglês para o português (só para ler; não altera o que está salvo)" hidden>🌐 traduzir</button>
       </div>
     </div>
     <div class="lightbox-controls" style="display:flex;gap:6px;justify-content:center;margin-top:8px;">
@@ -22735,7 +22735,18 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
   function updateLbDescVisibility(){
     if(!descEl) return;
     const hasText = !!(descTextEl && !descTextEl.hidden);
-    if(lbTranslateBtn) lbTranslateBtn.hidden = !hasText;
+    if(lbTranslateBtn){
+      lbTranslateBtn.hidden = !hasText;
+      // Fica na mesma linha de "URL da imagem" / "Copiar link"; sem fonte, vai para o rodapé do cartão.
+      const inRow = !!(lbSourceRow && !lbSourceRow.hidden);
+      if(inRow && lbTranslateBtn.parentNode !== lbSourceRow){
+        lbSourceRow.insertBefore(lbTranslateBtn, lbSourceCopy || null);
+        lbTranslateBtn.style.cssText = 'margin-left:auto;';
+      } else if(!inRow && lbTranslateBtn.parentNode !== descEl){
+        descEl.appendChild(lbTranslateBtn);
+        lbTranslateBtn.style.cssText = 'align-self:flex-start;';
+      }
+    }
     const hasSource = !!(lbSourceRow && !lbSourceRow.hidden);
     descEl.hidden = !hasText && !hasSource;
   }

@@ -101,3 +101,8 @@ test('tradução disponível também depois de enviada: galeria, editor de legen
   assert.match(html, /lbOriginalDesc = cur; descTextEl\.innerHTML = richDescHtml\(out\)/);
   assert.match(html, /lbResetTranslate\(\);\n\s*const old|lbResetTranslate\(\);\n    if\(descTextEl\)/);
 });
+
+test('lightbox: botão traduzir vai para a mesma linha da fonte ("URL da imagem" / "Copiar link"); sem fonte, rodapé do cartão', () => {
+  assert.match(html, /lbSourceRow\.insertBefore\(lbTranslateBtn, lbSourceCopy \|\| null\)/);
+  assert.match(html, /descEl\.appendChild\(lbTranslateBtn\)/);
+});

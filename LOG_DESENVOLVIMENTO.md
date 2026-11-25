@@ -6330,3 +6330,6 @@ proteção de branch ativa desde 06/11).
 ## 2026-11-25 — Tradução também depois de salvar a imagem + correção do botão "copiar p/ IA"
 - "🌐 traduzir" e "🤖 copiar p/ IA" agora também existem no editor de legenda de cada imagem (galeria da lesão e "✏ Editar"), onde a tradução fica no campo e só vale ao salvar; e há um "🌐 traduzir" na visualização ampliada (lightbox), só para ler (não altera o salvo; volta ao original ao trocar de imagem).
 - Correção: o botão "copiar p/ IA" tinha sido colocado por engano na barra de legenda de cada imagem (id duplicado, sem função) e não aparecia na barra do quadro. Agora está na barra do quadro, e na legenda de cada imagem usa classe própria.
+
+## 2026-11-25 — Lightbox: "🌐 traduzir" na mesma linha de "URL da imagem"
+- O botão ficava numa linha própria e empurrava a imagem para cima. Agora fica na linha da fonte (entre "URL da imagem" e "Copiar link"); só quando a imagem não tem fonte ele vai para o rodapé do cartão.
