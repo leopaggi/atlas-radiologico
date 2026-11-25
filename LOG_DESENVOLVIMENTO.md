@@ -6317,4 +6317,4 @@ proteção de branch ativa desde 06/11).
 ## 2026-11-24 — Descrição do quadro: sem linha "Fonte", sem linhas em branco, botão "copiar p/ IA" (userscript 1.5.6)
 - Descrição vinda do Radiopaedia não leva mais a linha "Fonte: Radiopaedia…" e os títulos (Achados/Legenda/Discussão) ficam um embaixo do outro, sem linha em branco.
 - Novo botão "🤖 copiar p/ IA" no quadro: copia o prompt de curadoria (traduz + normaliza em "- MODALIDADE: …") com o texto cru; o usuário cola na própria IA e cola a resposta de volta.
-- Tradução automática ao abrir removida (o campo fica com o texto cru em inglês); o botão "🌐 traduzir" (Chrome) segue manual.
+- Tradução automática ao abrir mantida (só se o idioma já está instalado no Chrome); "copiar p/ IA" usa o texto original em inglês mesmo com a tradução na tela.

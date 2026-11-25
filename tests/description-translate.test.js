@@ -61,10 +61,11 @@ test('idioma já instalado: cria direto, sem exigir clique, e reaproveita', asyn
   assert.equal(created, 1);
 });
 
-test('fiação no construtor: botão traduzir manual (sem tradução automática ao abrir)', () => {
+test('fiação no construtor: botão traduzir + tradução automática só se o idioma já está instalado e o texto não foi editado', () => {
   assert.match(html, /id="collage-translate-btn"/);
   assert.match(html, /await getPtTranslator\(true\)/);
-  assert.doesNotMatch(html, /await getPtTranslator\(false\)/);
+  assert.match(html, /await getPtTranslator\(false\); \/\/ automático/);
+  assert.match(html, /if\(cov\.isConnected && dEl\.value === init\)/);
 });
 
 test('botão copiar p/ IA: prompt com o texto cru no lugar de <colar aqui> (sem ** e __)', () => {

@@ -709,7 +709,7 @@ test('fluxos criticos sao localizados estaticamente no index.html', () => {
   // âncoras acima): a própria marcação retroativa fica DENTRO do handler de
   // importação (depois do marcador que esta âncora localiza), então não
   // desloca este número — só o que vier antes dele no arquivo desloca.
-  assert.equal(importHandler.line, 22264); // +117 (aviso + clique fora real): aviso 'sair sem salvar?' (confirmDiscardChanges + baseline do openForm) antes do handler
+  assert.equal(importHandler.line, 22275); // +117 (aviso + clique fora real): aviso 'sair sem salvar?' (confirmDiscardChanges + baseline do openForm) antes do handler
 });
 
 test('inventario de chamadas da recuperacao automatica e deterministico', () => {

@@ -19224,6 +19224,17 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
       try{ await navigator.clipboard.writeText(buildAiFormatPrompt(raw)); toast('Copiado! Cole na sua IA e depois cole a resposta aqui na descrição.'); }
       catch(_e){ toast('Não consegui copiar automaticamente.'); }
     };
+    const init = (!isEditMode && opts && typeof opts.initialDesc === 'string') ? opts.initialDesc : '';
+    if(init.trim()){
+      (async ()=>{
+        try{
+          const tr = await getPtTranslator(false); // automático só se o idioma já está instalado
+          if(!tr) return;
+          const out = await translateDescriptionToPt(init, tr);
+          if(cov.isConnected && dEl.value === init){ original = init; dEl.value = out; showTranslated(); }
+        }catch(_e){}
+      })();
+    }
   })();
   let finalBlob=null; let finalUrl='';
   const seqs=IMAGE_SEQUENCE_PRESETS;
