@@ -14,12 +14,20 @@ test('CSS: legenda expandida sobe até ~metade da tela, por cima da imagem, com 
 });
 
 test('clique no texto alterna expandir/recolher, sem fechar o lightbox e sem atrapalhar seleção de texto', () => {
-  assert.match(html, /descEl\.classList\.toggle\('expanded'\)/);
+  assert.match(html, /setDescExpanded\(!descEl\.classList\.contains\('expanded'\)\)/);
   assert.match(html, /if\(sel && String\(sel\)\.length > 0\) return;/);
-  assert.match(html, /e\.stopPropagation\(\);\n\s*descEl\.classList\.toggle/);
+  assert.match(html, /e\.stopPropagation\(\);\n\s*setDescExpanded/);
 });
 
 test('ESC: com a legenda expandida o 1º ESC só recolhe; senão fecha como sempre', () => {
-  assert.match(html, /if\(e\.key==='Escape' && descEl && descEl\.classList && descEl\.classList\.contains\('expanded'\)\)\{ descEl\.classList\.remove\('expanded'\); return; \}/);
+  assert.match(html, /if\(e\.key==='Escape' && descEl && descEl\.classList && descEl\.classList\.contains\('expanded'\)\)\{ setDescExpanded\(false\); return; \}/);
   assert.match(html, /if\(e\.key==='Escape'\)\{ closeLb\(\); return; \}/);
+});
+
+test('expandir não mexe no resto: deixa espaço reservado do tamanho original (contexto clínico e imagem não descem)', () => {
+  assert.match(html, /lbDescSpacer\.style\.cssText = 'flex:0 0 auto;width:100%;height:' \+ h \+ 'px;/);
+  assert.match(html, /const h = descEl\.offsetHeight \|\| 0;/);
+  assert.match(html, /descEl\.parentNode\.insertBefore\(lbDescSpacer, descEl\)/);
+  assert.match(html, /lbDescSpacer\.parentNode\.removeChild\(lbDescSpacer\)/);
+  assert.match(html, /if\(descEl\.hidden\) setDescExpanded\(false\);/);
 });

@@ -22749,6 +22749,28 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
     }catch(err){ console.error('traduzir legenda (lightbox)', err); if(typeof toast === 'function') toast('Não foi possível traduzir agora.'); lbResetTranslate(); }
     finally{ lbTranslateBtn.disabled = false; }
   };
+  // Expandir/recolher a legenda SEM mexer no resto: ao expandir o cartão sai do fluxo (position:fixed),
+  // então deixamos um espaço reservado com a altura original — senão o conjunto (contexto clínico +
+  // imagem) se recentraria e "desceria". Recolher remove o espaço reservado.
+  let lbDescSpacer = null;
+  function setDescExpanded(on){
+    if(!descEl || !descEl.classList) return;
+    const isOn = descEl.classList.contains('expanded');
+    if(on && !isOn){
+      const h = descEl.offsetHeight || 0;
+      if(descEl.parentNode && typeof document !== 'undefined' && document.createElement){
+        lbDescSpacer = document.createElement('div');
+        lbDescSpacer.className = 'lightbox-desc-spacer';
+        lbDescSpacer.style.cssText = 'flex:0 0 auto;width:100%;height:' + h + 'px;pointer-events:none;';
+        descEl.parentNode.insertBefore(lbDescSpacer, descEl);
+      }
+      descEl.classList.add('expanded');
+    } else if(!on && isOn){
+      descEl.classList.remove('expanded');
+      if(lbDescSpacer && lbDescSpacer.parentNode) lbDescSpacer.parentNode.removeChild(lbDescSpacer);
+      lbDescSpacer = null;
+    }
+  }
   function updateLbDescVisibility(){
     if(!descEl) return;
     const hasText = !!(descTextEl && !descTextEl.hidden);
@@ -22766,6 +22788,7 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
     }
     const hasSource = !!(lbSourceRow && !lbSourceRow.hidden);
     descEl.hidden = !hasText && !hasSource;
+    if(descEl.hidden) setDescExpanded(false);
   }
   function paintLightboxSource(item, fallbackSrc){
     if(!lbSourceRow || !lbSourceLink){ updateLbDescVisibility(); return; }
@@ -22804,7 +22827,7 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
   const lbKeydown = (e)=>{
     if(!e || !ov.isConnected) return;
     // legenda expandida: o 1º ESC só recolhe; o 2º fecha o lightbox
-    if(e.key==='Escape' && descEl && descEl.classList && descEl.classList.contains('expanded')){ descEl.classList.remove('expanded'); return; }
+    if(e.key==='Escape' && descEl && descEl.classList && descEl.classList.contains('expanded')){ setDescExpanded(false); return; }
     if(e.key==='Escape'){ closeLb(); return; }
     if(!hasNav || pasteTargetIsText(e.target)) return;
     if(e.key==='ArrowLeft' || e.key==='<'){ if(e.preventDefault) e.preventDefault(); goToLbImage(lightboxPrevIndex(navIdx, navList.length)); }
@@ -22823,7 +22846,7 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
       descTextEl.addEventListener('click', e=>{
         try{ const sel = window.getSelection && window.getSelection(); if(sel && String(sel).length > 0) return; }catch(_e){}
         e.stopPropagation();
-        descEl.classList.toggle('expanded');
+        setDescExpanded(!descEl.classList.contains('expanded'));
       });
     }
   }

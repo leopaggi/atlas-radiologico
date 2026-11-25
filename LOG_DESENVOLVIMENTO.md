@@ -6341,3 +6341,6 @@ proteção de branch ativa desde 06/11).
 
 ## 2026-11-25 — Lightbox: clicar na legenda expande até ~metade da tela
 - Textos longos ficavam em só ~4 linhas. Agora, clicar no texto da legenda (margem inferior da imagem ampliada) expande o cartão até ~55% da altura da tela, por cima da imagem e com fundo translúcido (a imagem continua visível atrás). Clicar de novo recolhe; ESC recolhe primeiro e só o 2º ESC fecha. Selecionar texto com o mouse não expande/recolhe.
+
+## 2026-11-25 — Lightbox: expandir a legenda sem mexer em contexto clínico/imagem
+- Ao expandir a legenda, o cartão saía do fluxo e o conjunto (apresentação clínica + imagem) se recentrava, "descendo". Agora é deixado um espaço reservado do tamanho original do cartão enquanto ele está expandido (removido ao recolher); só o texto cresce.
