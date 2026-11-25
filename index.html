@@ -913,6 +913,17 @@ body{
   max-height:calc(4 * 1.4em);overflow-y:auto;overflow-x:hidden;
 }
 .lightbox-desc-text[hidden]{display:none;}
+.lightbox-desc-text{cursor:pointer;}
+/* Expandida (clique no texto): sobe até ~metade da tela, por cima da imagem, com fundo translúcido
+   para a imagem continuar visível atrás do texto. Clicar de novo recolhe. */
+.lightbox-desc.expanded{
+  position:fixed;left:50%;bottom:24px;transform:translateX(-50%);width:min(1200px,94vw);z-index:3;
+  max-height:55vh;background:rgba(10,12,16,.55);border-color:rgba(255,255,255,.3);
+  box-shadow:0 6px 24px rgba(0,0,0,.35);
+}
+.lightbox-desc.expanded .lightbox-desc-text{
+  max-height:calc(55vh - 74px);font-size:15px;line-height:1.45;text-shadow:0 1px 3px rgba(0,0,0,.9);
+}
 .lightbox-desc-source{
   display:flex;align-items:center;gap:10px;flex:0 0 auto;
   padding-top:6px;border-top:1px solid rgba(255,255,255,.12);
@@ -22792,6 +22803,8 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
   // checagem já usada pelo paste amplo do editor, pasteTargetIsText()).
   const lbKeydown = (e)=>{
     if(!e || !ov.isConnected) return;
+    // legenda expandida: o 1º ESC só recolhe; o 2º fecha o lightbox
+    if(e.key==='Escape' && descEl && descEl.classList && descEl.classList.contains('expanded')){ descEl.classList.remove('expanded'); return; }
     if(e.key==='Escape'){ closeLb(); return; }
     if(!hasNav || pasteTargetIsText(e.target)) return;
     if(e.key==='ArrowLeft' || e.key==='<'){ if(e.preventDefault) e.preventDefault(); goToLbImage(lightboxPrevIndex(navIdx, navList.length)); }
@@ -22804,6 +22817,15 @@ function openImageLightbox(src, description, navImages, startIndex, onNavigate, 
     // clicar no texto não fecha o lightbox (permite ler/selecionar); clicar
     // fora continua fechando, como sempre.
     descEl.onclick = e=> e.stopPropagation();
+    // Clique no texto: expande/recolhe (ignora quando o clique foi só para selecionar texto).
+    if(descTextEl && typeof descTextEl.addEventListener === 'function'){
+      descTextEl.title = 'clique para expandir / recolher';
+      descTextEl.addEventListener('click', e=>{
+        try{ const sel = window.getSelection && window.getSelection(); if(sel && String(sel).length > 0) return; }catch(_e){}
+        e.stopPropagation();
+        descEl.classList.toggle('expanded');
+      });
+    }
   }
   // Troca de imagem: atualiza src/legenda/contador e RESETA zoom/pan (regra
   // 4) — nunca fecha/reabre a overlay. zbReset() é definida logo abaixo,
