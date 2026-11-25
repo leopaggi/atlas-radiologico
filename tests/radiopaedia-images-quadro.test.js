@@ -355,12 +355,13 @@ test('26. descrição: achados + legenda (sem repetir) + discussão + fonte com 
     'Galactoceles are milk retention cysts.',
     { title: 'Galactocele', url: 'https://radiopaedia.org/cases/galactocele-7', author: 'rania' });
   assert.match(d, /^\*\*Achados de imagem:\*\* Lesion with fat fluid level\./);
-  assert.match(d, /\n\n\*\*Discussão:\*\* Galactoceles are milk retention cysts\./);
-  assert.match(d, /\n\nFonte: Radiopaedia — Galactocele, rania — https:\/\/radiopaedia\.org\/cases\/galactocele-7$/);
+  assert.match(d, /\n\*\*Discussão:\*\* Galactoceles are milk retention cysts\./);
+  assert.doesNotMatch(d, /\n\n/, 'sem linha em branco entre os títulos');
+  assert.doesNotMatch(d, /Fonte/, 'sem linha de fonte');
   assert.doesNotMatch(d, /Legenda/);
   const same = c.buildImageDescription([{ findings: 'x', caption: 'x', modality: 'US' }], '', { url: 'u' });
   assert.equal((same.match(/Legenda/g) || []).length, 0, 'legenda igual aos achados não duplica');
-  assert.match(c.buildImageDescription([{ findings: 'a', caption: 'b', modality: 'US' }], '', { url: 'u' }), /\*\*Achados de imagem \(US\):\*\* a\n\n\*\*Legenda \(US\):\*\* b/);
+  assert.match(c.buildImageDescription([{ findings: 'a', caption: 'b', modality: 'US' }], '', { url: 'u' }), /\*\*Achados de imagem \(US\):\*\* a\n\*\*Legenda \(US\):\*\* b/);
 });
 
 test('27. sem nenhum texto do Radiopaedia, não inventa descrição (fica vazia)', () => {
@@ -369,12 +370,11 @@ test('27. sem nenhum texto do Radiopaedia, não inventa descrição (fica vazia)
   assert.equal(c.buildImageDescription([], '', null), '');
 });
 
-test('28. descrição respeita os tetos e mantém a linha de fonte inteira', () => {
+test('28. descrição respeita os tetos', () => {
   const c = descCtx();
   const big = 'palavra '.repeat(2000);
   const d = c.buildImageDescription([{ findings: big, caption: big + 'z', modality: 'US' }], big, { title: 'T', url: 'https://radiopaedia.org/cases/x', author: 'a' });
   assert.ok(d.length <= 4000, 'ficou em ' + d.length);
-  assert.match(d, /Fonte: Radiopaedia — T, a — https:\/\/radiopaedia\.org\/cases\/x$/);
 });
 
 test('29. Atlas: descrição é só texto limpo (sem controle) e vira o valor inicial do campo do quadro', () => {

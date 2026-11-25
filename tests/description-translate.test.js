@@ -61,9 +61,20 @@ test('idioma já instalado: cria direto, sem exigir clique, e reaproveita', asyn
   assert.equal(created, 1);
 });
 
-test('fiação no construtor: botão, traduz sozinho só se o idioma já está instalado e só se o texto não foi editado', () => {
+test('fiação no construtor: botão traduzir manual (sem tradução automática ao abrir)', () => {
   assert.match(html, /id="collage-translate-btn"/);
-  assert.match(html, /await getPtTranslator\(false\); \/\/ automático/);
-  assert.match(html, /if\(cov\.isConnected && dEl\.value === init\)/);
   assert.match(html, /await getPtTranslator\(true\)/);
+  assert.doesNotMatch(html, /await getPtTranslator\(false\)/);
+});
+
+test('botão copiar p/ IA: prompt com o texto cru no lugar de <colar aqui> (sem ** e __)', () => {
+  assert.match(html, /id="collage-ai-btn"/);
+  const m = html.match(/const AI_FORMAT_PROMPT = (".*");\nfunction buildAiFormatPrompt[^\n]*/);
+  assert.ok(m, 'prompt presente');
+  const ctx = vm.createContext({});
+  vm.runInContext(m[0] + '\nthis.f = buildAiFormatPrompt;', ctx);
+  const out = ctx.f('**Achados de imagem:** lesion __x__ $& end');
+  assert.ok(out.includes('Achados de imagem: lesion x $& end'));
+  assert.ok(!out.includes('<colar aqui>'));
+  assert.ok(out.includes('Discussão do caso'));
 });

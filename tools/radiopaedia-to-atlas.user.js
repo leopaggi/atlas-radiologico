@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.5.5
+// @version      1.5.6
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e entrega o caso à aba do Atlas já aberta (ou abre o Atlas com o payload no fragmento da URL). O botão "📸 Enviar com imagens" (1.5.0) também baixa as imagens do caso (uma por série), reduz cada uma e entrega ao Atlas só para APROVAÇÃO — nada é salvo sem você. Não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -356,14 +356,10 @@
     });
     var d = clipText(String(discussion || '').trim(), DESC_BLOCK_MAX);
     if (d) out.push('**Discussão:** ' + d);
-    var head = out.join('\n\n');
-    var fonte = '';
-    if (src && src.url) {
-      fonte = 'Fonte: Radiopaedia' + (src.title ? ' — ' + src.title : '') + (src.author ? ', ' + src.author : '') + ' — ' + src.url;
-    }
+    // Sem linha em branco entre os títulos e sem linha de "Fonte" (o caso já fica vinculado ao quadro)
+    var head = out.join('\n');
     if (!head) return '';
-    head = clipText(head, DESC_TOTAL_MAX - (fonte ? fonte.length + 2 : 0));
-    return fonte ? head + '\n\n' + fonte : head;
+    return clipText(head, DESC_TOTAL_MAX);
   }
 
   var IMG_BASE = 'https://prod-images-static.radiopaedia.org/images/';

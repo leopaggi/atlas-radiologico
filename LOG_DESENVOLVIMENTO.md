@@ -6313,3 +6313,8 @@ proteção de branch ativa desde 06/11).
 - Construtor de quadro: botão "🌐 traduzir" (alterna com "↩ ver original") ao lado de B/U. Usa o tradutor embutido do Chrome (Translator API: roda no PC, sem chave nem envio a terceiros). Traduz só o texto das linhas; rótulos em negrito, "Fonte: …" e links ficam intactos.
 - Ao abrir um quadro vindo do Radiopaedia, traduz sozinho se o idioma inglês→português já estiver instalado no Chrome (senão o botão baixa na 1ª vez, exige clique). Se o usuário já editou o texto, não sobrescreve. Sem tradutor no navegador, nada muda.
 - Testes: tests/description-translate.test.js.
+
+## 2026-11-24 — Descrição do quadro: sem linha "Fonte", sem linhas em branco, botão "copiar p/ IA" (userscript 1.5.6)
+- Descrição vinda do Radiopaedia não leva mais a linha "Fonte: Radiopaedia…" e os títulos (Achados/Legenda/Discussão) ficam um embaixo do outro, sem linha em branco.
+- Novo botão "🤖 copiar p/ IA" no quadro: copia o prompt de curadoria (traduz + normaliza em "- MODALIDADE: …") com o texto cru; o usuário cola na própria IA e cola a resposta de volta.
+- Tradução automática ao abrir removida (o campo fica com o texto cru em inglês); o botão "🌐 traduzir" (Chrome) segue manual.
