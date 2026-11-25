@@ -86,3 +86,18 @@ test('traduz bullets "- **TC:** texto" mantendo hífen e rótulo em negrito', as
   const out = await c.t('- **TC:** Round nodule.\n- **RM:** Signal drop.\n- **Discussão do caso:** Adenoma.', tr);
   assert.equal(out, '- **TC:** [PT] Round nodule.\n- **RM:** [PT] Signal drop.\n- **Discussão do caso:** [PT] Adenoma.');
 });
+
+test('botão copiar p/ IA fica na barra do quadro (e não repetido por imagem com id duplicado)', () => {
+  const idCount = (html.match(/id="collage-ai-btn"/g) || []).length;
+  assert.equal(idCount, 1);
+  const tb = html.slice(html.indexOf('aria-label="Formatação da descrição"'));
+  assert.ok(tb.slice(0, 1200).includes('id="collage-ai-btn"'), 'botão dentro da barra do quadro');
+});
+
+test('tradução disponível também depois de enviada: galeria, editor de legenda e lightbox', () => {
+  assert.equal((html.match(/class="rich-text-btn legend-translate-btn"/g) || []).length, 2);
+  assert.equal((html.match(/wireTranslateToggle\(labelInput,/g) || []).length, 2);
+  assert.match(html, /class="lightbox-translate rich-text-btn"/);
+  assert.match(html, /lbOriginalDesc = cur; descTextEl\.innerHTML = richDescHtml\(out\)/);
+  assert.match(html, /lbResetTranslate\(\);\n\s*const old|lbResetTranslate\(\);\n    if\(descTextEl\)/);
+});
