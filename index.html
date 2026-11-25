@@ -18442,7 +18442,8 @@ function openForm(id, opts){
         <div class="rich-text-toolbar" role="toolbar" aria-label="Formatação da legenda">
           <button type="button" class="rich-text-btn" data-rich-wrap="**" title="negrito (Ctrl+B)"><b>B</b></button>
           <button type="button" class="rich-text-btn" data-rich-wrap="__" title="sublinhado (Ctrl+U)"><u>U</u></button>
-          <span class="rich-text-hint">**negrito** · __sublinhado__ · links automáticos</span>
+          <button type="button" class="rich-text-btn" id="collage-ai-btn" title="copia o prompt de formatação + o texto cru, para colar na sua IA (ela devolve traduzido e formatado)">🤖 copiar p/ IA</button>
+        <span class="rich-text-hint">**negrito** · __sublinhado__ · links automáticos</span>
         </div>
         <div class="img-source-row">
           <div class="img-source-line">
@@ -19118,6 +19119,40 @@ async function collageEncodeUnderLimit(canvas, maxBytes){
   }
   return blob;
 }
+/* TRADUÇÃO DA DESCRIÇÃO (EN -> PT) com o tradutor embutido do Chrome (Translator API):
+   roda no próprio computador, sem chave e sem enviar o texto a terceiros. Mantém os
+   rótulos em negrito ("**Achados de imagem (CT):**") e a linha "Fonte: …" intactos e
+   traduz só o texto de cada linha. Se o navegador não tiver o tradutor, nada muda. */
+let __ptTranslatorPromise = null;
+async function getPtTranslator(allowDownload){
+  try{
+    if(typeof Translator === 'undefined' || !Translator || typeof Translator.availability !== 'function') return null;
+    const opts = { sourceLanguage: 'en', targetLanguage: 'pt' };
+    const av = await Translator.availability(opts);
+    if(av === 'unavailable') return null;
+    if(av !== 'available' && !allowDownload) return null; // baixar o idioma exige um clique do usuário
+    if(!__ptTranslatorPromise) __ptTranslatorPromise = Translator.create(opts).catch(e=>{ __ptTranslatorPromise = null; throw e; });
+    return await __ptTranslatorPromise;
+  }catch(_e){ return null; }
+}
+async function translateDescriptionToPt(text, translator){
+  const lines = String(text == null ? '' : text).split('\n');
+  const out = [];
+  for(const line of lines){
+    if(!line.trim() || /^\s*Fonte:/.test(line) || /^\s*https?:\/\/\S+\s*$/.test(line)){ out.push(line); continue; }
+    const m = line.match(/^(\*\*[^*\n]{1,80}:\*\*\s*)([\s\S]*)$/);
+    const label = m ? m[1] : '';
+    const body = m ? m[2] : line;
+    if(!body.trim()){ out.push(line); continue; }
+    const t = await translator.translate(body);
+    out.push(label + String(t == null ? body : t));
+  }
+  return out.join('\n');
+}
+
+// Prompt de curadoria (traduz + normaliza a descrição crua do Radiopaedia). O texto cru entra no lugar de <colar aqui>.
+const AI_FORMAT_PROMPT = "Você é um assistente de curadoria do Atlas Radiológico. Sua tarefa é TRADUZIR\npara o português brasileiro (quando necessário) e NORMALIZAR a descrição crua\nde um caso clínico do Radiopaedia, sem inventar achados.\n\nENTRADA: texto bruto, em inglês ou em português, podendo vir com quebras de\nlinha irregulares, sem tópicos, misturando modalidades e discussão.\n\nSAÍDA: apenas o bloco \"notes\" formatado EM PORTUGUÊS BRASILEIRO, seguindo o\npadrão abaixo, entregue SEMPRE dentro de um bloco de código (cercado por três\ncrases), para preservar as quebras de linha sem espaçamento extra.\n\n### REGRAS DE TRADUÇÃO (aplicar ANTES da formatação)\n\nT1. Se o texto bruto estiver em inglês, traduzir integralmente para português\n    brasileiro. Se já estiver em português, NÃO retraduzir — apenas revisar\n    pontuação e concordância óbvia.\n\nT2. Preservar em inglês (ou na forma consagrada) os termos técnicos que NÃO\n    têm tradução consolidada em português, por exemplo:\n    - nomes de sinais e epônimos (ex.: \"sinal de Comet\", \"sinal de Rigler\",\n      \"sinal de Westermark\");\n    - siglas consagradas (MAVP, TEP, DPOC, TCFC etc.);\n    - modalidades e técnicas (PET-CT, angio-TC, US Doppler, RM, RX);\n    - classificações e escores (Hinchey, Bosniak, LI-RADS, BI-RADS, Graf,\n      Lichtman, ENSAT).\n    Para esses casos, use a forma consagrada em português quando existir\n    (ex.: \"angiotomografia computadorizada\" em vez de \"CT angiography\").\n\nT3. Traduzir normalmente os termos descritivos: \"well-circumscribed\" →\n\"bem circunscrita\"; \"ground-glass opacity\" → \"opacidade em vidro fosco\";\n\"fat stranding\" → \"estriação/velamento da gordura\"; \"enhancement\" →\n\"realce\"; \"hypodense\" → \"hipodenso\"; \"hyperdense\" → \"hiperdenso\";\n\"hypoechoic\" → \"hipoecoico\"; \"hyperechoic\" → \"hiperecoico\";\n\"isointense\" → \"isointenso\"; \"effusion\" → \"derrame\"; \"consolidation\" →\n\"consolidação\"; \"nodule\" → \"nódulo\"; \"mass\" → \"massa\"; \"cavitation\" →\n\"cavitação\"; \"calcification\" → \"calcificação\"; \"septated\" → \"septado\";\n\"multicystic\" → \"multicístico\"; \"crescent-shaped\" → \"em forma de crescente\".\n\nT4. Manter EXATAMENTE os dados numéricos e unidades do original\n    (cm/mm, eixos AP x L x CC, valores de laboratório, escalas, idades).\n    Converter unidades apenas se o original vier em unidade não usual e o\n    texto já indicar o equivalente.\n\nT5. NÃO traduzir nomes próprios de autores, instituições ou referências.\n\n### REGRAS DE FORMATAÇÃO\n\n1. Cada modalidade vira um bullet próprio, no formato:\n   \"- <MODALIDADE>: <achados daquela modalidade>\"\n   Modalidades aceitas (usar o rótulo do texto; se ambíguo, inferir do contexto):\n   RX, US, TC, ANGIOTC, RM, PET-CT, MAMOGRAFIA, FLUOROSCOPIA, MEDICINA NUCLEAR.\n\n2. NÃO repetir a mesma informação em bullets diferentes. Se um achado aparece\n   duas vezes no texto bruto, mantenha-o apenas onde é mais específico.\n\n3. Preservar a ordem lógica: primeiro o achado principal/incidental,\n   depois os achados associados, depois os negativos relevantes.\n\n4. Agrupar frases curtas do mesmo bloco em um único bullet (não criar um\n   bullet por frase).\n\n5. O último bullet é SEMPRE:\n   \"- Discussão do caso: <síntese em 1–3 frases do diagnóstico e do raciocínio\n   já presentes no texto bruto, traduzidos>\"\n   Se o texto bruto NÃO tiver discussão/diagnóstico, escreva:\n   \"- Discussão do caso: (não informada na fonte)\"\n\n6. Se o texto bruto citar achados negativos relevantes (\"no evidence of...\",\n   \"no...\", \"absence of...\"), mantê-los no bullet da modalidade\n   correspondente, no fim do bullet, traduzidos.\n\n7. NÃO acrescentar diferenciais, epidemiologia, fisiopatologia ou qualquer\n   informação que não esteja no texto bruto. Se o texto bruto não tiver\n   diferenciais, NÃO criar.\n\n8. NÃO usar markdown no conteúdo (sem **, sem #, sem tabelas). Apenas\n   hífens e dois-pontos.\n\n9. Corrigir apenas: espaçamento, pontuação, capitalização, concordância e\n   tradução. NÃO reescrever estilo, NÃO resumir achados, NÃO trocar termos\n   técnicos por sinônimos.\n\n10. ENTREGA: a saída inteira deve vir dentro de UM bloco de código\n    (cercado por três crases), com cada bullet em uma linha e SEM linha em\n    branco entre os bullets. Essa regra tem precedência sobre a formatação\n    visual do chat.\n\n### CHECKLIST ANTES DE RESPONDER\n- [ ] Todo o texto de saída está em português brasileiro\n- [ ] Termos consagrados (epônimos, siglas, classificações) foram preservados\n- [ ] Todo bullet começa com \"- MODALIDADE:\"\n- [ ] Nenhum dado numérico foi alterado\n- [ ] Nenhuma informação nova foi introduzida\n- [ ] Existe exatamente um bullet \"- Discussão do caso:\"\n- [ ] Não há markdown dentro do conteúdo\n- [ ] Não há linha em branco entre bullets\n- [ ] A saída está dentro de um bloco de código\n\n### EXEMPLO\n\nENTRADA (crua, em inglês):\n\"Incidental finding of subsegmental dilatation of the left pulmonary artery in\nthe lingular segment of the left upper lobe, with dilatation of the pulmonary\nvein. The main pulmonary trunk is not dilated. No cardiomegaly.\nCoronary artery calcification with atherosclerotic disease of the thoracic\naorta is noted.\nCT pulmonary angiography confirmed a focus of pulmonary arteriovenous\nmalformation (PAVM) in the lingular segment of the left upper lobe, measuring\napproximately 1.5 x 1.3 x 1.0 cm (AP x L x CC). It is supplied by a single\ndilated branch of the pulmonary artery and drains through the left pulmonary\nvein to the left atrium.\nThere is no evidence of pulmonary hypertension or embolism. The heart is not\nenlarged.\"\n\nSAÍDA (dentro do bloco de código):\n- TC: Achado incidental de dilatação subsegmentar da artéria pulmonar esquerda no segmento lingular do lobo superior esquerdo, com dilatação da veia pulmonar. O tronco pulmonar não está dilatado. Ausência de cardiomegalia. Observa-se calcificação da artéria coronária com doença aterosclerótica da aorta torácica.\n- ANGIOTC: A angiotomografia computadorizada pulmonar confirmou a presença de um foco de malformação arteriovenosa pulmonar (MAVP) no segmento lingular do lobo superior esquerdo, medindo aproximadamente 1,5 x 1,3 x 1,0 cm (AP x L x CC). É irrigado por um único ramo dilatado da artéria pulmonar e drena através da veia pulmonar esquerda para o átrio esquerdo. Não há evidências de hipertensão pulmonar ou embolia. O coração não está aumentado.\n- Discussão do caso: Este é um caso de malformação arteriovenosa pulmonar lingular esquerda (tipo simples) evidenciada por uma única artéria segmentar que alimenta a malformação.\n\nAgora traduza (se necessário) e normalize o texto bruto a seguir. Responda\nSOMENTE com o bloco de código contendo os bullets, em português, sem\ncomentários fora do bloco.\n\nTEXTO BRUTO:\n\"\"\"\n<colar aqui>\n\"\"\"";
+function buildAiFormatPrompt(raw){ const clean=String(raw||'').replace(/\*\*|__/g,'').trim(); return AI_FORMAT_PROMPT.replace('<colar aqui>', ()=>clean); }
 function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpload, existingLabel, opts){
   const isEditMode = Array.isArray(existingPanels);
   // opts.preload: painéis já prontos [{url,seq}] (ex.: imagens do Radiopaedia, já
@@ -19145,6 +19180,7 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
       <div class="rich-text-toolbar" role="toolbar" aria-label="Formatação da descrição">
         <button type="button" class="rich-text-btn" data-rich-wrap="**" title="negrito (Ctrl+B)"><b>B</b></button>
         <button type="button" class="rich-text-btn" data-rich-wrap="__" title="sublinhado (Ctrl+U)"><u>U</u></button>
+        <button type="button" class="rich-text-btn" id="collage-translate-btn" title="traduzir a descrição do inglês para o português (tradutor do Chrome)">🌐 traduzir</button>
         <span class="rich-text-hint">**negrito** · __sublinhado__ · links automáticos</span>
       </div>
     </div>
@@ -19161,6 +19197,45 @@ function openCollageBuilder(lesionMeta, onCollageReady, existingPanels, deferUpl
     ? collageInitialDesc(existingLabel, items.map(x=>x.seq))
     : ((opts && typeof opts.initialDesc === 'string') ? opts.initialDesc : '');
   wireRichTextArea(cov.querySelector('#collage-desc'), cov.querySelector('.rich-text-toolbar'));
+  // Tradução EN -> PT da descrição (botão + automática ao abrir um quadro vindo do Radiopaedia).
+  (function wireCollageTranslate(){
+    const dEl = cov.querySelector('#collage-desc'), tBtn = cov.querySelector('#collage-translate-btn');
+    if(!dEl || !tBtn) return;
+    let original = null; // texto em inglês guardado enquanto o traduzido está na tela
+    const showTranslated = ()=>{ tBtn.textContent = '↩ ver original'; };
+    const showIdle = ()=>{ tBtn.textContent = '🌐 traduzir'; };
+    tBtn.onclick = async ()=>{
+      if(original !== null){ dEl.value = original; original = null; showIdle(); return; }
+      const src = dEl.value;
+      if(!src.trim()) return;
+      tBtn.disabled = true; tBtn.textContent = '🌐 traduzindo…';
+      try{
+        const tr = await getPtTranslator(true);
+        if(!tr){ toast('Tradutor do Chrome indisponível neste navegador (use o Chrome no computador).'); showIdle(); return; }
+        const out = await translateDescriptionToPt(src, tr);
+        original = src; dEl.value = out; showTranslated();
+      }catch(e){ console.error('traduzir descrição', e); toast('Não foi possível traduzir agora.'); showIdle(); }
+      finally{ tBtn.disabled = false; }
+    };
+    const aiBtn = cov.querySelector('#collage-ai-btn');
+    if(aiBtn) aiBtn.onclick = async ()=>{
+      const raw = (original !== null ? original : dEl.value);
+      if(!raw.trim()){ toast('Não há texto na descrição para copiar.'); return; }
+      try{ await navigator.clipboard.writeText(buildAiFormatPrompt(raw)); toast('Copiado! Cole na sua IA e depois cole a resposta aqui na descrição.'); }
+      catch(_e){ toast('Não consegui copiar automaticamente.'); }
+    };
+    const init = (!isEditMode && opts && typeof opts.initialDesc === 'string') ? opts.initialDesc : '';
+    if(init.trim()){
+      (async ()=>{
+        try{
+          const tr = await getPtTranslator(false); // automático só se o idioma já está instalado
+          if(!tr) return;
+          const out = await translateDescriptionToPt(init, tr);
+          if(cov.isConnected && dEl.value === init){ original = init; dEl.value = out; showTranslated(); }
+        }catch(_e){}
+      })();
+    }
+  })();
   let finalBlob=null; let finalUrl='';
   const seqs=IMAGE_SEQUENCE_PRESETS;
   const list=cov.querySelector('#collage-list'), drop=cov.querySelector('#collage-drop'), input=cov.querySelector('#collage-files');

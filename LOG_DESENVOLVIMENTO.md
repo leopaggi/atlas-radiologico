@@ -6308,3 +6308,13 @@ proteção de branch ativa desde 06/11).
 
 ## 2026-11-24 — Userscript 1.5.5: mais cortes além dos marcados
 - Além dos cortes marcados com seta, o quadro leva cortes de até 3 séries sem marcação do mesmo estudo (outras fases/planos, ex.: coronal, sagital) e DISTRIBUI até o teto de 8: rodada A = 1 marcado por série marcada; B = 1 corte (o "atual" do visualizador, senão o do meio) de cada série sem marcação; C = todos os marcados, depois mais cortes espaçados (longe das pontas, que costumam ser pretas) das sem marcação (até 3 cada). Testes 34/34b/34c.
+
+## 2026-11-24 — Tradução EN→PT da descrição do quadro
+- Construtor de quadro: botão "🌐 traduzir" (alterna com "↩ ver original") ao lado de B/U. Usa o tradutor embutido do Chrome (Translator API: roda no PC, sem chave nem envio a terceiros). Traduz só o texto das linhas; rótulos em negrito, "Fonte: …" e links ficam intactos.
+- Ao abrir um quadro vindo do Radiopaedia, traduz sozinho se o idioma inglês→português já estiver instalado no Chrome (senão o botão baixa na 1ª vez, exige clique). Se o usuário já editou o texto, não sobrescreve. Sem tradutor no navegador, nada muda.
+- Testes: tests/description-translate.test.js.
+
+## 2026-11-24 — Descrição do quadro: sem linha "Fonte", sem linhas em branco, botão "copiar p/ IA" (userscript 1.5.6)
+- Descrição vinda do Radiopaedia não leva mais a linha "Fonte: Radiopaedia…" e os títulos (Achados/Legenda/Discussão) ficam um embaixo do outro, sem linha em branco.
+- Novo botão "🤖 copiar p/ IA" no quadro: copia o prompt de curadoria (traduz + normaliza em "- MODALIDADE: …") com o texto cru; o usuário cola na própria IA e cola a resposta de volta.
+- Tradução automática ao abrir mantida (só se o idioma já está instalado no Chrome); "copiar p/ IA" usa o texto original em inglês mesmo com a tradução na tela.
