@@ -542,13 +542,15 @@ test('39. desenho da seta: posição acompanha a redução da imagem; rotação 
     save() { calls.push(['save']); }, restore() { calls.push(['restore']); },
     translate(x, y) { calls.push(['translate', x, y]); }, rotate(a) { calls.push(['rotate', a]); },
     beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, stroke() {}, fill() { calls.push(['fill', this.fillStyle]); } };
-  const code = ['var DRAW_ARROWS = true;', 'var ARROW_BASE_TILT_DEG = 20;', fn(us, 'drawArrows'), 'this.f = drawArrows;'].join('\n');
+  const code = ['var DRAW_ARROWS = true;', 'var ARROW_BASE_TILT_DEG = 2;', fn(us, 'drawArrows'), 'this.f = drawArrows;'].join('\n');
   const vctx = vm.createContext({ Math });
   vm.runInContext(code, vctx);
   vctx.f(ctx, [{ x: 313, y: 265, rotation: -435 }], 0.5);
   const tr = calls.find(x => x[0] === 'translate'), ro = calls.find(x => x[0] === 'rotate');
   assert.equal(tr[1], 156.5); assert.equal(tr[2], 132.5);
-  assert.ok(Math.abs(ro[1] - (-415 * Math.PI / 180)) < 1e-9);
+  assert.ok(Math.abs(ro[1] - (-433 * Math.PI / 180)) < 1e-9);
+  const tr2 = calls.filter(x => x[0] === 'translate')[1];
+  assert.equal(tr2[1], 0); assert.ok(tr2[2] > 0, '1.5.9: ponta da seta em x,y (corpo deslocado para trás)');
   assert.equal(calls.find(x => x[0] === 'fill')[1], '#f5821f');
   const n = calls.length;
   vctx.f(ctx, [], 0.5); vctx.f(ctx, null, 0.5);

@@ -6344,3 +6344,6 @@ proteção de branch ativa desde 06/11).
 
 ## 2026-11-25 — Lightbox: expandir a legenda sem mexer em contexto clínico/imagem
 - Ao expandir a legenda, o cartão saía do fluxo e o conjunto (apresentação clínica + imagem) se recentrava, "descendo". Agora é deixado um espaço reservado do tamanho original do cartão enquanto ele está expandido (removido ao recolher); só o texto cresce.
+
+## Userscript 1.5.9 — seta com a ponta no achado
+- Setas do Radiopaedia (x,y) marcam a PONTA; antes o desenho centrava a seta em x,y e cobria a lesão. Agora a ponta fica em x,y e o corpo fica ao lado. Inclinação-base 20° → 2° (medida em RX de pé, Lisfranc).

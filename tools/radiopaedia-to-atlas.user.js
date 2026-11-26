@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.5.8
+// @version      1.5.9
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e entrega o caso à aba do Atlas já aberta (ou abre o Atlas com o payload no fragmento da URL). O botão "📸 Enviar com imagens" (1.5.0) também baixa as imagens do caso (uma por série), reduz cada uma e entrega ao Atlas só para APROVAÇÃO — nada é salvo sem você. Não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -592,9 +592,9 @@
   /* 1.5.4 — SETA LARANJA. O site guarda a seta à parte (x, y na imagem original e
      rotação em graus, no sentido horário); aqui ela é desenhada por cima do corte,
      como o visualizador faz. A seta-base aponta "para cima, levemente à direita"
-     (ARROW_BASE_TILT_DEG), calibrado no caso atrial-septal-defect-14. */
+     (ARROW_BASE_TILT_DEG), calibrado no caso atrial-septal-defect-14 e, na 1.5.9, em RX de pé (Lisfranc): a ponta fica em x,y. */
   var DRAW_ARROWS = true;
-  var ARROW_BASE_TILT_DEG = 20;
+  var ARROW_BASE_TILT_DEG = 2;
   function drawArrows(ctx, arrows, scale) {
     if (!DRAW_ARROWS || !arrows || !arrows.length || !(scale > 0)) return;
     var L = Math.max(14, Math.round(ctx.canvas.width * 0.05));
@@ -603,6 +603,7 @@
       ctx.save();
       ctx.translate(a.x * scale, a.y * scale);
       ctx.rotate((a.rotation + ARROW_BASE_TILT_DEG) * Math.PI / 180);
+      ctx.translate(0, L * 0.6); // 1.5.9: x,y do site = PONTA da seta (aponta o achado); o corpo fica ao lado, sem cobrir a lesão
       ctx.beginPath();
       ctx.moveTo(0, -L * 0.6);
       ctx.lineTo(L * 0.5, L * 0.5);
