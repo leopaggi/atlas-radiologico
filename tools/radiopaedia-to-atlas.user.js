@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.6.2
+// @version      1.6.3
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e entrega o caso à aba do Atlas já aberta (ou abre o Atlas com o payload no fragmento da URL). O botão "📸 Enviar com imagens" (1.5.0) também baixa as imagens do caso (uma por série), reduz cada uma e entrega ao Atlas só para APROVAÇÃO — nada é salvo sem você. Não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -604,29 +604,31 @@
 
   // Reduz até caber em ~IMG_TARGET_CHARS (data URL). Tenta lados menores e
   // qualidades decrescentes; devolve a menor versão se nada couber.
-  /* 1.6.2 — SETA E LEGENDA como no visualizador (medido no DOM do Radiopaedia, 2026-11-27).
-     As coordenadas (x,y) do site NÃO são pixels da imagem: são unidades de uma caixa quadrada
-     de 448 (o visualizador a mostra em 672px, fator 1,5), com a imagem encaixada (contain).
-     - Seta: ícone "location-arrow" (Font Awesome), ~22,7 unidades de altura, girado `rotation` graus;
-       o centro fica em (x-11, y+3,3) unidades.
-     - Legenda: balão com o canto superior ESQUERDO em (x,y), altura 26,7, margem lateral 12, fonte 10,7. */
+  /* 1.6.3 — SETA E LEGENDA como no visualizador (medido no DOM do Radiopaedia, 2026-11-27).
+     x,y do site estão na escala da imagem original (= a imagem grande baixada), então basta
+     multiplicar pela redução (u = largura do canvas / largura da imagem). Tamanhos no viewer são
+     fixos em px de tela; aqui são proporções do lado maior do canvas.
+     - Legenda: balão com o canto superior ESQUERDO em (x,y); altura 6,3%, fonte 2,55%, margem 2,7%.
+     - Seta: ícone "location-arrow" (Font Awesome) de 4,4% de altura, com a PONTA em (x,y)
+       e apontando na direção `rotation` (graus, sentido horário a partir de cima). */
   var DRAW_ARROWS = true;
-  var VIEWER_UNITS = 448;
   var ARROW_PATH = 'M429.6 92.1c4.9-11.9 2.1-25.6-7-34.7s-22.8-11.9-34.7-7l-352 144c-14.2 5.8-22.2 20.8-19.3 35.8s16.1 25.8 31.4 25.8H224V432c0 15.3 10.8 28.4 25.8 31.4s30-5.1 35.8-19.3l144-352z';
-  // view = { u: pixels do canvas por unidade, ox, oy: deslocamento (unidades) da imagem na caixa }
-  function viewerView(bw, bh, cw) {
-    var m = Math.max(bw, bh), iw = VIEWER_UNITS * bw / m, ih = VIEWER_UNITS * bh / m;
-    return { u: cw / iw, ox: (VIEWER_UNITS - iw) / 2, oy: (VIEWER_UNITS - ih) / 2 };
+  var ARROW_TIP_DEG = 51.3;   // direção da ponta do ícone, a partir de cima, sentido horário
+  var ARROW_TIP_DIST = 262.5; // distância centro→ponta, em unidades do viewBox (512 de altura)
+  // view = { u: pixels do canvas por unidade do site, ref: lado maior do canvas }
+  function viewerView(bw, bh, cw, ch) {
+    return { u: cw / bw, ref: Math.max(cw, ch || cw) };
   }
   function drawArrows(ctx, arrows, view) {
     if (!DRAW_ARROWS || !arrows || !arrows.length || !view || !(view.u > 0)) return;
-    var path = new Path2D(ARROW_PATH), u = view.u;
+    var path = new Path2D(ARROW_PATH), k = (0.044 * view.ref) / 512;
     for (var i = 0; i < arrows.length; i++) {
       var a = arrows[i];
       ctx.save();
-      ctx.translate((a.x - view.ox - 11) * u, (a.y - view.oy + 3.3) * u);
+      ctx.translate(a.x * view.u, a.y * view.u);
       ctx.rotate(a.rotation * Math.PI / 180);
-      var k = (22.7 * u) / 512;
+      ctx.translate(0, ARROW_TIP_DIST * k);
+      ctx.rotate(-ARROW_TIP_DEG * Math.PI / 180);
       ctx.scale(k, k);
       ctx.translate(-224, -256);
       ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 6 / k;
@@ -638,13 +640,13 @@
   var DRAW_LABELS = true;
   function drawLabels(ctx, labels, view) {
     if (!DRAW_LABELS || !labels || !labels.length || !view || !(view.u > 0)) return;
-    var u = view.u, fs = 10.7 * u, ph = 26.7 * u, pad = 12 * u;
+    var fs = 0.0255 * view.ref, ph = 0.063 * view.ref, pad = 0.027 * view.ref;
     ctx.save();
     ctx.font = fs + 'px Arial, sans-serif';
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     for (var i = 0; i < labels.length; i++) {
       var l = labels[i], tw = ctx.measureText(l.text).width, pw = tw + pad * 2;
-      var x0 = (l.x - view.ox) * u, y0 = (l.y - view.oy) * u, r = ph / 2, cy = y0 + r;
+      var x0 = l.x * view.u, y0 = l.y * view.u, r = ph / 2, cy = y0 + r;
       ctx.beginPath();
       ctx.moveTo(x0 + r, y0); ctx.lineTo(x0 + pw - r, y0); ctx.arc(x0 + pw - r, cy, r, -Math.PI / 2, Math.PI / 2);
       ctx.lineTo(x0 + r, y0 + ph); ctx.arc(x0 + r, cy, r, Math.PI / 2, Math.PI * 1.5); ctx.closePath();
@@ -660,7 +662,7 @@
       var w = Math.max(1, Math.round(bitmap.width * scale)), h = Math.max(1, Math.round(bitmap.height * scale));
       var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
       var ctx = cv.getContext('2d'); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h); ctx.drawImage(bitmap, 0, 0, w, h);
-      var view = viewerView(bitmap.width, bitmap.height, w);
+      var view = viewerView(bitmap.width, bitmap.height, w, h);
       drawArrows(ctx, arrows, view);
       drawLabels(ctx, labels, view);
       for (var q = 0.85; q >= 0.45; q -= 0.08) {

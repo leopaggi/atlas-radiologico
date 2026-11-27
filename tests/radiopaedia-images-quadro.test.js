@@ -536,27 +536,27 @@ test('38. cada corte marcado leva as setas dele (x, y, rotação); sem marcaçã
   assert.ok(old.items.every(x => x.arrows.length === 0));
 });
 
-test('39. desenho da seta (1.6.2): coordenadas em unidades do viewer (caixa 448, contain); rotação = a do site; sem seta não desenha', () => {
+test('39. desenho da seta (1.6.3): x,y na escala da imagem original; PONTA em x,y; rotação = a do site; sem seta não desenha', () => {
   const calls = [];
   const ctx = { canvas: { width: 448 },
     save() { calls.push(['save']); }, restore() { calls.push(['restore']); },
     translate(x, y) { calls.push(['translate', x, y]); }, rotate(a) { calls.push(['rotate', a]); }, scale(a, b) { calls.push(['scale', a, b]); },
     fill() { calls.push(['fill', this.fillStyle]); } };
-  const code = ['var DRAW_ARROWS = true;', 'var VIEWER_UNITS = 448;', 'var ARROW_PATH = "M0 0";', fn(us, 'viewerView'), fn(us, 'drawArrows'), 'this.f = drawArrows; this.v = viewerView;'].join('\n');
+  const code = ['var DRAW_ARROWS = true;', 'var ARROW_PATH = "M0 0";', 'var ARROW_TIP_DEG = 51.3;', 'var ARROW_TIP_DIST = 262.5;', fn(us, 'viewerView'), fn(us, 'drawArrows'), 'this.f = drawArrows; this.v = viewerView;'].join('\n');
   const vctx = vm.createContext({ Math, Path2D: function () {} });
   vm.runInContext(code, vctx);
-  const v = vctx.v(384, 384, 448);
-  assert.equal(v.u, 1); assert.equal(v.ox, 0); assert.equal(v.oy, 0);
+  const v = vctx.v(896, 896, 448, 448);
+  assert.equal(v.u, 0.5); assert.equal(v.ref, 448);
   vctx.f(ctx, [{ x: 144, y: 310, rotation: -285 }], v);
   const tr = calls.find(x => x[0] === 'translate'), ro = calls.find(x => x[0] === 'rotate');
-  assert.equal(tr[1], 133); assert.ok(Math.abs(tr[2] - 313.3) < 1e-9);
+  assert.equal(tr[1], 72); assert.equal(tr[2], 155);
   assert.ok(Math.abs(ro[1] - (-285 * Math.PI / 180)) < 1e-9);
   assert.equal(calls.find(x => x[0] === 'fill')[1], '#f5821f');
   const n = calls.length;
   vctx.f(ctx, [], v); vctx.f(ctx, null, v);
   assert.equal(calls.length, n);
-  const vp = vctx.v(300, 600, 300); // retrato: encaixado com margem lateral na caixa
-  assert.ok(Math.abs(vp.u - 300 / 224) < 1e-9); assert.equal(vp.ox, 112); assert.equal(vp.oy, 0);
+  const vp = vctx.v(300, 600, 150, 300); // retrato: referência = lado maior
+  assert.equal(vp.u, 0.5); assert.equal(vp.ref, 300);
 });
 
 test('40. fiação: só desenha na imagem grande (a miniatura de reserva não tem a mesma escala)', () => {

@@ -6360,3 +6360,6 @@ proteção de branch ativa desde 06/11).
 ## Userscript 1.6.2 — seta e legenda no sistema de coordenadas do viewer
 - Medido no DOM do Radiopaedia: x,y não são pixels da imagem e sim unidades de uma caixa 448 (viewer mostra em 672px = ×1,5), imagem encaixada. Antes usávamos pixels da imagem (384) → seta/legenda deslocadas.
 - Legenda: canto superior esquerdo em (x,y), altura 26,7u, fonte 10,7u. Seta: ícone Font Awesome location-arrow, 22,7u, girado `rotation`, centro em (x-11, y+3,3)u.
+
+## Userscript 1.6.3 — seta com a ponta em x,y e legenda no canto sup. esq.
+- Medido no DOM do Radiopaedia (casos tornozelo): x,y na escala da imagem original (u = canvas/bitmap, sem "caixa 448"); legenda tem o canto sup. esq. em (x,y); seta = ícone location-arrow com a PONTA em (x,y), direção = rotation. Tamanhos como proporção do lado maior (balão 6,3%, fonte 2,55%, ícone 4,4%).
