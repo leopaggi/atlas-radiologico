@@ -6356,3 +6356,7 @@ proteção de branch ativa desde 06/11).
 
 ## Userscript 1.6.1 — seta e legenda menores
 - Medido no viewer do Radiopaedia (imagem 672px): seta ≈4,3% da largura, balão 6% de altura, fonte ≈2,5%. Agora: seta L=2,7%, fonte 2,5%, balão fs×2,35 de altura.
+
+## Userscript 1.6.2 — seta e legenda no sistema de coordenadas do viewer
+- Medido no DOM do Radiopaedia: x,y não são pixels da imagem e sim unidades de uma caixa 448 (viewer mostra em 672px = ×1,5), imagem encaixada. Antes usávamos pixels da imagem (384) → seta/legenda deslocadas.
+- Legenda: canto superior esquerdo em (x,y), altura 26,7u, fonte 10,7u. Seta: ícone Font Awesome location-arrow, 22,7u, girado `rotation`, centro em (x-11, y+3,3)u.
