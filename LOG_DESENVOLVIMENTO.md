@@ -6355,4 +6355,4 @@ proteção de branch ativa desde 06/11).
 - Cada corte marcado leva o texto da legenda (annotation.label, posição em label_positions) desenhado como balão claro na imagem enviada (só na imagem grande, como as setas).
 
 ## Userscript 1.6.1 — seta e legenda menores
-- Seta 5% → 3,2% da largura e fonte da legenda 3,4% → 2,2%, para não cobrir a lesão (comparado com o viewer, caso tornozelo RM).
+- Medido no viewer do Radiopaedia (imagem 672px): seta ≈4,3% da largura, balão 6% de altura, fonte ≈2,5%. Agora: seta L=2,7%, fonte 2,5%, balão fs×2,35 de altura.
