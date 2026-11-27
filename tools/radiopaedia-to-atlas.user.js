@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.6.0
+// @version      1.6.1
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e entrega o caso à aba do Atlas já aberta (ou abre o Atlas com o payload no fragmento da URL). O botão "📸 Enviar com imagens" (1.5.0) também baixa as imagens do caso (uma por série), reduz cada uma e entrega ao Atlas só para APROVAÇÃO — nada é salvo sem você. Não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -612,7 +612,7 @@
   var ARROW_BASE_TILT_DEG = 2;
   function drawArrows(ctx, arrows, scale) {
     if (!DRAW_ARROWS || !arrows || !arrows.length || !(scale > 0)) return;
-    var L = Math.max(14, Math.round(ctx.canvas.width * 0.05));
+    var L = Math.max(14, Math.round(ctx.canvas.width * 0.027));
     for (var i = 0; i < arrows.length; i++) {
       var a = arrows[i];
       ctx.save();
@@ -638,12 +638,12 @@
   var DRAW_LABELS = true;
   function drawLabels(ctx, labels, scale) {
     if (!DRAW_LABELS || !labels || !labels.length || !(scale > 0)) return;
-    var fs = Math.max(11, Math.round(ctx.canvas.width * 0.034));
+    var fs = Math.max(10, Math.round(ctx.canvas.width * 0.025));
     ctx.save();
     ctx.font = fs + 'px Arial, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (var i = 0; i < labels.length; i++) {
-      var l = labels[i], tw = ctx.measureText(l.text).width, pw = tw + fs * 1.2, ph = fs * 1.9;
+      var l = labels[i], tw = ctx.measureText(l.text).width, pw = tw + fs * 2.1, ph = fs * 2.35;
       var cx = Math.min(Math.max(l.x * scale, pw / 2 + 2), ctx.canvas.width - pw / 2 - 2);
       var cy = Math.min(Math.max(l.y * scale, ph / 2 + 2), ctx.canvas.height - ph / 2 - 2);
       var r = ph / 2, x0 = cx - pw / 2, y0 = cy - ph / 2;
