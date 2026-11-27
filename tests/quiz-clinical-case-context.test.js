@@ -263,6 +263,6 @@ test('093d 32-36: 093b, 093c, 092, Quiz sem caso e userscript intactos', () => {
   assert.equal(A.quizClinicalContextBlockHtml({}, mk('Z'), false), '');
   // alternativas do Quiz inalteradas (mesma montagem das opções)
   assert.match(quizFn, /choices\.map\(\(x,i\)=>`<button class="quiz-mcq-option" data-id="\$\{escAttr\(x\.id\)\}">/);
-  assert.match(userscript, /@version\s+1\.5\.\d+/);
+  assert.match(userscript, /@version\s+1\.[56]\.\d+/);
   assert.doesNotMatch(userscript, /imageRefs|quizPick|quizCase/);
 });

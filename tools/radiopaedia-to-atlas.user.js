@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Radiopaedia → Atlas Radiológico (MVP, metadata-only)
 // @namespace    atlas-radiologico
-// @version      1.5.9
+// @version      1.6.0
 // @description  Adiciona um botão discreto "📥 Enviar ao Atlas" nas páginas de casos do Radiopaedia. Coleta SOMENTE metadados visíveis (título, URL, idade/sexo, modalidade, apresentação) e entrega o caso à aba do Atlas já aberta (ou abre o Atlas com o payload no fragmento da URL). O botão "📸 Enviar com imagens" (1.5.0) também baixa as imagens do caso (uma por série), reduz cada uma e entrega ao Atlas só para APROVAÇÃO — nada é salvo sem você. Não traduz, não inventa campos.
 // @author       Atlas Radiológico
 // @match        https://radiopaedia.org/cases/*
@@ -446,6 +446,20 @@
     }
     return out.slice(0, 6);
   }
+  // 1.6.0 — Legendas (balão de texto) do corte `ix`: annotation.label + label_positions[].x/y.
+  function labelsAt(se, ix) {
+    var anns = (se && Array.isArray(se.annotations)) ? se.annotations : [], out = [];
+    for (var a = 0; a < anns.length; a++) {
+      var an = anns[a], txt = an && typeof an.label === 'string' ? an.label.replace(/\s+/g, ' ').trim() : '';
+      var lp = an && Array.isArray(an.label_positions) ? an.label_positions : [];
+      if (!txt) continue;
+      for (var i = 0; i < lp.length; i++) {
+        var p = lp[i];
+        if (p && Number(p.slice_idx) === ix && isFinite(Number(p.x)) && isFinite(Number(p.y))) out.push({ text: txt.slice(0, 80), x: Number(p.x), y: Number(p.y) });
+      }
+    }
+    return out.slice(0, 6);
+  }
   function evenlyPick(list, n) {
     if (list.length <= n) return list.slice();
     if (n <= 1) return [list[Math.floor((list.length - 1) / 2)]];
@@ -533,7 +547,8 @@
           full: IMG_BASE + f.id + '/' + orig,
           fallback: small ? IMG_BASE + f.id + '/' + small : '',
           seq: label || '',
-          arrows: pickedIdx ? arrowsAt(se, pickedIdx[i2]) : []
+          arrows: pickedIdx ? arrowsAt(se, pickedIdx[i2]) : [],
+          labels: pickedIdx ? labelsAt(se, pickedIdx[i2]) : []
         });
       }
     }
@@ -619,7 +634,28 @@
       ctx.restore();
     }
   }
-  function shrinkToJpegDataUrl(bitmap, arrows) {
+  /* 1.6.0 — LEGENDA. Balão claro com o texto do autor, centrado em label_positions (x,y na imagem original). */
+  var DRAW_LABELS = true;
+  function drawLabels(ctx, labels, scale) {
+    if (!DRAW_LABELS || !labels || !labels.length || !(scale > 0)) return;
+    var fs = Math.max(11, Math.round(ctx.canvas.width * 0.034));
+    ctx.save();
+    ctx.font = fs + 'px Arial, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (var i = 0; i < labels.length; i++) {
+      var l = labels[i], tw = ctx.measureText(l.text).width, pw = tw + fs * 1.2, ph = fs * 1.9;
+      var cx = Math.min(Math.max(l.x * scale, pw / 2 + 2), ctx.canvas.width - pw / 2 - 2);
+      var cy = Math.min(Math.max(l.y * scale, ph / 2 + 2), ctx.canvas.height - ph / 2 - 2);
+      var r = ph / 2, x0 = cx - pw / 2, y0 = cy - ph / 2;
+      ctx.beginPath();
+      ctx.moveTo(x0 + r, y0); ctx.lineTo(x0 + pw - r, y0); ctx.arc(x0 + pw - r, cy, r, -Math.PI / 2, Math.PI / 2);
+      ctx.lineTo(x0 + r, y0 + ph); ctx.arc(x0 + r, cy, r, Math.PI / 2, Math.PI * 1.5); ctx.closePath();
+      ctx.fillStyle = 'rgba(240,240,240,0.92)'; ctx.fill();
+      ctx.fillStyle = '#222'; ctx.fillText(l.text, cx, cy + 1);
+    }
+    ctx.restore();
+  }
+  function shrinkToJpegDataUrl(bitmap, arrows, labels) {
     var best = '';
     for (var s = 0; s < IMG_SIDES.length; s++) {
       var scale = Math.min(1, IMG_SIDES[s] / Math.max(bitmap.width, bitmap.height));
@@ -627,6 +663,7 @@
       var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
       var ctx = cv.getContext('2d'); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h); ctx.drawImage(bitmap, 0, 0, w, h);
       drawArrows(ctx, arrows, w / bitmap.width);
+      drawLabels(ctx, labels, w / bitmap.width);
       for (var q = 0.85; q >= 0.45; q -= 0.08) {
         best = cv.toDataURL('image/jpeg', Math.round(q * 100) / 100);
         if (best.length <= IMG_TARGET_CHARS) return best;
@@ -644,7 +681,7 @@
       throw err;
     })
       .then(function (blob) { return createImageBitmap(blob); })
-      .then(function (bmp) { var d = shrinkToJpegDataUrl(bmp, usedFull ? item.arrows : null); try { bmp.close(); } catch (e) {} return { url: d, seq: item.seq }; })
+      .then(function (bmp) { var d = shrinkToJpegDataUrl(bmp, usedFull ? item.arrows : null, usedFull ? item.labels : null); try { bmp.close(); } catch (e) {} return { url: d, seq: item.seq }; })
       .catch(function () { return null; });
   }
 

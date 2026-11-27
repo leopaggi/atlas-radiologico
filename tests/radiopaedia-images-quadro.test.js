@@ -252,7 +252,7 @@ function jsonCtx(fetchImpl) {
   const code = ['var MAX_FIELD = 500;', 'var IMG_MAX_COUNT = 8;',
     "var IMG_BASE = 'https://prod-images-static.radiopaedia.org/images/';",
     'var SKIP_MODALITIES = /patholog|histolog|photograph|illustration|diagram/i;',
-    fn(us, 'cleanText'), fn(us, 'pickFrames'), fn(us, 'safeImageFile'), fn(us, 'annotatedSliceIndexes'), fn(us, 'arrowsAt'), fn(us, 'evenlyPick'), fn(us, 'spreadFrames'), fn(us, 'imagesFromStudyJson'),
+    fn(us, 'cleanText'), fn(us, 'pickFrames'), fn(us, 'safeImageFile'), fn(us, 'annotatedSliceIndexes'), fn(us, 'arrowsAt'), fn(us, 'labelsAt'), fn(us, 'evenlyPick'), fn(us, 'spreadFrames'), fn(us, 'imagesFromStudyJson'),
     fn(us, 'studyIdsFromPage'), fn(us, 'collectImagesViaStudyJson')].join('\n');
   vm.runInContext(code, ctx);
   return ctx;
@@ -558,6 +558,19 @@ test('39. desenho da seta: posição acompanha a redução da imagem; rotação 
 });
 
 test('40. fiação: só desenha na imagem grande (a miniatura de reserva não tem a mesma escala)', () => {
-  assert.match(us, /shrinkToJpegDataUrl\(bmp, usedFull \? item\.arrows : null\)/);
+  assert.match(us, /shrinkToJpegDataUrl\(bmp, usedFull \? item\.arrows : null, usedFull \? item\.labels : null\)/);
   assert.match(us, /drawArrows\(ctx, arrows, w \/ bitmap\.width\)/);
+});
+
+test('41. legenda (1.6.0): texto do autor vem em item.labels e é desenhado só na imagem grande', () => {
+  assert.match(us, /function labelsAt\(se, ix\)/);
+  assert.match(us, /labels: pickedIdx \? labelsAt\(se, pickedIdx\[i2\]\) : \[\]/);
+  assert.match(us, /drawLabels\(ctx, labels, w \/ bitmap\.width\)/);
+  const code = [fn(us, 'labelsAt'), 'this.f = labelsAt;'].join('\n');
+  const vctx = vm.createContext({ Math, Number, isFinite, Array });
+  vm.runInContext(code, vctx);
+  const se = { annotations: [{ label: 'ankle joint effusion ', label_positions: [{ slice_idx: 9, x: 128, y: 213 }], arrow_positions: [] }, { label: 'outra', label_positions: [{ slice_idx: 4, x: 1, y: 2 }] }, { label: '', label_positions: [{ slice_idx: 9, x: 5, y: 5 }] }] };
+  const r = vctx.f(se, 9);
+  assert.equal(r.length, 1); assert.equal(r[0].text, 'ankle joint effusion'); assert.equal(r[0].x, 128); assert.equal(r[0].y, 213);
+  assert.equal(vctx.f(se, 77).length, 0);
 });
