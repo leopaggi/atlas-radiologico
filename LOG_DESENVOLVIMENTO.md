@@ -6350,3 +6350,6 @@ proteção de branch ativa desde 06/11).
 
 ## Links de referência — reordenar
 - Editor de lesão: cada link ganhou ⠿ (arrastar) e botões ↑/↓; a ordem é salva com a lesão.
+
+## Userscript 1.6.0 — legenda do autor no quadro
+- Cada corte marcado leva o texto da legenda (annotation.label, posição em label_positions) desenhado como balão claro na imagem enviada (só na imagem grande, como as setas).
